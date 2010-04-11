@@ -1,0 +1,3115 @@
+<ACGWFDNative Version="3.0">
+  <ProcessVersions>
+    <ProcessVersion VersionID="1">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="Yes"
+          type="boolean" />
+          <property locked="0" name="Display Name" value=""
+          type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="960" Top="495"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="930" Top="2700"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="1155" Top="4740"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="810" Top="6720"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.zebra.ext.task.SubProcess"
+              type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name" value=""
+              type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="3885" Top="6585"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="2085" Y="2700" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="2280" Y="4740" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="1905" Y="6720" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="4650" Y="6585" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="5" TaskOrgGUID="4">
+            <Points>
+              <Point X="3885" Y="7320" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="2">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2280" Top="375"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2250" Top="2580"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2355" Top="4740"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="810" Top="6720"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.zebra.ext.task.SubProcess"
+              type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name" value=""
+              type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3405" Y="2580" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3480" Y="4740" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="1905" Y="6720" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="5" TaskOrgGUID="4">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="3">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2040" Top="360"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2160" Top="2100"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2235" Top="4140"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="810" Top="6720"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.zebra.ext.task.SubProcess"
+              type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name" value=""
+              type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3315" Y="2100" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3360" Y="4140" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="1905" Y="6720" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="5" TaskOrgGUID="4">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.zebra.ext.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="4">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2160" Top="0"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2160" Top="2100"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2235" Top="4140"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="810" Top="6720"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.zebra.ext.task.SubProcess"
+              type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name" value=""
+              type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3315" Y="2100" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3360" Y="4140" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="1905" Y="6720" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="5" TaskOrgGUID="4">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="5">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2160" Top="0"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2160" Top="2100"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2235" Top="4140"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="810" Top="6720"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.zebra.ext.task.SubProcess"
+              type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name" value=""
+              type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3315" Y="2100" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3360" Y="4140" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="1905" Y="6720" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="5" TaskOrgGUID="4">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="6">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2160" Top="0"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2160" Top="2100"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2235" Top="4140"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="810" Top="6720"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name" value=""
+              type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3315" Y="2100" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3360" Y="4140" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="1905" Y="6720" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="5" TaskOrgGUID="4">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="7">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2160" Top="0"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2160" Top="2340"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2235" Top="4140"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="810" Top="6720"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.zebra.ext.task.SubProcess"
+              type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name" value=""
+              type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3315" Y="2340" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3360" Y="4140" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="1905" Y="6720" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="5" TaskOrgGUID="4">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="8">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+          <property locked="-1" name="Class Destruct"
+          value="com.anite.antelope.zebra.processLifectyle.ProcessDestruct"
+                    type="string" />
+          <property locked="-1" name="Class Construct"
+          value="com.anite.antelope.zebra.processLifectyle.ProcessConstruct"
+                    type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2160" Top="0"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2160" Top="2340"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2235" Top="4140"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="810" Top="6720"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.zebra.ext.task.SubProcess"
+              type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name" value=""
+              type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3315" Y="2340" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3360" Y="4140" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="1905" Y="6720" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="5" TaskOrgGUID="4">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="9">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2160" Top="0"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2160" Top="2340"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2235" Top="4140"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="810" Top="6720"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.zebra.ext.task.SubProcess"
+              type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name" value=""
+              type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3315" Y="2340" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3360" Y="4140" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="1905" Y="6720" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="5" TaskOrgGUID="4">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="10">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+          <property locked="-1" name="Class Destruct"
+          value="com.anite.antelope.zebra.processLifecycle.ProcessDestruct"
+                    type="string" />
+          <property locked="-1" name="Class Construct"
+          value="com.anite.antelope.zebra.processLifecycle.ProcessConstruct"
+                    type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2160" Top="0"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2160" Top="2340"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2235" Top="4140"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="810" Top="6720"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.zebra.ext.task.SubProcess"
+              type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name" value=""
+              type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3315" Y="2340" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3360" Y="4140" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="1905" Y="6720" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="5" TaskOrgGUID="4">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="11">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+          <property locked="-1" name="Class Destruct"
+          value="com.anite.antelope.zebra.processLifecycle.ProcessDestruct"
+                    type="string" />
+          <property locked="-1" name="Class Construct"
+          value="com.anite.antelope.zebra.processLifecycle.ProcessConstruct"
+                    type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2160" Top="0"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2160" Top="2340"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2235" Top="4140"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="615" Top="6735"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.antelope.zebra.taskAction.SubProcess"
+                        type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name"
+              value="SubProcess" type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3315" Y="2340" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3360" Y="4140" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="1815" Y="6735" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="4" TaskOrgGUID="5">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+    <ProcessVersion VersionID="12">
+      <ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+        <properties name="(General)">
+          <property locked="0" name="Name" value="SimpleWorkflow"
+          type="string" />
+          <property locked="-1" name="Class Destruct"
+          value="com.anite.antelope.zebra.processLifecycle.ProcessDestruct"
+                    type="string" />
+          <property locked="-1" name="Class Construct"
+          value="com.anite.antelope.zebra.processLifecycle.ProcessConstruct"
+                    type="string" />
+        </properties>
+        <properties name="Visibility">
+          <property locked="0" name="DebugFlow" value="No"
+          type="boolean" />
+          <property locked="0" name="Display Name"
+          value="Simple Workflow" type="string" />
+          <property locked="0" name="Permissions"
+          value="systemAccess;" type="string" />
+        </properties>
+        <properties name="Security">
+          <property locked="0" name="Process Start Permissions"
+          value="systemAccess;" type="string" />
+          <property locked="0" name="Dynamic Permissions" value=""
+          type="string" />
+        </properties>
+        <properties name="(Inputs)" />
+        <properties name="(Outputs)" />
+        <TaskDefs>
+          <TaskDef GUID="1" Height="1440" Left="2160" Top="0"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Welcome to workflow" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Static Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="Dynamic Permissions"
+              value="" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="simpleWorkflow,Welcome.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="2" Height="1440" Left="2160" Top="2340"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Enter some data" type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Static Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="Dynamic Permissions"
+              value="" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="3" Height="1440" Left="2235" Top="4140"
+          Width="2340" TaskTemplate="Decision">
+            <properties name="(General)">
+              <property locked="0" name="Name"
+              value="Do you want to try and subprocess?"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Static Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="Dynamic Permissions"
+              value="" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="DefaultDecision.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="4" Height="1440" Left="4245" Top="6705"
+          Width="2340" TaskTemplate="Screen">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="The End"
+              type="string" />
+              <property locked="0" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="No"
+              type="boolean" />
+              <property locked="-1" name="Class Name" value=""
+              type="string" />
+              <property locked="-1" name="NewThread" value="No"
+              type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Static Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="Dynamic Permissions"
+              value="" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+            </properties>
+            <properties name="Screen">
+              <property locked="0" name="Screen Name"
+              value="blankpage.vm" type="string" />
+              <property locked="0" name="Auto Show" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="FeBs Properties">
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+            </properties>
+          </TaskDef>
+          <TaskDef GUID="5" Height="1440" Left="615" Top="6735"
+          Width="2340" TaskTemplate="SubProcess">
+            <properties name="(General)">
+              <property locked="0" name="Name" value="SubProcess"
+              type="string" />
+              <property locked="-1" name="Synchronise" value="No"
+              type="boolean" />
+              <property locked="-1" name="Auto" value="Yes"
+              type="boolean" />
+              <property locked="-1" name="Class Name"
+              value="com.anite.antelope.zebra.taskAction.SubProcess"
+                        type="string" />
+              <property locked="0" name="NewThread" value="No"
+              type="boolean" />
+              <property locked="-1" name="ShowInTaskList"
+              value="No" type="boolean" />
+            </properties>
+            <properties name="(General Task Properties)">
+              <property locked="0" name="Static Permissions"
+              value="systemAccess" type="string" />
+              <property locked="0" name="Dynamic Permissions"
+              value="" type="string" />
+              <property locked="0" name="ShowInHistory" value="Yes"
+              type="boolean" />
+              <property locked="0" name="Permissions"
+              value="systemAccess" type="string" />
+            </properties>
+            <properties name="SubProcess">
+              <property locked="0" name="Process Name"
+              value="SubProcess" type="file" />
+              <property locked="0" name="Push Outputs" value="Yes"
+              type="boolean" />
+            </properties>
+            <properties name="(Inputs)" />
+            <properties name="(Outputs)" />
+          </TaskDef>
+        </TaskDefs>
+        <RoutingDefs>
+          <RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="1">
+            <Points>
+              <Point X="3315" Y="2340" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="7" TaskDestGUID="3" TaskOrgGUID="2">
+            <Points>
+              <Point X="3360" Y="4140" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="8" TaskDestGUID="4" TaskOrgGUID="3">
+            <Points>
+              <Point X="5010" Y="6705" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="No"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="9" TaskDestGUID="5" TaskOrgGUID="3">
+            <Points>
+              <Point X="1815" Y="6735" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value="Yes"
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+          <RoutingDef GUID="10" TaskDestGUID="4" TaskOrgGUID="5">
+            <Points>
+              <Point X="4245" Y="7440" />
+            </Points>
+            <properties name="(General)">
+              <property locked="0" name="Name" value=""
+              type="string" />
+              <property locked="0" name="Parallel" value="No"
+              type="boolean" />
+              <property locked="0" name="Condition Class"
+              value="com.anite.antelope.zebra.routing.RoutingNameCondition"
+                        type="string" />
+            </properties>
+          </RoutingDef>
+        </RoutingDefs>
+      </ProcessDef>
+    </ProcessVersion>
+  </ProcessVersions>
+</ACGWFDNative>

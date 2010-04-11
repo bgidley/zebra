@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<document>
+
+  <properties>
+    <title>Maven Antelope Goals</title>
+    <author email="ben.gidley@anite.com">Ben Gidley</author>
+  </properties>
+
+  <body>
+    <section name="Goals">
+      <table>
+        <tr><th>Goal</th><th>Description</th></tr>
+        <tr>
+			<td>wombat:generateHibernateXml</td>
+			<td>
+            Generate hbm.xml files based on properties aniteps.hibernate.includes and aniteps.hibernate.excludes
+			</td>
+        </tr>
+        <tr>
+        	<td>wombat:schemaExport</td>
+        	<td>Exports the database to a sql file and create the database</td>
+        </tr>
+        <tr>
+        	<td>wombat:generateStartupData</td>
+        	<td>Generate startup data in the database.</td>
+        </tr>        
+        <tr>
+        	<td>wombat:inplace</td>
+        	<td>
+        		Compile and deploy all the webapp resources for inplace development.  Set your tomcat webapp
+        		home to /src/webapp instead of the more typical /target/${webapp.name}.
+        	</td>
+        </tr>     
+        <tr>
+        	<td>wombat:clean</td>
+        	<td>
+        		Cleans an inplace exploded WAR webapp
+        	</td>
+        </tr> 
+        <tr>
+        	<td>clean (postGoal)</td>
+        	<td>
+        		Plugin adds a postGoal to the clean goal to call wombat:clean.
+        	</td>
+        </tr>                    
+      </table>
+    </section>
+ </body>
+</document>

@@ -1,0 +1,13 @@
+<!-- This configuration file for Avalon components is used for testing the TestComponent -->
+<role-list>
+    <role
+        name="org.apache.fulcrum.crypto.CryptoService"
+        shorthand="crypto"
+        default-class="org.apache.fulcrum.crypto.DefaultCryptoService"
+    />  
+    <role
+        name="org.apache.fulcrum.security.authenticator.Authenticator"
+        shorthand="authenticator"
+        default-class="org.apache.fulcrum.security.authenticator.CryptoAuthenticator"
+    />
+</role-list>

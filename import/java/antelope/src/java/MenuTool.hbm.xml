@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<!DOCTYPE hibernate-mapping PUBLIC "-//Hibernate/Hibernate Mapping DTD 2.0//EN" 
+	"http://hibernate.sourceforge.net/hibernate-mapping-2.0.dtd">
+<hibernate-mapping auto-import="true">
+	<class name="com.anite.antelope.menu.MenuItem" table="MENUITEM" >
+		<id name="id" type="long" column="MENUITEM_ID" unsaved-value="0">
+			<generator class="native"/>
+		</id>
+		<property name="htmlId" column="HTML_ID" type="string"/>
+		<property name="htmlClass" column="HTML_CLASS" type="string"/>
+		<subclass name="com.anite.antelope.menu.MenuListItem">
+			<!-- the class for the one to one is determined by reflection -->
+			<one-to-one name="menuItem" 
+				class="com.anite.antelope.menu.MenuLink"/>
+			<subclass name="com.anite.antelope.menu.MenuGroup">
+				<property name="open" type="boolean" />
+				<set name="menuItems" lazy="true" table="MENUGROUP_MENUITEM">
+					<key column="MENUITEM_ID" />
+					<many-to-many 
+						class="com.anite.antelope.menu.MenuItem" 
+						column="MENUITEM_ID" />
+				</set>
+			</subclass>
+		</subclass>
+		<subclass name="com.anite.antelope.menu.MenuLink">
+			<property name="htmlHref" column="HTML_HREF" type="string"/>
+			<property name="value" column="HTML_VALUE" type="string"/>
+		</subclass>
+	</class>
+	<class name="com.anite.antelope.menu.Menu" table="MENU">
+		<id name="id" type="long" column="MENUI_ID" unsaved-value="0">
+			<generator class="native"/>
+		</id>
+		<set name="menuItems" lazy="true" table="MENU_MENUITEM">
+			<key column="MENUITEM_ID" />
+			<many-to-many class="com.anite.antelope.menu.MenuItem" 
+				column="MENUITEM_ID" />
+		</set>
+	</class>
+</hibernate-mapping>

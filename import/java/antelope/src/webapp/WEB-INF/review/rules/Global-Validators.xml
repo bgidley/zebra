@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE global-validators PUBLIC "-//Apache//TEXT global-validators//EN" "http://purl.oclc.org/NET/turbine-review/Global-Validators.dtd">
+
+<global-validators>
+  <!--This file contains a list of global parameter validators.-->
+  <parametervalidators>
+	</parametervalidators>
+</global-validators>
+

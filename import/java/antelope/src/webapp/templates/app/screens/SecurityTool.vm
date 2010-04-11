@@ -1,0 +1,73 @@
+#*
+ * Copyright 2004 Anite - Central Government Division
+ *    http://www.anite.com/publicsector
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *#
+ <h2>Security Tool</h2>
+<p>
+  Antelope has abstracted the code for accessing the security managers 
+  and utlitiy methods for common tasks such as finding out if a user has a 
+  logged is or has a specific permission into a pull tool.
+</p>
+<p>
+  The tool can be used in doPerform and doBuildTemplates of Actions and Screens 
+  easily as well as in templates (this will be dicussed later). The only
+  place its a where the tool is a bit tricky to access to is in the 
+  <code>isAuthorized</code> method of a class that extends 
+  <code>VelocitySecureAction</code> or <code>VelocitySecureScreen</code>. As the tool
+  really helps simply the 
+  great as you obviously need the context to get the tool out. 
+</p>
+<p>
+  You have a few options for getting access to the context, the first is to 
+  call the static accessor method on the <code>TurbineVelocity</code> class.
+</p>
+<pre><code> Context context = TurbineVelocity.getContext(data);</code></pre>
+<p>
+  After doing this you are able to access and use the pull tool as normal.
+</p>
+<p>
+  Another option is to create your own implemanation of the 
+  <code>VelocitySecureScreen</code> or <code>VelocitySecureAction</code>.
+  This is as simple as overriding the <code>doBuildTemplate</code> and
+  <code>doPerform</code> to pass in the context to pass in the context
+  to the <code>isAuthorized</code> method.
+</p>
+<pre><code>  /**
+   * This method overrides the method in VelocityScreen to
+   * perform a security check first.
+   *
+   * @param data Turbine information.
+   * @exception Exception, a generic exception.
+   */
+  protected void doBuildTemplate(RunData data)
+    throws Exception
+  {
+    Context context = TurbineVelocity.getContext(data);
+    if (isAuthorized(data, context))
+    {
+      doBuildTemplate(data, context);
+    }
+  }
+</code></pre>
+<h3>Using the Security tool in Velocity Pages</h3>
+<p>
+  The security tool is easily integrated into your velocity pages allowing
+  you to limit the functionality depending on the permissions a user has. 
+  This technique is used in antelopes security manager to show or hide the 
+  add, edit and delete buttons depend if the user has that specific permission.
+</p>
+<p>
+  
+</p>

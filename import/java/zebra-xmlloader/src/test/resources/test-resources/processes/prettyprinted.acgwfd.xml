@@ -1,0 +1,365 @@
+<ACGWFDNative Version="3.0">
+	<ProcessVersions>
+		<ProcessVersion VersionID="2">
+			<ProcessDef FirstTask="1" ProcessTemplate="Test1">
+				<properties name="(General)">
+					<property locked="-1" name="Name" value="New Test1 Process" 
+						type="string"/>
+				</properties>				
+				<properties name="Visibility">
+					<property locked="0" name="ShowInMainMenu" value="Yes" 
+						type="boolean"/>
+					<property locked="0" name="DebugFlow" value="Yes" 
+						type="boolean"/>
+					<property locked="0" name="Display Name" value="" 
+						type="string"/>
+					<property locked="0" name="Roles" 
+						value="ZebraUsers; ZebraAdmins;" type="string"/>
+				</properties>
+				<properties name="(Inputs)"/>
+				<properties name="(Outputs)"/>
+				<TaskDefs>
+					<TaskDef GUID="1" Height="1440" Left="825" Top="1080" 
+						Width="2340" TaskTemplate="Activity">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Activity" 
+								type="string"/>
+							<property locked="0" name="Synchronise" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Auto" value="Yes" 
+								type="boolean"/>
+							<property locked="0" name="Class Name" value="" 
+								type="string"/>
+							<property locked="-1" name="NewThread" value="Yes" 
+								type="boolean"/>
+						</properties>
+						<properties name="(Inputs)"/>
+						<properties name="Test1 Properties">
+							<property locked="0" name="Another Property" 
+								value="" type="string"/>
+						</properties>
+					</TaskDef>
+					<TaskDef GUID="2" Height="1440" Left="1590" Top="4125" 
+						Width="2340" TaskTemplate="Decision">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Decision" 
+								type="string"/>
+							<property locked="0" name="Synchronise" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Auto" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Class Name" value="" 
+								type="string"/>
+							<property locked="-1" name="NewThread" value="No" 
+								type="boolean"/>
+						</properties>
+						<properties name="Screen">
+							<property locked="0" name="Screen Name" 
+								value="DefaultDecision.vm" type="string"/>
+							<property locked="0" name="Auto Show" value="Yes" 
+								type="boolean"/>
+						</properties>
+						<properties name="Test1 Properties">
+							<property locked="0" name="Another Property" 
+								value="" type="string"/>
+						</properties>
+					</TaskDef>
+				</TaskDefs>
+				<RoutingDefs>
+					<RoutingDef GUID="3" TaskDestGUID="2" TaskOrgGUID="1">
+						<Points>
+							<Point X="2385" Y="4125"/>
+						</Points>
+						<properties name="(General)">
+							<property locked="0" name="Name" value="" 
+								type="string"/>
+							<property locked="0" name="Parallel" value="No" 
+								type="boolean"/>
+							<property locked="0" name="Condition Class" 
+								value="com.anite.zebra.ext.routing.RoutingNameCondition" 
+								type="string"/>
+						</properties>
+					</RoutingDef>
+				</RoutingDefs>
+			</ProcessDef>
+		</ProcessVersion>
+		<ProcessVersion VersionID="3">
+			<ProcessDef FirstTask="1" ProcessTemplate="Test1">
+				<properties name="(General)">
+					<property locked="-1" name="Name" value="New Test1 Process" 
+						type="string"/>
+					<property locked="-1" name="Class Destruct" 
+						value="com.anite.zebra.ext.process.ProcessDestruct" 
+						type="string"/>
+					<property locked="-1" name="Class Construct" 
+						value="com.anite.zebra.ext.process.ProcessConstruct" 
+						type="string"/>
+				</properties>
+				<properties name="Visibility">
+					<property locked="0" name="ShowInMainMenu" value="Yes" 
+						type="boolean"/>
+					<property locked="0" name="DebugFlow" value="Yes" 
+						type="boolean"/>
+					<property locked="0" name="Display Name" value="" 
+						type="string"/>
+					<property locked="0" name="Roles" 
+						value="ZebraUsers; ZebraAdmins;" type="string"/>
+				</properties>
+				<properties name="(Inputs)"/>
+				<properties name="(Outputs)"/>
+				<TaskDefs>
+					<TaskDef GUID="1" Height="1440" Left="825" Top="1080" 
+						Width="2340" TaskTemplate="Activity">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Activity" 
+								type="string"/>
+							<property locked="0" name="Synchronise" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Auto" value="Yes" 
+								type="boolean"/>
+							<property locked="0" name="Class Name" value="" 
+								type="string"/>
+							<property locked="-1" name="NewThread" value="Yes" 
+								type="boolean"/>
+						</properties>
+						<properties name="(Inputs)"/>
+						<properties name="Test1 Properties">
+							<property locked="0" name="Another Property" 
+								value="" type="string"/>
+						</properties>
+					</TaskDef>
+					<TaskDef GUID="2" Height="1440" Left="1590" Top="4125" 
+						Width="2340" TaskTemplate="Decision">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Decision" 
+								type="string"/>
+							<property locked="0" name="Synchronise" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Auto" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Class Name" value="" 
+								type="string"/>
+							<property locked="-1" name="NewThread" value="No" 
+								type="boolean"/>
+						</properties>
+						<properties name="Screen">
+							<property locked="0" name="Screen Name" 
+								value="DefaultDecision.vm" type="string"/>
+							<property locked="0" name="Auto Show" value="Yes" 
+								type="boolean"/>
+						</properties>
+						<properties name="Test1 Properties">
+							<property locked="0" name="Another Property" 
+								value="" type="string"/>
+						</properties>
+					</TaskDef>
+					<TaskDef GUID="3" Height="1440" Left="3900" Top="2190" 
+						Width="2340" TaskTemplate="Decision">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Decision" 
+								type="string"/>
+							<property locked="0" name="Synchronise" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Auto" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Class Name" value="" 
+								type="string"/>
+							<property locked="-1" name="NewThread" value="No" 
+								type="boolean"/>
+						</properties>
+						<properties name="Screen">
+							<property locked="0" name="Screen Name" 
+								value="DefaultDecision.vm" type="string"/>
+							<property locked="0" name="Auto Show" value="Yes" 
+								type="boolean"/>
+						</properties>
+						<properties name="Test1 Properties">
+							<property locked="0" name="Another Property" 
+								value="" type="string"/>
+						</properties>
+					</TaskDef>
+				</TaskDefs>
+				<RoutingDefs>
+					<RoutingDef GUID="4" TaskDestGUID="2" TaskOrgGUID="1">
+						<Points>
+							<Point X="2385" Y="4125"/>
+						</Points>
+						<properties name="(General)">
+							<property locked="0" name="Name" value="" 
+								type="string"/>
+							<property locked="0" name="Parallel" value="No" 
+								type="boolean"/>
+							<property locked="0" name="Condition Class" 
+								value="com.anite.zebra.ext.routing.RoutingNameCondition" 
+								type="string"/>
+						</properties>
+					</RoutingDef>
+					<RoutingDef GUID="5" TaskDestGUID="3" TaskOrgGUID="1">
+						<Points>
+							<Point X="3900" Y="2520"/>
+						</Points>
+						<properties name="(General)">
+							<property locked="0" name="Name" value="" 
+								type="string"/>
+							<property locked="0" name="Parallel" value="No" 
+								type="boolean"/>
+							<property locked="0" name="Condition Class" 
+								value="com.anite.zebra.ext.routing.RoutingNameCondition" 
+								type="string"/>
+						</properties>
+					</RoutingDef>
+					<RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="3">
+						<Points>
+							<Point X="3420" Y="4125"/>
+						</Points>
+						<properties name="(General)">
+							<property locked="0" name="Name" value="" 
+								type="string"/>
+							<property locked="0" name="Parallel" value="No" 
+								type="boolean"/>
+							<property locked="0" name="Condition Class" 
+								value="com.anite.zebra.ext.routing.RoutingNameCondition" 
+								type="string"/>
+						</properties>
+					</RoutingDef>
+				</RoutingDefs>
+			</ProcessDef>
+		</ProcessVersion>
+		<ProcessVersion VersionID="4">
+			<ProcessDef FirstTask="1" ProcessTemplate="Test3">
+				<properties name="(General)">
+					<property locked="-1" name="Name" value="New Test1 Process" 
+						type="string"/>
+				</properties>
+				<properties name="Visibility">
+					<property locked="0" name="ShowInMainMenu" value="Yes" 
+						type="boolean"/>
+					<property locked="0" name="DebugFlow" value="Yes" 
+						type="boolean"/>
+					<property locked="0" name="Display Name" value="" 
+						type="string"/>
+					<property locked="0" name="Roles" 
+						value="ZebraUsers; ZebraAdmins;" type="string"/>
+				</properties>
+				<properties name="(Inputs)"/>
+				<properties name="(Outputs)"/>
+				<TaskDefs>
+					<TaskDef GUID="1" Height="1440" Left="825" Top="1080" 
+						Width="2340" TaskTemplate="Activity">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Activity" 
+								type="string"/>
+							<property locked="0" name="Synchronise" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Auto" value="Yes" 
+								type="boolean"/>
+							<property locked="0" name="Class Name" value="" 
+								type="string"/>
+							<property locked="-1" name="NewThread" value="Yes" 
+								type="boolean"/>
+						</properties>
+						<properties name="(Inputs)"/>
+						<properties name="Test1 Properties">
+							<property locked="0" name="Another Property" 
+								value="" type="string"/>
+						</properties>
+					</TaskDef>
+					<TaskDef GUID="2" Height="1440" Left="1590" Top="4125" 
+						Width="2340" TaskTemplate="Decision">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Decision" 
+								type="string"/>
+							<property locked="0" name="Synchronise" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Auto" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Class Name" value="" 
+								type="string"/>
+							<property locked="-1" name="NewThread" value="No" 
+								type="boolean"/>
+						</properties>
+						<properties name="Screen">
+							<property locked="0" name="Screen Name" 
+								value="DefaultDecision.vm" type="string"/>
+							<property locked="0" name="Auto Show" value="Yes" 
+								type="boolean"/>
+						</properties>
+						<properties name="Test1 Properties">
+							<property locked="0" name="Another Property" 
+								value="" type="string"/>
+						</properties>
+					</TaskDef>
+					<TaskDef GUID="3" Height="1440" Left="3900" Top="2190" 
+						Width="2340" TaskTemplate="Decision">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Decision" 
+								type="string"/>
+							<property locked="0" name="Synchronise" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Auto" value="No" 
+								type="boolean"/>
+							<property locked="-1" name="Class Name" value="" 
+								type="string"/>
+							<property locked="-1" name="NewThread" value="No" 
+								type="boolean"/>
+						</properties>
+						<properties name="Screen">
+							<property locked="0" name="Screen Name" 
+								value="DefaultDecision.vm" type="string"/>
+							<property locked="0" name="Auto Show" value="Yes" 
+								type="boolean"/>
+						</properties>
+						<properties name="Test1 Properties">
+							<property locked="0" name="Another Property" 
+								value="" type="string"/>
+						</properties>
+					</TaskDef>
+				</TaskDefs>
+				<RoutingDefs>
+					<RoutingDef GUID="4" TaskDestGUID="2" TaskOrgGUID="1">
+						<Points>
+							<Point X="2385" Y="4125"/>
+						</Points>
+						<properties name="(General)">
+							<property locked="0" name="Name" value="" 
+								type="string"/>
+							<property locked="0" name="Parallel" value="No" 
+								type="boolean"/>
+							<property locked="0" name="Condition Class" 
+								value="com.anite.zebra.ext.routing.RoutingNameCondition" 
+								type="string"/>
+						</properties>
+					</RoutingDef>
+					<RoutingDef GUID="5" TaskDestGUID="3" TaskOrgGUID="1">
+						<Points>
+							<Point X="3900" Y="2520"/>
+						</Points>
+						<properties name="(General)">
+							<property locked="0" name="Name" value="" 
+								type="string"/>
+							<property locked="0" name="Parallel" value="No" 
+								type="boolean"/>
+							<property locked="0" name="Condition Class" 
+								value="com.anite.zebra.ext.routing.RoutingNameCondition" 
+								type="string"/>
+						</properties>
+					</RoutingDef>
+					<RoutingDef GUID="6" TaskDestGUID="2" TaskOrgGUID="3">
+						<Points>
+							<Point X="3420" Y="4125"/>
+						</Points>
+						<properties name="(General)">
+							<property locked="0" name="Name" value="" 
+								type="string"/>
+							<property locked="0" name="Parallel" value="No" 
+								type="boolean"/>
+							<property locked="0" name="Condition Class" 
+								value="com.anite.zebra.ext.routing.RoutingNameCondition" 
+								type="string"/>
+						</properties>
+					</RoutingDef>
+				</RoutingDefs>
+			</ProcessDef>
+		</ProcessVersion>
+	</ProcessVersions>
+</ACGWFDNative>

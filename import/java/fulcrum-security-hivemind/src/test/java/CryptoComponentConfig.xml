@@ -1,0 +1,17 @@
+<componentConfig>
+
+               
+  <authenticator>
+      <algorithm>java</algorithm>
+      <cipher>SHA1</cipher>
+</authenticator>
+  
+   <crypto>   
+ 	<algorithm>
+      	<unix>org.apache.fulcrum.crypto.provider.UnixCrypt</unix>
+        <clear>org.apache.fulcrum.crypto.provider.ClearCrypt</clear>
+        <java>org.apache.fulcrum.crypto.provider.JavaCrypt</java>   
+        <oldjava>org.apache.fulcrum.crypto.provider.OldJavaCrypt</oldjava>                         
+      </algorithm>    
+  </crypto>            
+</componentConfig>

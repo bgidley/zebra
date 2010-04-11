@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE validation PUBLIC "-//Apache//TEXT Validation//EN" "http://purl.oclc.org/NET/turbine-review/Validation.dtd">
+
+<validation requestLookupKey="action.myFirstWorkflow.EnterExpiryDateAction">
+  <!--Validation Specification : action.myFirstWorkflow.EnterExpiryDateAction-->
+  <parametervalidators>
+    <parameter-validator name="action">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="expiry">
+      <args />
+      <validators>
+        <validator class="com.anite.antelope.validation.FormattedDateValidator">
+          <args>
+            <argument name="failedMessage" type="string" value="Invalid Date, please re-enter" />
+          </args>
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="done">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+  </parametervalidators>
+  <request-validator />
+</validation>
+

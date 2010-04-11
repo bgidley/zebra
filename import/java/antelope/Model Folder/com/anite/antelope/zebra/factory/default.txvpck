@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+
+<nodeSet  version="1.0">
+	<view uin="V574ng9dxykk748-362hdl">
+		<property name="$defaultDiagram" value="true"/>
+		<property name="$metaclass" value="Package Diagram"/>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.factory.AntelopeStateFactory">
+			<property name="bounds" value="10,10,200,185"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.factory.AntelopeDefinitionsFactoryTest">
+			<property name="bounds" value="10,230,200,328"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.factory.AntelopeDefinitionsFactory">
+			<property name="bounds" value="230,10,200,539"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.factory.AntelopeStateFactoryTest">
+			<property name="bounds" value="450,10,200,370"/>
+			<property name="bounds_setted_by_user" value="true"/>
+			<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.factory.AntelopeStateFactoryTest$InnerClass1">
+				<property name="bounds" value="79,-16,0,0"/>
+			</reference>
+		</reference>
+	</view>
+</nodeSet>

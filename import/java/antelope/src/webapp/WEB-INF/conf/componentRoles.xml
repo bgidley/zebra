@@ -1,0 +1,28 @@
+<role-list>
+	<!-- Turbine services -->
+	<role name="org.apache.fulcrum.upload.UploadService" shorthand="upload" 
+		default-class="org.apache.fulcrum.upload.DefaultUploadService"/>
+	<role name="org.apache.turbine.components.rundata.impl.RunDataPool" 
+		shorthand="rundatapool" 
+		default-class="org.apache.turbine.components.rundata.impl.DefaultTurbineRunDataPool"/>
+	<role name="org.apache.turbine.components.rundata.impl.RunData" 
+		shorthand="rundata" 
+		default-class="org.apache.turbine.components.rundata.impl.DefaultTurbineRunData"/>
+	<!-- End turbine stuff -->
+	<!-- Review Service -->
+	<role name="org.apache.turbine.component.review.main.api.ReviewService" 
+		shorthand="review" 
+		default-class="org.apache.turbine.component.review.main.impl.ReviewServiceImpl" 
+		/>
+	<role 
+		name="org.apache.turbine.component.review.datastore.api.RulesDatastore" 
+		shorthand="datastore" 
+		default-class="org.apache.turbine.component.review.datastore.impl.XMLRulesDatastore" 
+		/>
+	<!-- end review -->
+	<!-- Penguin endpoints -->
+	<role name="com.anite.penguin.screenEndPoint.api.ScreenEndPoint" 
+		shorthand="endpoint" 
+		default-class="com.anite.penguin.screenEndPoint.impl.XmlScreenEndPoint"/>
+	<!-- End Penguin endpoints -->
+</role-list>

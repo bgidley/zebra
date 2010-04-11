@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/3.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/3.0.0 http://maven.apache.org/maven-v3_0_0.xsd">
+	<pomVersion>3</pomVersion>
+	<groupId>zebra</groupId>
+	<id>zebra-defs</id>
+	<name>Zebra Process Definitions</name>
+	<currentVersion>0.5.2-dev</currentVersion>
+	<inceptionYear>2004</inceptionYear>
+	<logo/>
+	<organization>
+		<name>Anite</name>
+		<url>http://www.aniteps.com</url>
+		<logo>/images/APS_logo.gif</logo>
+	</organization>
+	<gumpRepositoryId/>
+	<description>This project is the base XML loader for Zebra Process Definitions. </description>
+	<shortDescription>Zebra Process Definitions</shortDescription>
+	<url>http://zebra.berlios.de</url>
+	<issueTrackingUrl>http://developer.berlios.de/bugs/?group_id=2683</issueTrackingUrl>
+	<siteAddress>shell.berlios.de</siteAddress>
+	<siteDirectory>/home/groups/zebra/htdocs/cc/zebra-defs</siteDirectory>
+	<distributionDirectory>/var/www/repo</distributionDirectory>
+	<repository>
+		<connection>scm:cvs:pserver:anonymous@cvs.zebra.berlios.de:/cvsroot/zebra:zebra/src/java/zebra-defs</connection>
+		<url>http://cvs.berlios.de/cgi-bin/viewcvs.cgi/zebra/zebra/src/java/zebra-defs/</url>
+	</repository>
+	<mailingLists>
+		<mailingList>
+			<name>zebra-users@lists.berlios.de</name>
+			<subscribe>zebra-users-subscribe@lists.berlios.de</subscribe>
+			<unsubscribe>zebra-users-unsubscribe@lists.berlios.de</unsubscribe>
+			<archive>https://lists.berlios.de/pipermail/zebra-users/</archive>
+		</mailingList>
+		<mailingList>
+			<name>zebra-dev@lists.berlios.de</name>
+			<subscribe>zebra-dev-subscribe@lists.berlios.de</subscribe>
+			<unsubscribe>zebra-dev-unsubscribe@lists.berlios.de</unsubscribe>
+			<archive>https://lists.berlios.de/pipermail/zebra-dev/</archive>
+		</mailingList>
+		<mailingList>
+			<name>zebra-announce@lists.berlios.de</name>
+			<subscribe>zebra-announce-subscribe@lists.berlios.de</subscribe>
+			<unsubscribe> zebra-announce-unsubscribe@lists.berlios.de</unsubscribe>
+			<archive> https://lists.berlios.de/pipermail/zebra-announce/</archive>
+		</mailingList>
+		<mailingList>
+			<name>zebra-checkins@lists.berlios.de</name>
+			<subscribe>zebra-checkins-subscribe@lists.berlios.de</subscribe>
+			<unsubscribe> zebra-checkins-unsubscribe@lists.berlios.de</unsubscribe>
+			<archive> https://lists.berlios.de/pipermail/zebra-checkins/</archive>
+		</mailingList>
+	</mailingLists>
+	<developers>
+		<developer>
+			<name>Matt Norris</name>
+			<id>mpn_uk</id>
+			<email>matthew.norris@anite.com</email>
+			<organization/>
+			<roles>
+				<role>Senior Architect</role>
+			</roles>
+		</developer>
+		<developer>
+			<name>Ben Gidley</name>
+			<id>bgidley</id>
+			<email>ben.gidley@anite.com</email>
+			<organization/>
+			<roles>
+				<role>Senior Architect</role>
+			</roles>
+		</developer>
+		<developer>
+			<name>Eric Pugh</name>
+			<id>dep4b</id>
+			<email>epugh@opensourceconnections.com</email>
+			<organization>OpenSource Connections </organization>
+			<url>http://www.opensourceconnections.com/</url>
+			<roles>
+				<role>Developer</role>
+			</roles>
+		</developer>
+	</developers>
+	<dependencies>
+		<dependency>
+			<groupId>commons-convert</groupId>
+			<artifactId>commons-convert</artifactId>
+			<version>20040714.191311</version>
+		</dependency>
+		<dependency>
+			<groupId>commons-lang</groupId>
+			<artifactId>commons-lang</artifactId>
+			<version>2.0</version>
+		</dependency>
+		<dependency>
+			<groupId>commons-logging</groupId>
+			<artifactId>commons-logging</artifactId>
+			<version>1.0.3</version>
+		</dependency>
+		<dependency>
+			<groupId>zebra</groupId>
+			<artifactId>zebra-core</artifactId>
+			<version>0.5.2-dev</version>
+		</dependency>
+		<!-- Needed for Hibernate Implementation -->
+		<dependency>
+			<groupId>mckoi</groupId>
+			<artifactId>mckoi</artifactId>
+			<version>1.0.2</version>
+		</dependency>
+		<dependency>
+			<id>commons-collections</id>
+			<version>2.1</version>
+		</dependency>
+		<dependency>
+			<id>hibernate</id>
+			<version>2.1.1</version>
+		</dependency>
+		<dependency>
+			<groupId>hibernate</groupId>
+			<artifactId>ehcache</artifactId>
+			<version>0.7</version>
+			<url>http://ehcache.sf.net</url>
+		</dependency>
+		<dependency>
+			<id>odmg</id>
+			<version>3.0</version>
+		</dependency>
+		<dependency>
+			<groupId>hibernate</groupId>
+			<artifactId>hibernate-cglib</artifactId>
+			<version>2.1.1</version>
+			<url>http://www.hibernate.org</url>
+		</dependency>
+		<dependency>
+			<groupId>hibernate</groupId>
+			<artifactId>jta</artifactId>
+			<version>hib2.1</version>
+			<url>http://www.hibernate.org</url>
+		</dependency>
+		<dependency>
+			<id>dom4j</id>
+			<version>1.4</version>
+			<url>http://www.dom4j.org/</url>
+		</dependency>
+		<!-- Needed for XDoclet -->
+		<dependency>
+			<groupId>xdoclet</groupId>
+			<artifactId>maven-xdoclet-plugin</artifactId>
+			<version>1.2.3</version>
+			<type>plugin</type>
+		</dependency>
+	</dependencies>
+	<build>
+		<nagEmailAddress>matthew.norris@anite.com</nagEmailAddress>
+		<sourceDirectory>src/java</sourceDirectory>
+		<unitTestSourceDirectory>src/test</unitTestSourceDirectory>
+		<unitTest>
+			<includes>
+				<include>**/*Test*.java</include>
+			</includes>
+			<excludes>
+				<exclude>**/*TestCase.java</exclude>
+			</excludes>
+			<resources/>
+		</unitTest>
+		<resources/>
+	</build>
+	<reports>
+		<report>maven-changelog-plugin</report>
+		<report>maven-changes-plugin</report>
+		<report>maven-jdepend-plugin</report>
+		<report>maven-checkstyle-plugin</report>
+		<report>maven-pmd-plugin</report>
+		<!--<report>maven-findbugs-plugin</report>-->
+		<report>maven-javadoc-plugin</report>
+		<report>maven-jxr-plugin</report>
+		<report>maven-tasklist-plugin</report>
+		<report>maven-developer-activity-plugin</report>
+		<report>maven-simian-plugin</report>
+		<report>maven-jcoverage-plugin</report>
+		<report>maven-statcvs-plugin</report>
+		<report>maven-junit-report-plugin</report>
+	</reports>
+</project>

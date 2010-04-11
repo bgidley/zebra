@@ -1,0 +1,13 @@
+Microsoft Visual Studio Solution File, Format Version 1.00
+Project("{73393D18-DAC4-11D1-88FC-0000F8064EBB}") = "ACGWFDXML", "ACGWFDXML.wip", "{4F19FFD2-516E-4376-A53A-E29A10023602}"
+EndProject
+Global
+	GlobalSection(LocalDeployment) = postSolution
+		StartupProject = {00000000-0000-0000-0000-000000000000}
+	EndGlobalSection
+	GlobalSection(BuildOrder) = postSolution
+		0 = {4F19FFD2-516E-4376-A53A-E29A10023602}
+	EndGlobalSection
+	GlobalSection(DeploymentRoot) = postSolution
+	EndGlobalSection
+EndGlobal

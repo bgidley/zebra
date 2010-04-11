@@ -1,0 +1,57 @@
+<!--
+	when "routingparallel" set to TRUE the designer assumes that all routing lines
+		created should be parallel by default
+-->
+<ACGWFD.TaskTemplate name="RawTask" 
+	icon="Activity.bmp" 
+	description="This is a RAW task template" 
+	routingparallel="no">
+	<!--
+		properties and property groups specified here will
+			be applied to all tasks of this task template type.
+		system properties can also be overridden / locked / have defaults set
+	-->	
+	<properties name = "(General)">
+		<!-- ** Class Name ** 
+			name of Java class called when the task is run by the engine
+		<property name="Class Name" 
+				value="[name of java class to run implementing ITaskAction]"
+				type ="String"
+				locked="no" 
+				/>
+		-->
+		<!-- ** Auto **
+			If TRUE the engine will run the task automatically upon creation 
+				without returning to the calling code.
+			For a task that a user must manually complete (e.g. make a decision) 
+				this parameter should be FALSE
+		<property name="Auto" 
+				value="[true/false]"
+				type ="boolean"
+				locked="no" 
+				/>
+		-->
+		<!-- ** NewThread **
+			If TRUE the engine will run the task asynchronously on a seperate thread
+				from the engine thread.
+			**NOTE: This property is currently ignore by the engine and may be removed
+		<property name="NewThread" 
+				value="[true/false]"
+				type ="boolean"
+				locked="no" 
+				/>
+		-->
+		<!-- ** Synchronise **
+			If TRUE the engine will treat this task a Synchronisation task.
+			The task will be instantiated, but not run, until ALL parallel tasks that 
+				*can* Synchronise with this task have completed or moved into a state
+				where they would never be able to synchronise at this point in the 
+				workflow definition.
+		<property name="Synchronise" 
+				value="[true/false]"
+				type ="boolean"
+				locked="no" 
+				/>
+		-->
+	</properties>
+</ACGWFD.TaskTemplate>

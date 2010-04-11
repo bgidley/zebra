@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<module id="fulcrum.security" version="1.0.0">
+  <service-point id="authenticatorCrypto"
+    interface="org.apache.fulcrum.security.authenticator.Authenticator">
+    <invoke-factory>
+      <construct class="org.apache.fulcrum.security.authenticator.CryptoAuthenticator">
+        <!-- Optionally set crypto choice here -->
+      </construct>
+    </invoke-factory>
+  </service-point>
+  <service-point id="authenticatorNoop"
+    interface="org.apache.fulcrum.security.authenticator.Authenticator">
+    <invoke-factory>
+      <construct class="org.apache.fulcrum.security.authenticator.NoOpAuthenticator"/> 
+    </invoke-factory>
+  </service-point>
+  <service-point id="authenticatorTextMatch"
+    interface="org.apache.fulcrum.security.authenticator.Authenticator">
+    <invoke-factory>
+      <construct class="org.apache.fulcrum.security.authenticator.TextMatchAuthenticator"/>
+    </invoke-factory>
+  </service-point>
+  <service-point id="aclFactoryBasic" interface="org.apache.fulcrum.security.model.ACLFactory">
+    <invoke-factory>
+      <construct class="org.apache.fulcrum.security.model.basic.BasicACLFactory"/>
+    </invoke-factory>
+  </service-point>
+  <service-point id="aclFactoryDynamic" interface="org.apache.fulcrum.security.model.ACLFactory">
+    <invoke-factory>
+      <construct class="org.apache.fulcrum.security.model.dynamic.DynamicACLFactory"/>
+    </invoke-factory>
+  </service-point>
+</module>

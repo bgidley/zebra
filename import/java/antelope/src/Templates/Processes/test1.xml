@@ -1,0 +1,40 @@
+<ACGWFD.ProcessTemplate name="Test1">
+	<settings>
+		<setting name="Common Task Properties">
+			<properties name="Test1 Properties">
+				<property name="Another Property" type="String" locked="no" value="" />
+			</properties>
+		</setting>
+		<setting name="Process Properties">
+
+			<properties name="(General)">
+				<property name="Class Destruct" value="com.anite.zebra.ext.process.ProcessDestruct" type ="String" locked="yes"/>
+				<property name="Class Construct" value="com.anite.zebra.ext.process.ProcessConstruct" type ="String" locked="yes"/>
+			</properties>
+
+			<properties name = "Visibility">
+				<property name="ShowInMainMenu" value="yes" type="Boolean" locked="no"/>
+				<property name="DebugFlow" value="yes" type ="Boolean" locked="no"/>
+				<property name="Display Name" value="" type ="String" locked="no" />
+				<property name="Roles" type="String" value="ZebraUsers; ZebraAdmins;" locked="no"/>
+			</properties>
+
+			<properties name="(Inputs)" />
+			<properties name="(Outputs)" />
+
+		</setting>
+		<setting name="GUI Task Display">
+			<properties name="(General)">
+				<property name="Process Name" type="String" value="Process: " locked="yes"/>
+				<property name="Name" type="String" value="" locked="yes" />
+				<property name="Custom ID" type="string" value = "ID: " locked="yes"/>
+			</properties>
+		</setting>
+
+		<setting name="Common Routing Properties">
+			<properties name="(General)">
+				<property name="Condition Class" value = "com.anite.zebra.ext.routing.RoutingNameCondition" type="String" locked="no"/>
+			</properties>
+		</setting>
+	</settings>
+</ACGWFD.ProcessTemplate>

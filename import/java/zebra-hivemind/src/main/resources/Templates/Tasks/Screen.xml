@@ -1,0 +1,18 @@
+<ACGWFD.TaskTemplate name="Screen" icon="Screen.bmp" 
+	description="A screen is a step that displays or captures information and requires user intervention" 
+	routingparallel="no">
+	<properties name="(General)">
+		<property name="class name" type="string" value="" locked="yes" />
+		<property name="auto" type="boolean" value="no" locked="yes"/>
+		<property name="synchronise" type="boolean" value="false" locked="no"/>
+	</properties>
+	<properties name = "(General Task Properties)">
+		<property name="ShowInTaskList" value="Yes" type="Boolean" 
+			locked="yes"/>
+	</properties>
+	<properties name="Screen">
+		<property name="Screen Name" type="string" value="" 
+			locked="no"/>
+		<property name="Auto Show" type="boolean" value="yes" locked="no"/>
+	</properties>
+</ACGWFD.TaskTemplate>

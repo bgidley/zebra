@@ -1,0 +1,25 @@
+<h1>Workflow</h1>
+
+<p>The workflow process is fairly simple and can be demonstrated with the example "MyFirstWorkflow"
+</p>
+	
+<p>This workflow is very basic. It first asks the user's name, then their age 
+	and then finally their expiry date. The last page gives a summary.
+</p>
+
+<p>The flow is made up from 4 velocity pages
+<ul>
+	<li><a href="$link.setPage("myFirstWorkflow,ExplainHello.vm")">Hello</a></li>
+	<li><a href="$link.setPage("myFirstWorkflow,ExplainHowOld.vm")">HowOldAreYou</a></li>
+	<li><a href="$link.setPage("myFirstWorkflow,ExplainExpiry.vm")">EnterExpiryDate</a></li>
+	<li><a href="$link.setPage("myFirstWorkflow,ExplainSummary.vm")">Summary</a></li>
+</ul>
+</p>
+
+<p>
+	The workflow was first designed using the workflow designer which can be found <a href="http://zebra.berlios.de">here</a>
+</p>
+<p>
+	Here is an image of the workflow:
+<img src="$content.getURI("i/WorkflowDesigner.gif")" id="designer" alt="Workflow Designer" />
+</p>
