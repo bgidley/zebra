@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module id="fulcrum.hivmind.jmx" version="1.0.0">
+    <contribution configuration-id="hivemind.EagerLoad">
+        <load service-id="hivemind.management.MBeanRegistry"/>
+    </contribution>
+    <contribution configuration-id="hivemind.management.MBeans">
+        <mbean service-id="hivemind.management.connector.NamingServiceMBean" start-method="start"/>
+        <mbean service-id="hivemind.management.connector.JMXConnectorServerMBean"
+            start-method="start"/>
+        <mbean service-id="hivemind.management.log4j.LogManagementMBean"/>
+    </contribution>
+    <contribution configuration-id="hivemind.management.log4j.ManagedLog4jLoggers">
+        <logger name="*"/>
+    </contribution>
+</module>

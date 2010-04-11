@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<document>
+    <properties>
+        <title>How does this work</title>
+        <author email="bgidley@berlios.de">Ben Gidley</author>
+    </properties>
+    <body>
+        <section name="Summary">
+            <p> Summary's process has nothing that hasn't already been covered as it simply displays
+                information in the way that has already been described. The only thing worth
+                mentioning is to remember to indicate that the process is ready to move on as is
+                done in the above code on line 62. </p>
+        </section>
+    </body>
+</document>

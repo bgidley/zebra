@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<document>
+  <properties>
+    <title>Changes</title>
+    <author email="bgidley@berlios.de">Ben Gidley</author>
+  </properties>
+
+  <body>
+	<release version="1.0rc1" date="6/12/2004">
+		<action dev="bgidley" type="add">Added feature to allow 'skipocelot' 
+			parameter. This is useful for raw screens </action>
+	</release>
+    <release version="0.1" date="17/05/2004">
+      <action dev="bgidley" type="add">
+		Initial upload to Tigris of basic component 
+      </action>  
+      <action dev="bgidley" type="update">
+		Added licenses
+      </action>             
+    </release>
+  </body>
+</document>
+

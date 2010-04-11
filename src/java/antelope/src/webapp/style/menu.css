@@ -1,0 +1,78 @@
+/*
+ * Copyright 2004 Anite - Central Government Division
+ *    http://www.anite.com/publicsector
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+ 
+ /*
+	# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+	This is the style for the menu.
+	The basic menu has the following from
+	  
+	  <div id="navcontainer">
+	    <ul id="navlist">
+	      <li id="active">
+	        <a href="#" id="current">Item one</a>
+	        <ul id="subnavlist">
+	          <li id="subactive"><a href="#" id="subcurrent">Subitem one</a></li>
+	          <li><a href="#">Subitem two</a></li>
+	          <li><a href="#">Subitem three</a></li>
+	          <li><a href="#">Subitem four</a></li>
+	        </ul>
+	      </li>
+	      <li><a href="#">Item two</a></li>
+	      <li><a href="#">Item three</a></li>
+	      <li><a href="#">Item four</a></li>
+	    </ul>
+	  </div>
+	  
+	  This menu can then be changed USING CSS to either be displayed 
+	  horizontally or vertically. To get an idea of how this can be done 
+	  have a look at http://css.maxdesign.com.au/index.htm
+	# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+*/
+
+
+#navcontainer ul {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 10px 0;
+}
+
+#navcontainer li a {
+	display: block;
+	border-bottom: 1px solid #eee;
+	margin: 2px 0 2px 0;
+	text-decoration: none;
+	width: 100%;
+}
+
+#navcontainer ul#subnavlist {
+	margin: 0 0 5px 0;	
+}
+
+#navcontainer li li a {
+	display: block;
+	margin: 0 0 0 10px;
+	color: #00f;
+	text-decoration: none;
+	border-left: 2px solid #eee;
+	padding-left:2px;
+	width: 100%;	
+}
+html>body #navcontainer li a { width: auto; }
+
+#navcontainer li li a:hover {
+	border-left: 2px solid #369	;
+}

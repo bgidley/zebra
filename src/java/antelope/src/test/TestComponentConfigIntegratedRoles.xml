@@ -1,0 +1,6 @@
+<my-system>
+  <component
+    role="org.apache.fulcrum.testcontainer.SimpleComponent"
+    class="org.apache.fulcrum.testcontainer.AlternativeComponentImpl">   
+  </component>  
+</my-system>

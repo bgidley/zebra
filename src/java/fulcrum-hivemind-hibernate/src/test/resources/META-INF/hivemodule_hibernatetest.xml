@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<module id="fulcrum.hibernate.test" version="1.0.0">
+    <implementation service-id="fulcrum.hibernate.HibernateSessionFactory">
+        <invoke-factory model="singleton">
+            <construct class="org.apache.fulcrum.hibernate.factory.HibernateSessionFactory"
+                initialize-method="initializeService">
+                <set property="createSchema" value="true"/>
+            </construct>
+        </invoke-factory>
+    </implementation>
+</module>

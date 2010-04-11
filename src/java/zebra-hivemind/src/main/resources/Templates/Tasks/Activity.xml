@@ -1,0 +1,11 @@
+<ACGWFD.TaskTemplate name="Activity" icon="Activity.bmp" description="An activity runs on the server
+	and requires no user intervention" routingparallel="no">
+	<properties name="(General)">
+		<property name="synchronise" type="boolean" value="false" locked="no"/>
+		<property name="auto" type="boolean" value="true" locked="yes"/>
+	</properties>
+	<properties name="(General Task Properties)">
+		<property name="ShowInTaskList" value="no" type="Boolean" locked="yes"/>
+	</properties>
+	<properties name="(Inputs)"/>
+</ACGWFD.TaskTemplate>

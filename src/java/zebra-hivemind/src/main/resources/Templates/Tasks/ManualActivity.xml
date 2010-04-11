@@ -1,0 +1,10 @@
+<ACGWFD.TaskTemplate name="Manual Activity" icon="Activity.bmp" description="An activity runs on the server that requires the user to start it manually" routingparallel="no">
+	<properties name="(General)">
+		<property name="synchronise" type="boolean" value="no" locked="no"/>
+		<property name="auto" type="boolean" value="no" locked="yes"/>
+	</properties>
+	<properties name = "(General Task Properties)">
+		<property name="ShowInTaskList" value="no" type="Boolean" locked="yes"/>
+	</properties>
+	
+</ACGWFD.TaskTemplate>

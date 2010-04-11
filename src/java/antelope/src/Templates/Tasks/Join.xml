@@ -1,0 +1,12 @@
+<ACGWFD.TaskTemplate name="Join" icon="Join.bmp" description="A join step will only complete once all input routes have been completed. Use this step to merge concurrent operations after using a Split step" routingparallel="no">
+	<properties name="(General)">
+		<property name="class name" type="string" value="" locked="yes"/>
+		<property name="synchronise" type="boolean" value="true" locked="yes"/>
+		<property name="auto" type="boolean" value="true" locked="yes"/>
+		<property name="newthread" type="boolean" value="false" locked="yes"/>
+	</properties>
+	<properties name = "(General Task Properties)">
+		<property name="ShowInTaskList" value="no" type="Boolean" locked="yes"/>
+	</properties>
+	
+</ACGWFD.TaskTemplate>

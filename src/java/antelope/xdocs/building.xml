@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<document>
+	<properties>
+		<title>Zebra Antelope - Building</title>
+		<author email="bgidley@berlios.de">Ben Gidley</author>
+	</properties>
+	<body>
+		<section name="Introduction">
+			<p>Antelope uses <a href="http://maven.apache.org">Maven</a> to control it's build process. This is because it makes it easier!</p>
+			
+		</section>
+		<section name="The Goals">
+			<subsection name="antelope:setup">
+				<p>This goal builds the application, creates the database 
+					and sets up eclipse for inplace development (e.g. you can 
+					debug it easily).</p>
+			</subsection>
+			<subsection name="antelope:start-hsql">
+				<p>This will start hsql</p>
+			</subsection>
+			<subsection name="site:generate">
+				If you want to build this site and the javadoc etc run this goal.
+			</subsection>
+		</section>
+		<section name="Configuration">
+			<p>Firstly you should not have to reconfigure the build - but if 
+				you want to, edit project.properties. It is pretty self 
+				explanatory</p>
+		</section>
+	</body>
+</document>

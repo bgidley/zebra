@@ -1,0 +1,332 @@
+#*
+ * Copyright 2004 Anite - Central Government Division
+ *    http://www.anite.com/publicsector
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *#
+ 
+<h2>Security Manger</h2>
+<p>
+ Antelope uses the <a href="http://jakarta.apache.org/turbine/fulcrum/fulcrum-security-site/index.html">
+ Fulcrum Security framework </a>to manage user login and permission for the application. There
+ is a number of implementations of Fulcrum security, Antelope uses the "Dynamic" model as it is 
+ the most flexible. In the dynamic model each of the security entities (User, Group, Role and 
+ Permission) are connected by a many to many relationship. The Hibernate implementation of this 
+ security model was used as it is the chosen ORM layer for the application.
+</p>
+<p>
+ This section will give a detailed description the steps that were followed to use the Dynamic 
+ Hibernate implementation. The overall steps that where take where:
+</p>
+<ul>
+  <li>Map the Security Classes</li>
+  <li>Configure the Fulcrum security service components</li>
+  <li>Meercat Persistence Helper</li>
+  <li>Using the Security Service</li>
+</ul>
+<h3>Map the Security Classes</h3>
+<p>
+  Below is the mapping file used in Antelope that provides the metadata for Fulcrum's dynamic 
+  model classes in the hibernate implementations. This was unashamedly copied from the 
+  Fulcrum unit tests found in the CVS repository.   
+</p>
+<pre class="codeExample"><code>
+&lt;?xml version="1.0"?&gt;
+  &lt;!DOCTYPE hibernate-mapping PUBLIC
+   "-//Hibernate/Hibernate Mapping DTD 2.0//EN" 
+   "http://hibernate.sourceforge.net/hibernate-mapping-2.0.dtd"&gt; 
+
+&lt;hibernate-mapping auto-import="true"&gt;
+  &lt;class name="org.apache.fulcrum.security.model.dynamic.entity.DynamicPermission" table="PERMISSION" &gt;
+    &lt;id name="id" type="long" column="PERMISSION_ID" unsaved-value="0"&gt;
+      &lt;generator class="native"/&gt;
+    &lt;/id&gt;
+    &lt;property name="name" column="NAME" type="string"/&gt;          
+  &lt;/class&gt;
+  
+  &lt;class name="org.apache.fulcrum.security.model.dynamic.entity.DynamicRole" table="ROLE" &gt;
+    &lt;id name="id" type="long" column="ROLE_ID" unsaved-value="0"&gt;
+      &lt;generator class="native"/&gt;
+    &lt;/id&gt;
+    &lt;property name="name" column="NAME" type="string"/&gt;        
+    &lt;set name="permissionsAsSet" lazy="true" table="ROLE_PERMISSION"&gt;
+      &lt;key column="ROLE_ID"/&gt;
+      &lt;many-to-many class="org.apache.fulcrum.security.model.dynamic.entity.DynamicPermission" column="PERMISSION_ID"/&gt; 
+    &lt;/set&gt;      
+    &lt;set name="groupsAsSet" lazy="true" table="GROUP_ROLE" inverse="true" cascade="none"&gt;
+      &lt;key column="ROLE_ID"/&gt;
+      &lt;many-to-many class="org.apache.fulcrum.security.model.dynamic.entity.DynamicGroup" column="GROUP_ID"/&gt; 
+    &lt;/set&gt;         
+  &lt;/class&gt;   
+
+  &lt;class name="org.apache.fulcrum.security.model.dynamic.entity.DynamicGroup" table="GROUPS" &gt;
+    &lt;id name="id" type="long" column="GROUP_ID" unsaved-value="0"&gt;
+      &lt;generator class="native"/&gt;
+    &lt;/id&gt;
+    &lt;property name="name" column="NAME" type="string"/&gt;      
+      
+    &lt;set name="rolesAsSet" lazy="true" table="GROUP_ROLE" cascade="none" &gt;
+      &lt;key column="GROUP_ID"/&gt;
+      &lt;many-to-many class="org.apache.fulcrum.security.model.dynamic.entity.DynamicRole" column="ROLE_ID"/&gt; 
+    &lt;/set&gt;
+      
+    &lt;set name="usersAsSet" lazy="true" table="HIBUSER_GROUP" cascade="none" &gt;
+      &lt;key column="GROUP_ID"/&gt;
+      &lt;many-to-many class="org.apache.fulcrum.security.model.dynamic.entity.DynamicUser" column="USER_ID"/&gt; 
+    &lt;/set&gt;        
+  &lt;/class&gt;   
+
+  &lt;class name="org.apache.fulcrum.security.model.dynamic.entity.DynamicUser" table="HIBUSER" &gt;
+    &lt;id name="id" type="long" column="HIBUSER_ID" unsaved-value="0"&gt;
+      &lt;generator class="native"/&gt;
+    &lt;/id&gt;
+    &lt;property name="name" column="USERNAME" type="string"/&gt;      
+    &lt;property name="password" column="PASSWORD" type="string"/&gt;            
+      
+    &lt;set name="groupsAsSet" lazy="true" table="HIBUSER_GROUP" inverse="true" cascade="none"&gt;
+      &lt;key column="USER_ID"/&gt;
+      &lt;many-to-many class="org.apache.fulcrum.security.model.dynamic.entity.DynamicGroup" column="GROUP_ID"/&gt; 
+    &lt;/set&gt;
+  &lt;/class&gt;    
+
+&lt;/hibernate-mapping&gt;
+</code>
+</pre>
+<p>
+  This file is stored in the root of the java source and a reference to this
+  file is added to the hibernate.cfg.xml. 
+</p>
+<h3>Configure the Security Service Components</h3>
+<p>
+  Before you are able to start to use the security service you must register the components. 
+  You do this in the componentRoles.xml and componentConfiguration.xml files. The component 
+  configuration file is the main place to register the components as it you to register the 
+  components and provide the configuration information. The Hibernate/Dynamic component 
+  configuration file used in Antelope is shown below. 
+</p>
+<pre class="codeExample"><code>
+&lt;componentConfig&gt;
+  ...
+  &lt;component role="org.apache.fulcrum.security.SecurityService" 
+    class="org.apache.fulcrum.security.BaseSecurityService"&gt;
+  &lt;/component&gt;
+  &lt;component role="org.apache.fulcrum.security.UserManager" 
+    class="org.apache.fulcrum.security.hibernate.HibernateUserManagerImpl"&gt;
+    &lt;className&gt;
+      org.apache.fulcrum.security.model.dynamic.entity.DynamicUser
+    &lt;/className&gt;
+  &lt;/component&gt;
+  &lt;component role="org.apache.fulcrum.security.GroupManager" 
+    class="org.apache.fulcrum.security.hibernate.HibernateGroupManagerImpl"&gt;
+    &lt;className&gt;
+      org.apache.fulcrum.security.model.dynamic.entity.DynamicGroup
+    &lt;/className&gt;
+  &lt;/component&gt;
+  &lt;component role="org.apache.fulcrum.security.RoleManager" 
+    class="org.apache.fulcrum.security.hibernate.HibernateRoleManagerImpl"&gt;
+    &lt;className&gt;
+      org.apache.fulcrum.security.model.dynamic.entity.DynamicRole
+    &lt;/className&gt;
+  &lt;/component&gt;
+  &lt;component role="org.apache.fulcrum.security.PermissionManager" 
+    class="org.apache.fulcrum.security.hibernate.HibernatePermissionManagerImpl"&gt;
+    &lt;className&gt;
+      org.apache.fulcrum.security.model.dynamic.entity.DynamicPermission
+    &lt;/className&gt;
+  &lt;/component&gt;
+  &lt;component role="org.apache.fulcrum.security.hibernate.PersistenceHelper" 
+    class="com.anite.antelope.security.hibernate.MeercatPersistenceHelper"&gt;
+  &lt;/component&gt;
+  &lt;component role="org.apache.fulcrum.security.ModelManager" 
+    class="org.apache.fulcrum.security.hibernate.dynamic.HibernateModelManagerImpl"&gt;
+  &lt;/component&gt;
+  &lt;component role="org.apache.fulcrum.security.authenticator.Authenticator" 
+    class="org.apache.fulcrum.security.authenticator.TextMatchAuthenticator"&gt;
+  &lt;/component&gt;
+  &lt;component role="org.apache.fulcrum.security.model.ACLFactory" 
+    class="org.apache.fulcrum.security.model.dynamic.DynamicACLFactory"&gt;
+  &lt;/component&gt;	
+  ...
+&lt;/componentConfig&gt;
+</code>
+</pre>
+<p>
+  The component roles file can be used when your components needs different 
+  configurations for different situations. For example you may require a one
+  configuration during development and one for the live system. The can be 
+  done by registering each of the services in the roles file and specifying 
+  the configuration in two separate files. 
+</p>
+<p>
+  For more information on component orientated programming look 
+  <a href="http://avalon.apache.org/overview.html">here</a>.
+</p>
+<h4>Meercat Persistence Helper</h4>
+<p>
+  You may have noticed from the component configuration that Antelope doesn’t 
+  use the standard hibernate persistence helper. Instead a Persistence Helper 
+  has been written that leverages (:P) Meercat. Meercat is a component used 
+  by Zebra/Antelope to manage Hibernate sessions, for more information have 
+  a look <a href="http://zebra.berlios.de/nonav/meercat/">here</a>.   
+</p>
+<h3>Using the Security Service</h3>
+<p>
+  The Fulcrum Security Service is very easy to use once you have access to 
+  the SecurityService from the Avalon Component Service. Antelope provides a 
+  simple utility method for getting it, example code for this is shown below.   
+</p>
+<pre><code>  SecurityService securityService;
+  AvalonComponentService acs;
+
+  acs = (AvalonComponentService) TurbineServices.getInstance()
+    .getService(AvalonComponentService.SERVICE_NAME);
+  try {
+    securityService = (SecurityService) acs
+      .lookup(SecurityService.ROLE);
+  } catch (ComponentException ce) {
+    throw new InitializationException(
+      "Could not retrieve Avalon Security Service:"
+        + ce.getMessage(), ce);
+  }
+</code></pre>
+<p>
+  Each of the objects in the security model has a manager that allows a you to 
+  create, remove, find and return all instances of the entities. The managers 
+  themselves are accessed from the security service. An example of retrieving 
+  the role manager is shown below.
+</p>
+<pre><code>  RoleManager roleManager;
+  roleManager = securityService.getRoleManager();
+</code></pre>
+<h4>Building the Security Model</h4>
+<p>
+  To manage the relationships between Users, Groups, Roles and Permissions fulcrum 
+  provides a ModelManager, accessible from the SecurityService. The ModelManager 
+  has grant and revoke methods for each of the relationships in the model. Thus 
+  you can allocate Users certain Groups, Groups designated Roles and Roles 
+  specific Permissions. An example of this is shown below.
+</p>
+<pre><code>  DynamicModelManager modelManager  
+  modelManager = (DynamicModelManager) 
+    securityService.getModelManager();
+  modelManager.grant(user, group);
+  modelManager.grant(group, role);
+  modelManager.grant(role, permission);
+</code></pre>
+<p>
+  The relationships between these entities define an Access Control list (ACL) for
+   a user. This is basically all the permissions a user has derived from the 
+   relationship. More information of ACL's and how they can be used in the security 
+   for an application is discussed below.
+</p>
+<h4>Logging the user in</h4>
+<p>
+  Logging a user in is as simple as using the UserManager to authenticate the login details
+  and storing the User object in the RunData. However as the RunData method requires a 
+  org.apache.turbine.om.security.User not a  org.apache.fulcrum.security.entity.User, you must wrap 
+  the Fulcrum user in the UserAdapter class to allow it to be stored. 
+</p>
+<pre class="codeExample"><code>public class LoginUser extends VelocityAction {
+  public void doPerform(RunData data, Context context) throws Exception {
+    // get the login details and the usermanager
+    ...
+    // Check that the name entered is one which is stored in 
+    // the usermanager
+    if( usermanager.checkExists(username) ) {
+      User user;
+      UserAdapter userAdapter;
+      
+      // Authenticate the user 
+      try {
+        user = usermanager.getUser(username);
+        usermanager.authenticate(user, password);
+        
+        // Wrap the user in the fulcrum user adapter 
+        // for turbine so it can be saved in the rundata
+        userAdapter = new UserAdapter(user); 
+      
+        // log the user in
+        data.setUser(userAdapter);
+        data.save();        
+      } catch (PasswordMismatchException pme) {
+        // tell the user the password is incorrect
+      }	      
+    } else { 
+      // the the user that the details do not match a user
+    }
+  }
+}
+</code></pre>
+<p>  
+  It should be noted that the functionality of the Turbine user in not retained in 
+  the Fulcrum UserAdapter. Even though the adapter implements the Turbine User, the 
+  method bodies themselves are empty.
+</p>
+<h4>Making things (actions and screens) secure</h4>
+<p>
+  Now you know where the user information is kept you can check if a user 
+  has logged in and provide some security for your application. To stop anonymous users looking 
+  at a given screen or running an action you are able to check the RunData for a user object to 
+  see if a user has been logged in.
+</p>
+<p>
+  Turbine provides has an elegant method of adding this security to your screens and actions
+  though the use of the SecureScreen and SecureAction classes. These classes provide an
+  authenticate method that is called before doBuildTemplate or doPerform methods. In 
+  this method you are able to check the user has logged in and if not take some action, e.g. 
+  redirect to the login screen. Below is an example of how you could do this for a screen.
+</p>
+<pre><code>public abstract class SecureScreen extends VelocitySecureScreen {
+  protected boolean isAuthorized(RunData data) throws Exception {
+    // If the name is null or an empty string 
+    // then the user is annonymous and needs to login
+    if ((data.getUser() == null)
+      || StringUtils.isEmpty(data.getUser().getName())) {
+      data.setScreenTemplate("Login.vm");
+      return false;
+    } else {
+      return true;
+    }
+  }
+}
+</code></pre>
+<h4>Working with Permissions</h4>
+<p>
+  The crux of fulcrum security is the Access Control List, this allows fine grain control 
+  over which screens or actions a user is allowed to see or do. The access control list 
+  is built up from the permissions a User has from its relations ship to Groups, each 
+  Group’s relationship to the Roles and each Role’s relationships to the permissions. To 
+  get a better idea of how this works have a look at the link in the security menu on the 
+  left. 
+</p>
+<p>
+  In a very similar way to stopping anonymous user access to the application you can limit 
+  a user’s access to certain parts of the application. The access control list is retrieved 
+  for a user via the UserManager the permission it contains checked against the permission 
+  needed for an action or screen.
+</p>
+<pre><code>  SecurityService securityService;
+  UserManager usermanager;
+  String permissionName;
+  User user;
+  DynamicAccessControlList dacl;
+
+  // get the security manager, usermanager and permission name
+  ...
+  
+  user = usermanager.getUser(userName);
+  dacl = (DynamicAccessControlList) usermanager.getACL(user);
+  
+  hasPermission(permissionName);
+</code></pre>
+

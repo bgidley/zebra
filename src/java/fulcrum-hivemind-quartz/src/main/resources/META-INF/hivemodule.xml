@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<module id="fulcrum.quartz" version="1.0.0">
+    <!-- quartz scheduler -->
+    <service-point id="Scheduler" interface="org.quartz.Scheduler">
+        <invoke-factory service-id="QuartzSchedulerFactory" model="singleton">
+            <construct/>
+        </invoke-factory>
+        <interceptor service-id="hivemind.LoggingInterceptor"/>
+    </service-point>
+    <service-point id="QuartzSchedulerFactory"
+        interface="org.apache.fulcrum.quartz.factory.QuartzSchedulerFactory">
+        <invoke-factory model="singleton">
+            <construct class="org.apache.fulcrum.quartz.factory.QuartzSchedulerFactory"/>
+        </invoke-factory>
+        <interceptor service-id="hivemind.LoggingInterceptor"/>
+    </service-point>
+	<contribution configuration-id="hivemind.EagerLoad">
+		<load service-id="fulcrum.quartz.Scheduler"/>
+	</contribution>
+</module>

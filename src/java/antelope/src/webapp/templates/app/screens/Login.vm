@@ -1,0 +1,58 @@
+#*
+ * Copyright 2004 Anite - Central Government Division
+ *    http://www.anite.com/publicsector
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *#
+ 
+#set( $layout = "Login.vm" )
+<h1>Log In</h1>
+#if ($data.getMessage()) 
+<p class="error">$!data.getMessage()</p>
+#end
+Please enter your 
+  <a href="#" 
+    onmouseover="return showElement('loginHelp', this);" 
+    onmouseout="return hideElement('loginHelp', this);"
+   >
+    username and password
+   </a> below.
+
+<form method="post" action="$link.setAction('LoginUser').setPage('Index.vm')">
+  <table class="basic">
+    <tr>
+      <td>User name:</td>
+      <td><input name="username" type="text" size="10" /></td>
+    </tr>
+      <tr>
+      <td>Password:</td>
+      <td><input name="password" type="password" size="10" /></td>
+    </tr>
+  </table>
+  <p><input type="submit" value="Login" /></p>
+</form>
+
+
+ <div class="wrap1" id="loginHelp">
+ <div class="wrap2">
+  <div class="wrap3">
+  <div class="helpBox" >
+   Need a username and password? <br/>
+  Try username: <strong>antelope</strong><br/>
+  password: <strong>test</strong>
+  </div>
+ </div>
+</div>
+</div>
+
+

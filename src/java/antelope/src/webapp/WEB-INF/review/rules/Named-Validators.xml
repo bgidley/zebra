@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE named-validators PUBLIC "-//Apache//TEXT named-validators//EN" "http://purl.oclc.org/NET/turbine-review/Named-Validators.dtd">
+
+<named-validators>
+  <!--This file contains a list of named parameter validators.-->
+  <parametervalidators />
+</named-validators>
+

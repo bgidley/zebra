@@ -1,0 +1,115 @@
+<ACGWFD.ProcessTemplate name="RAW">
+	<settings>
+		<setting name="Process Properties">
+			<!-- 
+				any properties / property groups listed here are applied
+					to any process definition based on this template
+				for example, you could add a property that determined which
+					users are able to see the process definition (trigger the process)
+				you can also lock system properties down to a specific value, or just 
+					prevent access to them in the designer, by specifying a property as "locked"
+			-->
+			<properties name="(General)">
+				<!-- system properties for reference -->
+				<!--
+				<property name="Class Construct" 
+						value="[name of Java class called when process is constructed (started) by the engine implementing IProcessConstruct]"
+						type ="String"
+						locked="yes" 
+						/>
+					-->	
+				<!--
+				<property name="Class Destruct" 
+					value="[name of Java class called when process is destroyed (completed) by the engine implementing IProcessDestruct]" 
+					type = "String" 
+					locked="yes"
+					/>
+				-->
+			</properties>
+			<!-- these two properties groups are need for handling "subprocess" tasks -->
+			<properties name="(Inputs)" />
+			<properties name="(Outputs)" />
+						
+		</setting>
+		<setting name="Common Task Properties">
+			<!-- 
+				any properties / property groups listed here are applied
+					to *all* tasks based on this process template.
+				a common property might be the number of days a task is due in.
+				you can also hide / lock default task proprty values from here
+			-->
+			<properties name="(General)">
+				<!-- ** Class Name ** 
+					name of Java class called when the task is run by the engine
+				<property name="Class Name" 
+						value="[name of java class to run implementing ITaskAction]"
+						type ="String"
+						locked="no" 
+						/>
+				-->
+				<!-- ** Auto **
+					If TRUE the engine will run the task automatically upon creation 
+						without returning to the calling code.
+					For a task that a user must manually complete (e.g. make a decision) 
+						this parameter should be FALSE
+				<property name="Auto" 
+						value="[true/false]"
+						type ="boolean"
+						locked="no" 
+						/>
+				-->
+				<!-- ** NewThread **
+					If TRUE the engine will run the task asynchronously on a seperate thread
+						from the engine thread.
+					**NOTE: This property is currently ignore by the engine and may be removed
+				<property name="NewThread" 
+						value="[true/false]"
+						type ="boolean"
+						locked="no" 
+						/>
+				-->
+				<!-- ** Synchronise **
+					If TRUE the engine will treat this task a Synchronisation task.
+					The task will be instantiated, but not run, until ALL parallel tasks that 
+						*can* Synchronise with this task have completed or moved into a state
+						where they would never be able to synchronise at this point in the 
+						workflow definition.
+				<property name="Synchronise" 
+						value="[true/false]"
+						type ="boolean"
+						locked="no" 
+						/>
+				-->
+			</properties>
+		</setting>
+		<setting name="GUI Task Display">
+			<!-- 
+				any properties listed here will be used by the GUI designer to display 
+					the task icon.
+				e.g. specifying "Name" will mean the GUI designer will display the task name
+					along with the associated task template icon.
+				If a property does not exist the designer will ignore it.
+				If a "value" is specified below it will be used as the prefix for the text - 
+					e.g. specifying "Name: " for the value would prefix the task caption with "Name :"
+			-->
+			<properties name="(General)">
+				<property name="Name" type="String" value="" locked="yes" />
+			</properties>
+		</setting>
+		<setting name="Common Routing Properties">
+			<properties name="(General)">
+				<!--
+					This section allows you to override / lock / specify properties that
+					will be applied to ALL routings generated under this process template.
+					
+				<property name="Condition Class" 
+					value = "[name of java class implementing IConditionAction]" 
+					type="String" 
+					locked="no"
+					/>
+				-->
+				
+			</properties>
+		</setting>
+	</settings>
+</ACGWFD.ProcessTemplate>

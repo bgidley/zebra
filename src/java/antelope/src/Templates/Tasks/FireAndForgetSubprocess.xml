@@ -1,0 +1,20 @@
+<ACGWFD.TaskTemplate name="FireAndForgetSubProcess" icon="SubProcess.bmp" 
+	description="A fire and forget subprocess task allows you to run another process from within this process. This task will complete immediately" 
+	routingparallel="no">
+	<properties name="(General)">
+		<property name="synchronise" type="boolean" value="false" locked="yes"/>
+		<property name="auto" type="boolean" value="yes" locked="yes"/>
+		<property name="class name" type="string" 
+			value="com.anite.antelope.zebra.taskAction.FireAndForgetSubprocess" 
+			locked="yes"/>
+	</properties>
+	<properties name="SubProcess">
+		<property name="Process Name" type="file" value="" locked="no" />
+		<property name="Push Outputs" type="boolean" value="false" locked="yes" />
+	</properties>
+	<properties name = "(General Task Properties)">
+		<property name="ShowInTaskList" value="no" type="Boolean" locked="yes"/>
+	</properties>
+	<properties name="(Inputs)" />
+	<properties name="(Outputs)" />
+</ACGWFD.TaskTemplate>

@@ -1,0 +1,7 @@
+<!-- This configuration file for Avalon components is used for testing the TestComponent -->
+<role-list>
+    <role
+        name="org.apache.fulcrum.security.model.ACLFactory"
+        shorthand="acl"
+        default-class="org.apache.fulcrum.security.model.basic.BasicACLFactory"/>
+</role-list>

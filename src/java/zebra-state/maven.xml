@@ -1,0 +1,6 @@
+<project default="site" xmlns:j="jelly:core" xmlns:deploy="deploy" 
+	xmlns:ant="jelly:ant">
+    <preGoal name="java:compile">
+        <attainGoal name="xdoclet:hibernatedoclet"/>        
+    </preGoal>	
+</project>

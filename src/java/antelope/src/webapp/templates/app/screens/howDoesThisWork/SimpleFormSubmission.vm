@@ -1,0 +1,159 @@
+<h1>Simple Form Submission</h1>
+
+<p>Forms are commonly used to gather data - all the forms in antelope
+	use Turbine Review with the Penguin pull tool.</p>
+<p>Turbine Review is an system for validating all form parameters. It has
+two modes - developer and production. In developer mode it generates validation 
+files for all parameters that are not being validated. You can then add validation 
+for each parameter. In production mode a request will fail validation if any unexpected
+paramters are supplied.</p>
+<p>Penguin works with Turbine reivew to provide a page redisplay solution and to provide
+	easy access to validation information.<p>
+		
+		
+<h2>The Components</h2>
+A form is made up of
+<table>
+	<tr>
+		<th>Component</th>
+		<th>What does it do</th>
+		<th>file name</th>
+		<th>Optional</th>
+	</tr>	
+	<tr>
+		<td>Screen Template</td>
+		<td>The template is a velocity file that will display the form. It is written mainly in HTML with velocity tags supplying data and page display logic</td>
+		<td>src/ webapp/ templates/ app/ screens/ SimpleForm.vm</td>
+		<td>No</td>
+	</tr>
+	<tr>
+		<td>Screen Class</td>
+		<td>A screen class is a java class that runs before the form is displayed. It is used to set defaults on the form and to push variables to the context.</td>
+		<td>src/ java/ com/ anite/ antelope/ modules/ screens/ formSample/ SimpleForm.java</td>
+		<td>Yes</td>
+	</tr>
+	<tr>
+		<td>Action Class</td>
+		<td>An action recieves the data that has been submitted by the form and processes it.</td>
+		<td>src/ java/ com/ anite/ antelope/ modules/ actions/ formSample/ SimpleFormSubmit</td>
+		<td>No</td>
+	</tr>
+	<tr>
+		<td>Validation XML</td>
+		<td>This map fields and a request to a set of validators. These will be run when the form is submitted</td>
+		<td>src/ webapp/ WEB-INF/ review/ rules/ customised/ action- formSample_SimpleFormSubmit.xml</td>
+		<td>No</td>
+	</tr>
+	<tr>
+		<td>Pull Tools</td>
+		<td>The \$form pull tool is used to access all the fields for the form, check validation and view data </td>
+		<td>N/A</td>
+		<td>No</td>
+	</tr>
+	<tr>
+		<td>endpoints.xml</td>
+		<td>This xml file tell the pull tool which action any given screen will submit to. This allows it to prepopulate the tools with the form details</td>
+		<td>src/ webapp/ WEB-INF/ conf/ endpoints.xml</td>
+		<td>Yes</td>
+	</tr>
+	<tr>
+		<td>Velocity Macros</td>
+		<td>Macro's can be used to help with form redisplay they can be used as a library or per form. See the screen for a sample</td>
+		<td></td>
+		<td>Yes</td>
+	</tr>
+
+</table>
+
+
+<a href="$content.getURI("i/FormSubmitSequence.png")">
+	<img width="50%" src="$content.getURI("images/FormSubmitSequence.png")" id="wrap"/>
+</a> 
+<p>The image to the left shows the sequence of events when a form is submitted with data on. On the first display the same sequence is followed
+except the action is missed out.</p>
+<p>All user written code access the form data via the form pull tool. This is passed in the VelocityContext by Turbine</p>
+
+<h2 id="nofloat">What should you implement to write a form</h2>
+<h3>Screen Template</h3>
+<p>Write a normal HTML form and mark it up using the \$form pull tool. This tool will contain all form values and error messages. For a simple form you need at least
+</p>
+<code>
+&lt;form action="\$link.setAction("formSample.SimpleFormSubmit")" method="post"&gt;
+
+<br>\#set ($textfield = \$form.Fields.get("textfield"))
+<br>\#showFieldError($textfield)
+<br>&lt;p&gt;&lt;input type="text" name="textfield" value="\$textfield.Value" size="\$textfield.Size" maxlength="\$textfield.MaxLength"/&gt;&lt;/p&gt;
+<br>&lt;/form&gt;
+</code>
+<p>Going though it detail</p>
+<ul>
+	<li>The first line sets the form and uses the \$link pull tool to set the URL to the action</li>
+	<li>The second line gets thefield called "textField" from the \$field pull tool.</li>
+	<li>The 3rd line uses a macro to display any errors for the field</li>
+	<li>The 4th line shows the field and sets it to the default or current value. The tool can also read parameters from Validation (if the validation supports this) e.g. max size</li>
+	<li>The 5th line ends the form</li>
+</ul>
+<h2>Screen Class</h2>
+<p>A screen class allows you to set up defaults for the page. e.g.</p>
+<pre>
+    protected void doBuildTemplate(RunData data, Context context)
+            throws Exception {
+
+        FormTool form = (FormTool) context.get(FormTool.DEFAULT_TOOL_NAME);
+
+        Field field = (Field) form.getFields().get(TEXTFIELD);
+        field.setDefaultValue("Default Text Value");
+
+    }
+</pre>
+<p>Goin though it in detail</p>
+	<ul>
+	<li>The function doBuildTemplate in inhertited from VelocityScreen</li>
+	<li>The form tool (which will have been initialised already. It loaded from the context.</li>
+	<li>The field is fetched from the formTool using the TEXTFIELD constant</li>
+	<li>The default value is set. This will be displayed if the form tool does not have a user entered value</li>
+</ul>
+<h2>Action Class</h2>
+<p>The action class process the results after validation and decided what to do with them. e.g.</p>
+<pre>
+public void doPerform(RunData data, Context context) throws Exception {
+                
+        FormTool form  = (FormTool) context.get(FormTool.DEFAULT_TOOL_NAME);
+        
+        if (form.isAllValid()){
+            // Passed all validation
+            // Go to success URL
+            data.setScreenTemplate("formSample,Success.vm");
+        } else {
+            // Failed some validation         
+            // Return to previous screen
+            data.setScreenTemplate("formSample,SimpleForm.vm");
+        }
+        
+}
+</pre>
+<p>Goin though it in detail</p>
+	<ul>
+	<li>The function doPerform in inhertited from VelocityAction</li>
+	<li>The form tool (which will have been initialised already. It loaded from the context.</li>
+	<li>Check if the submitted values has passed validation</li>
+	<li>If so allow it to move on to the sucess screen. In a normal application you would save the data here</li>
+	<li>If not send them back to the form. Validation will automatically pass the data they entered back with messages telling them why it failed.</li>
+</ul>
+<p>It is valid to add more validation beyond that provided by the XML validation here. Ideally Review should check all fields are within expected data types. 
+	Form flow logic can be performed here. (see the user management screens for an example).</p>
+<p>It is worth noting template URL use , rather than / to seperate directories. This is to ensure they can be easily passed in URL's as a single parameter.
+<h2>Validation XML</h2>
+<p>The validation XML is specified by the Turbine Review Service - see its manual for more information on the format.</p>
+<h2>Endpoints.xml</h2>
+<p>This XML file is used to map screens together with actions. This enables the \$form tool to prepopulate with the correct field on first screen display. This
+	is useful as the tool can work out things about fields such as max length (which you may want in your HTML) from the validation. e.g.</p>
+<pre>
+&lt;application&gt;
+	&lt;screen name="formSample,SimpleForm.vm" endpoint="formSample.SimpleFormSubmit"/&gt;
+&lt;/application&gt;
+</pre>
+<p>Goin though it in detail</p>
+<ul>
+	<li>Each screen is listed along with the action it submits to</li>
+</ul>

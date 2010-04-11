@@ -1,0 +1,144 @@
+<?xml version="1.0"?>
+<project xmlns:j="jelly:core" xmlns:ant="jelly:ant" xmlns:maven="jelly:maven" 
+	xmlns:define="jelly:define" xmlns:deploy="deploy" xmlns:util="jelly:util" 
+	xmlns:log="jelly:log" xmlns:artifact="artifact">
+
+
+	<goal name="wombat:init">
+		<j:set var="warWebappBuildDir"
+        	value="${maven.src.dir}/webapp"/>    	
+	</goal>	
+
+	<goal name="wombat:generateHibernateXml" 
+		description="Generate the hbm.xml files using XDoclet">
+		<path id="xdocletpath">
+			<pathelement path="${plugin.getDependencyPath('xdoclet:xdoclet')}"/>
+			<pathelement 
+				path="${plugin.getDependencyPath('xdoclet:xdoclet-hibernate-module')}"/>
+			<pathelement 
+				path="${plugin.getDependencyPath('xdoclet:xdoclet-xdoclet-module')}"/>
+			<pathelement 
+				path="${plugin.getDependencyPath('commons-collections:commons-collections')}"/>
+			<pathelement 
+				path="${plugin.getDependencyPath('commons-logging:commons-logging')}"/>
+			<pathelement path="${plugin.getDependencyPath('xdoclet:xjavadoc')}"/>
+			<pathelement path="${plugin.getDependencyPath('log4j:log4j')}"/>
+			<pathelement path="${java.class.path}/"/>
+		</path>
+		<property name="xdocletpath" refid="xdocletpath"/>
+		<taskdef classpathref="xdocletpath" 
+			classname="xdoclet.modules.hibernate.HibernateDocletTask" 
+			name="hibernatedoclet"/>
+		<delete quiet="true">
+			<fileset dir="${maven.src.dir}/java" includes="**/om/*.hbm.xml"/>
+		</delete>
+		<echo message="${wombat.hibernate.includes}"/>
+		<echo message="${wombat.hibernate.excludes}"/>
+		<echo message="${maven.src.dir}"/>
+		<hibernatedoclet destDir="${maven.src.dir}/java" force="true" 
+			verbose="true">
+			<hibernate version="2.0"/>
+			<fileset dir="${maven.src.dir}/java" 
+				includes="${wombat.hibernate.includes}" 
+				excludes="${wombat.hibernate.excludes}" />
+		</hibernatedoclet>
+	</goal>
+	<!-- Export the schema -->
+	<goal name="wombat:schemaExport" 
+		description="Export the schema to the database" 
+		prereqs="wombat:generateHibernateXml,java:compile">
+		<path id="hibernatePath">
+			<pathelement path="${java.class.path}/"/>
+			<fileset dir="${java.home}\lib">
+				<include name="*.jar"/>
+			</fileset>
+			<pathelement path="${maven.build.dest}"/>
+			<path refid="maven.dependency.classpath"/>
+		</path>
+		<property name="hibernatePath" refid="hibernatePath"/>
+		<taskdef name="schemaexport" 
+			classname="net.sf.hibernate.tool.hbm2ddl.SchemaExportTask" 
+			classpathref="hibernatePath"/>
+		<schemaexport properties="${wombat.hibernateProperties}" 
+			quiet="no" text="no" drop="no" delimiter=";" 
+			output="schema-export.sql">
+			<fileset dir="src/java">
+				<include name="**/*.hbm.xml"/>
+			</fileset>
+		</schemaexport>
+	</goal>
+	<goal name="wombat:generateStartupData" description="Generate startup data" 
+		prereqs="wombat:schemaExport, test:compile">
+		<j:choose>
+			<j:when test="${antelope.testcase != null}">
+				<ant:echo>
+Please note that the property antelope.testcase has been 
+deprecated in favor of the property wombat.startupdata.testcase.
+				</ant:echo>		
+			</j:when>
+			<j:when test="${context.getVariable('wombat.startupdata.testcase') == null}">
+				<ant:echo>
+Please provide a property wombat.startupdata.testcase that 
+contains the unit test or suite to run.
+				</ant:echo>
+			</j:when>
+			<j:otherwise>
+				<taskdef name="junit" 
+					classname="org.apache.tools.ant.taskdefs.optional.junit.JUnitTask" 
+					/>
+				<path id="test">
+					<pathelement 
+						location="${pom.getPluginContext('maven-test-plugin').getVariable('maven.test.dest')}"/>
+					<pathelement location="${maven.build.dest}"/>
+					<path refid="maven.dependency.classpath"/>
+					<pathelement path="${plugin.getDependencyPath('junit')}"/>
+				</path>
+				<property name="test" refid="test"/>
+				<echo message="${test}"/>
+				<junit fork="yes" dir="${basedir}" filtertrace="on" haltonfailure="on" 
+					printsummary="on" showoutput="on">
+					<classpath>
+						<path refid="test"/>
+					</classpath>
+					<formatter type="plain" usefile="false"/>
+					<formatter type="brief" usefile="false" />
+					<test name="${wombat.startupdata.testcase}"/>
+				</junit>
+			</j:otherwise>
+		</j:choose>
+	</goal>
+	
+	<goal name="wombat:inplace" description="Builds an inplace exploded WAR webapp" prereqs="wombat:init">
+     	<ant:uptodate property="eclipseUpToDate" targetfile=".classpath" >
+      		<ant:srcfiles dir= "." includes="project.*"/>
+     	</ant:uptodate>
+     	<ant:echo message="eclipseUpToDate:${eclipseUpToDate}"/>
+     	<j:if test="${eclipseUpToDate == null}">
+       		<attainGoal name="eclipse"/>
+		</j:if>
+		<attainGoal name="war:inplace"/>
+     
+   	</goal>
+
+   	<!-- 
+  	Delegate a call to the wombat:inplace-clean goal without
+  	starting to loop! 
+   	-->
+   	<goal name="cleen">
+		<j:if test="${firstclean == null}">
+			<ant:echo message="About to clean inplace war files"/>
+			<ant:property name="firstclean" value="false"/>
+			<attainGoal name="wombat:clean"/>
+			<attainGoal name="clean"/>
+		</j:if>
+	</goal>   
+   	<goal name="wombat:clean" description="Cleans an inplace exploded WAR webapp" prereqs="wombat:init">		       
+     	<ant:delete dir="${warWebappBuildDir}/WEB-INF/lib"/>
+     	<ant:delete dir="${warWebappBuildDir}/WEB-INF/classes"/>     	          
+	</goal>   
+	
+   	<postGoal name="clean">
+     	<attainGoal name="wombat:clean"/>          
+	</postGoal> 	
+        
+</project>

@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<document>
+	<properties><title>How does this work</title>
+		<author email="bgidley@berlios.de">Ben Gidley</author>
+	</properties>
+	
+	
+	<body>
+		<section name ="How does this work">
+			<p>This application is a <a 
+				href="http://jakarta.apache.org/turbine">Turbine </a>web 
+				application. The Turbine site contains some background on 
+				Turbine. However many people find it not sufficent to get 
+				started.</p>
+			<p>Antelope aims to provide a good sample of the commonly used 
+				features of Turbine and specicially how to use it with the <a 
+				href="zebra.berlios.de">Zebra</a> workflow engine.</p>
+		</section>
+		<section name="So what is Turbine">
+			<p>Turbine is a web application framework which makes it easy to 
+				build web applications within a Servlet environment.</p>
+			<p>The Turbine Site is reasonably good on general concepts see</p>
+			<ul>
+				<li>
+					<a 
+						href="http://jakarta.apache.org/turbine/turbine-concepts.html">
+						 
+						http://jakarta.apache.org/turbine/turbine-concepts.html</a>
+				</li>
+				<li>
+					<a href="http://jakarta.apache.org/turbine/fsd.html"> 
+						http://jakarta.apache.org/turbine/fsd.html</a>
+				</li>
+			</ul>
+		</section>
+		<section name="Some specific examples of common tasks">
+			<ul>
+				<li>
+					<a href="SimpleFormSubmission.html"> Simple Form 
+						Submission</a>
+				</li>
+				<li>
+					<a href="PullTools.html"> Standard Pull Tools</a>
+				</li>
+				<li>
+					<a href="SavingAndLoadingData.html"> Saving and loading from 
+						the database</a>
+				</li>
+				<li>
+					<a href="TemplateToApplication.html"> Turning this template 
+						into your application</a>
+				</li>
+			</ul>
+		</section>
+	</body>
+</document>

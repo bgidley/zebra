@@ -1,0 +1,12 @@
+<project default="site" xmlns:j="jelly:core" xmlns:deploy="deploy" 
+	xmlns:ant="jelly:ant">
+
+    <preGoal name="java:compile">
+        <attainGoal name="xdoclet:hibernatedoclet"/>   
+	 	<copy todir="${maven.build.dest}">
+			<fileset dir="${basedir}/target/generated-sources/xdoclet">
+				<include name="**/*.xml"/>
+		    </fileset>
+		</copy>  
+    </preGoal>	
+</project>

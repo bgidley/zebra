@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project-modules id="moduleCoreId">
+  <wb-module deploy-name="fulcrum-security">
+    <module-type module-type-id="jst.utility">
+    </module-type>
+    <wb-resource deploy-path="/" source-path="src/main/java"/>
+    <wb-resource deploy-path="/" source-path="src/main/resources"/>
+<wb-resource deploy-path="/" source-path="/src/main/java"/>
+<wb-resource deploy-path="/" source-path="/src/main/resources"/>
+<wb-resource deploy-path="/" source-path="/src/test/java"/>
+<property name="java-output-path" value="/target/classes"/>
+  </wb-module>
+</project-modules>

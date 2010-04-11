@@ -1,0 +1,74 @@
+<ACGWFDNative Version="3.0">
+	<ProcessVersions>
+		<ProcessVersion VersionID="1">
+			<ProcessDef FirstTask="1" ProcessTemplate="Antelope">
+				<properties name="(General)">
+					<property locked="0" name="Name" value="Sub" type="string"/>
+					<property locked="-1" name="Class Destruct" value="com.anite.antelope.zebra.processLifecycle.ProcessDestruct" type="string"/>
+					<property locked="-1" name="Class Construct" value="com.anite.antelope.zebra.processLifecycle.ProcessConstruct" type="string"/>
+				</properties>
+				<properties name="Visibility">
+					<property locked="0" name="DebugFlow" value="Yes" type="boolean"/>
+					<property locked="0" name="Display Name" value="" type="string"/>
+					<property locked="0" name="Permissions" value="systemAccess;" type="string"/>
+				</properties>
+				<properties name="(Inputs)">
+					<property locked="0" name="Wibble" value="" type="string"/>
+					<property locked="0" name="Wobble" value="" type="string"/>
+				</properties>
+				<properties name="(Outputs)">
+					<property locked="0" name="Bob" value="" type="string"/>
+					<property locked="0" name="Wobble" value="" type="string"/>
+				</properties>
+				<TaskDefs>
+					<TaskDef GUID="1" Height="1440" Left="1440" Top="960" Width="2340" TaskTemplate="Screen">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Read Properties" type="string"/>
+							<property locked="0" name="Synchronise" value="No" type="boolean"/>
+							<property locked="-1" name="Auto" value="No" type="boolean"/>
+							<property locked="-1" name="Class Name" value="" type="string"/>
+							<property locked="-1" name="NewThread" value="No" type="boolean"/>
+						</properties>
+						<properties name="Screen">
+							<property locked="0" name="Screen Name" value="blankpage.vm" type="string"/>
+							<property locked="0" name="Auto Show" value="Yes" type="boolean"/>
+						</properties>
+						<properties name="(General Task Properties)">
+							<property locked="0" name="Permissions" value="systemAccess" type="string"/>
+							<property locked="0" name="ShowInHistory" value="Yes" type="boolean"/>
+						</properties>
+					</TaskDef>
+					<TaskDef GUID="2" Height="1440" Left="3660" Top="3885" Width="2340" TaskTemplate="Screen">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Change Properties" type="string"/>
+							<property locked="0" name="Synchronise" value="No" type="boolean"/>
+							<property locked="-1" name="Auto" value="No" type="boolean"/>
+							<property locked="-1" name="Class Name" value="" type="string"/>
+							<property locked="-1" name="NewThread" value="No" type="boolean"/>
+						</properties>
+						<properties name="Screen">
+							<property locked="0" name="Screen Name" value="blankpage.vm" type="string"/>
+							<property locked="0" name="Auto Show" value="Yes" type="boolean"/>
+						</properties>
+						<properties name="(General Task Properties)">
+							<property locked="0" name="Permissions" value="systemAccess" type="string"/>
+							<property locked="0" name="ShowInHistory" value="Yes" type="boolean"/>
+						</properties>
+					</TaskDef>
+				</TaskDefs>
+				<RoutingDefs>
+					<RoutingDef GUID="3" TaskDestGUID="2" TaskOrgGUID="1">
+						<Points>
+							<Point X="4695" Y="3885"/>
+						</Points>
+						<properties name="(General)">
+							<property locked="0" name="Name" value="" type="string"/>
+							<property locked="0" name="Parallel" value="No" type="boolean"/>
+							<property locked="0" name="Condition Class" value="com.anite.antelope.zebra.routing.RoutingNameCondition" type="string"/>
+						</properties>
+					</RoutingDef>
+				</RoutingDefs>
+			</ProcessDef>
+		</ProcessVersion>
+		<ProcessVersion VersionID="2"><ProcessDef FirstTask="1" ProcessTemplate="Antelope"><properties name="(General)"><property locked="0" name="Name" value="Sub" type="string"/><property locked="-1" name="Class Destruct" value="com.anite.antelope.zebra.processLifecycle.ProcessDestruct" type="string"/><property locked="-1" name="Class Construct" value="com.anite.antelope.zebra.processLifecycle.ProcessConstruct" type="string"/></properties><properties name="Visibility"><property locked="0" name="DebugFlow" value="Yes" type="boolean"/><property locked="0" name="Display Name" value="" type="string"/><property locked="0" name="Permissions" value="systemAccess;" type="string"/></properties><properties name="(Inputs)"><property locked="0" name="Wibble" value="" type="string"/><property locked="0" name="Wobble" value="" type="string"/></properties><properties name="(Outputs)"><property locked="0" name="Bob" value="" type="string"/><property locked="0" name="Wobble" value="" type="string"/></properties><TaskDefs><TaskDef GUID="1" Height="1440" Left="480" Top="240" Width="2340" TaskTemplate="Screen"><properties name="(General)"><property locked="0" name="Name" value="Child Read Properties" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="No" type="boolean"/><property locked="-1" name="Class Name" value="" type="string"/><property locked="-1" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Permissions" value="systemAccess" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/></properties><properties name="Screen"><property locked="0" name="Screen Name" value="blankpage.vm" type="string"/><property locked="0" name="Auto Show" value="Yes" type="boolean"/></properties></TaskDef><TaskDef GUID="2" Height="1440" Left="540" Top="2445" Width="2340" TaskTemplate="Screen"><properties name="(General)"><property locked="0" name="Name" value="Child Change Properties" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="No" type="boolean"/><property locked="-1" name="Class Name" value="" type="string"/><property locked="-1" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Permissions" value="systemAccess" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/></properties><properties name="Screen"><property locked="0" name="Screen Name" value="blankpage.vm" type="string"/><property locked="0" name="Auto Show" value="Yes" type="boolean"/></properties></TaskDef></TaskDefs><RoutingDefs><RoutingDef GUID="3" TaskDestGUID="2" TaskOrgGUID="1"><Points><Point X="1575" Y="2445"/></Points><properties name="(General)"><property locked="0" name="Name" value="" type="string"/><property locked="0" name="Parallel" value="No" type="boolean"/><property locked="0" name="Condition Class" value="com.anite.antelope.zebra.routing.RoutingNameCondition" type="string"/></properties></RoutingDef></RoutingDefs></ProcessDef></ProcessVersion><ProcessVersion VersionID="3"><ProcessDef FirstTask="1" ProcessTemplate="Antelope"><properties name="(General)"><property locked="0" name="Name" value="Sub" type="string"/><property locked="-1" name="Class Destruct" value="com.anite.antelope.zebra.processLifecycle.ProcessDestruct" type="string"/><property locked="-1" name="Class Construct" value="com.anite.antelope.zebra.processLifecycle.ProcessConstruct" type="string"/></properties><properties name="Visibility"><property locked="0" name="DebugFlow" value="Yes" type="boolean"/><property locked="0" name="Display Name" value="" type="string"/><property locked="0" name="Permissions" value="systemAccess;" type="string"/></properties><properties name="Security"><property locked="0" name="Process Start Permissions" value="systemAccess;" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/></properties><properties name="(Inputs)"><property locked="0" name="Wibble" value="" type="string"/><property locked="0" name="Wobble" value="" type="string"/></properties><properties name="(Outputs)"><property locked="0" name="Bob" value="" type="string"/><property locked="0" name="Wobble" value="" type="string"/></properties><TaskDefs><TaskDef GUID="1" Height="1440" Left="480" Top="240" Width="2340" TaskTemplate="Screen"><properties name="(General)"><property locked="0" name="Name" value="Child Read Properties" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="No" type="boolean"/><property locked="-1" name="Class Name" value="" type="string"/><property locked="-1" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="0" name="Permissions" value="systemAccess" type="string"/></properties><properties name="Screen"><property locked="0" name="Screen Name" value="blankpage.vm" type="string"/><property locked="0" name="Auto Show" value="Yes" type="boolean"/></properties></TaskDef><TaskDef GUID="2" Height="1440" Left="540" Top="2445" Width="2340" TaskTemplate="Screen"><properties name="(General)"><property locked="0" name="Name" value="Child Change Properties" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="No" type="boolean"/><property locked="-1" name="Class Name" value="" type="string"/><property locked="-1" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="0" name="Permissions" value="systemAccess" type="string"/></properties><properties name="Screen"><property locked="0" name="Screen Name" value="blankpage.vm" type="string"/><property locked="0" name="Auto Show" value="Yes" type="boolean"/></properties></TaskDef></TaskDefs><RoutingDefs><RoutingDef GUID="3" TaskDestGUID="2" TaskOrgGUID="1"><Points><Point X="1575" Y="2445"/></Points><properties name="(General)"><property locked="0" name="Name" value="" type="string"/><property locked="0" name="Parallel" value="No" type="boolean"/><property locked="0" name="Condition Class" value="com.anite.antelope.zebra.routing.RoutingNameCondition" type="string"/></properties></RoutingDef></RoutingDefs></ProcessDef></ProcessVersion></ProcessVersions>
+</ACGWFDNative>

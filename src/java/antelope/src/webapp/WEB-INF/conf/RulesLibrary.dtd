@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+
+<!ELEMENT library (ruleset*)>
+
+<!ELEMENT ruleset (parameter-validator*)>
+<!ATTLIST ruleset name NMTOKEN #REQUIRED>
+<!ATTLIST ruleset version NMTOKEN #REQUIRED>
+
+<!ELEMENT parameter-validator (args,validators)>
+<!ATTLIST parameter-validator name NMTOKEN #REQUIRED>
+
+
+<!ELEMENT args (argument*)>
+<!ELEMENT argument EMPTY>
+<!ATTLIST argument
+	name NMTOKEN #REQUIRED
+	type (string | int ) "string"
+	value CDATA #REQUIRED
+>
+
+<!ELEMENT validator (args?)>
+<!ATTLIST validator class NMTOKEN #REQUIRED>
+<!ELEMENT validators (validator*)>

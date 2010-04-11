@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+
+<nodeSet  version="1.0">
+	<view uin="V574ng9dxyhy4x0kaasfc">
+		<property name="$defaultDiagram" value="true"/>
+		<property name="$metaclass" value="Package Diagram"/>
+		<reference referencedUin="jdt:e_class:src:anite.antelope.zebra.Class1">
+			<property name="bounds" value="339,213,91,55"/>
+		</reference>
+		<reference referencedUin="design:view:::V574ng9dxyhy60y8uxltn">
+			<property name="bounds" value="10,10,50,50"/>
+		</reference>
+	</view>
+</nodeSet>

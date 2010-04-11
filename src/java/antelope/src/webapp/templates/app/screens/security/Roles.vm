@@ -1,0 +1,91 @@
+#*
+ * Copyright 2004 Anite - Central Government Division
+ *    http://www.anite.com/publicsector
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *#
+ 
+<h2>Role Maintenance</h2>
+<p>
+The page allows you to add and remove roles and also allows you to change the permission groups are allocated.
+</p>
+<form method="post" id="permmaintform" action="$link.setAction('security.ChangeRolePermission').setPage('security,Roles.vm')" method="post"> 
+
+<table id="permissionTable" summary="User Permission modification" class="basic">
+  <tr>
+    <th colspan="2">Role Maintainance</th>
+  </tr>
+  <tr>
+    <td colspan="2">Roles</td>
+  </tr>  
+  <tr>
+    <td>
+      <select name="allocatedroles" size="5" onchange="submitForm('permmaintform')">
+        #foreach ($role in $allocatedroles)
+          #if($role.id == $selectedrole.id )
+          	 <option value="$role.id" selected="selected">$role.name</option>
+          #else
+          	 <option value="$role.id">$role.name</option>
+          #end
+        #end
+      </select>
+    </td>
+    <td>
+	  <ul>
+	  #if($security.hasPermission($data, "security_add"))
+        <li><a href="$link.setPage('security,AddRole.vm')">Add Role</a></li>	
+      #end
+      #if($security.hasPermission($data, "security_edit"))
+        <li><a href="javascript:submitFormNewAction('permmaintform', '$link.setAction('security.SelectRole').setPage('security,EditRole.vm')')">Edit Role</a></li>
+      #end
+      #if($security.hasPermission($data, "security_delete"))
+        <li><a href="javascript:submitFormNewAction('permmaintform', '$link.setAction('security.DeleteRole').setPage('security,Roles.vm')')">Delete Role</a></li>
+      #end
+      </ul>       
+    </td>
+  </tr>  
+  <tr>
+    <td>Allocated Permissions</td>
+    <td>Available Permissions</td>
+  </tr>
+  <tr>
+    <td>
+      <select name="allocatedperms" size="5" multiple="multiple">
+        #foreach ($permission in $allocatedperms)
+          <option value="$permission.id">$permission.name</option>
+        #end
+      </select>
+    </td>
+    <td>
+      <select name="availableperms" size="5" multiple="multiple">
+        #foreach ($permission in $availableperms)
+          <option value="$permission.id">$permission.name</option>
+        #end
+      </select>
+    </td>
+  </tr>
+  <tr>
+  	<td>
+  	  <input type="submit" name="doremoveperm" value="--&gt;" />
+  	</td>  
+  	<td>
+  	  <input type="submit" name="doaddperm" value="&lt;--" />
+  	</td>  
+  </tr>
+</table>
+</form>
+
+
+
+
+
