@@ -63,7 +63,7 @@ public class FormTool implements PipelineDataApplicationTool, Serializable {
         return fields.toString();
     }
 
-    private transient static Log log = LogFactory.getLog(FormTool.class);
+    private transient static Logger log = LoggerFactory.getLogger(FormTool.class);
 
     /**
      * The default tool name - this can be used by applications to load an

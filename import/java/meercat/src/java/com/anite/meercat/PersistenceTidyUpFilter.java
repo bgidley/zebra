@@ -39,7 +39,7 @@ import org.apache.commons.logging.LogFactory;
  */
 public class PersistenceTidyUpFilter implements Filter {
 
-    private static Log log = LogFactory.getLog(PersistenceTidyUpFilter.class);
+    private static Logger log = LoggerFactory.getLogger(PersistenceTidyUpFilter.class);
 
     /*
      * (non-Javadoc)

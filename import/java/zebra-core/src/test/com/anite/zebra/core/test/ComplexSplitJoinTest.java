@@ -45,7 +45,7 @@ import com.anite.zebra.core.state.api.ITaskInstance;
  */
 public class ComplexSplitJoinTest extends TestCase {
 
-	private static Log log = LogFactory.getLog(ComplexSplitJoinTest.class);
+	private static Logger log = LoggerFactory.getLogger(ComplexSplitJoinTest.class);
 	
 	/*
 	 * the following fields are needed to allow the various tests

@@ -36,7 +36,7 @@ public class CalendarHelper {
             + " " + DEFAULT_TIME_FORMAT;
 
     /** Class logger */
-    private static Log log = LogFactory.getLog(CalendarHelper.class);
+    private static Logger log = LoggerFactory.getLogger(CalendarHelper.class);
 
     private CalendarHelper() {
     }

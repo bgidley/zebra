@@ -14,7 +14,7 @@ import org.apache.hivemind.impl.XmlModuleDescriptorProvider;
 
 public class RegistryManager {
 
-    private static final Log log = LogFactory.getLog(RegistryManager.class);
+    private static final Logger log = LoggerFactory.getLogger(RegistryManager.class);
 
     private Registry registry = null;
 

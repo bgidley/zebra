@@ -29,7 +29,7 @@ import org.apache.commons.logging.LogFactory;
 public class CachedPrintWriter extends java.io.PrintWriter {
 
     /** logging */
-    private static Log log = LogFactory.getLog(CachedPrintWriter.class);
+    private static Logger log = LoggerFactory.getLogger(CachedPrintWriter.class);
 
     private String buf = "";
 

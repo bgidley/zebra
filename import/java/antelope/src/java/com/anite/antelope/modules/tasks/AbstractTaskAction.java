@@ -35,7 +35,7 @@ import com.anite.zebra.core.state.api.ITransaction;
  */
 public abstract class AbstractTaskAction implements ITaskAction {
 
-    private final static Log log = LogFactory.getLog(AbstractTaskAction.class);
+    private final static Logger log = LoggerFactory.getLogger(AbstractTaskAction.class);
     
     /**
      * Sets the task into the correct state to proceed

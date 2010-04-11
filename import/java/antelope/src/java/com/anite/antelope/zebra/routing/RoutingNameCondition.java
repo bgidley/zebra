@@ -30,7 +30,7 @@ import com.anite.zebra.core.state.api.ITaskInstance;
  * @author Matthew.Norris
  */
 public class RoutingNameCondition implements IConditionAction {
-    private static Log log = LogFactory.getLog(RoutingNameCondition.class);
+    private static Logger log = LoggerFactory.getLogger(RoutingNameCondition.class);
 
     /**
      * Run the condition if and only if it is an AntelopeTaskInstance

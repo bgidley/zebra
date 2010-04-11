@@ -74,7 +74,7 @@ public class TurbineAntelopeRunWorkflowTest extends TestCase {
 
     private static final String SPLIT_WORKFLOW = "Split";
 
-    private static Log log = LogFactory.getLog(TurbineAntelopeRunWorkflowTest.class);
+    private static Logger log = LoggerFactory.getLogger(TurbineAntelopeRunWorkflowTest.class);
 
     private ZebraHelper zebraHelper;
 

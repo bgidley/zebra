@@ -43,7 +43,7 @@ public abstract class HibernateStateFactory implements IStateFactory {
 
     private LockManager lockManager = new LockManager();
 
-    private static Log log = LogFactory.getLog(HibernateStateFactory.class);
+    private static Logger log = LoggerFactory.getLogger(HibernateStateFactory.class);
 
     public abstract Session getSession() throws StateFailureException;
 

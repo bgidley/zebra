@@ -71,7 +71,7 @@ public class ZebraRunWorkflowTest extends TestCase {
 
     private static final String SPLIT_WORKFLOW = "Split";
 
-    private static Log log = LogFactory.getLog(ZebraRunWorkflowTest.class);
+    private static Logger log = LoggerFactory.getLogger(ZebraRunWorkflowTest.class);
 
 
     private Zebra zebra;

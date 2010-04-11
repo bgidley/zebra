@@ -39,7 +39,7 @@ import org.apache.turbine.util.parser.ParameterParser;
 public class RegexMaskStringValidator extends AbstractBasePerFieldValidator
 {
 
-    private static Log log = LogFactory.getLog(RegexMaskStringValidator.class);
+    private static Logger log = LoggerFactory.getLogger(RegexMaskStringValidator.class);
 
     public void doCheckArguments() throws ReviewConfigurationException
     {

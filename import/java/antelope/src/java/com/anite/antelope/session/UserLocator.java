@@ -25,7 +25,7 @@ import org.apache.fulcrum.security.entity.User;
  * @author Ben.Gidley
  */
 public class UserLocator {
-    private static final Log log = LogFactory.getLog(UserLocator.class);
+    private static final Logger log = LoggerFactory.getLogger(UserLocator.class);
     
     private static ThreadLocal threadLocal;
     

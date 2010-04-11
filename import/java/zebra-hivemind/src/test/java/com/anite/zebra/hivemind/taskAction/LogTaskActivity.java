@@ -29,7 +29,7 @@ import com.anite.zebra.hivemind.om.state.ZebraTaskInstance;
 
 public class LogTaskActivity implements ITaskAction{
 
-	private static final Log log = LogFactory.getLog(LogTaskActivity.class);
+	private static final Logger log = LoggerFactory.getLogger(LogTaskActivity.class);
 	
 	public void runTask(ITaskInstance arg0) throws RunTaskException {
 		SimpleDateFormat sdf = new SimpleDateFormat();

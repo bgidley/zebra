@@ -57,7 +57,7 @@ public abstract class BaseWorkflowAction extends AbstractWorkflowRunTaskAction {
 
     public static final String HOME_NAME = "home";
 
-    private static Log log = LogFactory.getLog(BaseWorkflowAction.class); //$SUP-HIA$
+    private static Logger log = LoggerFactory.getLogger(BaseWorkflowAction.class); //$SUP-HIA$
 
     public final void doPerform(RunData data, Context context) throws Exception {
         ZebraSessionData sessionData = (ZebraSessionData) data.getSession()

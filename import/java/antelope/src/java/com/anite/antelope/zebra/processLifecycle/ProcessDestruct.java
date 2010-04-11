@@ -47,7 +47,7 @@ import com.anite.zebra.ext.definitions.api.IProperties;
  */
 public class ProcessDestruct implements IProcessDestruct {
 
-	private static Log log = LogFactory.getLog(ProcessDestruct.class);
+	private static Logger log = LoggerFactory.getLogger(ProcessDestruct.class);
 
 	public void processDestruct(IProcessInstance processInstance)
 			throws DestructException {

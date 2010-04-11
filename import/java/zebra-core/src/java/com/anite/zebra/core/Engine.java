@@ -63,7 +63,7 @@ import com.anite.zebra.core.util.TaskSync;
  * @author Matthew.Norris
  */
 public class Engine implements IEngine {
-	private static Log log = LogFactory.getLog(Engine.class);
+	private static Logger log = LoggerFactory.getLogger(Engine.class);
 	private IStateFactory stateFactory;
 	private TaskSync taskSync = new TaskSync();
 	private IClassFactory classFactory;

@@ -27,7 +27,7 @@ public class MeercatPersistenceHelper extends AbstractManager implements
         PersistenceHelper {
 
     /** Logging */
-    private static Log log = LogFactory.getLog(MeercatPersistenceHelper.class);
+    private static Logger log = LoggerFactory.getLogger(MeercatPersistenceHelper.class);
 
     protected HibernateService hibernateService;
 

@@ -42,7 +42,7 @@ import com.anite.zebra.core.state.api.IProcessInstance;
  */
 public class TaskInstanceTool implements ApplicationTool {
 
-    private static final Log log = LogFactory.getLog(TaskInstanceTool.class);
+    private static final Logger log = LoggerFactory.getLogger(TaskInstanceTool.class);
 
     private AntelopeTaskInstance taskInstance;
  

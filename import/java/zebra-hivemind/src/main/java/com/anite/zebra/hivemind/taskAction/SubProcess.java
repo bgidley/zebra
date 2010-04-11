@@ -45,7 +45,7 @@ import com.anite.zebra.hivemind.util.RegistryHelper;
  * @author Ben Gidley
  */
 public class SubProcess implements ITaskAction {
-	private static Log log = LogFactory.getLog(SubProcess.class);
+	private static Logger log = LoggerFactory.getLogger(SubProcess.class);
 
 	public void runTask(ITaskInstance taskInstance) throws RunTaskException {
 		String processName = null;

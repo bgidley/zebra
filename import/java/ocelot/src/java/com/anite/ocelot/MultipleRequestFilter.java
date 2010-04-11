@@ -74,7 +74,7 @@ public class MultipleRequestFilter implements Filter {
     private static final String SESSION_REQUESTSTACK = "MultipleRequestFilter._RequestStack";
 
     /** logging */
-    private static Log log = LogFactory.getLog(MultipleRequestFilter.class);
+    private static Logger log = LoggerFactory.getLogger(MultipleRequestFilter.class);
 
     
     /**

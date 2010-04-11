@@ -69,7 +69,7 @@ public class AntelopeStateFactory extends HibernateStateFactory implements
         // TODO Auto-generated method stub
         return lockManager;
     }
-    private static Log log = LogFactory.getLog(AntelopeStateFactory.class);
+    private static Logger log = LoggerFactory.getLogger(AntelopeStateFactory.class);
 
     private ServiceManager manager;
 

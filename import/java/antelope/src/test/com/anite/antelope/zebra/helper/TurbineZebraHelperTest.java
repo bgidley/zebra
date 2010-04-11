@@ -43,7 +43,7 @@ public class TurbineZebraHelperTest extends TestCase {
 
     private static final String SIMPLE_WORKFLOW = "SimpleWorkflow";
 
-    private static Log log = LogFactory.getLog(TurbineZebraHelperTest.class);
+    private static Logger log = LoggerFactory.getLogger(TurbineZebraHelperTest.class);
 
     private ZebraHelper zebraHelper;
 

@@ -49,7 +49,7 @@ public class ZebraAvalonDefsFactory implements IAvalonDefsFactory,
     /**
      * logging
      */
-    private static Log log = LogFactory.getLog(ZebraAvalonDefsFactory.class);
+    private static Logger log = LoggerFactory.getLogger(ZebraAvalonDefsFactory.class);
 
     private String appRootPath = null;
 

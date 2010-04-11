@@ -45,7 +45,7 @@ import com.anite.antelope.zebra.helper.ZebraHelper;
  */
 public class AntelopeSessionValidator extends TemplateSessionValidator {
 
-    private final static Log log = LogFactory.getLog(AntelopeSessionValidator.class);
+    private final static Logger log = LoggerFactory.getLogger(AntelopeSessionValidator.class);
 
     /**
      * If logged in set up userLocator

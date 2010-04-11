@@ -45,7 +45,7 @@ import com.anite.penguin.modules.tools.FormTool;
  */
 public abstract class BasicUserSecurityAction extends VelocityAction {
 
-	private static Log log = LogFactory.getLog(BaseWorkflowAction.class);
+	private static Logger log = LoggerFactory.getLogger(BaseWorkflowAction.class);
 
 	/**
 	 * Prepare the form TODO revise this for pipeline data once things have

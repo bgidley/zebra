@@ -73,7 +73,7 @@ public class AntelopeProcessInstance implements IProcessInstance {
 
     private static final String ZEBRA_PERMISSION_PREFIX = "ZEBRA";
 
-    private static Log log = LogFactory.getLog(AntelopeProcessInstance.class);
+    private static Logger log = LoggerFactory.getLogger(AntelopeProcessInstance.class);
 
     /* Field Variables for Interface */
     private Long processDefinitionId;

@@ -30,7 +30,7 @@ import org.apache.commons.logging.LogFactory;
 public class CachedServletResponse extends ServletResponseWrapper {
 
     /** logging */
-    private static Log log = LogFactory.getLog(CachedServletResponse.class);
+    private static Logger log = LoggerFactory.getLogger(CachedServletResponse.class);
 
     private CachedPrintWriter pw = null;
 

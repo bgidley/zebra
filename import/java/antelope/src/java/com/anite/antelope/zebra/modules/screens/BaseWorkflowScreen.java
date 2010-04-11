@@ -55,7 +55,7 @@ import com.anite.zebra.core.state.api.ITransaction;
  */
 public abstract class BaseWorkflowScreen extends VelocityScreen {
 
-    private static Log log = LogFactory.getLog(BaseWorkflowScreen.class);
+    private static Logger log = LoggerFactory.getLogger(BaseWorkflowScreen.class);
 
     /**
      * Prepare the form TODO revise this for pipeline data once things have

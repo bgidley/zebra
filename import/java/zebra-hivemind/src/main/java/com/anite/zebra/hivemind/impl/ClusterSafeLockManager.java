@@ -34,7 +34,7 @@ import com.anite.zebra.hivemind.om.state.DatabaseLock;
  */
 public class ClusterSafeLockManager implements LockManager {
 
-    private final static Log log = LogFactory.getLog(ClusterSafeLockManager.class);
+    private final static Logger log = LoggerFactory.getLogger(ClusterSafeLockManager.class);
 
     /**
      * @param processInstance

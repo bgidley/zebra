@@ -38,7 +38,7 @@ import com.anite.zebra.hivemind.om.defs.ZebraTaskDefinition;
  */
 public class ZebraDefinitionFactoryImpl implements ZebraDefinitionFactory {
     /** logging */
-    private static Log log = LogFactory.getLog(ZebraDefinitionFactoryImpl.class);
+    private static Logger log = LoggerFactory.getLogger(ZebraDefinitionFactoryImpl.class);
 
     /* Variables for configuration */
     private String processesPath;

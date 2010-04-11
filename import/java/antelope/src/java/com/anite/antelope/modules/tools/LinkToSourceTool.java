@@ -48,7 +48,7 @@ public class LinkToSourceTool implements ApplicationTool {
 
     private String screenSource = "";
 
-    private static Log log = LogFactory.getLog(LinkToSourceTool.class);
+    private static Logger log = LoggerFactory.getLogger(LinkToSourceTool.class);
 
     private static final String SOURCE_BASE = "xref/";
 

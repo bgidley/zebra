@@ -20,7 +20,7 @@ import com.anite.zebra.core.state.api.IProcessInstance;
 import com.anite.zebra.core.state.api.ITaskInstance;
 
 public class SplitJoinTest extends TestCase {
-	private static Log log = LogFactory.getLog(SplitJoinTest.class);
+	private static Logger log = LoggerFactory.getLogger(SplitJoinTest.class);
 	
     
 	public void testSimpleSplitJoin() throws Exception {

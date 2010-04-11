@@ -36,7 +36,7 @@ import com.anite.zebra.core.state.api.ITaskInstance;
  * @author Matthew.Norris
  */
 public class TaskSync {
-    private static Log log = LogFactory.getLog(TaskSync.class);
+    private static Logger log = LoggerFactory.getLogger(TaskSync.class);
 	/**
      * @return Returns TaskDefs marked as Synchronise=TRUE that this TaskDef can
      *         potentially block

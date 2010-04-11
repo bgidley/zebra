@@ -65,7 +65,7 @@ public class ZebraHelper {
     /**
      * logging
      */
-    private static Log log = LogFactory.getLog(ZebraHelper.class);
+    private static Logger log = LoggerFactory.getLogger(ZebraHelper.class);
 
     private static ZebraHelper instance;
 

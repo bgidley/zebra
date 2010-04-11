@@ -33,7 +33,7 @@ import org.apache.commons.logging.LogFactory;
  */
 public class Menu {
     
-    private static Log log = LogFactory.getLog(Menu.class);
+    private static Logger log = LoggerFactory.getLogger(Menu.class);
     
     // this is a list of menuitems that make up the menu 
     private List menuItems;    

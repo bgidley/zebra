@@ -31,7 +31,7 @@ import com.anite.zebra.ext.definitions.api.IProcessVersions;
  */
 public class LoadFromFile {
 
-	private static final Log log = LogFactory.getLog(LoadFromFile.class);
+	private static final Logger log = LoggerFactory.getLogger(LoadFromFile.class);
 
 	private Set allProcessVersions = new HashSet();
 

@@ -37,7 +37,7 @@ import org.quartz.impl.StdSchedulerFactory;
 
 public class QuartzSchedulerFactory implements ServiceImplementationFactory, RegistryShutdownListener {
 
-    private static final Log log = LogFactory.getLog(QuartzSchedulerFactory.class);
+    private static final Logger log = LoggerFactory.getLogger(QuartzSchedulerFactory.class);
 
     private static final String HIBERNATE_DRIVER_KEY = "hibernate.connection.driver_class";
 

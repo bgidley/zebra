@@ -40,7 +40,7 @@ public class PersistenceLocator {
      */
     private static PersistenceLocator instance;
 
-    private static Log log = LogFactory.getLog(PersistenceLocator.class);
+    private static Logger log = LoggerFactory.getLogger(PersistenceLocator.class);
 
     /**
      * Holds the hibernate session on a per thread basis

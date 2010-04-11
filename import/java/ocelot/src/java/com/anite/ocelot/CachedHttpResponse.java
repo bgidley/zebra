@@ -32,7 +32,7 @@ import org.apache.commons.logging.LogFactory;
 public class CachedHttpResponse extends HttpServletResponseWrapper {
 
     /** logging */
-    private static Log log = LogFactory.getLog(CachedHttpResponse.class);
+    private static Logger log = LoggerFactory.getLogger(CachedHttpResponse.class);
 
     private CachedServletResponse csr;
 

@@ -33,7 +33,7 @@ import com.anite.penguin.modules.tools.FormTool;
  */
 public class StartProcess extends AbstractWorkflowRunTaskAction {
 
-    private final static Log log = LogFactory.getLog(StartProcess.class);
+    private final static Logger log = LoggerFactory.getLogger(StartProcess.class);
 
     private static final String PROCESS_NAME = "processname";
 

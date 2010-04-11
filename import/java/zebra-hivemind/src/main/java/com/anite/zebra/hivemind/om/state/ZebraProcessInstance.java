@@ -82,7 +82,7 @@ public class ZebraProcessInstance implements IProcessInstance {
 
     private static final String ZEBRA_PERMISSION_PREFIX = "ZEBRA";
 
-    private static Log log = LogFactory.getLog(ZebraProcessInstance.class);
+    private static Logger log = LoggerFactory.getLogger(ZebraProcessInstance.class);
 
     /* Field Variables for Interface */
     private Long processDefinitionId;

@@ -32,7 +32,7 @@ import com.anite.antelope.menu.Menu;
  */
 public class MenuTool implements ApplicationTool {
     
-    private static Log log = LogFactory.getLog(MenuTool.class);
+    private static Logger log = LoggerFactory.getLogger(MenuTool.class);
     
     /**
      * The name to get the tool out of the context

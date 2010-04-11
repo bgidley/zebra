@@ -33,7 +33,7 @@ import com.anite.zebra.core.state.api.IProcessInstance;
  */
 public class ProcessConstruct implements IProcessConstruct {
 
-    private static Log log = LogFactory.getLog(ProcessConstruct.class);
+    private static Logger log = LoggerFactory.getLogger(ProcessConstruct.class);
 
     public void processConstruct(IProcessInstance processInstance)
             throws ConstructException {

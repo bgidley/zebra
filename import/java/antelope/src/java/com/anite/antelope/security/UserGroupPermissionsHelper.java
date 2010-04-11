@@ -52,7 +52,7 @@ import com.anite.antelope.utils.AvalonServiceHelper;
  */
 public class UserGroupPermissionsHelper {
 
-    private final static Log log = LogFactory.getLog(UserGroupPermissionsHelper.class);
+    private final static Logger log = LoggerFactory.getLogger(UserGroupPermissionsHelper.class);
 
     private static UserGroupPermissionsHelper instance;
 

@@ -15,7 +15,7 @@ public class HibernateConnectionProviderDataSource implements DataSource {
 
 	private ConnectionProvider connectionProvider = null;
 	
-	private static final Log log = LogFactory.getLog(HibernateConnectionProviderDataSource.class);
+	private static final Logger log = LoggerFactory.getLogger(HibernateConnectionProviderDataSource.class);
 	
 	public HibernateConnectionProviderDataSource(ConnectionProvider cp)
 	{

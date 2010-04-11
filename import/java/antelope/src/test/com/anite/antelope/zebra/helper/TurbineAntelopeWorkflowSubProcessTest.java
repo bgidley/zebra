@@ -43,7 +43,7 @@ import com.anite.zebra.core.exceptions.TransitionException;
 public class TurbineAntelopeWorkflowSubProcessTest extends TestCase {
 
 	private static final String PUSHSUBFLOW = "PushSubflow";
-	private static Log log = LogFactory.getLog(TurbineAntelopeRunWorkflowTest.class);
+	private static Logger log = LoggerFactory.getLogger(TurbineAntelopeRunWorkflowTest.class);
 
 	private static final String RUBBISH = "Rubbish";
 

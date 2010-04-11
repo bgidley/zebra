@@ -22,7 +22,7 @@ import com.anite.zebra.core.state.api.IProcessInstance;
  */
 public class LockManager {
 
-    private final static Log log = LogFactory.getLog(LockManager.class);
+    private final static Logger log = LoggerFactory.getLogger(LockManager.class);
 
     /**
      * TODO: this implementation does nothing with the "engine" parameter 

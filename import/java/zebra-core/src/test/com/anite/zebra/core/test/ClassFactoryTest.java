@@ -39,7 +39,7 @@ import com.anite.zebra.core.taskconstruct.MockTaskConstruct;
  * Created on Aug 21, 2005
  */
 public class ClassFactoryTest extends TestCase {
-	//private static Log log = LogFactory.getLog(ClassFactoryTest.class);
+	//private static Logger log = LoggerFactory.getLogger(ClassFactoryTest.class);
 
 	public void testClassFactory() throws Exception {
 		

@@ -36,7 +36,7 @@ import com.anite.antelope.utils.CalendarHelper;
  */
 public class FormatterTool implements ApplicationTool {
     
-    private static Log log = LogFactory.getLog(FormatterTool.class);
+    private static Logger log = LoggerFactory.getLogger(FormatterTool.class);
     
     /**
      * The name to get the tool out of the context

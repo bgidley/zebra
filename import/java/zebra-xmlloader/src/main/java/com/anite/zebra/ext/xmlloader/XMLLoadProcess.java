@@ -53,7 +53,7 @@ import com.anite.zebra.ext.definitions.impl.TaskDefinition;
  * @author Eric.Pugh
  */
 public class XMLLoadProcess {
-    private static final Log log = LogFactory.getLog(XMLLoadProcess.class);
+    private static final Logger log = LoggerFactory.getLogger(XMLLoadProcess.class);
 
     private static final String XMLNODE_TYPE = "ACGWFDNative";
 

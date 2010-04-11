@@ -43,7 +43,7 @@ public class PriorityManager {
     public static final String URGENT = "Urgent";
     public static final String NORMAL = "Normal";
 
-    private final static Log log = LogFactory.getLog(PriorityManager.class);
+    private final static Logger log = LoggerFactory.getLogger(PriorityManager.class);
     
     private Long defaultPriorityId;
     

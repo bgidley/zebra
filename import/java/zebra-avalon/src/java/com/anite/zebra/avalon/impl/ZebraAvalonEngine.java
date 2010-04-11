@@ -44,7 +44,7 @@ public class ZebraAvalonEngine implements IEngine, Serviceable,
     /**
      * logging
      */
-    private static final Log log = LogFactory.getLog(ZebraAvalonEngine.class);
+    private static final Logger log = LoggerFactory.getLogger(ZebraAvalonEngine.class);
 
     private IEngine engine = null;
 
