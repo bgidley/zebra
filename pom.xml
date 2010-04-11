@@ -41,6 +41,7 @@
     <modules>
         <module>zebra-core</module>
         <module>zebra-defs</module>
+        <module>zebra-service</module>
     </modules>
     <packaging>pom</packaging>
 
@@ -49,6 +50,10 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>zebra-core</artifactId>
+                <version>${project.version}</version>
+            </dependency> <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>zebra-defs</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
