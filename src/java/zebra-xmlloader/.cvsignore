@@ -1,9 +1,0 @@
-lib
-*.log
-zebra-xmlloader-pom-snapshot-version
-jcoverage.ser
-Model Folder
-target
-junit*.properties
-.classpath
-.project

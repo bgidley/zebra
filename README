@@ -1,1 +1,8 @@
-All Source Code is under /src
+This project is being converted from an old CVS layout. So it is current laid out oddly.
+
+The end game is
+
+Top level folder - Maven pom
+Sub Folders for each project that is being kept
+
+All the old code is under a import folder for now.

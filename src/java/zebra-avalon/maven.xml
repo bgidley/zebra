@@ -1,4 +1,0 @@
-<project default="site:deploy" xmlns:j="jelly:core" xmlns:deploy="deploy" 
-	xmlns:ant="jelly:ant">
-		
-</project>
