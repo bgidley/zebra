@@ -6,11 +6,91 @@
 
     <groupId>zebra</groupId>
     <artifactId>zebra</artifactId>
+    <name>zebra</name>
     <version>1.0.0</version>
+
+    <developers>
+       <developer>
+            <name>Matt Norris</name>
+            <id>mpn_uk</id>
+        </developer>
+        <developer>
+            <id>bgidley</id>
+            <name>Ben Gidley</name>
+            <url>http://www.gidley.co.uk/</url>
+            <email>ben@gidley.co.uk</email>
+        </developer>
+    </developers>
+
+    <contributors>
+
+
+    </contributors>
+
+    <inceptionYear>2004</inceptionYear>
+
+    <licenses>
+        <license>
+            <name>Apache 2</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+            <comments>A business-friendly OSS license</comments>
+        </license>
+    </licenses>
+
     <modules>
         <module>zebra-core</module>
     </modules>
     <packaging>pom</packaging>
 
-    
+    <dependencyManagement>
+
+
+    </dependencyManagement>
+
+
+    <dependencies>
+        <dependency>
+            <groupId>commons-lang</groupId>
+            <artifactId>commons-lang</artifactId>
+            <version>2.4</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.5.8</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jcl104-over-slf4j</artifactId>
+            <version>1.5.8</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>0.9.17</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+            <version>0.9.17</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.5.8</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>log4j-over-slf4j</artifactId>
+            <version>1.5.8</version>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>3.8.1</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
 </project>
