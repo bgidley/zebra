@@ -42,6 +42,7 @@
         <module>zebra-core</module>
         <module>zebra-defs</module>
         <module>zebra-service</module>
+        <module>zebra-xmlloader</module>
     </modules>
     <packaging>pom</packaging>
 
@@ -51,9 +52,15 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>zebra-core</artifactId>
                 <version>${project.version}</version>
-            </dependency> <dependency>
+            </dependency>
+            <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>zebra-defs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>zebra-xmlloader</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

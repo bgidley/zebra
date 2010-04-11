@@ -33,6 +33,8 @@ import org.dom4j.io.DOMWriter;
 import org.dom4j.io.OutputFormat;
 import org.dom4j.io.SAXReader;
 import org.dom4j.io.XMLWriter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
@@ -144,8 +146,7 @@ public class XMLLoadProcess {
         try {
             return processHeader(root);
         } catch (Exception e) {
-            log.error(e);
-            e.printStackTrace();
+            log.error("",e);
             throw e;
         }
 

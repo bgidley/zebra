@@ -21,10 +21,10 @@ import java.io.File;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-
 import com.anite.zebra.ext.definitions.api.IProcessVersions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 /**
  * @author matt
@@ -72,7 +72,6 @@ public class LoadFromFile {
 						processFolder(subitem);
 					} catch (Exception e) {
 						//ignore an error thrown by this, just log it
-						log.debug(e);
 						log.error("Failure processing folder " + subitem, e);
 					}
 				} else if (subitem.isFile()) {
@@ -80,7 +79,6 @@ public class LoadFromFile {
 						processFile(subitem);
 					} catch (Exception e) {
 						// ignore an error thrown by this, just log it
-						log.debug(e);
 						log.error("Failure processing file " + subitem, e);
 					}
 				}
@@ -107,7 +105,6 @@ public class LoadFromFile {
 					processFile(subitem);
 				} catch (Exception e) {
 					// ignore an error thrown by this, just log it
-					log.debug(e);
 					log.error("Failure processing file " + subitem, e);
 				}
 			}
