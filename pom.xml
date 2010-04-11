@@ -10,7 +10,7 @@
     <version>1.0.0</version>
 
     <developers>
-       <developer>
+        <developer>
             <name>Matt Norris</name>
             <id>mpn_uk</id>
         </developer>
@@ -40,11 +40,18 @@
 
     <modules>
         <module>zebra-core</module>
+        <module>zebra-defs</module>
     </modules>
     <packaging>pom</packaging>
 
     <dependencyManagement>
-
+        <dependencies>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>zebra-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
 
     </dependencyManagement>
 
