@@ -1,13 +1,15 @@
 /*
- * Copyright 2004/2005 Anite - Enforcement & Security
+ * Original Code Copyright 2004, 2005 Anite - Central Government Division
  * http://www.anite.com/publicsector
- * 
+ *
+ * Modifications Copyright 2010 Ben Gidley
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -35,7 +37,8 @@ import java.util.Set;
  * @author Matthew.Norris
  */
 public class TaskSync {
-    private static Logger log = LoggerFactory.getLogger(TaskSync.class);
+    private static Logger logger = LoggerFactory.getLogger(TaskSync.class);
+
 	/**
      * @return Returns TaskDefs marked as Synchronise=TRUE that this TaskDef can
      *         potentially block
@@ -127,8 +130,8 @@ public class TaskSync {
                 IRoutingDefinition checkRouting = (IRoutingDefinition) it.next();
                 ITaskDefinition srcTask = checkRouting.getOriginatingTaskDefinition();
                 if (blockingDefs.containsKey(srcTask.getId())) {
-                    if (log.isInfoEnabled()) {
-                    	log.info("Task " + taskDef + " is being blocked by "  + srcTask);
+                    if (logger.isInfoEnabled()) {
+                    	logger.info("Task " + taskDef + " is being blocked by "  + srcTask);
                     }
                 	return true;
                 }
