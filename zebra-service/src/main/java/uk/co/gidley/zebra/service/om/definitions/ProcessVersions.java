@@ -36,24 +36,14 @@ public class ProcessVersions {
 
 	private String name;
 
-	/**
-	 * @return Returns the id.
-	 * @hibernate.id generator-class="native"
-	 */
 	public Long getId() {
 		return id;
 	}
 
-	/**
-	 * @param id The id to set.
-	 */
 	public void setId(Long id) {
 		this.id = id;
 	}
 
-	/**
-	 * @param processVersions The processVersions to set.
-	 */
 	public void setProcessVersions(Set<ProcessDefinition> processVersions) {
 		this.processVersions = processVersions;
 	}
@@ -77,27 +67,14 @@ public class ProcessVersions {
 
 	}
 
-	/**
-	 * @return Returns the process versions.
-	 * @hibernate.set cascade="all" inverse="true" lazy="true"
-	 * @hibernate.collection-key column="processVersionId"
-	 * @hibernate.collection-one-to-many class="com.anite.zebra.ext.definitions.impl.ProcessDefinition"
-	 */
 	public Set<ProcessDefinition> getProcessVersions() {
 		return processVersions;
 	}
 
-	/**
-	 * @return Returns the name.
-	 * @hibernate.property
-	 */
 	public String getName() {
 		return name;
 	}
 
-	/**
-	 * @param name The name to set.
-	 */
 	public void setName(String name) {
 		this.name = name;
 	}

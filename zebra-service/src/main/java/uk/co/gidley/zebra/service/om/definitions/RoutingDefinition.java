@@ -40,17 +40,11 @@ public class RoutingDefinition implements IRoutingDefinition {
 	private String conditionClass;
 
 
-	/**
-	 * @hibernate.id generator-class="native"
-	 */
 	public Long getId() {
 		return id;
 	}
 
 
-	/**
-	 * @hibernate.property
-	 */
 	public String getName() {
 		return this.name;
 	}
@@ -59,9 +53,6 @@ public class RoutingDefinition implements IRoutingDefinition {
 		this.name = name;
 	}
 
-	/**
-	 * @hibernate.property
-	 */
 	public boolean getParallel() {
 		return this.parallel;
 	}
@@ -70,9 +61,6 @@ public class RoutingDefinition implements IRoutingDefinition {
 		this.parallel = parallel;
 	}
 
-	/**
-	 * @hibernate.property
-	 */
 	public String getConditionClass() {
 		return this.conditionClass;
 	}
@@ -81,10 +69,6 @@ public class RoutingDefinition implements IRoutingDefinition {
 		this.conditionClass = conditionClass;
 	}
 
-	/**
-	 * @hibernate.many-to-one column="destTaskDefId" not-null="false" class="com.anite.zebra.ext.definitions.impl.TaskDefinition"
-	 * cascade="all"
-	 */
 	public TaskDefinition getDestinationTaskDefinition() {
 		return destinationTaskDefinition;
 	}
@@ -93,10 +77,6 @@ public class RoutingDefinition implements IRoutingDefinition {
 		this.destinationTaskDefinition = destinationTaskDefinition;
 	}
 
-	/**
-	 * @hibernate.many-to-one column="origTaskDefId" not-null="false" class="com.anite.zebra.ext.definitions.impl.TaskDefinition"
-	 * cascade="all"
-	 */
 	public TaskDefinition getOriginatingTaskDefinition() {
 		return originatingTaskDefinition;
 	}

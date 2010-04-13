@@ -40,10 +40,6 @@ public class TaskDefinitions implements ITaskDefinitions {
 		this.taskDefinitions = taskDefinitions;
 	}
 
-	/**
-	 * @param id
-	 * @return
-	 */
 	public ITaskDefinition getTaskDef(Long id) {
 		ITaskDefinition taskDef = null;
 		for (Iterator i = taskDefinitions.iterator(); i.hasNext();) {

@@ -22,7 +22,6 @@ package uk.co.gidley.zebra.service.om.definitions;
 import com.anite.zebra.core.definitions.api.IProcessDefinition;
 import com.anite.zebra.core.definitions.api.ITaskDefinition;
 
-import javax.persistence.Transient;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -111,12 +110,10 @@ public class ProcessDefinition implements IProcessDefinition {
 		this.processVersions = processVersions;
 	}
 
-	@Transient
 	public TaskDefinitions getTaskDefs() {
 		return new TaskDefinitions(taskDefinitions);
 	}
 
-	@Transient
 	public RoutingDefinitions getRoutingDefs() {
 		return new RoutingDefinitions(routingDefinitions);
 	}
