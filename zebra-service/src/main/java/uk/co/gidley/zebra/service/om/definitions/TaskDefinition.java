@@ -28,6 +28,8 @@ import java.util.Set;
  */
 public class TaskDefinition implements ITaskDefinition {
 
+	private String name;
+
 	private Long id;
 
 	private boolean auto;
@@ -106,5 +108,13 @@ public class TaskDefinition implements ITaskDefinition {
 
 	public void setClassDestruct(String classDestruct) {
 		this.classDestruct = classDestruct;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
 	}
 }
