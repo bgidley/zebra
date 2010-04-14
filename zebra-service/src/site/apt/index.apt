@@ -1,0 +1,16 @@
+
+Implementation Notes
+
+ Zebra is layered into
+
+ * The Core Engine
+
+ * Zebra-Service - this is the service module that is used to access zebra.
+
+ You then require a persistence layer you can choose from
+
+ * zebra-inmemory
+
+ * zebra-jpa
+
+ * zebra-XXX

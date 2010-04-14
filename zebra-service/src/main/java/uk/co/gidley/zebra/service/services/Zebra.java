@@ -24,13 +24,11 @@ import com.anite.zebra.core.exceptions.CreateProcessException;
 import com.anite.zebra.core.exceptions.DestructException;
 import com.anite.zebra.core.exceptions.StartProcessException;
 import com.anite.zebra.core.exceptions.TransitionException;
+import com.anite.zebra.core.factory.api.IStateFactory;
 import com.anite.zebra.core.factory.exceptions.StateFailureException;
-import com.anite.zebra.core.state.api.ITransaction;
-import uk.co.gidley.zebra.service.internal.services.ProcessDefinitionFactory;
-
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import uk.co.gidley.zebra.service.om.definitions.ProcessDefinition;
+import uk.co.gidley.zebra.service.om.state.ProcessInstance;
+import uk.co.gidley.zebra.service.om.state.TaskInstance;
 
 /**
  * This is the main facade class for Zebra
@@ -43,19 +41,17 @@ public class Zebra {
 
 	private ProcessDefinitionFactory definitionFactory;
 
-	private ZebraStateFactory stateFactory;
+	private IStateFactory stateFactory;
 
 	private IEngine engine;
 
-	private ZebraSecurity zebraSecurity;
-
-
-	public Zebra(ProcessDefinitionFactory processDefinitionFactory) {
+	public Zebra(ProcessDefinitionFactory processDefinitionFactory, IStateFactory stateFactory) {
 		this.definitionFactory = processDefinitionFactory;
+		this.stateFactory = stateFactory;
 
 	}
 
-	public ZebraProcessDefinition getProcessDefinition(String processName) {
+	public ProcessDefinition getProcessDefinition(String processName) {
 		return this.definitionFactory.getProcessDefinitionByName(processName);
 	}
 
@@ -67,9 +63,8 @@ public class Zebra {
 	 * @throws com.anite.zebra.core.exceptions.CreateProcessException
 	 *
 	 */
-	public ZebraProcessInstance createProcessPaused(String processName) throws CreateProcessException {
-		return createProcessPaused(this.getProcessDefinition(processName));
-
+	public ProcessInstance createProcessPaused(String processName) throws CreateProcessException {
+		return createProcessPaused(getProcessDefinition(processName));
 	}
 
 	/**
@@ -79,45 +74,23 @@ public class Zebra {
 	 * @return
 	 * @throws CreateProcessException
 	 */
-	public ZebraProcessInstance createProcessPaused(ZebraProcessDefinition process) throws CreateProcessException {
-		return (ZebraProcessInstance) engine.createProcess(process);
+	public ProcessInstance createProcessPaused(ProcessDefinition process) throws CreateProcessException {
+		return (ProcessInstance) engine.createProcess(process);
 
 	}
 
-	/**
-	 * Gets the task list for the passed user
-	 *
-	 * @param user
-	 * @return
-	 */
-	public List<ZebraTaskInstance> getTaskList(DynamicUser user) {
-
-		return zebraSecurity.getTaskList(user);
-
-	}
-
-	public List<ZebraTaskInstance> getOnlyOwnedTaskList(HibernateDynamicUser user) {
-
-		return zebraSecurity.getOnlyOwnedTaskList(user);
-	}
-
-	public List<ZebraTaskInstance> getOnlyDelegatedTaskList(HibernateDynamicUser user) {
-
-		return zebraSecurity.getOnlyDelegatedTaskList(user);
-	}
-
-	public void startProcess(ZebraProcessInstance processInstance) throws StartProcessException {
+	public void startProcess(ProcessInstance processInstance) throws StartProcessException {
 		engine.startProcess(processInstance);
 
 	}
 
-	public void transitionTask(ZebraTaskInstance taskInstance) throws TransitionException {
+	public void transitionTask(TaskInstance taskInstance) throws TransitionException {
 		engine.transitionTask(taskInstance);
 	}
 
 	/**
-	 * Kill this process and all tasks within it. This does NOT kill the parent process but will kill child processes.
-	 * If these is a parent it will be tiggered to move on by the process destruct step
+	 * Kill this process and all tasks within it. This does NOT kill the parent process but will kill child processes. If
+	 * these is a parent it will be tiggered to move on by the process destruct step
 	 * <p/>
 	 * The application is expected to handle security over who can kill a process it is NOT enforced here
 	 * <p/>
@@ -130,42 +103,41 @@ public class Zebra {
 	 * @throws com.anite.zebra.core.exceptions.DestructException
 	 *
 	 */
-	public void killProcess(ZebraProcessInstance processInstance,
-			HibernateDynamicUser owner) throws StateFailureException,
+	public void killProcess(ProcessInstance processInstance) throws StateFailureException,
 			DestructException {
 
-		List<ZebraProcessInstance> processesToKill = processInstance.getRunningChildProcesses();
-		processesToKill.add(processInstance);
-
-		ITransaction t = stateFactory.beginTransaction();
-
-		for (Iterator iter = processesToKill.iterator(); iter.hasNext();) {
-			ZebraProcessInstance process = (ZebraProcessInstance) iter.next();
-
-			Set<ZebraTaskInstance> tasks = process.getTaskInstances();
-
-			for (ZebraTaskInstance task : tasks) {
-				task.setState(ZebraTaskInstance.KILLED);
-				task.setTaskOwner(owner);
-				stateFactory.saveObject(task);
-
-				// This will create history automatically and will remove itself
-				// from the set
-				stateFactory.deleteObject(task);
-				process.setState(ZebraTaskInstance.KILLED);
-				stateFactory.saveObject(process);
-			}
-
-		}
-		t.commit();
-
-		// Only destroy this process if there is a parent to force a subflow
-		// return
-		// - no need to do the child tree - as they are all killed
-		if (processInstance.getParentProcessInstance() != null) {
-			ProcessDestruct destructor = new ProcessDestruct();
-			destructor.processDestruct(processInstance);
-		}
+//		List<ProcessInstance> processesToKill = processInstance.getRunningChildProcesses();
+//		processesToKill.add(processInstance);
+//
+//		ITransaction t = stateFactory.beginTransaction();
+//
+//		for (Iterator iter = processesToKill.iterator(); iter.hasNext();) {
+//			ProcessInstance process = (ProcessInstance) iter.next();
+//
+//			Set<TaskInstance> tasks = process.getTaskInstances();
+//
+//			for (TaskInstance task : tasks) {
+//				task.setState(TaskInstance.KILLED);
+//				task.setTaskOwner(owner);
+//				stateFactory.saveObject(task);
+//
+//				// This will create history automatically and will remove itself
+//				// from the set
+//				stateFactory.deleteObject(task);
+//				process.setState(TaskInstance.KILLED);
+//				stateFactory.saveObject(process);
+//			}
+//
+//		}
+//		t.commit();
+//
+//		// Only destroy this process if there is a parent to force a subflow
+//		// return
+//		// - no need to do the child tree - as they are all killed
+//		if (processInstance.getParentProcessInstance() != null) {
+//			ProcessDestruct destructor = new ProcessDestruct();
+//			destructor.processDestruct(processInstance);
+//		}
 	}
 
 

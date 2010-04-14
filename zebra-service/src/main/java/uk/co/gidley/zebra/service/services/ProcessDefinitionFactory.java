@@ -17,7 +17,7 @@
  * the License.
  */
 
-package uk.co.gidley.zebra.service.internal.services;
+package uk.co.gidley.zebra.service.services;
 
 import uk.co.gidley.zebra.service.om.definitions.ProcessDefinition;
 import uk.co.gidley.zebra.service.om.definitions.TaskDefinition;
