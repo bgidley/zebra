@@ -25,11 +25,22 @@ import uk.co.gidley.zebra.service.om.definitions.TaskDefinition;
 import java.util.List;
 
 /**
+ * provides access to stored process definitions
+ * <p/>
+ * This interface deliberately doesn't worry about how these got created.
+ * <p/>
  * Created by IntelliJ IDEA. User: ben Date: Apr 13, 2010 Time: 8:14:00 AM
  */
 public interface ProcessDefinitionFactory {
 	public TaskDefinition getTaskDefinition(Long id);
 
+	/**
+	 * Find the process with given name within the named process
+	 *
+	 * @param processName
+	 * @param taskName
+	 * @return
+	 */
 	public List<Long> getTaskDefinitionIds(String processName, String taskName);
 
 	public ProcessDefinition getProcessDefinitionById(Long id);
