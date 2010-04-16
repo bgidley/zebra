@@ -24,6 +24,7 @@ import uk.co.gidley.zebra.service.om.definitions.ProcessVersions;
 import uk.co.gidley.zebra.service.om.definitions.TaskDefinition;
 import uk.co.gidley.zebra.service.services.ProcessDefinitionFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -31,48 +32,69 @@ import java.util.List;
  */
 public class InMemoryProcessDefinitionFactory implements ProcessDefinitionFactory {
 
-	InMemoryDatastore inMemoryDatastore;
+    InMemoryDatastore inMemoryDatastore;
 
-	public InMemoryProcessDefinitionFactory(InMemoryDatastore inMemoryDatastore) {
-		this.inMemoryDatastore = inMemoryDatastore;
-
-
-	}
-
-	public TaskDefinition getTaskDefinition(Long id) {
-
-		for (ProcessVersions processVersion : inMemoryDatastore.getProcessVersions()) {
-			for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
-				for (TaskDefinition taskDefinition : processDefinition.getTaskDefinitions()) {
-					if (taskDefinition.getId().equals(id)) {
-						return taskDefinition;
-					}
-				}
-			}
-		}
-		return null;
-	}
-
-	public List<Long> getTaskDefinitionIds(String processName, String taskName) {
-		for (ProcessVersions processVersion : inMemoryDatastore.getProcessVersions()) {
-			for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
-				for (TaskDefinition taskDefinition : processDefinition.getTaskDefinitions()) {
-					if (taskDefinition.getName().equals(name)) {
-						return taskDefinition;
-					}
-				}
-			}
-		}
-		return null;
-	}
-
-	public ProcessDefinition getProcessDefinitionById(Long id) {
-		return null;
-	}
-
-	public ProcessDefinition getProcessDefinitionByName(String name) {
-		return null;
-	}
+    public InMemoryProcessDefinitionFactory(InMemoryDatastore inMemoryDatastore) {
+        this.inMemoryDatastore = inMemoryDatastore;
 
 
+    }
+
+    public TaskDefinition getTaskDefinition(Long id) {
+
+        for (ProcessVersions processVersion : inMemoryDatastore.getProcessVersions()) {
+            for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
+                for (TaskDefinition taskDefinition : processDefinition.getTaskDefinitions()) {
+                    if (taskDefinition.getId().equals(id)) {
+                        return taskDefinition;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * TODO review if this function is useful - it is getting all versions of a taskdef but there is no obvious way to tell which one the caller would want
+     *
+     * @param processName
+     * @param taskName
+     * @return
+     */
+    public List<Long> getTaskDefinitionIds(String processName, String taskName) {
+        for (ProcessVersions processVersion : inMemoryDatastore.getProcessVersions()) {
+            if (processVersion.getName().equals(processName)) {
+                List<Long> taskDefinitionIds = new ArrayList<Long>();
+                for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
+                    for (TaskDefinition taskDefinition : processDefinition.getTaskDefinitions()) {
+                        if (taskDefinition.getName().equals(taskName)) {
+                            taskDefinitionIds.add(taskDefinition.getId());
+                        }
+                    }
+                }
+                return taskDefinitionIds;
+            }
+        }
+        return null;
+    }
+
+    public ProcessDefinition getProcessDefinitionById(Long id) {
+        for (ProcessVersions processVersion : inMemoryDatastore.getProcessVersions()) {
+            for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
+                if (processDefinition.getId().equals(id)) {
+                    return processDefinition;
+                }
+            }
+        }
+        return null;
+    }
+
+    public ProcessDefinition getProcessDefinitionByName(String name) {
+        for (ProcessVersions processVersion : inMemoryDatastore.getProcessVersions()) {
+            if (processVersion.getName().equals(name)){
+                return processVersion.getLatestProcessVersion();
+            }
+        }
+        return null;
+    }
 }

@@ -43,7 +43,17 @@ public interface ProcessDefinitionFactory {
 	 */
 	public List<Long> getTaskDefinitionIds(String processName, String taskName);
 
+    /**
+     * Get the process defn for the passed id
+     * @param id
+     * @return
+     */
 	public ProcessDefinition getProcessDefinitionById(Long id);
 
+    /**
+     * Get the latest version of the named process
+     * @param name
+     * @return
+     */
 	public ProcessDefinition getProcessDefinitionByName(String name);
 }
