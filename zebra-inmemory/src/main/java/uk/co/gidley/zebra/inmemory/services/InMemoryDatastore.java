@@ -19,7 +19,8 @@
 
 package uk.co.gidley.zebra.inmemory.services;
 
-import uk.co.gidley.zebra.service.om.definitions.ProcessVersions;
+import uk.co.gidley.zebra.service.om.definitions.Process;
+import uk.co.gidley.zebra.service.om.state.ProcessInstance;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -31,19 +32,28 @@ import java.util.Set;
  */
 public class InMemoryDatastore {
 
-	private Set<ProcessVersions> processVersions;
+	private Set<Process> processes;
+
+    private Set<ProcessInstance> processInstances;
 
 	public InMemoryDatastore() {
-		processVersions = new HashSet<ProcessVersions>();
+		processes = new HashSet<Process>();
 	}
 
-	public Set<ProcessVersions> getProcessVersions() {
-		return processVersions;
+	public Set<Process> getProcessVersions() {
+		return processes;
 	}
 
-	public void setProcessVersions(Set<ProcessVersions> processVersions) {
-		this.processVersions = processVersions;
+	public void setProcessVersions(Set<Process> processes) {
+		this.processes = processes;
 	}
 
 
+    public Set<ProcessInstance> getProcessInstances() {
+        return processInstances;
+    }
+
+    public void setProcessInstances(Set<ProcessInstance> processInstances) {
+        this.processInstances = processInstances;
+    }
 }

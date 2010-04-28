@@ -44,7 +44,7 @@ public class ProcessDefinition implements IProcessDefinition {
 
 	private Long version;
 
-	private ProcessVersions processVersions;
+	private Process process;
 
 	public Long getId() {
 		return id;
@@ -102,12 +102,12 @@ public class ProcessDefinition implements IProcessDefinition {
 		this.version = version;
 	}
 
-	public ProcessVersions getProcessVersions() {
-		return processVersions;
+	public Process getProcessVersions() {
+		return process;
 	}
 
-	public void setProcessVersions(ProcessVersions processVersions) {
-		this.processVersions = processVersions;
+	public void setProcessVersions(Process process) {
+		this.process = process;
 	}
 
 	public TaskDefinitions getTaskDefs() {

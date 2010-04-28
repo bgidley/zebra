@@ -19,8 +19,22 @@
 
 package uk.co.gidley.zebra.inmemory.services;
 
+import com.anite.zebra.core.factory.api.IStateFactory;
+import org.apache.tapestry5.ioc.ServiceBinder;
+import org.apache.tapestry5.ioc.annotations.SubModule;
+import uk.co.gidley.zebra.service.services.ProcessDefinitionFactory;
+import uk.co.gidley.zebra.service.services.Zebra;
+import uk.co.gidley.zebra.service.services.ZebraServiceModule;
+
 /**
  * Created by IntelliJ IDEA. User: ben Date: Apr 15, 2010 Time: 7:04:20 PM
  */
+@SubModule(ZebraServiceModule.class)
 public class InMemoryModule {
+    public static void bind(ServiceBinder binder) {
+        binder.bind(InMemoryDatastore.class);
+        binder.bind(ProcessDefinitionFactory.class, InMemoryProcessDefinitionFactory.class);
+        binder.bind(IStateFactory.class,InMemoryStateFactory.class);
+    }
+
 }

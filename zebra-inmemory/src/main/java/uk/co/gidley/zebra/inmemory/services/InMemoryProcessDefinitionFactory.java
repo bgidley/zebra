@@ -19,9 +19,8 @@
 
 package uk.co.gidley.zebra.inmemory.services;
 
-import uk.co.gidley.zebra.service.om.definitions.ProcessDefinition;
-import uk.co.gidley.zebra.service.om.definitions.ProcessVersions;
-import uk.co.gidley.zebra.service.om.definitions.TaskDefinition;
+import uk.co.gidley.zebra.service.om.definitions.*;
+import uk.co.gidley.zebra.service.om.definitions.Process;
 import uk.co.gidley.zebra.service.services.ProcessDefinitionFactory;
 
 import java.util.ArrayList;
@@ -42,8 +41,8 @@ public class InMemoryProcessDefinitionFactory implements ProcessDefinitionFactor
 
     public TaskDefinition getTaskDefinition(Long id) {
 
-        for (ProcessVersions processVersion : inMemoryDatastore.getProcessVersions()) {
-            for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
+        for (Process process : inMemoryDatastore.getProcessVersions()) {
+            for (ProcessDefinition processDefinition : process.getProcessVersions()) {
                 for (TaskDefinition taskDefinition : processDefinition.getTaskDefinitions()) {
                     if (taskDefinition.getId().equals(id)) {
                         return taskDefinition;
@@ -62,10 +61,10 @@ public class InMemoryProcessDefinitionFactory implements ProcessDefinitionFactor
      * @return
      */
     public List<Long> getTaskDefinitionIds(String processName, String taskName) {
-        for (ProcessVersions processVersion : inMemoryDatastore.getProcessVersions()) {
-            if (processVersion.getName().equals(processName)) {
+        for (uk.co.gidley.zebra.service.om.definitions.Process process : inMemoryDatastore.getProcessVersions()) {
+            if (process.getName().equals(processName)) {
                 List<Long> taskDefinitionIds = new ArrayList<Long>();
-                for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
+                for (ProcessDefinition processDefinition : process.getProcessVersions()) {
                     for (TaskDefinition taskDefinition : processDefinition.getTaskDefinitions()) {
                         if (taskDefinition.getName().equals(taskName)) {
                             taskDefinitionIds.add(taskDefinition.getId());
@@ -79,8 +78,8 @@ public class InMemoryProcessDefinitionFactory implements ProcessDefinitionFactor
     }
 
     public ProcessDefinition getProcessDefinitionById(Long id) {
-        for (ProcessVersions processVersion : inMemoryDatastore.getProcessVersions()) {
-            for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
+        for (Process process : inMemoryDatastore.getProcessVersions()) {
+            for (ProcessDefinition processDefinition : process.getProcessVersions()) {
                 if (processDefinition.getId().equals(id)) {
                     return processDefinition;
                 }
@@ -90,9 +89,9 @@ public class InMemoryProcessDefinitionFactory implements ProcessDefinitionFactor
     }
 
     public ProcessDefinition getProcessDefinitionByName(String name) {
-        for (ProcessVersions processVersion : inMemoryDatastore.getProcessVersions()) {
-            if (processVersion.getName().equals(name)){
-                return processVersion.getLatestProcessVersion();
+        for (Process process : inMemoryDatastore.getProcessVersions()) {
+            if (process.getName().equals(name)){
+                return process.getLatestProcessVersion();
             }
         }
         return null;

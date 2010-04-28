@@ -26,9 +26,8 @@ import java.util.Set;
 
 /**
  * @author Eric Pugh
- * @hibernate.class
  */
-public class ProcessVersions {
+public class Process {
 
 	private Long id;
 

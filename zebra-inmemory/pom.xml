@@ -39,6 +39,10 @@
             <groupId>${project.groupId}</groupId>
             <artifactId>zebra-service</artifactId>
         </dependency>
+        <dependency>
+          <groupId>org.hamcrest</groupId>
+          <artifactId>hamcrest-all</artifactId>
+        </dependency>        
     </dependencies>
 
 

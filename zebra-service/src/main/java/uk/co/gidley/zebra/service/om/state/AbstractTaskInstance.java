@@ -149,11 +149,6 @@ public abstract class AbstractTaskInstance implements ITaskInstance {
 		this.state = newState;
 	}
 
-	public void setTaskDefinition(TaskDefinition taskDefinition) {
-
-		this.taskDefinitionId = taskDefinition.getId();
-	}
-
 	@ManyToOne(targetEntity = FOE.class, cascade = { CascadeType.PERSIST, CascadeType.MERGE })
 	public IFOE getFOE() {
 		return this.FOE;

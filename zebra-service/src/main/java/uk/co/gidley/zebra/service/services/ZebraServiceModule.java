@@ -19,8 +19,14 @@
 
 package uk.co.gidley.zebra.service.services;
 
+import org.apache.tapestry5.ioc.ServiceBinder;
+
 /**
  * Created by IntelliJ IDEA. User: ben Date: Apr 13, 2010 Time: 8:00:10 AM
  */
 public class ZebraServiceModule {
+
+  public static void bind(ServiceBinder binder) {
+        binder.bind(Zebra.class);
+    }
 }
