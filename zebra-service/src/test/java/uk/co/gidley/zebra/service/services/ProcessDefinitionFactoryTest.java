@@ -36,13 +36,10 @@ public class ProcessDefinitionFactoryTest extends IocBaseTest {
         inMemoryDatastore.clear();
         inMemoryDatastore.getProcessVersions().add(generateProcessVersion(BASIC_TEST));
 
-
-        
-
     }
 
     @Test
-    public void testProcessDefintionFactory() {
+    public void testLatestProcessDefinition() {
 
         ProcessDefinitionFactory processDefinitionFactory = registry.getService(ProcessDefinitionFactory.class);
         assertThat(processDefinitionFactory, notNullValue());
@@ -53,8 +50,14 @@ public class ProcessDefinitionFactoryTest extends IocBaseTest {
         ProcessVersion processVersion = processDefinition.getProcessVersions();
 
         assertThat(processDefinition, is(processVersion.getLatestProcessVersion()));
+        assertThat(processDefinition, isIn(processVersion.getProcessVersions()));
+        assertThat(processVersion.getProcessVersions().size(), is(greaterThan(1)));
 
-
+        for (ProcessDefinition eachProcessDefinition : processVersion.getProcessVersions()){
+            if (!eachProcessDefinition.equals(processDefinition)){
+                 assertThat(eachProcessDefinition.getVersion(), is(lessThan(processDefinition.getVersion())));
+            }
+        }
     }
 
 
