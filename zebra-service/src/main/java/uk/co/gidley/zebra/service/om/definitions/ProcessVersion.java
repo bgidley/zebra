@@ -27,7 +27,7 @@ import java.util.Set;
 /**
  * @author Eric Pugh
  */
-public class Process {
+public class ProcessVersion {
 
 	private Long id;
 

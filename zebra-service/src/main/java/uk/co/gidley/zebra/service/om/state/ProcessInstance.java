@@ -38,7 +38,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * A Zebra Process Instance reflect an instance of a Process Definition. This class implements the core interface and
+ * A Zebra ProcessVersion Instance reflect an instance of a ProcessVersion Definition. This class implements the core interface and
  * add additional properties as commonly required by the applications This class can be extended, but this should not be
  * necessary.
  * <p/>
@@ -64,7 +64,7 @@ public class ProcessInstance implements IProcessInstance {
 
 	/* Custom behavioural properties */
 	/**
-	 * Parent Process used for subflows
+	 * Parent ProcessVersion used for subflows
 	 */
 	private ProcessInstance parentProcessInstance;
 
@@ -186,7 +186,7 @@ public class ProcessInstance implements IProcessInstance {
 	/* IProcessInstance Methods */
 
 	/**
-	 * Interface method for get the Process definition Note this should never actually throw definition not found exception
+	 * Interface method for get the ProcessVersion definition Note this should never actually throw definition not found exception
 	 * as that would imply this instance can't exist. Which it does!
 	 */
 	public IProcessDefinition getProcessDef() throws DefinitionNotFoundException {

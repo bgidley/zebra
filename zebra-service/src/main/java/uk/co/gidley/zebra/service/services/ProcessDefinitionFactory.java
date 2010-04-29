@@ -32,24 +32,6 @@ import java.util.List;
  * Created by IntelliJ IDEA. User: ben Date: Apr 13, 2010 Time: 8:14:00 AM
  */
 public interface ProcessDefinitionFactory {
-	public TaskDefinition getTaskDefinition(Long id);
-
-	/**
-	 * Find the process with given name within the named process
-	 *
-	 * @param processName
-	 * @param taskName
-	 * @return
-	 */
-	public List<Long> getTaskDefinitionIds(String processName, String taskName);
-
-    /**
-     * Get the process defn for the passed id
-     * @param id
-     * @return
-     */
-	public ProcessDefinition getProcessDefinitionById(Long id);
-
     /**
      * Get the latest version of the named process
      * @param name

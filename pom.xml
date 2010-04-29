@@ -40,11 +40,9 @@
 
     <modules>
         <module>zebra-core</module>
-        <module>zebra-defs</module>
-        <!--<module>zebra-hivemind</module>-->
-        <module>zebra-xmlloader</module>
         <module>zebra-service</module>
         <module>zebra-inmemory</module>
+        <module>zebra-process-definition-loader</module>
     </modules>
     <packaging>pom</packaging>
 
@@ -53,16 +51,6 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>zebra-core</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>zebra-defs</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>zebra-xmlloader</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -86,9 +74,10 @@
                 </exclusions>
             </dependency>
             <dependency>
-              <groupId>org.hamcrest</groupId>
-              <artifactId>hamcrest-all</artifactId>
-              <version>1.1</version>
+                <groupId>org.hamcrest</groupId>
+                <artifactId>hamcrest-all</artifactId>
+                <version>1.1</version>
+                <scope>test</scope>
             </dependency>
         </dependencies>
 
