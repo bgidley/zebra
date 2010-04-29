@@ -39,55 +39,6 @@ public class InMemoryProcessDefinitionFactory implements ProcessDefinitionFactor
 
     }
 
-    public TaskDefinition getTaskDefinition(Long id) {
-
-        for (ProcessVersion processVersion : inMemoryDatastore.getProcessVersions()) {
-            for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
-                for (TaskDefinition taskDefinition : processDefinition.getTaskDefinitions()) {
-                    if (taskDefinition.getId().equals(id)) {
-                        return taskDefinition;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * TODO review if this function is useful - it is getting all versions of a taskdef but there is no obvious way to tell which one the caller would want
-     *
-     * @param processName
-     * @param taskName
-     * @return
-     */
-    public List<Long> getTaskDefinitionIds(String processName, String taskName) {
-        for (ProcessVersion processVersion : inMemoryDatastore.getProcessVersions()) {
-            if (processVersion.getName().equals(processName)) {
-                List<Long> taskDefinitionIds = new ArrayList<Long>();
-                for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
-                    for (TaskDefinition taskDefinition : processDefinition.getTaskDefinitions()) {
-                        if (taskDefinition.getName().equals(taskName)) {
-                            taskDefinitionIds.add(taskDefinition.getId());
-                        }
-                    }
-                }
-                return taskDefinitionIds;
-            }
-        }
-        return null;
-    }
-
-    public ProcessDefinition getProcessDefinitionById(Long id) {
-        for (ProcessVersion processVersion : inMemoryDatastore.getProcessVersions()) {
-            for (ProcessDefinition processDefinition : processVersion.getProcessVersions()) {
-                if (processDefinition.getId().equals(id)) {
-                    return processDefinition;
-                }
-            }
-        }
-        return null;
-    }
-
     public ProcessDefinition getProcessDefinitionByName(String name) {
         for (ProcessVersion processVersion : inMemoryDatastore.getProcessVersions()) {
             if (processVersion.getName().equals(name)){

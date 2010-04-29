@@ -38,6 +38,7 @@ public class InMemoryDatastore {
 
 	public InMemoryDatastore() {
 		processVersions = new HashSet<ProcessVersion>();
+        processInstances = new HashSet<ProcessInstance>();
 	}
 
 	public Set<ProcessVersion> getProcessVersions() {
@@ -55,5 +56,10 @@ public class InMemoryDatastore {
 
     public void setProcessInstances(Set<ProcessInstance> processInstances) {
         this.processInstances = processInstances;
+    }
+
+    public void clear() {
+        this.processInstances.clear();
+        this.processVersions.clear();
     }
 }
