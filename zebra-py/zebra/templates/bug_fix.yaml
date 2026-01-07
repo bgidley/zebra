@@ -1,0 +1,95 @@
+# Bug Fix Workflow
+# A workflow template for fixing bugs systematically
+
+name: "Bug Fix"
+version: 1
+first_task: describe_bug
+
+tasks:
+  describe_bug:
+    name: "Describe Bug"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Please describe the bug:
+        - What is the expected behavior?
+        - What is the actual behavior?
+        - Steps to reproduce?
+
+  investigate:
+    name: "Investigate Root Cause"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Bug description: {{describe_bug.output}}
+
+        Please investigate the root cause. What files and code paths are involved?
+
+  create_test:
+    name: "Create Failing Test"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Based on the investigation: {{investigate.output}}
+
+        Please write a test that reproduces the bug (should currently fail).
+
+  implement_fix:
+    name: "Implement Fix"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Test case: {{create_test.output}}
+
+        Please implement the fix to make the test pass.
+
+  run_tests:
+    name: "Run Tests"
+    action: shell
+    properties:
+      command: "echo 'Running test suite...'"
+
+  verify_fix:
+    name: "Verify Fix"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Test results: {{run_tests.output}}
+
+        Does the fix resolve the bug? Are all tests passing?
+
+  complete:
+    name: "Complete"
+    properties:
+      message: "Bug fix workflow completed!"
+
+routings:
+  - from: describe_bug
+    to: investigate
+
+  - from: investigate
+    to: create_test
+
+  - from: create_test
+    to: implement_fix
+
+  - from: implement_fix
+    to: run_tests
+
+  - from: run_tests
+    to: verify_fix
+
+  - from: verify_fix
+    to: complete
+    condition: route_name
+    name: "yes"
+
+  - from: verify_fix
+    to: implement_fix
+    condition: route_name
+    name: "no"

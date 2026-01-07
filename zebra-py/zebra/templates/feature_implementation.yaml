@@ -1,0 +1,110 @@
+# Feature Implementation Workflow
+# A workflow template for implementing new features with Claude
+
+name: "Feature Implementation"
+version: 1
+first_task: gather_requirements
+
+tasks:
+  gather_requirements:
+    name: "Gather Requirements"
+    action: prompt
+    auto: false
+    properties:
+      prompt: "What feature should we implement? Please describe the requirements."
+
+  analyze_codebase:
+    name: "Analyze Codebase"
+    action: shell
+    properties:
+      command: "echo 'Analyzing codebase structure...'"
+
+  create_plan:
+    name: "Create Implementation Plan"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Based on the requirements: {{gather_requirements.output}}
+
+        Please create a detailed implementation plan including:
+        1. Files to modify or create
+        2. Key changes needed
+        3. Testing approach
+
+  review_plan:
+    name: "Review Plan"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Please review this implementation plan:
+        {{create_plan.output}}
+
+        Do you approve this plan? (yes/no/modify)
+
+  implement:
+    name: "Implement Feature"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Please implement the feature according to this plan:
+        {{create_plan.output}}
+
+  run_tests:
+    name: "Run Tests"
+    action: shell
+    properties:
+      command: "echo 'Running tests...'"
+      # In real use: pytest tests/
+
+  code_review:
+    name: "Code Review"
+    action: prompt
+    auto: false
+    synchronized: true
+    properties:
+      prompt: |
+        Implementation is complete.
+        Test results: {{run_tests.output}}
+
+        Please review the changes and provide feedback.
+
+  complete:
+    name: "Complete"
+    properties:
+      message: "Feature implementation workflow completed!"
+
+routings:
+  - from: gather_requirements
+    to: analyze_codebase
+
+  - from: analyze_codebase
+    to: create_plan
+
+  - from: create_plan
+    to: review_plan
+
+  - from: review_plan
+    to: implement
+    condition: route_name
+    name: "yes"
+
+  - from: review_plan
+    to: create_plan
+    condition: route_name
+    name: "modify"
+
+  - from: implement
+    to: run_tests
+    parallel: true
+
+  - from: implement
+    to: code_review
+
+  - from: run_tests
+    to: code_review
+
+  - from: code_review
+    to: complete
