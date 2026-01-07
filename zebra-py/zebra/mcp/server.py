@@ -46,7 +46,7 @@ def create_mcp_server():
 
     Note:
         Requires the 'mcp' package to be installed.
-        Install with: pip install zebra-workflow[mcp]
+        Install with: uv add zebra-workflow --extra mcp
     """
     try:
         from mcp.server import Server
@@ -54,7 +54,7 @@ def create_mcp_server():
         from mcp.types import TextContent, Tool
     except ImportError:
         raise ImportError(
-            "MCP package not installed. Install with: pip install zebra-workflow[mcp]"
+            "MCP package not installed. Install with: uv add zebra-workflow --extra mcp"
         )
 
     server = Server("zebra-workflow")
@@ -357,14 +357,14 @@ def main():
     try:
         from mcp.server.stdio import stdio_server
     except ImportError:
-        print("MCP package not installed. Install with: pip install zebra-workflow[mcp]")
+        print("MCP package not installed. Install with: uv add zebra-workflow --extra mcp")
         return
 
     server = create_mcp_server()
 
     async def run():
         async with stdio_server() as (read_stream, write_stream):
-            await server.run(read_stream, write_stream)
+            await server.run(read_stream, write_stream, server.create_initialization_options())
 
     asyncio.run(run())
 

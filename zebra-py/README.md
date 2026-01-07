@@ -168,6 +168,317 @@ routings:
     to: join
 ```
 
+## Workflow Definition Reference
+
+Workflows are defined in YAML format with the following structure:
+
+### Basic Structure
+
+```yaml
+name: "Workflow Name"          # Required: Human-readable name
+version: 1                      # Optional: Version number (default: 1)
+first_task: task_id            # Optional: Entry point (default: first defined task)
+
+tasks:                         # Required: Map of task definitions
+  task_id:
+    # Task definition...
+
+routings:                      # Optional: List of routing definitions
+  - from: source_task
+    to: dest_task
+```
+
+### Task Definition
+
+Each task defines a step in the workflow:
+
+```yaml
+tasks:
+  my_task:
+    name: "Human Readable Name"    # Required: Display name
+    action: prompt                  # Optional: Action to execute (prompt, shell, etc.)
+    auto: true                      # Optional: Auto-execute (default: true)
+    synchronized: false             # Optional: Wait for parallel branches (default: false)
+    construct_action: action_name   # Optional: Run before task starts
+    destruct_action: action_name    # Optional: Run after task completes
+    properties:                     # Optional: Task-specific configuration
+      key: value
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | string | task_id | Human-readable name |
+| `action` | string | null | Action to execute (`prompt`, `shell`) |
+| `auto` | bool | true | If false, waits for manual completion |
+| `synchronized` | bool | false | Join point for parallel branches |
+| `properties` | object | {} | Configuration passed to the action |
+
+### Routing Definition
+
+Routings define the flow between tasks:
+
+```yaml
+routings:
+  - from: source_task              # Required: Source task ID
+    to: destination_task           # Required: Destination task ID
+    parallel: false                # Optional: Create parallel branch (default: false)
+    condition: condition_name      # Optional: Condition to evaluate
+    name: "route_name"             # Optional: Name for conditional routing
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `from` | string | - | Source task ID (required) |
+| `to` | string | - | Destination task ID (required) |
+| `parallel` | bool | false | If true, creates a new parallel execution branch |
+| `condition` | string | null | Condition action to evaluate before routing |
+| `name` | string | null | Route name (used by `route_name` condition) |
+
+### Template Variables
+
+Task properties support template variables to reference outputs from previous tasks:
+
+```yaml
+tasks:
+  first_task:
+    name: "Get Input"
+    action: prompt
+    properties:
+      prompt: "What should we do?"
+
+  second_task:
+    name: "Use Input"
+    action: prompt
+    properties:
+      prompt: "Processing: {{first_task.output}}"  # References first_task's result
+```
+
+### Parallel Execution
+
+Create parallel branches by using `parallel: true` on routings:
+
+```yaml
+tasks:
+  start:
+    name: "Start"
+
+  branch_a:
+    name: "Branch A"
+
+  branch_b:
+    name: "Branch B"
+
+  join:
+    name: "Join Point"
+    synchronized: true    # Waits for ALL incoming branches
+
+routings:
+  - from: start
+    to: branch_a
+    parallel: true        # Creates parallel branch
+
+  - from: start
+    to: branch_b
+    parallel: true        # Creates parallel branch
+
+  - from: branch_a
+    to: join
+
+  - from: branch_b
+    to: join              # join task waits for both branches
+```
+
+### Conditional Routing
+
+Use conditions to create decision points:
+
+```yaml
+tasks:
+  decision:
+    name: "Make Decision"
+    action: prompt
+    auto: false
+    properties:
+      prompt: "Approve? (yes/no)"
+
+  approved:
+    name: "Approved Path"
+
+  rejected:
+    name: "Rejected Path"
+
+routings:
+  - from: decision
+    to: approved
+    condition: route_name
+    name: "yes"           # Fires when task result's next_route is "yes"
+
+  - from: decision
+    to: rejected
+    condition: route_name
+    name: "no"            # Fires when task result's next_route is "no"
+```
+
+The `route_name` condition checks if the task's result `next_route` matches the routing's `name`.
+
+### Complete Example: Feature Implementation
+
+```yaml
+name: "Feature Implementation"
+version: 1
+first_task: gather_requirements
+
+tasks:
+  gather_requirements:
+    name: "Gather Requirements"
+    action: prompt
+    auto: false
+    properties:
+      prompt: "What feature should we implement?"
+
+  create_plan:
+    name: "Create Plan"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Requirements: {{gather_requirements.output}}
+
+        Create a detailed implementation plan.
+
+  review_plan:
+    name: "Review Plan"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Plan: {{create_plan.output}}
+
+        Approve this plan? (yes/modify)
+
+  implement:
+    name: "Implement"
+    action: prompt
+    auto: false
+    properties:
+      prompt: "Implement according to: {{create_plan.output}}"
+
+  run_tests:
+    name: "Run Tests"
+    action: shell
+    properties:
+      command: "pytest tests/"
+
+  final_review:
+    name: "Final Review"
+    synchronized: true
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Implementation complete.
+        Test results: {{run_tests.output}}
+
+        Approve for merge?
+
+routings:
+  - from: gather_requirements
+    to: create_plan
+
+  - from: create_plan
+    to: review_plan
+
+  - from: review_plan
+    to: implement
+    condition: route_name
+    name: "yes"
+
+  - from: review_plan
+    to: create_plan
+    condition: route_name
+    name: "modify"
+
+  - from: implement
+    to: run_tests
+    parallel: true
+
+  - from: implement
+    to: final_review
+
+  - from: run_tests
+    to: final_review
+```
+
+### Complete Example: Bug Fix with TDD
+
+```yaml
+name: "Bug Fix (TDD)"
+version: 1
+first_task: describe_bug
+
+tasks:
+  describe_bug:
+    name: "Describe Bug"
+    action: prompt
+    auto: false
+    properties:
+      prompt: |
+        Describe the bug:
+        - Expected behavior?
+        - Actual behavior?
+        - Steps to reproduce?
+
+  investigate:
+    name: "Investigate"
+    action: prompt
+    auto: false
+    properties:
+      prompt: "Bug: {{describe_bug.output}}\n\nInvestigate the root cause."
+
+  write_test:
+    name: "Write Failing Test"
+    action: prompt
+    auto: false
+    properties:
+      prompt: "Write a test that reproduces: {{investigate.output}}"
+
+  implement_fix:
+    name: "Implement Fix"
+    action: prompt
+    auto: false
+    properties:
+      prompt: "Implement a fix for the failing test."
+
+  run_tests:
+    name: "Run Tests"
+    action: shell
+    properties:
+      command: "pytest tests/ -v"
+
+  verify:
+    name: "Verify Fix"
+    action: prompt
+    auto: false
+    properties:
+      prompt: "Tests: {{run_tests.output}}\n\nIs the bug fixed? (yes/no)"
+
+routings:
+  - from: describe_bug
+    to: investigate
+  - from: investigate
+    to: write_test
+  - from: write_test
+    to: implement_fix
+  - from: implement_fix
+    to: run_tests
+  - from: run_tests
+    to: verify
+  - from: verify
+    to: implement_fix
+    condition: route_name
+    name: "no"
+```
+
 ## Built-in Actions
 
 ### shell
@@ -218,22 +529,86 @@ registry.register_action("my_action", MyCustomAction)
 
 ## MCP Server
 
-Run the MCP server for Claude integration:
+The MCP (Model Context Protocol) server allows Claude to create and manage workflows directly.
+
+### Running the MCP Server
 
 ```bash
 uv run python -m zebra.mcp.server
 ```
 
-Available MCP tools:
+### Configuring Claude Code
 
-- `create_workflow`: Create a workflow from YAML
-- `start_workflow`: Start a created workflow
-- `get_workflow_status`: Get workflow status
-- `list_workflows`: List all workflows
-- `get_pending_tasks`: Get tasks awaiting input
-- `complete_task`: Complete a pending task
-- `pause_workflow`: Pause a running workflow
-- `resume_workflow`: Resume a paused workflow
+Add the following to your Claude Code MCP settings file (`~/.claude/claude_desktop_config.json` or via Claude Code settings):
+
+```json
+{
+  "mcpServers": {
+    "zebra-workflow": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/zebra-py", "python", "-m", "zebra.mcp.server"]
+    }
+  }
+}
+```
+
+Replace `/path/to/zebra-py` with the actual path to your zebra-py installation.
+
+Alternatively, if zebra-workflow is published to PyPI, use `uvx` to run it directly:
+
+```json
+{
+  "mcpServers": {
+    "zebra-workflow": {
+      "command": "uvx",
+      "args": ["--from", "zebra-workflow[mcp]", "python", "-m", "zebra.mcp.server"]
+    }
+  }
+}
+```
+
+Or if you have a virtual environment with zebra installed:
+
+```json
+{
+  "mcpServers": {
+    "zebra-workflow": {
+      "command": "uv",
+      "args": ["run", "--project", "/path/to/your/project", "python", "-m", "zebra.mcp.server"]
+    }
+  }
+}
+```
+
+### Workflow Data Location
+
+Workflows are stored in SQLite at `~/.zebra/workflows.db`. This persists across sessions, allowing workflows to be resumed.
+
+### Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `create_workflow` | Create a workflow from YAML definition |
+| `start_workflow` | Start a created workflow |
+| `get_workflow_status` | Get current status of a workflow |
+| `list_workflows` | List all active workflows |
+| `get_pending_tasks` | Get tasks waiting for input |
+| `complete_task` | Complete a pending task with a result |
+| `pause_workflow` | Pause a running workflow |
+| `resume_workflow` | Resume a paused workflow |
+
+### Example Usage with Claude
+
+Once configured, Claude can create and manage workflows:
+
+```
+Claude: I'll create a workflow to help implement this feature.
+
+[Claude calls create_workflow with YAML definition]
+[Claude calls start_workflow]
+[Claude monitors with get_pending_tasks]
+[Claude completes manual tasks with complete_task]
+```
 
 ## Development
 

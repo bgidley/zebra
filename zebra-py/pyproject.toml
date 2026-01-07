@@ -21,6 +21,7 @@ dependencies = [
     "pydantic>=2.0",
     "aiosqlite>=0.19",
     "pyyaml>=6.0",
+    "mcp>=1.25.0",
 ]
 
 [project.optional-dependencies]
@@ -50,3 +51,8 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[dependency-groups]
+dev = [
+    "pypdf>=6.5.0",
+]
