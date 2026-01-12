@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Zebra is a workflow engine with implementations in multiple languages:
 - **zebra-rs/** - Modern Rust port (async/await with Tokio)
 - **zebra-py/** - Modern Python port (async with SQLite persistence, MCP integration)
-- **Root Java modules** - Legacy 2004 codebase (Maven multi-module)
+- **legacy/** - Original 2004 Java codebase (Maven multi-module, preserved for reference)
 
-Current development is on the `python-modernization` branch. The `master` branch contains stable Java/legacy code.
+Current development is on the `python-modernization` branch.
 
 ## Build and Test Commands
 
@@ -56,9 +56,10 @@ uv run ruff check --fix .           # Auto-fix
 uv run python -m zebra.mcp.server   # Run MCP server for Claude
 ```
 
-### Java (Legacy)
+### Java (Legacy - in legacy/)
 
 ```bash
+cd legacy
 mvn clean compile                   # Compile
 mvn test                            # Run tests
 ```
