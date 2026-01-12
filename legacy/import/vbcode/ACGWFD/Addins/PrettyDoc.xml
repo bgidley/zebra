@@ -1,0 +1,4 @@
+<ACGWFD.Addins>
+	<Addin menuname = "PrettyDoc" classname ="AnitePrettyDoc.PrettyDoc" />
+	<Addin menuname = "AutoNumber" classname ="AnitePrettyDoc.AutoID" />
+</ACGWFD.Addins> 

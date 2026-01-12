@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<document>
+	<properties>
+		<title>Wombat Properties</title>
+		<author email="bengidley@tigris.org">Ben Gidley</author>
+	</properties>
+	<body>
+		<section name="wombat Properties">
+			<table>
+				<tr>
+					<td>wombat.hibernate.includes</td>
+					<td>No</td>
+					<td> The files to include in the hibernate XDoclet command 
+						</td>
+				</tr>
+				<tr>
+					<td>wombat.hibernate.excludes</td>
+					<td>No</td>
+					<td> The files to exclude in the hibernate XDoclet command 
+						</td>
+				</tr>
+				<tr>
+					<td>wombat.hibernate.srcPackage</td>
+					<td>No</td>
+					<td>The package to the hbm.xml file for hibernate to work 
+						with</td>
+				</tr>
+				<tr>
+					<td>wombat.startupdata.testcase</td>
+					<td>No</td>
+					<td>The JUnit testcase or test suite to execute to load all startup data required.</td>
+				</tr>
+			</table>
+		</section>
+	</body>
+</document>

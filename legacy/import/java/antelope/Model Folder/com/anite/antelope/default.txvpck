@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+
+<nodeSet  version="1.0">
+	<view uin="V574ng9dy1duk4pym0zq2">
+		<property name="$defaultDiagram" value="true"/>
+		<property name="$metaclass" value="Package Diagram"/>
+		<reference referencedUin="design:view:::V574ng9dytp97nz-m8yws2">
+			<property name="bounds" value="230,150,142,121"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.AbstractCreateUsersTest">
+			<property name="bounds" value="10,10,200,185"/>
+		</reference>
+		<reference referencedUin="design:view:::V574ng9dytp97jnn8lia4">
+			<property name="bounds" value="446,10,74,95"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.HibernateCreateUsersTest">
+			<property name="bounds" value="28,255,164,94"/>
+			<reference referencedUin="jdt:l_gnt:src:com.anite.antelope.HibernateCreateUsersTest:AbstractCreateUsersTest">
+				<property name="sourceAnchor" value="110,255"/>
+				<property name="targetAnchor" value="110,195"/>
+				<property name="bendpoints" value=""/>
+			</reference>
+		</reference>
+		<reference referencedUin="design:view:::V574ng9dxyr3tro-kt5s0p">
+			<property name="bounds" value="392,150,85,95"/>
+		</reference>
+		<reference referencedUin="design:view:::V574ng9dyd1u8wk-x33hiq">
+			<property name="bounds" value="392,290,81,69"/>
+		</reference>
+		<reference referencedUin="design:view:::V574ng9dxyikfp7-mbhbii">
+			<property name="bounds" value="10,390,96,147"/>
+		</reference>
+		<reference referencedUin="design:view:::V574ng9dytp97ic-3a4gzp">
+			<property name="bounds" value="540,10,87,121"/>
+		</reference>
+		<reference referencedUin="design:view:::V574ng9dytp97n4-hoo7v6">
+			<property name="bounds" value="230,10,196,95"/>
+		</reference>
+		<reference referencedUin="design:view:::V574ng9dytp97ld-wgbu8b">
+			<property name="bounds" value="126,470,96,69"/>
+		</reference>
+		<reference referencedUin="design:view:::V574ng9dytp97gm-atrbgb">
+			<property name="bounds" value="212,310,122,121"/>
+		</reference>
+		<reference referencedUin="design:view:::V574ng9dy8gi04v5fe7uw">
+			<property name="bounds" value="354,390,85,69"/>
+		</reference>
+	</view>
+</nodeSet>

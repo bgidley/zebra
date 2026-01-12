@@ -1,0 +1,17 @@
+<!-- Unit Test Zebra Configuration -->
+<componentConfig>
+	<component role="com.anite.zebra.avalon.api.IAvalonDefsFactory" 
+		class="com.anite.antelope.zebra.factory.AntelopeDefinitionsFactory" 
+		baseFolder="/src/webapp/WEB-INF/processes/" 
+		processDefinitionClass="com.anite.antelope.zebra.om.AntelopeProcessDefinition" 
+		taskDefinitionClass="com.anite.antelope.zebra.om.AntelopeTaskDefinition" 
+		processVersionsClass="com.anite.antelope.zebra.om.AntelopeProcessVersions" 
+		routingDefinitionClass="com.anite.antelope.zebra.om.AntelopeRoutingDefinition" 
+		propertyGroupsClass="com.anite.antelope.zebra.om.AntelopePropertyGroups" 
+		propertyElementClass="com.anite.antelope.zebra.om.AntelopePropertyElement" 
+		/>
+	<component role="com.anite.zebra.core.factory.api.IStateFactory" 
+		class="com.anite.antelope.zebra.factory.AntelopeStateFactory" />
+	<component role="com.anite.zebra.core.api.IEngine" 
+		class="com.anite.zebra.avalon.impl.ZebraAvalonEngine" />
+</componentConfig>

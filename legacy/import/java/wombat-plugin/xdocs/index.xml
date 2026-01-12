@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<document>
+
+  <properties>
+    <title>Maven Wombat Plug-in</title>
+    <author email="bengidley@tigris.org">Ben Gidley</author>
+  </properties>
+
+  <body>
+    <section name="Maven Wombat Plug-in">
+      <p>
+        This plugin is for executing Maven actions that facilatiate development with the Antelope
+        sample application as well as the Zebra workflow engine.
+      </p>      
+    </section>
+    
+    </body>
+</document>

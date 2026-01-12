@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<module id="fulcrum.security.hivemind" version="1.0.0">
+	<service-point id="peristenceHelper"
+		interface="org.apache.fulcrum.security.hibernate.PersistenceHelper">
+		<invoke-factory model="threaded">
+			<construct
+				class="org.apache.fulcrum.security.hibernate.PersistenceHelperHivemindImplementation">
+				<set-service property="session"
+					service-id="fulcrum.hibernate.Session"/>
+			</construct>
+		</invoke-factory>
+	</service-point>
+	<service-point id="modelManagerDynamic"
+		interface="org.apache.fulcrum.security.model.dynamic.DynamicModelManager">
+		<invoke-factory>
+			<construct
+				class="org.apache.fulcrum.security.hibernate.dynamic.HibernateModelManagerImpl">
+			</construct>
+		</invoke-factory>
+	</service-point>
+	<service-point id="userManagerDynamic"
+		interface="org.apache.fulcrum.security.UserManager">
+		<invoke-factory>
+			<construct
+				class="org.apache.fulcrum.security.hibernate.HibernateUserManagerImpl">
+				<set property="className"
+					value="org.apache.fulcrum.security.hibernate.dynamic.model.HibernateDynamicUser"/>
+				<set property="passwordDurationDays" value="28"/>
+				<set property="passwordCyclePolicy" value="5"/>
+				<set property="maxLoginAttempts" value="3"/>
+				<set property="lockResetHours" value="12"/>
+				<set-service property="authenticator"
+					service-id="fulcrum.security.authenticatorTextMatch"/>
+				<set-service property="aclFactory"
+					service-id="fulcrum.security.aclFactoryDynamic"/>
+			</construct>
+		</invoke-factory>
+	</service-point>
+	<service-point id="groupManagerDynamic"
+		interface="org.apache.fulcrum.security.GroupManager">
+		<invoke-factory>
+			<construct
+				class="org.apache.fulcrum.security.hibernate.HibernateGroupManagerImpl">
+				<set property="className"
+					value="org.apache.fulcrum.security.hibernate.dynamic.model.HibernateDynamicGroup"/>
+			</construct>
+		</invoke-factory>
+	</service-point>
+	<service-point id="permissionManagerDynamic"
+		interface="org.apache.fulcrum.security.PermissionManager">
+		<invoke-factory>
+			<construct
+				class="org.apache.fulcrum.security.hibernate.HibernatePermissionManagerImpl">
+				<set property="className"
+					value="org.apache.fulcrum.security.hibernate.dynamic.model.HibernateDynamicPermission"/>
+			</construct>
+		</invoke-factory>
+	</service-point>
+	<service-point id="roleManagerDynamic"
+		interface="org.apache.fulcrum.security.RoleManager">
+		<invoke-factory>
+			<construct
+				class="org.apache.fulcrum.security.hibernate.HibernateRoleManagerImpl">
+				<set property="className"
+					value="org.apache.fulcrum.security.hibernate.dynamic.model.HibernateDynamicRole"/>
+			</construct>
+		</invoke-factory>
+	</service-point>
+	<service-point id="securityServiceDynamic"
+		interface="org.apache.fulcrum.security.SecurityService">
+		<invoke-factory>
+			<construct class="org.apache.fulcrum.security.BaseSecurityService">
+				<set-service property="modelManager"
+					service-id="modelManagerDynamic"/>
+				<set-service property="groupManager"
+					service-id="groupManagerDynamic"/>
+				<set-service property="userManager"
+					service-id="userManagerDynamic"/>
+				<set-service property="permissionManager"
+					service-id="permissionManagerDynamic"/>
+				<set-service property="roleManager"
+					service-id="roleManagerDynamic"/>
+			</construct>
+		</invoke-factory>
+	</service-point>
+</module>

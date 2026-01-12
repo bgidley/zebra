@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<module id="fulcrum.crypto" version="1.0.0">
+    <configuration-point id="CryptoProviders">
+        <schema>
+            <element name="crypto" key-attribute="key">
+                <attribute name="key" required="true"/>
+                <attribute name="class" required="true"/>
+                <rules>
+                    <push-attribute attribute="class"/>
+                    <invoke-parent method="addElement"/>
+                </rules>
+            </element>
+        </schema>
+    </configuration-point>
+    <contribution configuration-id="CryptoProviders">
+        <crypto key="unix" class="org.apache.fulcrum.crypto.provider.UnixCrypt"/>
+        <crypto key="java" class="org.apache.fulcrum.crypto.provider.JavaCrypt"/>
+        <crypto key="clear" class="org.apache.fulcrum.crypto.provider.ClearCrypt"/>
+        <crypto key="oldjava" class="org.apache.fulcrum.crypto.provider.OldJavaCrypt"/>
+    </contribution>
+    <service-point id="Crypto" interface="org.apache.fulcrum.crypto.CryptoService">
+        <invoke-factory>
+            <construct class="org.apache.fulcrum.crypto.DefaultCryptoService">
+                <set-configuration property="algorithm" configuration-id="CryptoProviders"/>
+            </construct>
+        </invoke-factory>
+    </service-point>
+</module>

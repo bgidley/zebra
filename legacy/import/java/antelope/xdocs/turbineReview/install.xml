@@ -1,0 +1,98 @@
+<?xml version="1.0"?>
+<document>
+	<properties>
+		<title> Turbine-Review Installation</title>
+		<author email="peter@courcoux.biz">Peter Courcoux</author>
+		<author email="bgidley@berlios.de">Ben Gidley</author>
+	</properties>
+	<body>
+		<section name="Installation">
+			<p>As far as the developer is concerned, the ReView service can be 
+				switched on and ignored. It will start to build rules files 
+				without interfering. </p>
+			<p>Edit your WEB-INF/conf/componentConfig.xml file so that it 
+				includes the following.</p>
+			<source><![CDATA[
+<componentConfig>
+    <validatorFactory>
+        <validator 
+		class="org.apache.turbine.component.review.validators.AlwaysTrueValidator" 				factory="threadsafe" />
+        <validator 
+		class="org.apache.turbine.component.review.validators.MaxLengthStringValidator" 			factory="threadsafe" />
+    </validatorFactory>
+	<component
+	  role="org.apache.turbine.component.review.main.api.ReviewService"
+	  class="org.apache.turbine.component.review.main.impl.ReviewServiceImpl"
+	  mode="developer" >
+	</component>
+	<component
+	  role="org.apache.turbine.component.review.datastore.api.RulesDatastore"
+	  class="org.apache.turbine.component.review.datastore.impl.XMLRulesDatastore"
+	  dtdRelativeLocation="WEB-INF/conf/" 
+	  rulesLibraryLocation=”WEB-INF/review/libs/”
+	  rulesLocation=”WEB-INF/review/rules/”>
+	</component>
+</componentConfig> 
+]]></source>
+			<p>Edit your WEB-INF/conf/roleConfiguration.xml file so that 
+				includes the following.</p>
+			<source><![CDATA[
+   <role-list>
+    <role name="org.apache.turbine.component.review.main.api.ReviewService"
+     shorthand="review"
+     default-class="org.apache.turbine.component.review.main.impl.ReviewServiceImpl"/>
+
+    <role name="org.apache.turbine.component.review.datastore.api.RulesDatastore"
+     shorthand="datastore"
+     default-class="org.apache.turbine.component.review.datastore.impl.XMLRulesDatastore"/>
+
+    <role name="org.apache.turbine.component.review.factory.api.ValidatorFactoryService"
+     shorthand="validatorFactory"
+     default-class="org.apache.turbine.component.review.factory.impl.ValidatorFactoryServiceImpl"/>
+   </role-list>
+]]></source>
+			<p>Copy the following DTD's to the folder specified in the 
+				configuration file above (WEB-INF/conf) :-</p>
+			<ul>
+				<li>Validation.dtd</li>
+				<li>Named-validators.dtd</li>
+				<li>Global-validators.dtd</li>
+				<li>RulesLibrary.dtd</li>
+			</ul>
+			<p>Add the following lines to TurbineResources.props</p>
+			<p>services.AvalonComponentService.lookup = 
+				org.apache.turbine.component.review.api.RulesDatastore</p>
+			<p>services.AvalonComponentService.lookup = 
+				org.apache.turbine.component.review.main.api.ReviewService</p>
+			<p>For Turbine 2.4 edit the Turbine-classic-pipeline.xml as follows 
+				:-</p>
+			<source><![CDATA[
+<pipeline>
+  <name>TurbineClassicPipeline</name>
+  <valves>
+<!-- following line added to enable ReView service -->
+    <valve className="org.apache.turbine.component.review.util.ReviewValve"/>
+
+    <valve className="org.apache.turbine.pipeline.DetermineActionValve"/>
+    <valve className="org.apache.turbine.pipeline.DetermineTargetValve"/>   
+    <valve className="org.apache.turbine.pipeline.DefaultSessionTimeoutValve"/>   
+    <valve className="org.apache.turbine.pipeline.DefaultLoginValve"/>
+    <valve className="org.apache.turbine.pipeline.DefaultSessionValidationValve"/>
+    <valve className="org.apache.turbine.pipeline.DefaultACLCreationValve"/>
+    <valve className="org.apache.turbine.pipeline.ExecutePageValve"/>
+    <valve className="org.apache.turbine.pipeline.CleanUpValve"/>
+    <valve className="org.apache.turbine.pipeline.DetermineRedirectRequestedValve"/>
+  </valves>
+</pipeline>
+]]></source>
+			<p>To see what is going on ensure that logging is set to DEBUG, so 
+				that you can see the logging from the services at startup.</p>
+			<p>Start your application. If all is well, your application should 
+				start as usual. Examine the log. The ReView service checks as 
+				much of its configuration as possible at start-up. You should 
+				see extensive debug logging under the category 'avalon' showing 
+				the services starting. Any configuration issues should result 
+				in ReviewConfigurationExceptions being thrown.</p>
+		</section>
+	</body>
+</document>

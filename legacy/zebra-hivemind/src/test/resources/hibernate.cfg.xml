@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-configuration PUBLIC
+		"-//Hibernate/Hibernate Configuration DTD 3.0//EN"
+		"http://hibernate.sourceforge.net/hibernate-configuration-3.0.dtd">
+<hibernate-configuration>
+	<session-factory>
+		<property name="show_sql">false</property>
+		<property name="hibernate.connection.driver_class">org.postgresql.Driver</property>
+		<property name="hibernate.connection.password">zebra</property>
+		<property name="hibernate.connection.url">jdbc:postgresql:zebra</property>
+		<property name="hibernate.connection.username">zebra</property>
+		<property name="hibernate.dialect">org.hibernate.dialect.PostgreSQLDialect</property>
+		<property name="connection.pool_size">0</property>
+		<mapping class="com.anite.zebra.hivemind.om.defs.ZebraPropertyElement"/>
+		<mapping class="com.anite.zebra.hivemind.om.defs.ZebraProcessVersions"/>
+		<mapping class="com.anite.zebra.hivemind.om.defs.ZebraProcessDefinition"/>
+		<mapping class="com.anite.zebra.hivemind.om.defs.ZebraPropertyGroups"/>
+		<mapping class="com.anite.zebra.hivemind.om.defs.ZebraRoutingDefinition"/>
+		<mapping class="com.anite.zebra.hivemind.om.defs.ZebraTaskDefinition"/>
+		<mapping class="com.anite.zebra.hivemind.om.state.Priority"/>
+		<mapping class="com.anite.zebra.hivemind.om.state.DatabaseLock"/>
+		<mapping class="com.anite.zebra.hivemind.om.state.ZebraFOE"/>
+		<mapping class="com.anite.zebra.hivemind.om.state.ZebraProcessInstance"/>
+		<mapping class="com.anite.zebra.hivemind.om.state.ZebraPropertySetEntry"/>
+		<mapping class="com.anite.zebra.hivemind.om.state.ZebraTaskInstance"/>
+		<mapping class="com.anite.zebra.hivemind.om.state.ZebraTaskInstanceHistory"/>
+		
+		<mapping class="com.anite.zebra.hivemind.om.timedtask.FiredTimedTask"/>
+		<mapping class="com.anite.zebra.hivemind.om.timedtask.Time"/>
+		<mapping class="com.anite.zebra.hivemind.om.timedtask.TimedTask"/>
+		
+		<mapping class="org.apache.fulcrum.security.hibernate.dynamic.model.HibernateDynamicUser"/>
+		<mapping class="org.apache.fulcrum.security.hibernate.dynamic.model.HibernateDynamicGroup"/>
+		<mapping class="org.apache.fulcrum.security.hibernate.dynamic.model.HibernateDynamicRole"/>
+		<mapping class="org.apache.fulcrum.security.hibernate.dynamic.model.HibernateDynamicPermission"/>
+		
+		
+	</session-factory>
+</hibernate-configuration>

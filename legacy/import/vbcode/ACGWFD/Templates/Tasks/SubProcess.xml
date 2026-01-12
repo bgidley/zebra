@@ -1,0 +1,20 @@
+<ACGWFD.TaskTemplate name="SubProcess" icon="SubProcess.bmp" 
+	description="A subprocess task allows you to run another process from within this process. The task will not complete until all tasks in the subprocess have been completed." 
+	routingparallel="no">
+	<properties name="(General)">
+		<property name="synchronise" type="boolean" value="false" locked="yes"/>
+		<property name="auto" type="boolean" value="yes" locked="yes"/>
+		<property name="class name" type="string" 
+			value="com.anite.antelope.zebra.taskAction.SubProcess" 
+			locked="yes"/>
+	</properties>
+	<properties name="SubProcess">
+		<property name="Process Name" type="file" value="" locked="no" />
+		<property name="Push Outputs" type="boolean" value="true" locked="no" />
+	</properties>
+	<properties name = "(General Task Properties)">
+		<property name="ShowInTaskList" value="no" type="Boolean" locked="yes"/>
+	</properties>
+	<properties name="(Inputs)" />
+	<properties name="(Outputs)" />
+</ACGWFD.TaskTemplate>

@@ -1,0 +1,177 @@
+<?xml version="1.0"?>
+<document>
+	<properties>
+		<title> Turbine-Review Validation</title>
+		<author email="peter@courcoux.biz">Peter Courcoux</author>
+		<author email="bgidley@berlios.de">Ben Gidley</author>
+	</properties>
+	<body>
+		<section name="Validation">
+			<p> Validation, a look at the XML based validation rules </p>
+			<p>Before looking at the validation rules in detail, it is worth 
+				looking at how requests are identified in Turbine. When an HTML 
+				form is created it will usually have an action attribute. This 
+				will be sent with the HTTPRequest as a parameter called action 
+				which will be set to the name of the action. Non 'action' 
+				requests will contain a parameter called 'template' whose value 
+				will be set to the name of the .vm template being called. In 
+				some cases an action request will also contain a template 
+				parameter.</p>
+			<p>This behaviour provides a good way to group and identify 
+				parameters. The parameters belonging to a specified form will 
+				all be sent in a request which includes the name of the action 
+				being called. We can think of each individual parameter being 
+				uniquely identified by a key made up as follows :-</p>
+			<source>action.myActionName.myParameterName</source>
+			<p>or</p>
+			<source>template.myTemplateName.myParameterName</source>
+			<p>Note that, in terms of building keys for parameters, Re-View 
+				ignores template parameters when they are contained in a 
+				request which also contains an action parameter. This is partly 
+				because the action parameter is the important one, but also 
+				because the template can be changed by the action being called. 
+				Even if they are ignored for the purposes of building keys, 
+				they are always subject to validation in the same way as any 
+				other parameter.</p>
+			<p>Occasionally, parameter names will be created from lists or 
+				tables and may be of the following form:-</p>
+			<p>Name=”caseid$id” which may resolve to multiple parameters like 
+				:-</p>
+			<p>caseid10, caseid11, caseid12 etc. </p>
+			<p>These would normally result in a requirement for separate 
+				validation to be specified for each parameter. By surrounding 
+				the discriminator with [ ], while each parameter will be 
+				identifiable, for validation the discriminator will be ignored 
+				such that caseid[$id] will result in parameters </p>
+			<p>caseid[10], caseid[11], caseid[12] etc </p>
+			<p>but will all be validated as : caseid, requiring only a single 
+				parameter-validator rule.</p>
+			<p>The table below shows an example of a complete XMLRulesDatastore 
+				style file.</p>
+			<source><![CDATA[
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE validation PUBLIC "-//Apache//TEXT Validation//EN" "http://purl.oclc.org/NET/turbine-review/Validation.dtd">
+
+<validation requestLookupKey="action.TOLLoginUser">					[1]
+  <library ruleset="uk_address" version="1.0"/>							[2]
+  <!--Validation Specification : action.TOLLoginUser-->
+  <parametervalidators>
+    <parameter-validator name="password">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="action">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="username">
+       <args />											[3]
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.MaxLengthStringValidator">
+  	<args>											[4]
+<argument name="maxlength" type="int" value="255" />				[5]
+<argument 
+	name="inputTooLongMessage" 
+	type="string" 
+	value="This item must be less than 255 characters in length. Please re-enter." />
+</args>
+</validator>
+      </validators>
+    </parameter-validator>
+  </parametervalidators>
+  <request-validator/>						[6]
+</validation>
+]]></source>
+			<p>The following points are worth noting :-</p>
+			<p>The file content is in accordance with the Validation.dtd file 
+				which by default is located in the WEB-INF/conf folder of the 
+				web application. DTD's are used for all XML files and are 
+				checked at service start-up by the xml parser used to load the 
+				rules. This again is to help ensure that problems are 
+				identified at service start-up and not at some unspecified 
+				later time. The location of the DTD is configurable by means of 
+				an entry in the configuration file.</p>
+			<p>Note the 'requestLookupKey' [1] attribute on the validation tag. 
+				This identifies this file as the validation rules for an action 
+				class named TOLLoginUser. Note that the validation service 
+				will, in developer mode, create a file such as this and that it 
+				will be given the name “action.TOLLoginUser.xml”. This file 
+				will be created in the folder specified by the 'rulesLocation' 
+				entry in the configuration file. However, also note that the 
+				name of the file is not important and any file in this folder 
+				will be read and if it is found to contain a valid set of rules 
+				it will be parsed and included in the application's validation 
+				rules map. This can be particularly useful to development teams 
+				where there is the possibility of overwriting someone else's 
+				validation definitions. </p>
+			<p>A good method to adopt is to allow the system to create default 
+				validation files with default entries for all the parameters. 
+				Once you customise the file to add validation to individual 
+				parameter, change the name of the file. The file will be loaded 
+				by the system on start-up. However, should any new parameters 
+				be found for the same action, if, for example a new field is 
+				added to a form, then the system will create a new file with 
+				its default name and add the new parameter into that file. You 
+				will be able to copy and paste the validator entry into your 
+				original renamed file. This way, colleagues who may be working 
+				on different areas of the application, should not overwrite 
+				your validation if they commit default files into subversion or 
+				cvs by mistake!</p>
+			<p>The<![CDATA[<library ruleset="uk_address" version="1.0"/>]]> tag 
+				[2] specifies an external file conforming to the 
+				ReviewLibrary.dtd which can contain sets of <![CDATA[<parameter-validator></parameter-validator>]]>
+				 tags grouped into <![CDATA[<ruleset>]]>'s. These definitions 
+				will be added into the rules for this file. This will allow 
+				often reused validation fragments to be built as libraries and 
+				dropped into validation definition files without changes being 
+				required. This is useful if you work in similar application 
+				domains where validation can be reused across separate 
+				applications.</p>
+			<p>The<![CDATA[<args/>]]>tag [3] will contain arguments which may 
+				apply to all the nested validators. By contrast the <![CDATA[<args>]]>
+				 tag [4] specifies arguments which are specific to the 
+				validator within which it is nested, in this case the 
+				MaxLengthStringValidator. These arguments supercede any set at 
+				[3].</p>
+			<p>By convention (mine :-) ), the arguments required by a validator 
+				[5] are set out in the javadoc for the class and can be copied 
+				and edited as appropriate from the javadoc to the rules 
+				file.</p>
+			<p>The<![CDATA[ <request-validator/>]]>tag [6], specifies a 
+				validator which runs after all the individual validators. It is 
+				often used for testing for missing parameters, where controls, 
+				such as check boxes are used which only send a parameter if 
+				completed.</p>
+		</section>
+		<section name="Named Validators">
+			<p>NOTE THIS IS LIKELY TO BE REPLACED WITH ENTITY REFERENCES</p>
+			<p>To facilitate reuse of sets of validation configuration, named 
+				validators can be configured in the file 
+				WEB-INF/review/rules/Named-Validators.xml. This file contains <![CDATA[<parameter-validator>]]>
+				 tags with name attributes which should be unique and 
+				descriptive. These can then be called by adding a <![CDATA[<named-validator name=”myNamedValidatorName”>]]>
+				 tag to the validators tag of a parameter-validator. This 
+				promotes reuse and the ability to change the validation for a 
+				large number of parameters from a single location.</p>
+		</section>
+		<section name="Global Validators">
+			<p>In production mode, if a parameter is not mapped, before 
+				throwing an exception, the 
+				WEB-INF/review/rules/GlobalValidators.xml file is checked for 
+				the parameter. This is designed to catch parameters such as 
+				JSESSIONID parameters, which may on occasion be included in the 
+				request, and which may be valid but not mapped before. Again 
+				include a <![CDATA[<parameter-validator>]]> tag in the 
+				GlobalValidators file with the name attribute set to the name 
+				of the parameter.</p>
+		</section>
+	</body>
+</document>

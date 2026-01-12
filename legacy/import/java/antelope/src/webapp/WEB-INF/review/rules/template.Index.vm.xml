@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE validation PUBLIC "-//Apache//TEXT Validation//EN" "http://purl.oclc.org/NET/turbine-review/Validation.dtd">
+
+<validation requestLookupKey="template.Index.vm">
+  <!--Validation Specification : template.Index.vm-->
+  <parametervalidators>
+    <parameter-validator name="scripts">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="template">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="lang">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+  </parametervalidators>
+  <request-validator />
+</validation>
+

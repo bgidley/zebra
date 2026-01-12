@@ -1,0 +1,6 @@
+<my-system>
+  <component
+    role="org.apache.fulcrum.security.model.ACLFactory"
+    class="org.apache.fulcrum.security.model.dynamic.DynamicACLFactory">   
+  </component> 
+</my-system>

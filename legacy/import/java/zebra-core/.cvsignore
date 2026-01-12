@@ -1,0 +1,7 @@
+lib
+target
+.classpath
+.project
+*.log
+zebra-core-pom-snapshot-version
+jcoverage.ser

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE validation PUBLIC "-//Apache//TEXT Validation//EN" "http://purl.oclc.org/NET/turbine-review/Validation.dtd">
+
+<validation requestLookupKey="action.user.AddUser">
+  <!--Validation Specification : action.user_AddUser-->
+  <parametervalidators>
+    <parameter-validator name="confpassword">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="password">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="action">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>    
+    <parameter-validator name="username">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+  </parametervalidators>
+  <request-validator>
+    <args />
+    <validators>
+      <validator class="com.anite.antelope.validation.NotNullValidator">
+        <args>
+          <!-- Arguments for NotNullValidator -->
+          <argument name="isNullMessage" type="string" value="Please enter a user name." />
+          <argument name="keys" type="string" value="username" />
+        </args>
+      </validator>
+      <validator class="com.anite.antelope.validation.NotNullValidator">
+        <args>
+          <!-- Arguments for NotNullValidator -->
+          <argument name="isNullMessage" type="string" value="Please enter a password." />
+          <argument name="keys" type="string" value="password" />
+        </args>
+      </validator>
+      <validator class="com.anite.antelope.validation.NotNullValidator">
+        <args>
+          <!-- Arguments for NotNullValidator -->
+          <argument name="isNullMessage" type="string" value="Please confirm your password." />
+          <argument name="keys" type="string" value="confpassword" />
+        </args>
+      </validator>
+    </validators>
+  </request-validator>
+</validation>
+

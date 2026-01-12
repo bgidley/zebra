@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<project name="Maven Wombat Plugin">
+
+  <title>Maven Wombat Plugin</title>
+
+  <body>
+    <links>
+      <item name="Aniteps" href="http://www.aniteps.com/"/>
+      <item name="Zebra Workflow" href="http://zebra.tigris.org"/>
+      <item name="Antelope Sample App" href="http://zebra.tigris.org/nonav/antelopeZebraSample/"/>
+      <item name="Wombat Plugin" href="http://zebra.tigris.org/nonav/wombat-plugin/"/>
+    </links>
+    <menu name="Overview">
+      <item name="Overview" href="/index.html" />
+      <item name="Goals" href="/goals.html" />
+      <item name="Properties" href="/properties.html" />
+    </menu>
+  </body>
+</project>

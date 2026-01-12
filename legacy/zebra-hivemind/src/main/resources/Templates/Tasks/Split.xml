@@ -1,0 +1,12 @@
+<ACGWFD.TaskTemplate name="Split" icon="Split.bmp" 
+	description="A split allows the flow to run multiple routes concurrently" 
+	routingparallel="yes">
+	<properties name="(General)">
+		<property name="synchronise" type="boolean" value="no" locked="yes"/>
+		<property name="auto" type="boolean" value="yes" locked="yes"/>
+		<property name="Class Name" type="string" value="" locked="yes" />
+	</properties>
+	<properties name = "(General Task Properties)">
+		<property name="ShowInTaskList" value="no" type="Boolean" locked="yes"/>
+	</properties>
+</ACGWFD.TaskTemplate>

@@ -1,0 +1,28 @@
+#* ------------------------------------------------------------------
+#
+#  Macros shared over multiple .vm templates go here.
+#
+*# ------------------------------------------------------------------
+
+## Show all the field arrors together for this form (typically at 
+## the top)
+#macro (showAllFieldErrors $form)
+	#if(!$form.allValid)
+		#foreach ($field in $form.Fields)			
+			#if(! $field.Valid )		
+		    	#foreach($message in $field.Messages)
+		    		<p class="error">$message</p>
+				#end
+			#end
+		#end
+	#end
+#end
+
+## Macro to show error messages for passed field if there are any
+#macro (showFieldError $field)
+	#if(! $field.Valid )
+    	#foreach($message in $field.Messages)
+    		<p class="error">$message</p>
+		#end
+	#end
+#end

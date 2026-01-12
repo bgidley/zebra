@@ -1,0 +1,6 @@
+<h1>Workflows</h1>
+<ul>
+#foreach ($processDefinition in $processDefinitions)	
+ <li><a href="$link.setAction("StartProcess").addPathInfo("processname","$processDefinition.Name")">$processDefinition.displayName</a></li>	
+#end
+</ul>

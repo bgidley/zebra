@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE application SYSTEM "endpoints.dtd">
+<application>
+	<screen name="formSample,SimpleForm.vm" endpoint="formSample.SimpleFormSubmit"/>
+	<screen name="formSample,SelectForm.vm" endpoint="formSample.SelectFormSubmit"/>
+	<screen name="formSample,WhichAnimal.vm" endpoint="formSample.WhichAnimal"/>
+	<screen name="formSample,CongratulationsMoorhen.vm" endpoint="formSample.UpdateMoorhen"/>
+	<screen name="formSample,CongratulationsLlama.vm" endpoint="formSample.UpdateLlama"/>
+	<screen name="myFirstWorkflow,Hello.vm" endpoint="myFirstWorkflow.HelloAction"/>
+</application>

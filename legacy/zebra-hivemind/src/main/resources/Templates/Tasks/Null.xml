@@ -1,0 +1,10 @@
+<ACGWFD.TaskTemplate name="Null" icon="Null.bmp" description="A null task does nothing, and is often used to signify the start and end of a flow when there is no clearly defined beginning or end" routingparallel="no">
+	<properties name="(General)">
+		<property name="class name" type="string" value="" locked="yes" />
+		<property name="auto" type="boolean" value="yes" locked="yes"/>
+	</properties>
+		<properties name = "(General Task Properties)">
+		<property name="ShowInTaskList" value="no" type="Boolean" locked="yes"/>
+	</properties>
+	
+</ACGWFD.TaskTemplate>

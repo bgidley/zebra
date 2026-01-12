@@ -1,0 +1,77 @@
+<h1>HowOldAreYou, EnterExpiryDate and Summary</h1>
+<h3>HowOldAreYou </h3>
+	On the "How old are you" page the user's name is confirmed and the age of the user is requested. 
+	As information is to be displayed on this page, the information must be provided by the screen class. the relevant part of HowOldAreYou.java is shown here.
+
+<pre style="overflow:scroll;">
+<a name="32" href="#32">32</a>  <strong>public</strong> <strong>class</strong> HowOldAreYou<strong> extends</strong> BaseWorkflowScreen{
+<a name="33" href="#33">33</a>  
+<a name="34" href="#34">34</a>  	<strong>public</strong> <strong>static</strong> <strong>final</strong> String	AGE	= <span class="string">"age"</span>;
+<a name="35" href="#35">35</a>  
+<a name="36" href="#36">36</a>  	<em>/**<em>*</em></em>
+<a name="37" href="#37">37</a>  <em>	 * Prepare Data if needed</em>
+<a name="38" href="#38">38</a>  <em>	 */</em>
+<a name="39" href="#39">39</a>  	<strong>protected</strong> <strong>void</strong> doBuildTemplate(RunData runData, Context context,
+<a name="40" href="#40">40</a>  			AntelopeTaskInstance taskInstance, FormTool tool) throws Exception {
+<a name="41" href="#41">41</a>  
+<a name="42" href="#42">42</a>  		<em class="comment">//need to display name on page so it is placed into the context to be displayed as text,</em>
+<a name="43" href="#43">43</a>  		<em class="comment">//NOT as a field. the name is taken from the process instance's property set </em>
+<a name="44" href="#44">44</a>  		context.put(Hello.NAME,
+<a name="45" href="#45">45</a>  			((AntelopePropertySetEntry) ((AntelopeProcessInstance) taskInstance
+<a name="46" href="#46">46</a>  					.getProcessInstance()).getPropertySetEntryInstances().get(
+<a name="47" href="#47">47</a>  				<span class="string">"name"</span>)).getValue());
+<a name="48" href="#48">48</a>  
+<a name="49" href="#49">49</a>  	}
+<a name="50" href="#50">50</a>  }
+</pre>
+<p>
+	This code gets the string value out of the AntelopePropertySetEntry using the .getValue() method and puts it into the context where it will be cleared once the page is displayed. 
+	As can be seen below in the vm file the template is much the same as Hello except it has the line which displays the user's name from the context
+</P>
+<pre style="overflow:scroll;">
+&#35;&#35; get age field from form tool
+&#35;set ($age = $form.Fields.get("age"))
+
+&#35;&#35; show error if incorrect
+&#35;showFieldError($age)
+
+&#35;&#35; $name is taken straight from the string placed into the context in the screen class
+&#35;&#35; $age is a field which is then filled in
+&lt;p&gt;Hello $name&lt;/p&gt;
+&lt;p&gt;How old are you?&lt;input type="text" name="age" value="$age.value" size="$age.size" maxlength="$age.maxLength"/&gt;&lt;/p&gt;
+</pre>
+<p>The action class for HowOldAreYou is similar to Hello's and so there's no need to go into any more detail here.
+<H3>EnterExpiryDate</H3>
+	The process for this page is virtually identical to the previous page apart from it's demonstration of the ability of AntelopePropertySetEntrys to 
+	contain Objects instead of Strings (obviously a String is an object but that is provided for easier usage).
+	The relevant code is within the EnterExpiryDateAction class.
+<pre style="overflow:scroll;">
+<a name="44" href="#44">44</a>  	<strong>protected</strong> <strong>void</strong> doPerform(RunData runData, Context context,
+<a name="45" href="#45">45</a>  			AntelopeTaskInstance taskInstance,
+<a name="46" href="#46">46</a>  			AntelopeProcessInstance processInstance, FormTool tool)
+<a name="47" href="#47">47</a>  			throws Exception {
+<a name="48" href="#48">48</a>  
+<a name="49" href="#49">49</a>  		<em class="comment">// Get the validated date </em>
+<a name="50" href="#50">50</a>  		Field expiry = (Field) tool.getFields().get(EnterExpiryDate.EXPIRY);
+<a name="51" href="#51">51</a>  		SimpleDateFormat sdf = <strong>new</strong> SimpleDateFormat(<span class="string">"dd/mm/yy"</span>);
+<a name="52" href="#52">52</a>  		Date expiryDate = <strong>new</strong> Date(sdf.parse(expiry.getValue()).getTime());
+<a name="53" href="#53">53</a>  
+<a name="54" href="#54">54</a>  		<em class="comment">// Save the age in the processInstance</em>
+<a name="55" href="#55">55</a>  		<em class="comment">// Obviously in a real app this could be save it in the database</em>
+<a name="56" href="#56">56</a>  		AntelopePropertySetEntry expiryEntry = <strong>new</strong> AntelopePropertySetEntry();
+<a name="57" href="#57">57</a>  		expiryEntry.setObject(expiryDate);
+<a name="58" href="#58">58</a>  		processInstance.getPropertySetEntryInstances().put(
+<a name="59" href="#59">59</a>  			EnterExpiryDate.EXPIRY, expiryEntry);
+<a name="60" href="#60">60</a>  
+<a name="61" href="#61">61</a>  		<em class="comment">// Indicate we are ready to move on</em>
+<a name="62" href="#62">62</a>  		taskInstance.setState(ITaskInstance.STATE_READY);
+<a name="63" href="#63">63</a>  	}
+</pre>
+<p>
+	line 57 shows where the object is added to the PropertySetEntry. The date is parsed from the date given to it in a dd/mm/yy format by a date validator. 	
+</p>
+<H3>Summary</H3>
+<p>
+	Summary's process has nothing that hasn't already been covered as it simply displays information in the way that has already been described.
+	The only thing worth mentioning is to remember to indicate that the process is ready to move on as is done in the above code on line 62.
+	

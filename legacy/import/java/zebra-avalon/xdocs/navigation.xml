@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<project name="zebra-avalon">
+
+  <title>zebra-avalon</title>
+
+  <body>
+    <links>
+      <item name="Aniteps" href="http://www.aniteps.com/"/>
+      <item name="Zebra Workflow" href="http://zebra.berlios.de"/>
+    </links>
+    <menu>
+		<item name="BerliOS Developer" href="http://developer.berlios.de/projects/zebra/" 
+			img="http://developer.berlios.de/bslogo.php?group_id=2683"/>
+    </menu>
+  </body>
+</project>

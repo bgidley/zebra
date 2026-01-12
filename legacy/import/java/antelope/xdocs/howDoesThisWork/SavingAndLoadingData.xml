@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<document>
+	<properties>
+		<title>Saving and Loading with Hibernate</title>
+		<author email="bgidley@berlios.de">Ben Gidley</author>
+	</properties>
+	<body>
+		<section name="What is hibernate"></section>
+		<section name="Connections/Sessions etc"></section>
+		<section name="Do's and Don'ts"></section>
+	</body>
+</document>

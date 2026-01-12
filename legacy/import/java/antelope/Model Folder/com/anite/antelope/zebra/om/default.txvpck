@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+
+<nodeSet  version="1.0">
+	<view uin="V574ng9dxztqqxsbp1q7s">
+		<property name="$defaultDiagram" value="true"/>
+		<property name="$metaclass" value="Package Diagram"/>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopeProcessDefinitionTest">
+			<property name="bounds" value="680,680,200,367"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopeProcessVersions">
+			<property name="bounds" value="1260,30,156,120"/>
+			<property name="background_color" value="255,255,128"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.IXmlDefinition">
+			<property name="bounds" value="820,550,98,120"/>
+			<property name="background_color" value="255,255,128"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AbstractAntelopeTaskInstance">
+			<property name="bounds" value="470,420,200,292"/>
+			<property name="background_color" value="128,128,255"/>
+			<reference referencedUin="jdt:l_ast:src:com.anite.antelope.zebra.om.AbstractAntelopeTaskInstance:taskDefinition">
+				<property name="sourceAnchor" value="670,476"/>
+				<property name="targetAnchor" value="740,476"/>
+				<property name="bendpoints" value=""/>
+			</reference>
+			<reference referencedUin="jdt:l_ast:src:com.anite.antelope.zebra.om.AbstractAntelopeTaskInstance:processInstance">
+				<property name="sourceAnchor" value="505,420"/>
+				<property name="targetAnchor" value="505,377"/>
+				<property name="bendpoints" value=""/>
+			</reference>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopePropertyGroups">
+			<property name="bounds" value="1260,290,154,94"/>
+			<property name="background_color" value="255,255,128"/>
+			<reference referencedUin="jdt:l_dpn:src:com.anite.antelope.zebra.om.AntelopePropertyGroups:Dependency_Link">
+				<property name="sourceAnchor" value="1357,384"/>
+				<property name="targetAnchor" value="1357,450"/>
+				<property name="bendpoints" value=""/>
+			</reference>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopeTaskInstance">
+			<property name="bounds" value="470,720,141,81"/>
+			<property name="background_color" value="128,128,255"/>
+			<reference referencedUin="jdt:l_gnt:src:com.anite.antelope.zebra.om.AntelopeTaskInstance:AbstractAntelopeTaskInstance">
+				<property name="sourceAnchor" value="540,720"/>
+				<property name="targetAnchor" value="540,712"/>
+				<property name="bendpoints" value=""/>
+			</reference>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopePropertySetEntry">
+			<property name="bounds" value="100,320,163,136"/>
+			<property name="background_color" value="128,128,255"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopeFOE">
+			<property name="bounds" value="70,500,190,136"/>
+			<property name="background_color" value="128,128,255"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopePropertyElement">
+			<property name="bounds" value="1300,450,160,146"/>
+			<property name="background_color" value="255,255,128"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopeTaskInstanceHistory">
+			<property name="bounds" value="190,720,182,123"/>
+			<property name="background_color" value="128,128,255"/>
+			<reference referencedUin="jdt:l_gnt:src:com.anite.antelope.zebra.om.AntelopeTaskInstanceHistory:AbstractAntelopeTaskInstance">
+				<property name="sourceAnchor" value="372,744"/>
+				<property name="targetAnchor" value="470,672"/>
+				<property name="bendpoints" value=""/>
+			</reference>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopeRoutingDefinition">
+			<property name="bounds" value="1030,470,200,188"/>
+			<property name="background_color" value="255,255,128"/>
+			<reference referencedUin="jdt:l_impl:src:com.anite.antelope.zebra.om.AntelopeRoutingDefinition:IXmlDefinition">
+				<property name="sourceAnchor" value="1030,604"/>
+				<property name="targetAnchor" value="918,604"/>
+				<property name="bendpoints" value=""/>
+			</reference>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopeProcessInstance">
+			<property name="bounds" value="340,20,200,357"/>
+			<property name="background_color" value="128,128,255"/>
+			<reference referencedUin="jdt:l_ast:src:com.anite.antelope.zebra.om.AntelopeProcessInstance:parentProcessInstance">
+				<property name="sourceAnchor" value="515,377"/>
+				<property name="targetAnchor" value="540,337"/>
+				<property name="bendpoints" value="515,427,575,427,575,337"/>
+			</reference>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopeFOETest">
+			<property name="bounds" value="6,6,168,146"/>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopeTaskDefinition">
+			<property name="bounds" value="740,20,200,513"/>
+			<property name="background_color" value="255,255,128"/>
+			<reference referencedUin="jdt:l_impl:src:com.anite.antelope.zebra.om.AntelopeTaskDefinition:IXmlDefinition">
+				<property name="sourceAnchor" value="869,533"/>
+				<property name="targetAnchor" value="869,550"/>
+				<property name="bendpoints" value=""/>
+			</reference>
+		</reference>
+		<reference referencedUin="jdt:e_class:src:com.anite.antelope.zebra.om.AntelopeProcessDefinition">
+			<property name="bounds" value="987,10,200,367"/>
+			<property name="background_color" value="255,255,128"/>
+			<reference referencedUin="jdt:l_dpn:src:com.anite.antelope.zebra.om.AntelopeProcessDefinition:Dependency_Link">
+				<property name="sourceAnchor" value="1187,333"/>
+				<property name="targetAnchor" value="1260,333"/>
+				<property name="bendpoints" value=""/>
+			</reference>
+			<reference referencedUin="jdt:l_ast:src:com.anite.antelope.zebra.om.AntelopeProcessDefinition:versions">
+				<property name="sourceAnchor" value="1187,90"/>
+				<property name="targetAnchor" value="1260,90"/>
+				<property name="bendpoints" value=""/>
+			</reference>
+		</reference>
+	</view>
+</nodeSet>

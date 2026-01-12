@@ -1,0 +1,31 @@
+<h1>Pull Tools</h1>
+<p>Pull tools are a key part of Turbine. They allow you to put generic objects
+	into the context for use in velocity templates.
+<p>Some of the most useful pull tools are
+<table>
+	<tr>
+		<td>Velocity Name</td><td><td>Description</td><td>Classname</td>
+	</tr>
+	<tr>
+		<td>\$link</td>
+		<td>Provides hyperlinks</td>
+		<td>org. apache. turbine. services. pull. tools. TemplateLink</td>			
+	</tr>
+	<tr>
+		<td>\$form</td>
+		<td>Provides access to form fields and validation data</td>
+		<td>com. anite.penguin. modules. tools. FormTool</td>
+	</tr>
+	<tr>
+		<td>\$page</td>
+		<td>Holds variables to describe the page (note these need to be included in your HTML if you want this to work).</td>
+		<td>org. apache. turbine. util. template. HtmlPageAttributes</td>
+	</tr>
+	<tr>
+		<td>\$content</td>
+		<td>Provides URL generation for links to images and non turbine pages</td>
+		<td>org. apache. turbine. services. pull. tools. ContentTool</td>
+	</tr>
+</table>
+<p>To find out how they work check out the Turbine or Penguin javadoc.
+<p>You can call any java function on the class.

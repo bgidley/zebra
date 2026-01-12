@@ -1,0 +1,6 @@
+<ProcessDef ProcessTemplate="Test1">
+	<properties name="(General)">
+		<property locked="-1" name="Name" value="New Test1 Process" 
+			type="string"/>
+	</properties>
+</ProcessDef>

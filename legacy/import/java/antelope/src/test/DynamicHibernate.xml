@@ -1,0 +1,48 @@
+<my-system>
+  <component
+    role="org.apache.fulcrum.security.SecurityService"
+    class="org.apache.fulcrum.security.BaseSecurityService">   
+  </component>  
+
+  <component
+    role="org.apache.fulcrum.security.UserManager"
+    class="org.apache.fulcrum.security.hibernate.HibernateUserManagerImpl"> 
+    <className>org.apache.fulcrum.security.model.dynamic.entity.DynamicUser</className>  
+  </component>   
+  <component
+    role="org.apache.fulcrum.security.GroupManager"
+    class="org.apache.fulcrum.security.hibernate.HibernateGroupManagerImpl">   
+    <className>org.apache.fulcrum.security.model.dynamic.entity.DynamicGroup</className>    
+  </component>     
+
+  <component
+    role="org.apache.fulcrum.security.RoleManager"
+    class="org.apache.fulcrum.security.hibernate.HibernateRoleManagerImpl">   
+    <className>org.apache.fulcrum.security.model.dynamic.entity.DynamicRole</className>
+  </component>     
+
+  <component
+    role="org.apache.fulcrum.security.PermissionManager"
+    class="org.apache.fulcrum.security.hibernate.HibernatePermissionManagerImpl">  
+    <className>org.apache.fulcrum.security.model.dynamic.entity.DynamicPermission</className>    
+  </component>     
+  
+  <component
+    role="org.apache.fulcrum.security.hibernate.PersistenceHelper"
+    class="com.anite.antelope.security.hibernate.MeercatPersistenceHelper">   
+  </component>
+    
+  <component
+    role="org.apache.fulcrum.security.ModelManager"
+    class="org.apache.fulcrum.security.hibernate.dynamic.HibernateModelManagerImpl">   
+  </component>   
+   <component
+    role="org.apache.fulcrum.security.authenticator.Authenticator"
+    class="org.apache.fulcrum.security.authenticator.TextMatchAuthenticator">   
+  </component>
+  
+  <component
+    role="org.apache.fulcrum.security.model.ACLFactory"
+    class="org.apache.fulcrum.security.model.dynamic.DynamicACLFactory">   
+  </component>    
+</my-system>

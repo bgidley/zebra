@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!ELEMENT args (argument*)>
+
+<!ELEMENT argument EMPTY>
+<!ATTLIST argument name CDATA #REQUIRED
+	type ( string | int ) "string"
+	value CDATA #REQUIRED
+>
+
+<!ELEMENT named-validators (parametervalidators)>
+
+<!ELEMENT parameter-validator (args,validators)>
+<!ATTLIST parameter-validator name NMTOKEN #REQUIRED>
+
+<!ELEMENT parametervalidators (parameter-validator*)>
+
+<!ELEMENT validator EMPTY>
+<!ATTLIST validator class NMTOKEN #REQUIRED>
+
+<!ELEMENT validators (validator*)>
+

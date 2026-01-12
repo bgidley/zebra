@@ -1,0 +1,16 @@
+<role-list>
+	
+	<!-- Zebra service -->
+	<role name="com.anite.zebra.api.avalon.IAvalonDefsFactory" 
+		shorthand="ZebraDefsFactory" 
+		default-class="com.anite.zebra.avalon.ZebraAvalonDefsFactory" />
+<!--	<role name="com.anite.zebra.api.avalon.IAvalonStatesFactory" 
+		shorthand="ZebraStatesFactory" 
+		default-class="com.anite.ctms.zebra.factory.HibernateStateFactory" />-->
+	<role name="com.anite.zebra.core.factory.api.IStateFactory" 
+		shorthand="zebraStateFactory" 
+		default-class="com.anite.zebra.avalon.impl.MockStateFactory" />
+	<role name="com.anite.zebra.core.api.IEngine" shorthand="zebraEngine" 
+		default-class="com.anite.zebra.avalon.impl.ZebraAvalonEngine" />
+
+</role-list>

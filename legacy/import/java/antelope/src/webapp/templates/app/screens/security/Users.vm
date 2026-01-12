@@ -1,0 +1,97 @@
+#*
+ * Copyright 2004 Anite - Central Government Division
+ *    http://www.anite.com/publicsector
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *# 
+ 
+<h2>User Maintenance</h2>
+<p>
+The page allows you to add and remove users and also allows you to change the groups users are allocated.
+</p>
+
+## Call the global marcro to show errors for the form
+#showAllFieldErrors ($form.Fields)
+
+<form method="post" id="usergroupsform" action="$link.setAction('security.ChangeUserGroup').setPage('security,Users.vm')" method="get">
+
+#showAllFieldErrors ($form)
+<table id="permissionTable" summary="User Permission modification" class="basic" >
+  <tr>
+    <th colspan="2">User Maintenance</th>
+  </tr>
+  <tr>
+    <td colspan="2">Users</td>
+  </tr>
+  <tr>
+    <td>
+      <select name="username" size="5" onchange="submitForm('usergroupsform')">
+        #foreach ($user in $users)
+          #if($user.id == $selectedUser.id )
+          	<option value="$user.name" selected="true">$user.name</option>         
+          #else
+          	<option value="$user.name" >$user.name</option>
+          #end
+        #end
+      </select>
+    </td>
+    <td>
+      <ul>
+      #if($security.hasPermission($data, "security_add"))
+      	<li><a href="$link.setPage('security,AddUser.vm')">Add User</a></li>
+      #end
+      #if($security.hasPermission($data, "security_edit"))
+      	<li><a href="javascript:submitFormNewAction('usergroupsform', '$link.setAction('security.SelectUser').setPage('security,EditUser.vm')')">Edit User</a></li>
+      #end
+      #if($security.hasPermission($data, "security_delete"))
+      	<li><a href="javascript:submitFormNewAction('usergroupsform', '$link.setAction('security.DeleteUser').setPage('security,Users.vm')')">Delete User</a></li>
+      #end
+      </ul>     
+    </td>
+  </tr>
+  <tr>
+    <td>Allocated Groups</td>
+    <td>Available Groups</td>
+  </tr>
+  <tr>
+    <td>
+	  <select name="allocatedgroups" multiple="true" size="5">
+        #foreach ($userGroup in $userGroups)          
+          <option value="$userGroup.id">$userGroup.name</option>
+        #end
+      </select>      
+    </td>
+    <td>
+      <select name="availablegroups" multiple="true" size="5">
+        #foreach ($availableGroup in $availableGroups)
+          <option value="$availableGroup.id">$availableGroup.name</option>
+        #end
+      </select>
+    </td>
+  </tr>
+  <tr>
+  	<td>
+  	  <input type="submit" name="doremovegroup" value="-->" />
+  	</td>  
+  	<td>
+  	  <input type="submit" name="doaddgroup" value="<--" />
+  	</td>  
+  <tr>  
+</table>
+</form>
+
+
+
+
+
+

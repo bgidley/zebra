@@ -1,0 +1,97 @@
+<ACGWFDNative Version="3.0">
+	<ProcessVersions>
+		<ProcessVersion VersionID="1">
+			<ProcessDef FirstTask="2" ProcessTemplate="Zebra">
+				<properties name="(General)">
+					<property locked="-1" name="Name" value="TestQuartzProcess" type="string"/>
+					<property locked="-1" name="Class Destruct" value="com.anite.zebra.hivemind.lifecycle.ProcessDestruct" type="string"/>
+					<property locked="-1" name="Class Construct" value="com.anite.zebra.hivemind.lifecycle.ProcessConstruct" type="string"/>
+				</properties>
+				<properties name="Visibility">
+					<property locked="0" name="DebugFlow" value="Yes" type="boolean"/>
+					<property locked="0" name="Display Name" value="" type="string"/>
+				</properties>
+				<properties name="Security">
+					<property locked="0" name="Process Start Permissions" value="systemAccess;" type="string"/>
+					<property locked="0" name="Dynamic Permissions" value="" type="string"/>
+				</properties>
+				<properties name="(Inputs)"/>
+				<properties name="(Outputs)"/>
+				<TaskDefs>
+					<TaskDef GUID="1" Height="1440" Left="7395" Top="4665" Width="2340" TaskTemplate="Activity">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Activity" type="string"/>
+							<property locked="0" name="Synchronise" value="No" type="boolean"/>
+							<property locked="-1" name="Auto" value="Yes" type="boolean"/>
+							<property locked="0" name="Class Name" value="com.anite.zebra.hivemind.taskAction.LogTaskActivity" type="string"/>
+							<property locked="0" name="NewThread" value="No" type="boolean"/>
+						</properties>
+						<properties name="(General Task Properties)">
+							<property locked="0" name="Static Permissions" value="systemAccess" type="string"/>
+							<property locked="0" name="Dynamic Permissions" value="" type="string"/>
+							<property locked="0" name="ShowInHistory" value="Yes" type="boolean"/>
+							<property locked="-1" name="ShowInTaskList" value="No" type="boolean"/>
+						</properties>
+						<properties name="(Inputs)"/>
+					</TaskDef>
+					<TaskDef GUID="2" Height="1440" Left="1680" Top="120" Width="2340" TaskTemplate="Activity">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Activity" type="string"/>
+							<property locked="0" name="Synchronise" value="No" type="boolean"/>
+							<property locked="-1" name="Auto" value="Yes" type="boolean"/>
+							<property locked="0" name="Class Name" value="com.anite.zebra.hivemind.taskAction.LogTaskActivity" type="string"/>
+							<property locked="0" name="NewThread" value="No" type="boolean"/>
+						</properties>
+						<properties name="(General Task Properties)">
+							<property locked="0" name="Static Permissions" value="systemAccess" type="string"/>
+							<property locked="0" name="Dynamic Permissions" value="" type="string"/>
+							<property locked="0" name="ShowInHistory" value="Yes" type="boolean"/>
+							<property locked="-1" name="ShowInTaskList" value="No" type="boolean"/>
+						</properties>
+						<properties name="(Inputs)"/>
+					</TaskDef>
+					<TaskDef GUID="3" Height="1440" Left="5205" Top="2385" Width="2085" TaskTemplate="Quartz">
+						<properties name="(General)">
+							<property locked="0" name="Name" value="Quartz" type="string"/>
+							<property locked="0" name="Synchronise" value="No" type="boolean"/>
+							<property locked="-1" name="Auto" value="Yes" type="boolean"/>
+							<property locked="-1" name="Class Name" value="com.anite.zebra.hivemind.taskAction.HivemindServiceTaskAction" type="string"/>
+							<property locked="0" name="NewThread" value="No" type="boolean"/>
+						</properties>
+						<properties name="(General Task Properties)">
+							<property locked="0" name="Static Permissions" value="systemAccess" type="string"/>
+							<property locked="0" name="Dynamic Permissions" value="" type="string"/>
+							<property locked="0" name="ShowInHistory" value="Yes" type="boolean"/>
+							<property locked="-1" name="ShowInTaskList" value="No" type="boolean"/>
+							<property locked="-1" name="ServiceId" value="zebra.QuartzTaskAction" type="string"/>
+							<property locked="0" name="Wait" value="40S" type="string"/>
+						</properties>
+						<properties name="(Inputs)"/>
+					</TaskDef>
+				</TaskDefs>
+				<RoutingDefs>
+					<RoutingDef GUID="4" TaskDestGUID="3" TaskOrgGUID="2">
+						<Points>
+							<Point X="6255" Y="2385"/>
+						</Points>
+						<properties name="(General)">
+							<property locked="0" name="Name" value="" type="string"/>
+							<property locked="0" name="Parallel" value="No" type="boolean"/>
+							<property locked="0" name="Condition Class" value="com.anite.zebra.hivemind.routing.RoutingNameCondition" type="string"/>
+						</properties>
+					</RoutingDef>
+					<RoutingDef GUID="5" TaskDestGUID="1" TaskOrgGUID="3">
+						<Points>
+							<Point X="8895" Y="4665"/>
+						</Points>
+						<properties name="(General)">
+							<property locked="0" name="Name" value="" type="string"/>
+							<property locked="0" name="Parallel" value="No" type="boolean"/>
+							<property locked="0" name="Condition Class" value="com.anite.zebra.hivemind.routing.RoutingNameCondition" type="string"/>
+						</properties>
+					</RoutingDef>
+				</RoutingDefs>
+			</ProcessDef>
+		</ProcessVersion>
+		<ProcessVersion VersionID="2"><ProcessDef FirstTask="2" ProcessTemplate="Zebra"><properties name="(General)"><property locked="-1" name="Name" value="TestQuartzProcess" type="string"/><property locked="-1" name="Class Destruct" value="com.anite.zebra.hivemind.lifecycle.ProcessDestruct" type="string"/><property locked="-1" name="Class Construct" value="com.anite.zebra.hivemind.lifecycle.ProcessConstruct" type="string"/></properties><properties name="Visibility"><property locked="0" name="DebugFlow" value="Yes" type="boolean"/><property locked="0" name="Display Name" value="" type="string"/></properties><properties name="Security"><property locked="0" name="Process Start Permissions" value="systemAccess;" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/></properties><properties name="(Inputs)"/><properties name="(Outputs)"/><TaskDefs><TaskDef GUID="1" Height="1440" Left="7395" Top="4665" Width="2340" TaskTemplate="Activity"><properties name="(General)"><property locked="0" name="Name" value="Activity" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="Yes" type="boolean"/><property locked="0" name="Class Name" value="com.anite.zebra.hivemind.taskAction.LogTaskActivity" type="string"/><property locked="0" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="-1" name="ShowInTaskList" value="No" type="boolean"/></properties><properties name="(Inputs)"/></TaskDef><TaskDef GUID="2" Height="1440" Left="1680" Top="120" Width="2340" TaskTemplate="Activity"><properties name="(General)"><property locked="0" name="Name" value="Activity" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="Yes" type="boolean"/><property locked="0" name="Class Name" value="com.anite.zebra.hivemind.taskAction.LogTaskActivity" type="string"/><property locked="0" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="-1" name="ShowInTaskList" value="No" type="boolean"/></properties><properties name="(Inputs)"/></TaskDef><TaskDef GUID="3" Height="1440" Left="5205" Top="2385" Width="2085" TaskTemplate="Quartz"><properties name="(General)"><property locked="0" name="Name" value="Quartz" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="Yes" type="boolean"/><property locked="-1" name="Class Name" value="com.anite.zebra.hivemind.taskAction.HivemindServiceTaskAction" type="string"/><property locked="0" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="-1" name="ShowInTaskList" value="No" type="boolean"/><property locked="-1" name="ServiceId" value="zebra.QuartzTaskAction" type="string"/><property locked="0" name="hour" value="12" type="string"/><property locked="0" name="minute" value="47" type="string"/><property locked="0" name="Wait" value="40S" type="string"/></properties><properties name="(Inputs)"/></TaskDef></TaskDefs><RoutingDefs><RoutingDef GUID="4" TaskDestGUID="3" TaskOrgGUID="2"><Points><Point X="6255" Y="2385"/></Points><properties name="(General)"><property locked="0" name="Name" value="" type="string"/><property locked="0" name="Parallel" value="No" type="boolean"/><property locked="0" name="Condition Class" value="com.anite.zebra.hivemind.routing.RoutingNameCondition" type="string"/></properties></RoutingDef><RoutingDef GUID="5" TaskDestGUID="1" TaskOrgGUID="3"><Points><Point X="8895" Y="4665"/></Points><properties name="(General)"><property locked="0" name="Name" value="" type="string"/><property locked="0" name="Parallel" value="No" type="boolean"/><property locked="0" name="Condition Class" value="com.anite.zebra.hivemind.routing.RoutingNameCondition" type="string"/></properties></RoutingDef></RoutingDefs></ProcessDef></ProcessVersion><ProcessVersion VersionID="3"><ProcessDef FirstTask="2" ProcessTemplate="Zebra"><properties name="(General)"><property locked="-1" name="Name" value="TestQuartzProcess" type="string"/><property locked="-1" name="Class Destruct" value="com.anite.zebra.hivemind.lifecycle.ProcessDestruct" type="string"/><property locked="-1" name="Class Construct" value="com.anite.zebra.hivemind.lifecycle.ProcessConstruct" type="string"/></properties><properties name="Visibility"><property locked="0" name="DebugFlow" value="Yes" type="boolean"/><property locked="0" name="Display Name" value="" type="string"/></properties><properties name="Security"><property locked="0" name="Process Start Permissions" value="systemAccess;" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/></properties><properties name="(Inputs)"/><properties name="(Outputs)"/><TaskDefs><TaskDef GUID="1" Height="1440" Left="915" Top="6465" Width="2340" TaskTemplate="Activity"><properties name="(General)"><property locked="0" name="Name" value="Activity" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="Yes" type="boolean"/><property locked="0" name="Class Name" value="com.anite.zebra.hivemind.taskAction.LogTaskActivity" type="string"/><property locked="0" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="-1" name="ShowInTaskList" value="No" type="boolean"/></properties><properties name="(Inputs)"/></TaskDef><TaskDef GUID="2" Height="1440" Left="1680" Top="120" Width="2340" TaskTemplate="Activity"><properties name="(General)"><property locked="0" name="Name" value="Activity" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="Yes" type="boolean"/><property locked="0" name="Class Name" value="com.anite.zebra.hivemind.taskAction.LogTaskActivity" type="string"/><property locked="0" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="-1" name="ShowInTaskList" value="No" type="boolean"/></properties><properties name="(Inputs)"/></TaskDef><TaskDef GUID="3" Height="1440" Left="885" Top="2145" Width="2085" TaskTemplate="Quartz"><properties name="(General)"><property locked="0" name="Name" value="Quartz" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="Yes" type="boolean"/><property locked="-1" name="Class Name" value="com.anite.zebra.hivemind.taskAction.HivemindServiceTaskAction" type="string"/><property locked="0" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="-1" name="ShowInTaskList" value="No" type="boolean"/><property locked="-1" name="ServiceId" value="zebra.QuartzTaskAction" type="string"/><property locked="0" name="hour" value="12" type="string"/><property locked="0" name="minute" value="48" type="string"/><property locked="0" name="Wait" value="40S" type="string"/></properties><properties name="(Inputs)"/></TaskDef></TaskDefs><RoutingDefs><RoutingDef GUID="4" TaskDestGUID="3" TaskOrgGUID="2"><Points><Point X="1935" Y="2145"/></Points><properties name="(General)"><property locked="0" name="Name" value="" type="string"/><property locked="0" name="Parallel" value="No" type="boolean"/><property locked="0" name="Condition Class" value="com.anite.zebra.hivemind.routing.RoutingNameCondition" type="string"/></properties></RoutingDef><RoutingDef GUID="5" TaskDestGUID="1" TaskOrgGUID="3"><Points><Point X="2415" Y="6465"/></Points><properties name="(General)"><property locked="0" name="Name" value="" type="string"/><property locked="0" name="Parallel" value="No" type="boolean"/><property locked="0" name="Condition Class" value="com.anite.zebra.hivemind.routing.RoutingNameCondition" type="string"/></properties></RoutingDef></RoutingDefs></ProcessDef></ProcessVersion><ProcessVersion VersionID="4"><ProcessDef FirstTask="2" ProcessTemplate="Zebra"><properties name="(General)"><property locked="-1" name="Name" value="TestQuartzProcess" type="string"/><property locked="-1" name="Class Destruct" value="com.anite.zebra.hivemind.lifecycle.ProcessDestruct" type="string"/><property locked="-1" name="Class Construct" value="com.anite.zebra.hivemind.lifecycle.ProcessConstruct" type="string"/></properties><properties name="Visibility"><property locked="0" name="DebugFlow" value="Yes" type="boolean"/><property locked="0" name="Display Name" value="" type="string"/></properties><properties name="Security"><property locked="0" name="Process Start Permissions" value="systemAccess;" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/></properties><properties name="(Inputs)"/><properties name="(Outputs)"/><TaskDefs><TaskDef GUID="1" Height="1440" Left="915" Top="6465" Width="2340" TaskTemplate="Activity"><properties name="(General)"><property locked="0" name="Name" value="Activity" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="Yes" type="boolean"/><property locked="0" name="Class Name" value="com.anite.zebra.hivemind.taskAction.LogTaskActivity" type="string"/><property locked="0" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="-1" name="ShowInTaskList" value="No" type="boolean"/></properties><properties name="(Inputs)"/></TaskDef><TaskDef GUID="2" Height="1440" Left="1680" Top="120" Width="2340" TaskTemplate="Activity"><properties name="(General)"><property locked="0" name="Name" value="Activity" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="Yes" type="boolean"/><property locked="0" name="Class Name" value="com.anite.zebra.hivemind.taskAction.LogTaskActivity" type="string"/><property locked="0" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="-1" name="ShowInTaskList" value="No" type="boolean"/></properties><properties name="(Inputs)"/></TaskDef><TaskDef GUID="3" Height="1440" Left="885" Top="2385" Width="2085" TaskTemplate="Quartz"><properties name="(General)"><property locked="0" name="Name" value="Quartz" type="string"/><property locked="0" name="Synchronise" value="No" type="boolean"/><property locked="-1" name="Auto" value="Yes" type="boolean"/><property locked="-1" name="Class Name" value="com.anite.zebra.hivemind.taskAction.HivemindServiceTaskAction" type="string"/><property locked="0" name="NewThread" value="No" type="boolean"/></properties><properties name="(General Task Properties)"><property locked="0" name="Static Permissions" value="systemAccess" type="string"/><property locked="0" name="Dynamic Permissions" value="" type="string"/><property locked="0" name="ShowInHistory" value="Yes" type="boolean"/><property locked="-1" name="ShowInTaskList" value="No" type="boolean"/><property locked="-1" name="ServiceId" value="zebra.QuartzTaskAction" type="string"/><property locked="0" name="hour" value="16" type="string"/><property locked="0" name="minute" value="12" type="string"/><property locked="0" name="Wait" value="40S" type="string"/></properties><properties name="(Inputs)"/></TaskDef></TaskDefs><RoutingDefs><RoutingDef GUID="4" TaskDestGUID="3" TaskOrgGUID="2"><Points><Point X="1935" Y="2385"/></Points><properties name="(General)"><property locked="0" name="Name" value="" type="string"/><property locked="0" name="Parallel" value="No" type="boolean"/><property locked="0" name="Condition Class" value="com.anite.zebra.hivemind.routing.RoutingNameCondition" type="string"/></properties></RoutingDef><RoutingDef GUID="5" TaskDestGUID="1" TaskOrgGUID="3"><Points><Point X="2415" Y="6465"/></Points><properties name="(General)"><property locked="0" name="Name" value="" type="string"/><property locked="0" name="Parallel" value="No" type="boolean"/><property locked="0" name="Condition Class" value="com.anite.zebra.hivemind.routing.RoutingNameCondition" type="string"/></properties></RoutingDef></RoutingDefs></ProcessDef></ProcessVersion></ProcessVersions>
+</ACGWFDNative>

@@ -1,0 +1,75 @@
+$page.addStyle('style/tasklist.css')
+
+#macro(createOnClick $colname)
+  ## the defualt direction is down  
+  #set($thisdirection = "down")
+  ## if the is the selected column ensure the link is the inverse
+  #if( $colname.equals($column) )
+    #if( $direction.equals("down"))
+      #set($thisdirection = "up")
+    #end
+  #end
+  document.location='$link.setPage('TaskList.vm').addQueryData('column', $colname).addPathInfo('direction', $thisdirection)'
+#end 
+
+#macro(displayArrow $colname)
+  #set($imgstring = "i/arrow_down.gif")
+  #if($direction.equals("up") )
+    #set($imgstring = "i/arrow_up.gif")
+  #end
+  #if( $colname.equals($column) )
+    <img src="$content.getURI($imgstring)" alt="$direction arrow" />			   
+  #end	
+#end 
+
+
+<h1>Task List</h1>
+<p>
+	To change the sorting order of the table click the heading. To reverse 
+	the order click the heading again. The arrow icons show the direction
+	of the sort.
+</p>
+
+
+
+<table id="taskList" >
+  ## Create the headings for the table 
+  <thead>
+    <tr>
+      <th #if($column.equals('task'))class="sorted"#end onclick="#createOnClick('task')">	    
+	    <span class="text">Task</span>
+        #displayArrow('task')
+      </th>
+	  <th #if($column.equals('owner'))class="sorted"#end onclick="#createOnClick('owner')">
+	    <span class="text">Owner</span>
+	    #displayArrow('owner')
+	  </th>
+	  <th #if($column.equals('created'))class="sorted"#end onclick="#createOnClick('created')">
+	    <span class="text">Date Created</span>
+	    #displayArrow('created')
+	  </th>
+    </tr>
+  </thead>
+  <tbody>
+  #set($rowclass = "even")
+  ## produce a row for each task in the list
+  #foreach ($task in $tasks)
+	<tr class="$rowclass">
+	  <td>
+	    <a href="$link.setAction("RunTask").addPathInfo("taskinstanceid", "$task.TaskInstanceId")">
+	      $task.Caption
+	    </a>
+	  </td>
+	  <td>$task.TaskOwner</td>
+	  <td>$task.DateCreated</td>
+	</tr>	
+	## change the row class to make the pretty patterns
+	#if($rowclass == "even")
+	  #set($rowclass = "odd")
+	#else 
+	  #set($rowclass = "even")
+	#end
+  #end
+  </tbody>
+</table>
+	

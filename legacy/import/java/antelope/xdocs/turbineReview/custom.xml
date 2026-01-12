@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+<document>
+	<properties>
+		<title> Turbine-Review Custom Validators</title>
+		<author email="peter@courcoux.biz">Peter Courcoux</author>
+		<author email="bgidley@berlios.de">Ben Gidley</author>
+	</properties>
+	<body>
+		<section name="Writing Validators">
+			<p>Some standard validators are available. However, it is easy to 
+				write custom validators. Follow one of the existing validators 
+				as a template and be sure to extend AbstractValidator. While it 
+				might be tempting to hard code things like messages, it will be 
+				easier to reuse if the messages and other such data are 
+				supplied as arguments. </p>
+			<p>A Validator must implement the Validator interface. If you have 
+				extended AbstractValidator you will need to implement two 
+				methods :-</p>
+			<source><![CDATA[
+public boolean validate (	ParameterParser pp,
+			  	String key,
+				ValidationResults validationResults	) 
+throws ReviewValidationException
+
+
+public void checkArguments( )
+	throws ReviewConfigurationException
+]]></source>
+			<p>A validator may require certain arguments to be present in the 
+				Validation.xml file and checkArguments is called at service 
+				start-up time for each validator called for each parameter. 
+				Missing or invalid arguments should be discovered at that 
+				time.</p>
+			<p>Please note that the validator should consider the possibility 
+				of multiple results being presented as an array. Also, if the 
+				validation fails, put a failure message into the 
+				validationResults object using 
+				validationResults.addMessage(key, message);</p>
+			<p>An example of a validator is set out on the next page :-</p>
+			<source><![CDATA[
+/**
+ * @author <a href="mailto:peter@courcoux.biz">Peter Courcoux </a>
+ * 
+ * A validator to check that a String input is not too long
+ * Arguments required to be set in the Validation.xml file are
+ * as follows. Please substitute values as appropriate. :-
+  <argument name="maxlength" type="int" value="255" />
+  <argument 
+  		name="inputTooLongMessage" 
+  		type="string" 
+  		value="This item must be less than 255 characters in length. Please re-enter." />	
+ */
+public class MaxLengthStringValidator extends AbstractValidator {
+	/**
+	 * @param params. A ParameterParser. The set of parameters being 
+	 * validated.
+	 * @param key. A String. the name of the parameter being validated.
+	 * @param validationData. A ValidationResults object of parameter 
+	 * data for this request.
+	 * @return true if valid, otherwise false.
+	 * @throws May throw an Exception if object cannot be validated. 
+	 * */
+	public boolean validate(ParameterParser params, String key, 
+           ValidationResults validationData) throws ReviewValidationException {
+		boolean valid = true;
+		String[] values = params.getStrings(key);
+		if (values == null) {
+			return valid;
+		}
+		Integer maxlength = (Integer)args.get("maxlength");
+		String inputTooLongMessage = (String)args.get("inputTooLongMessage");
+		for (int i=0; i<values.length; i++) {
+			if (values[i].length() > maxlength.intValue()) {
+				valid = false;
+				validationData.addMessage(key, inputTooLongMessage);
+			}
+		}
+		log.debug("Called validate() : returning :" + (new Boolean(valid)).toString());
+		return valid;
+	}
+	/**
+	 * The method which performs the checking of the arguments.
+	 * @throws ReviewConfigurationException
+	 */
+	public void checkArguments() throws ReviewConfigurationException {
+		Integer maxlength = (Integer)args.get("maxlength");
+		String inputTooLongMessage = (String)args.get("inputTooLongMessage");
+		if ( inputTooLongMessage == null ){
+			throw new ReviewConfigurationException("Unable to check String length. inputTooLongMessage argument missing.");
+		}	
+		if (maxlength == null){
+			throw new ReviewConfigurationException("Unable to check String length. maxlength argument missing.");
+		}		
+	}
+
+}
+NB Commons logging log definition excluded from listing.
+]]></source>
+		</section>
+		<section name="The ValidationResults Object">
+			<p>The ReView service populates the ValidationResults object with 
+				the parameters and any specified error messages which may have 
+				resulted from validation of the request. A number of methods 
+				have been provided to assist in obtaining the error messages 
+				together with the value submitted for validation. This provides 
+				for easy redisplay of the form.</p>
+			<p>The ValidationResults object is placed into RunData and is 
+				always available to allow for being used by business logic 
+				layer validation to report any failures at that level. There 
+				are a number of methods in the ValidationResults interface 
+				which are useful :-</p>
+		</section>
+	</body>
+</document>

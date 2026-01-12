@@ -1,0 +1,184 @@
+<?xml version="1.0"?>
+<document>
+    <properties>
+        <title>How does this work</title>
+        <author email="bgidley@berlios.de">Ben Gidley</author>
+    </properties>
+    <body>
+        <section name="Hello">
+
+<p>As with most turbine pages, "Hello" is surrounded by multiple parts.</p> 
+
+<ul> 
+	<li><b>Hello.java:</b> the <i>turbine </i>screen class used to populate hello's fields</li>
+	<li><b>Hello.vm:</b> the <i>velocity </i>template used to display the information</li>
+	<li><b>action.myFirstWorkflow.HelloAction.xml:</b> the <i>penguin </i>pull tool xml validation file </li>
+	<li><b>HelloAction.java:</b> the <i>turbine </i>action class used to store inputs and redirect to the next page</li>
+</ul>
+<subsection name="Hello.java">
+<source><![CDATA[
+public class Hello extends BaseWorkflowScreen {
+
+	public static final String	NAME	= "name";
+
+	/**
+	 * Can use this to initialise stuff but for the first form 
+	 * we won't because there is nothing to do.
+	 */
+	protected void doBuildTemplate(RunData runData, Context context,
+			AntelopeTaskInstance taskInstance, FormTool tool) throws Exception {
+
+	}
+
+}
+]]>
+</source>
+<p>
+This method shows that nothing is done in the first screen class as there is no data to be prepared for the template
+</p>
+</subsection>
+<subsection name="Hello.vm">
+<source>
+    <![CDATA[
+<h1>$task.caption</h1>
+$page.setTitle($task.Caption)
+
+<form name="hello" method="post" action="$link.setAction("myFirstWorkflow.HelloAction")">
+
+	## get name field from form tool 
+#set ($name = $form.Fields.get("name"))
+#showFieldError($name)
+
+<p>What is your name?<input type="text" name="name" value="$name.value" size="$name.size" maxlength="$name.maxLength"/></p>
+
+<p>
+<input type="submit" name="cancel" value="Cancel"/>
+<input type="submit" name="pause" value="Pause" />
+<input type="submit" name="done" value="Done" />
+</p>
+</form>
+    ]]>
+    </source>
+<p>This velocity template shows the Macro that is present on all these pages that is used to display the error messages if the validation has found any errors.
+This macro can be moved to the GlobalMacros.vm file and then there is no need for it to be replicated throughout.
+After the macro comes the page title and then the form declaration which has the action statement specifying the path of the action class.</p>
+<p>
+The next line shows the piece of code which reads the Field "name" in from the form tool. Any error messages for this field are then displayed by the code to the macro.
+Following all this is the point to the page, the question and Textbox. Whatever is entered into the Textbox is passed off to the validation when the Done button is clicked
+Pressing the pause button obviously pauses the flow, which can be commenced from the Tasklist option on the main menu.
+Cancel obviously cancels the current operation, and Done proceeds to the next operation (if one exists).
+</p>
+</subsection>
+<subsection name="HelloAction.java">
+<source>
+   <![CDATA[
+public class HelloAction extends BaseWorkflowAction {
+
+
+	/**
+	 * Form has been submitted and passed validation
+	 */
+	protected boolean doPerform(RunData runData, Context context,
+			AntelopeTaskInstance taskInstance,
+			AntelopeProcessInstance processInstance, FormTool tool)
+			throws Exception {
+
+		// Get the validated name
+		Field name = (Field) tool.getFields().get(Hello.NAME);
+
+		// Save the name in the processInstance
+		// Obviously in a real app this could be save it in the database
+		AntelopePropertySetEntry nameEntry = new AntelopePropertySetEntry();
+		nameEntry.setValue(name.getValue());
+		processInstance.getPropertySet().put("name", nameEntry);
+
+		// Indicate we are ready to move on
+		taskInstance.setState(ITaskInstance.STATE_READY);
+		
+		return true;
+	}
+
+	/**
+	 * This is set to true as we don't want doPerform to be
+	 * called if validation fails.
+	 */
+	protected boolean enforceValidation() {
+
+		return true;
+	}
+
+}   
+   ]]>
+   </source>
+<p>
+	In this class can be seen the code which reads the Field class to get the "name" which is then stored in an AntelopePropertySetEntry class. 
+	These classes can store a value (.setValue()), which is a string, or a serializable Object (.setObject()). 
+	Line 63 shows the procedure that decides wether the validation is used or not, which is now explained
+</p>
+</subsection>
+<subsection name="HelloAction.xml">
+<source>
+<![CDATA[
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE validation PUBLIC "-//Apache//TEXT Validation//EN" "http://purl.oclc.org/NET/turbine-review/Validation.dtd">
+
+<validation requestLookupKey="action.myFirstWorkflow.HelloAction">
+  <!--Validation Specification : action.myFirstWorkflow.HelloAction-->
+  <parametervalidators>
+    <parameter-validator name="action">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="pause">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="name">
+      <args />
+      <validators>
+        <validator class="com.anite.antelope.validation.NotNullValidator">
+          <args>
+            <!-- Arguments for NotNullValidator -->
+            <argument name="isNullMessage" type="string" value="Please enter a name." />
+            <argument name="keys" type="string" value="name" />
+          </args>
+        </validator>
+        <validator class="com.anite.antelope.validation.FormMaxLengthValidator">
+          <args>
+            <argument name="maxlength" type="int" value="60" />
+            <argument name="inputTooLongMessage" type="string" value="This item must be less than 60 characters in length. Please re-enter." />
+          </args>
+        </validator>
+      </validators>
+    </parameter-validator>
+    <parameter-validator name="done">
+      <args />
+      <validators>
+        <validator class="org.apache.turbine.component.review.validators.AlwaysTrueValidator">
+          <args />
+        </validator>
+      </validators>
+    </parameter-validator>
+  </parametervalidators>
+  <request-validator />
+</validation>
+]]>
+</source>
+<p>	Form level validation is taken care of by the penguin pull tool. this is configured using xml files. 
+	In this example the xml file is named from the action class that it is validating for. in the xml file is a list of the parameters, 
+	and then within each element is a list of the validators for each parameter. The most interesting parameter to look at here is the "name" parameter.
+	This parameter has two validators, NotNullValidator, which takes the name of the parameter and the error message and 
+	FormMaxLengthValidator, which takes the maximum allowable length and the error message. 
+	Validators are classes that take a number of parameters and return true if the inputs are valid and false otherwise.</p>
+</subsection>
+        </section>
+    </body>
+</document>

@@ -1,0 +1,29 @@
+<componentConfig>
+	<!-- Zebra configuration  -->
+	<component
+	  role="com.anite.zebra.avalon.api.IAvalonDefsFactory"
+	  class="com.anite.zebra.avalon.impl.ZebraAvalonDefsFactory"
+	  baseFolder="/WEB-INF/classes/processes/"
+	  processDefClass="com.anite.zebra.avalon.mocks.MockProcessDefinition"
+	  taskDefClass="com.anite.zebra.avalon.mocks.MockTaskDefinition"
+      processVersionsClass="com.anite.zebra.avalon.mocks.MockProcessVersions"
+	  />
+<!--
+	<component
+	  role="com.anite.zebra.api.avalon.IAvalonStatesFactory"
+	  class="com.anite.ctms.zebra.factory.HibernateStateFactory" 
+	  />
+-->
+	<component
+	  role="com.anite.zebra.core.factory.api.IStateFactory"
+	  class="com.anite.zebra.avalon.impl.MockStateFactory" 
+	  />
+
+	<component
+	  role="com.anite.zebra.core.api.IEngine"
+	  class="com.anite.zebra.avalon.impl.ZebraAvalonEngine" 
+	  />
+      
+	<!-- End of Zebra configuration -->
+
+</componentConfig>

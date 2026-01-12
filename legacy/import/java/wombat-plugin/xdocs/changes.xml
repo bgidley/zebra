@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<document>
+  <properties>
+    <title>Changes</title>
+    <author email="epugh@opensourceconnections.com">Eric Pugh</author>
+  </properties>
+
+  <body>
+    <release version="0.3" date="31-May-2004">
+     <action dev="epugh" type="update">
+       Change wombat:inplace to depend on war:inplace!
+     </action>             
+    </release>   
+	<release version="0.2" date="27-May-2004">
+     <action dev="epugh" type="fix">
+       Fixed an issue in wombat:clean where goals following wombat:clean would think that the war webapp
+       directory was in /src/webapp, not /target/.  wombat:clean was overly complex.mav
+     </action>             
+    </release>  
+    <release version="0.1" date="24-May-2004">
+     <action dev="epugh" type="add">
+       Revamp support for inplace development to work with the war.bundle property.  Integrate the 
+       inplace antelope:clean goal with the normal clean goal.
+     </action>             
+     <action dev="epugh" type="add">
+       First cut of plugin with support for dealing with jar's and inplace WAR files.
+     </action>     
+     
+    </release>
+
+  </body>
+</document>
+

@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<document>
+    <properties>
+        <title>How does this work</title>
+        <author email="bgidley@berlios.de">Ben Gidley</author>
+    </properties>
+    <body>
+        <section name="Workflow">
+            <p>The workflow process is fairly simple and can be demonstrated with the example "MyFirstWorkflow"</p>
+            <p>This workflow is very basic. It first asks the user's name, then their age and then
+                finally their expiry date. The last page gives a summary.</p>
+            <p>The flow is made up from 4 velocity pages<ul>
+                    <li>
+                        <a href="ExplainHello.html">Hello</a>
+                    </li>
+                    <li>
+                        <a href="ExplainHowOld.html">HowOldAreYou</a>
+                    </li>
+                    <li>
+                        <a href="EnterExpiryDate.html">EnterExpiryDate</a>
+                    </li>
+                    <li>
+                        <a href="Summary.html">Summary</a>
+                    </li>
+                </ul>
+            </p>
+            <p> The workflow was first designed using the workflow designer which can be found <a href="http://zebra.berlios.de">here</a>
+            </p>
+            <p> Here is an image of the workflow:<img src="i/WorkflowDesigner.gif" id="designer" alt="Workflow Designer"/>
+            </p>
+        </section>
+    </body>
+</document>

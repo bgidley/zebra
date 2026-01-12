@@ -1,0 +1,64 @@
+#*
+ * Copyright 2004 Anite - Central Government Division
+ *    http://www.anite.com/publicsector
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *#
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-Strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	$httptool.setNoCacheHeaders()
+	
+	<meta http-equiv="content-type" content="no-cache" ></meta>
+	<meta http-equiv="pragma" content="no-cache" ></meta>
+	<meta http-equiv="expires" content="-1" ></meta>
+	<meta http-equiv="Pragma-directive" content="no-cache" ></meta>
+	<meta http-equiv="cache-directive" content="no-cache" ></meta>
+	<meta http-equiv="content-type" content="text/html; charset=iso-8859-1"></meta>
+	
+
+	<title>Antelope - $page.title</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />
+	$page.addStyle('style/layout.css')
+	$page.addStyle('style/formatting.css')
+	$page.addStyle('style/menu.css')
+	<style type="text/css">
+		#foreach ($style in $page.getStyles())
+			@import url('$content.getURI("$style")');
+		#end
+	</style>
+	<script type="text/javascript" src="$content.getURI("scripts/common.js")" ></script>
+</head>
+	<body> 
+		<div id="wrapper" class="backgroundApp">
+			<div id="header">
+				$navigation.setTemplate("DefaultTop.vm")
+			</div>
+		
+		    <div id="sub-content">
+		        $navigation.setTemplate("DefaultMenu.vm")
+		    </div>
+		
+			<div id="content">
+		        $screen_placeholder
+			</div>
+		
+			<div id="footer">
+				$navigation.setTemplate("DefaultBottom.vm")
+			</div>
+		</div>
+	</body>
+</html>
+

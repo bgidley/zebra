@@ -1,0 +1,47 @@
+<ACGWFD.ProcessTemplate name="Antelope">
+	<settings>
+		<setting name="Common Task Properties">
+			<properties name="(General Task Properties)">
+				<property name="Static Permissions" type="String" locked="no" value="systemAccess" />
+				<property name="Dynamic Permissions" type="String" locked="no" value="" />
+				<property name="ShowInHistory" value="yes" type="Boolean" locked="no"/>
+			</properties>
+		</setting>
+		<setting name="Process Properties">
+			<properties name="(General)">
+				<property name="Class Destruct" 
+					value="com.anite.antelope.zebra.processLifecycle.ProcessDestruct" 
+					type ="String" locked="yes"/>
+				<property name="Class Construct" 
+					value="com.anite.antelope.zebra.processLifecycle.ProcessConstruct" 
+					type ="String" locked="yes"/>
+			</properties>
+			<properties name = "Visibility">
+				<property name="DebugFlow" value="yes" type ="Boolean" 
+					locked="no"/>
+				<property name="Display Name" value="" type ="String" 
+					locked="no" />				
+			</properties>
+			<properties name="Security">
+				<property name="Process Start Permissions" type="String" 
+					value="systemAccess;" locked="no"/>
+				<property name="Dynamic Permissions" type="String" 
+					value="" locked="no"/>
+			</properties>
+			<properties name="(Inputs)" />
+			<properties name="(Outputs)" />
+		</setting>
+		<setting name="GUI Task Display">
+			<properties name="(General)">
+				<property name="Process Name" type="String" value="Process: " locked="yes"/>
+				<property name="Name" type="String" value="" locked="yes" />
+			</properties>
+		</setting>
+
+		<setting name="Common Routing Properties">
+			<properties name="(General)">
+				<property name="Condition Class" value = "com.anite.antelope.zebra.routing.RoutingNameCondition" type="String" locked="no"/>
+			</properties>
+		</setting>
+	</settings>
+</ACGWFD.ProcessTemplate>

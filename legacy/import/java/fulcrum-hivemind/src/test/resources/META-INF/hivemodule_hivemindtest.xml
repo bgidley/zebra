@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module id="fulcrum.hivemind.test" version="1.0.0">
+    <service-point id="DummyService" interface="org.apache.fulcrum.hivemind.IDummy">
+        <invoke-factory>
+            <construct class="org.apache.fulcrum.hivemind.DummyService"/>
+        </invoke-factory>
+    </service-point>
+    <contribution configuration-id="hivemind.management.MBeans" >
+        <mbean service-id="fulcrum.hivemind.test.DummyService" />
+    </contribution>
+</module>

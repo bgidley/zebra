@@ -1,0 +1,61 @@
+#*
+ * Copyright 2004 Anite - Central Government Division
+ *    http://www.anite.com/publicsector
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *#
+ 
+ ## Macro to show error messages for passed field if there are any
+#macro (showFieldError $field)
+	#if(! $field.Valid )
+		<p>Invalid Data</p>
+    	#foreach($message in $field.Messages)
+    		<p>$message</p>
+		#end
+	#end
+#end
+
+
+<h1>Please pick an animal and enter a name</h1>
+
+
+#if(!$form.AllValid)
+	<p>Sorry not all the fields you entered are valid.</p>
+	<p>Please try again.</p>
+	#foreach ($message in $form.RequestMessages)
+		<p>$message</p>
+	#end
+#end
+
+
+<form action="$link.setAction("formSample.WhichAnimal")" method="post">
+
+<p>What type of animal do you have
+#set ($animaltype = $form.Fields.get("animaltype"))
+#showFieldError($animaltype)
+<p>Type:
+	<select name="animaltype">
+		#foreach ($option in $animaltype.Options)
+			<option value="$option.Value">$option.Caption</option>
+		#end
+	</select>
+</p>
+
+#set ($name = $form.Fields.get("name"))
+#showFieldError($name)
+<p>Name:<input type="text" name="name" value="$name.Value" size="$name.Size" maxlength="$name.MaxLength"/></p>
+
+
+<input type="submit">
+
+</form>

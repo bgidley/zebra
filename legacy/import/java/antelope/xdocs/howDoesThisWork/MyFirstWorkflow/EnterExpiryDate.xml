@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<document>
+    <properties>
+        <title>How does this work</title>
+        <author email="bgidley@berlios.de">Ben Gidley</author>
+    </properties>
+    <body>
+        <section name="Enter Expiry Date">
+            <p>The process for this page is virtually identical to the previous page apart from it's
+                demonstration of the ability of AntelopePropertySetEntrys to contain Objects instead
+                of Strings (obviously a String is an object but that is provided for easier usage).
+                The relevant code is within the EnterExpiryDateAction class.</p>
+            <source><![CDATA[
+public class EnterExpiryDate extends BaseWorkflowScreen {
+
+	public static final String	EXPIRY	= "expiry";
+
+	/**
+	 * Prepare Data if needed
+	 */
+	protected void doBuildTemplate(RunData runData, Context context,
+			AntelopeTaskInstance taskInstance, FormTool tool) throws Exception {
+
+		//put the name and age into the context to be displayed as text
+		context.put(Hello.NAME,
+			((AntelopePropertySetEntry) ((AntelopeProcessInstance) taskInstance
+					.getProcessInstance()).getPropertySet().get(
+				"name")).getValue());
+		
+		context.put(HowOldAreYou.AGE,
+			((AntelopePropertySetEntry) ((AntelopeProcessInstance) taskInstance
+					.getProcessInstance()).getPropertySet().get(
+				HowOldAreYou.AGE)).getValue());
+
+	}
+}
+                ]]></source>
+            <p> line 57 shows where the object is added to the PropertySetEntry. The date is parsed
+                from the date given to it in a dd/mm/yy format by a date validator.</p>
+        </section>
+    </body>
+</document>
