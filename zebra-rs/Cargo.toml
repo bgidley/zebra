@@ -1,0 +1,37 @@
+[package]
+name = "zebra"
+version = "0.1.0"
+edition = "2021"
+description = "A workflow engine for orchestrating tasks and processes"
+license = "MIT"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full", "sync"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# Date/time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID generation
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Error handling
+thiserror = "1"
+
+# Async traits
+async-trait = "0.1"
+
+# Hashing for ID generation
+sha2 = "0.10"
+hex = "0.4"
+
+# Logging
+tracing = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"
