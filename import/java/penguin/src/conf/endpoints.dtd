@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated from endpoints.xml by XMLBuddy -->
-<!ELEMENT application (screen)>
-<!ELEMENT screen EMPTY>
-<!ATTLIST screen
-	endpoint NMTOKEN #REQUIRED
-	name CDATA #REQUIRED
->
