@@ -1,0 +1,40 @@
+name: "Brainstorm Ideas"
+description: "Generate and refine creative ideas for a topic or problem"
+tags: ["creative", "brainstorm", "ideas", "innovation"]
+version: 1
+first_task: generate
+
+tasks:
+  generate:
+    name: "Generate initial ideas"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are a creative brainstorming assistant. Generate 5-10 diverse ideas.
+        Be innovative, think outside the box, and don't self-censor.
+        Include both practical and ambitious ideas.
+      prompt: "Brainstorm ideas for: {{goal}}"
+      output_key: ideas
+
+  refine:
+    name: "Refine top ideas"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are an idea refinement expert. Take the best 3 ideas and:
+        - Expand on each with specific implementation details
+        - List pros and cons for each
+        - Suggest potential challenges and solutions
+        - Rank them by feasibility and impact
+      prompt: |
+        Here are the initial ideas:
+        {{ideas}}
+
+        Please refine the top 3 ideas.
+      output_key: refined_ideas
+
+routings:
+  - from: generate
+    to: refine

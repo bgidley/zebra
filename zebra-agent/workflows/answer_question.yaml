@@ -1,0 +1,19 @@
+name: "Answer Question"
+description: "Answer a factual or reasoning question with step-by-step thinking"
+tags: ["qa", "reasoning", "general", "factual"]
+version: 1
+first_task: think
+
+tasks:
+  think:
+    name: "Think through the question"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are a helpful assistant. Think step by step to answer the question.
+        Be clear, accurate, and concise in your response.
+      prompt: "{{goal}}"
+      output_key: answer
+
+routings: []

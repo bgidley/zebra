@@ -5,10 +5,11 @@ description = "Zebra workflow engine workspace"
 requires-python = ">=3.11"
 
 [tool.uv.workspace]
-members = ["zebra-py", "zebra-tasks"]
+members = ["zebra-py", "zebra-tasks", "zebra-agent"]
 
 [tool.uv.sources]
 zebra-workflow = { workspace = true }
+zebra-tasks = { workspace = true }
 
 [dependency-groups]
 dev = [
