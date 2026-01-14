@@ -202,14 +202,18 @@ class OpenAIProvider(LLMProvider):
         tool_calls = None
 
         if message.tool_calls:
-            tool_calls = [
-                ToolCall(
+            tool_calls = []
+            for tc in message.tool_calls:
+                try:
+                    arguments = json.loads(tc.function.arguments)
+                except json.JSONDecodeError:
+                    # If JSON parsing fails, use empty dict
+                    arguments = {}
+                tool_calls.append(ToolCall(
                     id=tc.id,
                     name=tc.function.name,
-                    arguments=json.loads(tc.function.arguments),
-                )
-                for tc in message.tool_calls
-            ]
+                    arguments=arguments,
+                ))
 
         return LLMResponse(
             content=content,

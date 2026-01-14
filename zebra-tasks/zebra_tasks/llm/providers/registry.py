@@ -6,6 +6,9 @@ from zebra_tasks.llm.base import LLMProvider
 # Registry of provider factories
 _providers: dict[str, Callable[[str | None], LLMProvider]] = {}
 
+# Track if we've loaded dotenv
+_dotenv_loaded = False
+
 
 def register_provider(name: str, factory: Callable[[str | None], LLMProvider]) -> None:
     """Register an LLM provider factory.
@@ -30,6 +33,16 @@ def get_provider(name: str, model: str | None = None) -> LLMProvider:
     Raises:
         ValueError: If provider not found
     """
+    # Lazily load environment variables from .env file
+    global _dotenv_loaded
+    if not _dotenv_loaded:
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass  # dotenv not installed, skip
+        _dotenv_loaded = True
+
     name_lower = name.lower()
 
     if name_lower not in _providers:

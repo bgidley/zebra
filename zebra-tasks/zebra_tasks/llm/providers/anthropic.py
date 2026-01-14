@@ -191,12 +191,12 @@ class AnthropicProvider(LLMProvider):
 
     def _convert_response(self, response) -> LLMResponse:
         """Convert Anthropic response to LLMResponse."""
-        content = None
+        text_parts = []
         tool_calls = None
 
         for block in response.content:
             if block.type == "text":
-                content = block.text
+                text_parts.append(block.text)
             elif block.type == "tool_use":
                 if tool_calls is None:
                     tool_calls = []
@@ -205,6 +205,9 @@ class AnthropicProvider(LLMProvider):
                     name=block.name,
                     arguments=block.input,
                 ))
+
+        # Concatenate all text blocks
+        content = "".join(text_parts) if text_parts else None
 
         return LLMResponse(
             content=content,

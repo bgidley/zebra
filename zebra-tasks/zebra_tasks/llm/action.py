@@ -2,6 +2,7 @@
 
 from typing import Any
 import json
+import re
 
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, TaskAction
@@ -25,7 +26,7 @@ class LLMCallAction(TaskAction):
         system_prompt: System prompt (optional)
         messages: Full message history (alternative to prompt/system_prompt)
         temperature: LLM temperature (default: 0.7)
-        max_tokens: Maximum response tokens (default: 2000)
+        max_tokens: Maximum response tokens (default: 4096)
         response_format: Expected format - "text", "json" (default: "text")
         json_schema: JSON schema for structured output (optional)
         output_key: Where to store response (default: "llm_response")
@@ -75,7 +76,7 @@ class LLMCallAction(TaskAction):
 
         # Get parameters
         temperature = task.properties.get("temperature", 0.7)
-        max_tokens = task.properties.get("max_tokens", 2000)
+        max_tokens = task.properties.get("max_tokens", 4096)
 
         try:
             # Call LLM
@@ -165,21 +166,25 @@ class LLMCallAction(TaskAction):
         if response_format == "json":
             # Try to extract JSON from response
             try:
-                # Handle markdown code blocks
-                if "```json" in content:
-                    start = content.index("```json") + 7
-                    end = content.index("```", start)
-                    content = content[start:end].strip()
-                elif "```" in content:
-                    start = content.index("```") + 3
-                    end = content.index("```", start)
-                    content = content[start:end].strip()
-
-                return json.loads(content)
+                extracted = self._extract_json(content)
+                return json.loads(extracted)
             except (json.JSONDecodeError, ValueError):
                 # Return raw content if JSON parsing fails
                 return content
 
+        return content
+
+    def _extract_json(self, content: str) -> str:
+        """Extract JSON from content, handling code blocks."""
+        # Try to extract from code blocks using regex
+        patterns = [
+            r'```json\s*(.*?)\s*```',  # ```json ... ```
+            r'```\s*(.*?)\s*```',       # ``` ... ```
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, content, re.DOTALL)
+            if match:
+                return match.group(1).strip()
         return content
 
     def _track_tokens(self, context: ExecutionContext, usage: TokenUsage) -> None:
