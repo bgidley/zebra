@@ -42,18 +42,23 @@ cargo run
 
 ## Building
 
-### Python Packages
+This project uses [uv workspaces](https://docs.astral.sh/uv/concepts/workspaces/) to manage multiple Python packages.
 
-All Python packages use [uv](https://github.com/astral-sh/uv) for dependency management.
+### All Python Packages (Recommended)
 
 ```bash
-# zebra-py (core engine)
-cd zebra-py
-uv sync --extra dev --extra mcp
+# From project root - syncs all packages
+uv sync --all-packages
+```
 
-# zebra-tasks (task library)
-cd zebra-tasks
-uv sync --extra dev --extra all
+### Individual Packages
+
+```bash
+# zebra-py only
+cd zebra-py && uv sync
+
+# zebra-tasks only
+cd zebra-tasks && uv sync
 ```
 
 ### Rust Package
@@ -65,32 +70,34 @@ cargo build --release
 
 ## Running Tests
 
-### Python
+### All Python Tests (Recommended)
 
 ```bash
-# zebra-py tests
-cd zebra-py
-uv run pytest tests/ -v
-
-# zebra-tasks tests
-cd zebra-tasks
-uv run pytest tests/ -v
+# From project root - runs all Python tests
+uv run pytest
 ```
 
-### Rust
+### Individual Package Tests
+
+```bash
+# zebra-py tests only
+uv run pytest zebra-py/tests/ -v
+
+# zebra-tasks tests only
+uv run pytest zebra-tasks/tests/ -v
+```
+
+### Rust Tests
 
 ```bash
 cd zebra-rs
 cargo test
 ```
 
-### Run All Tests
+### All Tests (Python + Rust)
 
 ```bash
-# From project root
-cd zebra-py && uv run pytest tests/ -v && cd ..
-cd zebra-tasks && uv run pytest tests/ -v && cd ..
-cd zebra-rs && cargo test && cd ..
+uv run pytest && cd zebra-rs && cargo test
 ```
 
 ## Running the MCP Server

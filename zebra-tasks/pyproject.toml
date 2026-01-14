@@ -22,6 +22,9 @@ dependencies = [
     "httpx>=0.25",
 ]
 
+[tool.uv.sources]
+zebra-workflow = { workspace = true }
+
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.18"]
 openai = ["openai>=1.0"]

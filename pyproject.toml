@@ -1,0 +1,32 @@
+[project]
+name = "zebra-workspace"
+version = "0.1.0"
+description = "Zebra workflow engine workspace"
+requires-python = ">=3.11"
+
+[tool.uv.workspace]
+members = ["zebra-py", "zebra-tasks"]
+
+[tool.uv.sources]
+zebra-workflow = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["zebra-py/tests", "zebra-tasks/tests"]
+pythonpath = ["zebra-py", "zebra-tasks"]
+addopts = "--import-mode=importlib"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
