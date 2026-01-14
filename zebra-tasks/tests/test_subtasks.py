@@ -390,3 +390,233 @@ class TestParallelSubworkflowsAction:
 
         # Should have partial results due to fail_fast
         assert result.output is not None
+
+    @pytest.mark.asyncio
+    async def test_parallel_fail_fast_no_definition(self, mock_context, mock_task):
+        """Test fail_fast with missing workflow definition fails immediately."""
+        mock_task.properties = {
+            "workflows": [
+                {"key": "wf1"},  # No workflow definition
+            ],
+            "fail_fast": True,
+        }
+
+        action = ParallelSubworkflowsAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is False
+        assert "No workflow definition" in result.error
+
+    @pytest.mark.asyncio
+    async def test_parallel_skip_no_definition(self, mock_context, mock_task, mock_store):
+        """Test skipping workflow with no definition when fail_fast is False."""
+        mock_task.properties = {
+            "workflows": [
+                {"key": "wf1"},  # No workflow definition - will be skipped
+                {
+                    "workflow": {
+                        "id": "wf2",
+                        "name": "WF2",
+                        "first_task_id": "t1",
+                        "tasks": {"t1": {"id": "t1", "name": "T1", "action": "test"}},
+                        "routings": [],
+                    },
+                    "key": "wf2",
+                },
+            ],
+            "fail_fast": False,
+        }
+
+        async def complete_all():
+            await asyncio.sleep(0.02)
+            for p in mock_store.processes.values():
+                p.state = ProcessState.COMPLETE
+
+        asyncio.create_task(complete_all())
+
+        action = ParallelSubworkflowsAction()
+        result = await action.run(mock_task, mock_context)
+
+        # Should still succeed (skipping missing definition)
+        assert result.success is True
+        assert len(mock_context.engine.created_processes) == 1
+
+
+class TestSubworkflowTimeoutAndEdgeCases:
+    """Additional tests for timeout and edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_subworkflow_timeout(self, mock_context, mock_task, mock_store):
+        """Test subworkflow timeout handling."""
+        mock_task.properties = {
+            "workflow": {
+                "id": "test",
+                "name": "Test",
+                "first_task_id": "t1",
+                "tasks": {"t1": {"id": "t1", "name": "T1", "action": "test"}},
+                "routings": [],
+            },
+            "wait": True,
+            "timeout": 0.1,  # 100ms timeout
+        }
+
+        # Don't complete the process - let it timeout
+        action = SubworkflowAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is False
+        assert "Timeout" in result.error
+
+    @pytest.mark.asyncio
+    async def test_subworkflow_process_not_found(self, mock_context, mock_task, mock_store):
+        """Test subworkflow with process disappearing."""
+        mock_task.properties = {
+            "workflow": {
+                "id": "test",
+                "name": "Test",
+                "first_task_id": "t1",
+                "tasks": {"t1": {"id": "t1", "name": "T1", "action": "test"}},
+                "routings": [],
+            },
+            "wait": True,
+        }
+
+        # Delete the process after creation
+        async def delete_process():
+            await asyncio.sleep(0.02)
+            mock_store.processes.clear()
+
+        asyncio.create_task(delete_process())
+
+        action = SubworkflowAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is False
+        assert "Process not found" in result.error
+
+    @pytest.mark.asyncio
+    async def test_subworkflow_with_yaml_string(self, mock_context, mock_task):
+        """Test loading workflow from YAML string."""
+        yaml_workflow = """
+name: YAML Workflow
+first_task_id: t1
+tasks:
+  t1:
+    name: Task 1
+"""
+        mock_task.properties = {
+            "workflow": yaml_workflow,
+            "wait": False,
+        }
+
+        action = SubworkflowAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert len(mock_context.engine.created_processes) == 1
+
+    @pytest.mark.asyncio
+    async def test_subworkflow_with_definition_id(self, mock_context, mock_task, mock_store):
+        """Test loading workflow from definition ID in store."""
+        # Add definition to store
+        mock_store.definitions["stored_def"] = ProcessDefinition(
+            id="stored_def",
+            name="Stored Workflow",
+            first_task_id="t1",
+            tasks={"t1": TaskDefinition(id="t1", name="T1")},
+            routings=[],
+        )
+
+        mock_task.properties = {
+            "workflow": "stored_def",  # Definition ID
+            "wait": False,
+        }
+
+        action = SubworkflowAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert len(mock_context.engine.created_processes) == 1
+
+    @pytest.mark.asyncio
+    async def test_subworkflow_with_process_definition_object(self, mock_context, mock_task):
+        """Test passing ProcessDefinition object directly."""
+        from zebra.core.models import ProcessDefinition, TaskDefinition
+
+        mock_task.properties = {
+            "workflow": ProcessDefinition(
+                id="direct_def",
+                name="Direct Workflow",
+                first_task_id="t1",
+                tasks={"t1": TaskDefinition(id="t1", name="T1")},
+                routings=[],
+            ),
+            "wait": False,
+        }
+
+        action = SubworkflowAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_wait_timeout(self, mock_context, mock_task, mock_store):
+        """Test WaitForSubworkflowAction with timeout."""
+        # Create a running process that won't complete
+        running_process = ProcessInstance(
+            id="running_proc",
+            definition_id="test_def",
+            state=ProcessState.RUNNING,
+        )
+        mock_store.processes["running_proc"] = running_process
+
+        mock_task.properties = {
+            "process_id": "running_proc",
+            "timeout": 0.1,  # 100ms timeout
+        }
+
+        action = WaitForSubworkflowAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is False
+        assert "Timeout" in result.error
+
+    @pytest.mark.asyncio
+    async def test_wait_process_not_found(self, mock_context, mock_task, mock_store):
+        """Test WaitForSubworkflowAction with non-existent process."""
+        mock_task.properties = {
+            "process_id": "nonexistent_proc",
+        }
+
+        action = WaitForSubworkflowAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is False
+        assert "Process not found" in result.error
+
+    @pytest.mark.asyncio
+    async def test_parallel_with_timeout(self, mock_context, mock_task, mock_store):
+        """Test ParallelSubworkflowsAction with timeout."""
+        mock_task.properties = {
+            "workflows": [
+                {
+                    "workflow": {
+                        "id": "wf1",
+                        "name": "WF1",
+                        "first_task_id": "t1",
+                        "tasks": {"t1": {"id": "t1", "name": "T1", "action": "test"}},
+                        "routings": [],
+                    },
+                    "key": "wf1",
+                },
+            ],
+            "timeout": 0.1,
+        }
+
+        # Don't complete - let it timeout
+        action = ParallelSubworkflowsAction()
+        result = await action.run(mock_task, mock_context)
+
+        # Should complete with partial_failure or failure route
+        assert result.output is not None
+        assert result.next_route in ("partial_failure", "failure")

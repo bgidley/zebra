@@ -27,6 +27,10 @@ addopts = "--import-mode=importlib"
 [tool.coverage.run]
 source = ["zebra", "zebra_tasks"]
 branch = true
+omit = [
+    "*/mcp/server.py",  # MCP integration requires mcp package
+    "*/__main__.py",
+]
 
 [tool.coverage.report]
 show_missing = true
@@ -35,6 +39,9 @@ exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "class.*Protocol.*:",
+    "@abstractmethod",
 ]
 
 [tool.ruff]
