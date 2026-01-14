@@ -24,6 +24,19 @@ testpaths = ["zebra-py/tests", "zebra-tasks/tests"]
 pythonpath = ["zebra-py", "zebra-tasks"]
 addopts = "--import-mode=importlib"
 
+[tool.coverage.run]
+source = ["zebra", "zebra_tasks"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
