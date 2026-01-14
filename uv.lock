@@ -1170,6 +1170,7 @@ source = { editable = "zebra-tasks" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "zebra-workflow" },
 ]
 
@@ -1201,6 +1202,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "zebra-workflow", editable = "zebra-py" },
 ]
 provides-extras = ["anthropic", "openai", "all", "dev"]
