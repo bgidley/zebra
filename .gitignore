@@ -8,3 +8,5 @@ __pycache__/
 .coverage
 htmlcov/
 .pytest_cache/
+.env
+.env.local
