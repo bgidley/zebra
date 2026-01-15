@@ -222,6 +222,8 @@ Output ONLY valid YAML, no explanations."""
                 tags_str = ", ".join(w.tags) if w.tags else "none"
                 success = f"{w.success_rate:.0%}" if w.use_count > 0 else "N/A"
                 prompt += f"- {w.name}: {w.description} (success: {success}, tags: {tags_str})\n"
+                if w.use_when:
+                    prompt += f"  USE WHEN: {w.use_when}\n"
         else:
             prompt += "No workflows available yet. You must create a new one.\n"
 

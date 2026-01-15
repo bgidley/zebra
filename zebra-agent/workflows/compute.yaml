@@ -1,6 +1,7 @@
 name: "Compute"
 description: "Perform calculations and data processing using Python code"
 tags: ["compute", "calculation", "math", "data", "python"]
+use_when: "User needs numerical calculations, math operations, data transformations, or any task requiring actual computation (not just reasoning about numbers)"
 version: 1
 first_task: plan
 

@@ -22,6 +22,7 @@ class WorkflowInfo:
     tags: list[str]
     version: int
     definition_path: Path
+    use_when: str | None = None  # Detailed hint for LLM selection
     success_rate: float = 0.0
     use_count: int = 0
 
@@ -32,6 +33,7 @@ class WorkflowInfo:
             "description": self.description,
             "tags": self.tags,
             "version": self.version,
+            "use_when": self.use_when,
             "success_rate": self.success_rate,
             "use_count": self.use_count,
         }
@@ -99,6 +101,7 @@ class WorkflowLibrary:
             description = data.get("description", "No description")
             tags = data.get("tags", [])
             version = data.get("version", 1)
+            use_when = data.get("use_when")  # LLM selection hint
 
             # Get stats from metrics store
             stats = await self.metrics.get_stats(name)
@@ -109,6 +112,7 @@ class WorkflowLibrary:
                 tags=tags,
                 version=version,
                 definition_path=yaml_file,
+                use_when=use_when,
                 success_rate=stats.success_rate,
                 use_count=stats.total_runs,
             )

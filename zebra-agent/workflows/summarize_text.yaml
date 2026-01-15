@@ -1,6 +1,7 @@
 name: "Summarize Text"
 description: "Summarize provided text into a clear, concise summary"
 tags: ["summarization", "text", "condensing"]
+use_when: "User provides text and wants it shortened, condensed, or summarized"
 version: 1
 first_task: summarize
 

@@ -1,6 +1,7 @@
 name: "Brainstorm Ideas"
 description: "Generate and refine creative ideas for a topic or problem"
 tags: ["creative", "brainstorm", "ideas", "innovation"]
+use_when: "User wants to generate multiple ideas, explore options, or needs creative suggestions"
 version: 1
 first_task: generate
 

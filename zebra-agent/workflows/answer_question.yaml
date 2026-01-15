@@ -1,6 +1,7 @@
 name: "Answer Question"
 description: "Answer a factual or reasoning question with step-by-step thinking"
 tags: ["qa", "reasoning", "general", "factual"]
+use_when: "User asks a direct question that needs a factual answer or logical reasoning, but NOT computation"
 version: 1
 first_task: think
 

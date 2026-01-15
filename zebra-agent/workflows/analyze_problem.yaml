@@ -1,6 +1,7 @@
 name: "Analyze Problem"
 description: "Break down and analyze a problem with structured thinking"
 tags: ["analysis", "problem-solving", "structured", "reasoning"]
+use_when: "User has a complex problem that needs to be broken down, analyzed from multiple angles, and solved systematically"
 version: 1
 first_task: understand
 
