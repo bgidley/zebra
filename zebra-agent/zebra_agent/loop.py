@@ -12,6 +12,13 @@ from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
 from zebra_agent.library import WorkflowLibrary
+from zebra_agent.memory import (
+    AgentMemory,
+    LongTermTheme,
+    MemoryEntry,
+    ShortTermSummary,
+    estimate_tokens,
+)
 from zebra_agent.metrics import MetricsStore, WorkflowRun
 
 
@@ -110,6 +117,7 @@ Output ONLY valid YAML, no explanations."""
         library: WorkflowLibrary,
         engine: WorkflowEngine,
         metrics: MetricsStore,
+        memory: AgentMemory | None = None,
         provider: str = "anthropic",
         model: str | None = None,
     ):
@@ -120,12 +128,14 @@ Output ONLY valid YAML, no explanations."""
             library: Workflow library
             engine: Zebra workflow engine
             metrics: Metrics store
+            memory: Agent memory for context (optional)
             provider: LLM provider name
             model: LLM model name (optional)
         """
         self.library = library
         self.engine = engine
         self.metrics = metrics
+        self.memory = memory
         self.provider_name = provider
         self.model = model
         self._llm = None
@@ -141,9 +151,10 @@ Output ONLY valid YAML, no explanations."""
         """
         Process a user goal through the agent loop.
 
-        1. Select or create workflow for goal
-        2. Execute workflow
-        3. Record result
+        1. Check if memory needs compaction
+        2. Select or create workflow for goal
+        3. Execute workflow
+        4. Record result and update memory
 
         Args:
             goal: The user's goal/request
@@ -151,6 +162,13 @@ Output ONLY valid YAML, no explanations."""
         Returns:
             AgentResult with output, success status, etc.
         """
+        # Check if memory needs compaction first
+        if self.memory:
+            if await self.memory.needs_short_term_compaction():
+                await self._compact_short_term_memory()
+            if await self.memory.needs_long_term_compaction():
+                await self._compact_long_term_memory()
+
         # Create run record
         run = WorkflowRun.create("pending", goal)
         created_new = False
@@ -181,6 +199,10 @@ Output ONLY valid YAML, no explanations."""
 
             await self.metrics.record_run(run)
 
+            # Step 4: Update memory
+            if self.memory:
+                await self._add_to_memory(run, output)
+
             return AgentResult(
                 run_id=run.id,
                 workflow_name=workflow_name,
@@ -198,6 +220,10 @@ Output ONLY valid YAML, no explanations."""
             run.error = str(e)
 
             await self.metrics.record_run(run)
+
+            # Still add to memory on failure
+            if self.memory:
+                await self._add_to_memory(run, f"Error: {e}")
 
             return AgentResult(
                 run_id=run.id,
@@ -380,3 +406,170 @@ Output ONLY valid YAML, no explanations."""
     async def record_rating(self, run_id: str, rating: int) -> None:
         """Record a user rating for a run."""
         await self.metrics.update_rating(run_id, rating)
+
+    async def _add_to_memory(self, run: WorkflowRun, output: Any) -> None:
+        """Add a workflow run to memory."""
+        if not self.memory:
+            return
+
+        # Create summary of output
+        if isinstance(output, str):
+            summary = output[:500] + "..." if len(output) > 500 else output
+        elif isinstance(output, dict):
+            summary = json.dumps(output, indent=2)[:500]
+        else:
+            summary = str(output)[:500]
+
+        entry = MemoryEntry(
+            id=run.id,
+            timestamp=run.started_at,
+            goal=run.goal,
+            workflow_used=run.workflow_name or "unknown",
+            result_summary=summary,
+            tokens=estimate_tokens(run.goal + summary),
+        )
+
+        await self.memory.add_entry(entry)
+
+    async def _compact_short_term_memory(self) -> None:
+        """
+        Compact short-term memory into a detailed summary.
+
+        Focuses on preserving specific details, facts, and outcomes.
+        """
+        if not self.memory:
+            return
+
+        import asyncio
+        import uuid
+
+        # Get short-term content for compaction
+        memory_content = await self.memory.get_short_term_content_for_compaction()
+        if not memory_content:
+            return
+
+        # Count entries being compacted
+        entries = await self.memory.get_short_term_entries()
+        entry_count = len(entries)
+
+        # Load and run the short-term compact workflow
+        try:
+            definition = self.library.get_workflow("Memory Compact Short")
+        except KeyError:
+            # Workflow not available, skip compaction
+            return
+
+        process = await self.engine.create_process(
+            definition,
+            properties={
+                "memory_content": memory_content,
+                "__llm_provider_name__": self.provider_name,
+                "__llm_model__": self.model,
+            },
+        )
+
+        await self.engine.start_process(process.id)
+
+        # Wait for completion
+        max_wait = 60
+        waited = 0
+
+        while waited < max_wait:
+            process = await self.engine.store.load_process(process.id)
+
+            if process.state == ProcessState.COMPLETE:
+                break
+            elif process.state == ProcessState.FAILED:
+                return
+
+            await asyncio.sleep(0.5)
+            waited += 0.5
+
+        if process.state != ProcessState.COMPLETE:
+            return
+
+        # Get the summary and store it
+        summary_text = process.properties.get("short_term_summary")
+        if summary_text:
+            summary = ShortTermSummary(
+                id=str(uuid.uuid4()),
+                created_at=datetime.now(),
+                summary=summary_text,
+                tokens=estimate_tokens(summary_text),
+                entry_count=entry_count,
+            )
+            await self.memory.add_short_term_summary(summary)
+            await self.memory.clear_short_term_entries()
+
+    async def _compact_long_term_memory(self) -> None:
+        """
+        Compact long-term memory by extracting themes from short-term summaries.
+
+        Focuses on patterns, preferences, and high-level insights.
+        References short-term summaries for detail retrieval.
+        """
+        if not self.memory:
+            return
+
+        import asyncio
+        import uuid
+
+        # Get long-term content for compaction
+        memory_content = await self.memory.get_long_term_content_for_compaction()
+        if not memory_content:
+            return
+
+        # Get IDs of summaries being processed
+        summaries = await self.memory.get_short_term_summaries()
+        summary_ids = [s.id for s in summaries]
+
+        # Load and run the long-term compact workflow
+        try:
+            definition = self.library.get_workflow("Memory Compact Long")
+        except KeyError:
+            # Workflow not available, skip compaction
+            return
+
+        process = await self.engine.create_process(
+            definition,
+            properties={
+                "memory_content": memory_content,
+                "__llm_provider_name__": self.provider_name,
+                "__llm_model__": self.model,
+            },
+        )
+
+        await self.engine.start_process(process.id)
+
+        # Wait for completion
+        max_wait = 90  # Longer timeout for theme extraction
+        waited = 0
+
+        while waited < max_wait:
+            process = await self.engine.store.load_process(process.id)
+
+            if process.state == ProcessState.COMPLETE:
+                break
+            elif process.state == ProcessState.FAILED:
+                return
+
+            await asyncio.sleep(0.5)
+            waited += 0.5
+
+        if process.state != ProcessState.COMPLETE:
+            return
+
+        # Get the themes and store them
+        theme_text = process.properties.get("long_term_themes")
+        if theme_text:
+            theme = LongTermTheme(
+                id=str(uuid.uuid4()),
+                created_at=datetime.now(),
+                theme=theme_text,
+                tokens=estimate_tokens(theme_text),
+                short_term_refs=summary_ids,  # Reference the summaries used
+            )
+            await self.memory.add_long_term_theme(theme)
+            # Keep referenced summaries but clear older ones if needed
+            # For now, keep all summaries that are referenced by themes
+            await self.memory.clear_short_term_summaries(keep_ids=summary_ids)

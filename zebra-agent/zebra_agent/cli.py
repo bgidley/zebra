@@ -13,6 +13,7 @@ from zebra_tasks.compute import PythonExecAction
 
 from zebra_agent.library import WorkflowLibrary
 from zebra_agent.loop import AgentLoop
+from zebra_agent.memory import AgentMemory
 from zebra_agent.metrics import MetricsStore
 
 
@@ -21,6 +22,7 @@ DEFAULT_DATA_DIR = Path("~/.zebra-agent").expanduser()
 DEFAULT_WORKFLOWS_DIR = DEFAULT_DATA_DIR / "workflows"
 DEFAULT_STATE_DB = DEFAULT_DATA_DIR / "state.db"
 DEFAULT_METRICS_DB = DEFAULT_DATA_DIR / "metrics.db"
+DEFAULT_MEMORY_DB = DEFAULT_DATA_DIR / "memory.db"
 
 # Built-in workflows location (relative to package)
 BUILTIN_WORKFLOWS = Path(__file__).parent.parent / "workflows"
@@ -37,6 +39,7 @@ def print_banner():
 ║  Commands:                                                ║
 ║    /list     - Show available workflows                   ║
 ║    /stats    - Show workflow statistics                   ║
+║    /memory   - Show memory status                         ║
 ║    /help     - Show this help                             ║
 ║    /quit     - Exit the agent                             ║
 ║                                                           ║
@@ -102,6 +105,7 @@ def cmd_help():
   Commands:
     /list     - Show all available workflows with descriptions
     /stats    - Show usage statistics and recent runs
+    /memory   - Show memory status and usage
     /help     - Show this help message
     /quit     - Exit the agent (also: /exit, /q)
 
@@ -121,6 +125,70 @@ def cmd_help():
     )
 
 
+async def cmd_memory(memory: AgentMemory):
+    """Show memory status."""
+    print("\n  Memory Status:")
+    print("  " + "─" * 60)
+
+    stats = await memory.get_stats()
+    short = stats["short_term"]
+    long = stats["long_term"]
+
+    # Short-term memory status
+    short_total = short["entry_tokens"]
+    short_threshold = int(memory.short_term_max_tokens * memory.compact_threshold)
+    short_pct = (short_total / memory.short_term_max_tokens) * 100
+
+    print("\n  SHORT-TERM MEMORY (details & recent context)")
+    print(f"    Entries: {short['entry_count']} ({short_total:,} tokens)")
+    print(f"    Summaries: {short['summary_count']} ({short['summary_tokens']:,} tokens)")
+    print(f"    Limit: {memory.short_term_max_tokens:,} tokens (compact at {short_threshold:,})")
+    print(f"    Usage: {short_pct:.1f}%")
+
+    # Long-term memory status
+    long_total = long["theme_tokens"] + short["summary_tokens"]
+    long_threshold = int(memory.long_term_max_tokens * memory.compact_threshold)
+    long_pct = (long_total / memory.long_term_max_tokens) * 100
+
+    print("\n  LONG-TERM MEMORY (themes & patterns)")
+    print(f"    Themes: {long['theme_count']} ({long['theme_tokens']:,} tokens)")
+    print(f"    Limit: {memory.long_term_max_tokens:,} tokens (compact at {long_threshold:,})")
+    print(f"    Usage: {long_pct:.1f}%")
+
+    # Show recent entries
+    entries = await memory.get_short_term_entries(limit=5)
+    if entries:
+        print("\n  Recent interactions (short-term):")
+        for entry in entries:
+            time_str = entry.timestamp.strftime("%Y-%m-%d %H:%M")
+            goal_preview = entry.goal[:40] + "..." if len(entry.goal) > 40 else entry.goal
+            print(f"    [{time_str}] {goal_preview}")
+            print(f"      -> {entry.workflow_used} ({entry.tokens} tokens)")
+
+    # Show recent summaries
+    summaries = await memory.get_short_term_summaries(limit=2)
+    if summaries:
+        print("\n  Recent summaries (short-term):")
+        for s in summaries:
+            preview = s.summary[:150] + "..." if len(s.summary) > 150 else s.summary
+            print(f"    [{s.created_at.strftime('%Y-%m-%d')}] {s.entry_count} entries summarized")
+            print(f"      {preview}")
+
+    # Show themes
+    themes = await memory.get_long_term_themes(limit=2)
+    if themes:
+        print("\n  Themes (long-term):")
+        for t in themes:
+            preview = t.theme[:150] + "..." if len(t.theme) > 150 else t.theme
+            print(f"    [{t.created_at.strftime('%Y-%m-%d')}] refs: {len(t.short_term_refs)} summaries")
+            print(f"      {preview}")
+
+    if not entries and not summaries and not themes:
+        print("\n  No memory entries yet.")
+
+    print()
+
+
 async def async_main():
     """Main async entry point."""
     # Ensure data directory exists
@@ -128,6 +196,11 @@ async def async_main():
 
     # Initialize components
     metrics = MetricsStore(DEFAULT_METRICS_DB)
+    memory = AgentMemory(
+        DEFAULT_MEMORY_DB,
+        short_term_max_tokens=20000,  # 20k for recent details
+        long_term_max_tokens=30000,   # 30k for themes and patterns
+    )
     library = WorkflowLibrary(DEFAULT_WORKFLOWS_DIR, metrics)
 
     # Copy built-in workflows if library is empty
@@ -153,6 +226,7 @@ async def async_main():
         library=library,
         engine=engine,
         metrics=metrics,
+        memory=memory,
         provider="anthropic",
     )
 
@@ -177,6 +251,8 @@ async def async_main():
                     await cmd_list(library)
                 elif cmd == "/stats":
                     await cmd_stats(metrics)
+                elif cmd == "/memory":
+                    await cmd_memory(memory)
                 elif cmd == "/help":
                     cmd_help()
                 else:
