@@ -1,0 +1,63 @@
+name: "Memory Compact Long"
+description: "Extract themes and patterns from short-term summaries for long-term memory"
+tags: ["memory", "internal", "system", "compaction", "long-term"]
+use_when: "INTERNAL USE ONLY - automatically triggered when long-term memory needs consolidation"
+version: 1
+first_task: extract_themes
+
+tasks:
+  extract_themes:
+    name: "Extract themes and patterns"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are a long-term memory consolidation assistant. Your job is to extract
+        THEMES and PATTERNS from detailed summaries to create lasting memory.
+
+        Focus on identifying:
+        1. USER PREFERENCES - How they like things done, their coding style, preferences
+        2. RECURRING PATTERNS - Types of tasks they frequently request
+        3. PROJECT CONTEXT - What projects they work on, their structure, technologies used
+        4. LEARNED INSIGHTS - What approaches worked well, what to avoid
+        5. RELATIONSHIPS - How different pieces of their work connect
+
+        Your output should be:
+        - High-level themes, not specific details
+        - Actionable insights for future interactions
+        - Patterns that will remain relevant over time
+        - References to which detailed summaries contain supporting details
+
+        Format:
+        ## Long-Term Themes
+
+        ### User Preferences
+        - [Preference]: [Evidence/reasoning]
+          (Details in: [summary IDs])
+
+        ### Project Context
+        - [Project/Area]: [Key characteristics]
+          (Details in: [summary IDs])
+
+        ### Patterns & Insights
+        - [Pattern]: [When this applies]
+          (Details in: [summary IDs])
+
+        ### Workflow Effectiveness
+        - [Workflow]: [How well it works for this user]
+
+        Note: Reference summary IDs so details can be retrieved when needed.
+        Consolidate with existing themes where appropriate.
+
+      prompt: |
+        Extract themes and patterns from this content:
+
+        {{memory_content}}
+
+        Focus on high-level patterns and insights. Reference the summary IDs
+        (e.g., "Summary abc123") so we can retrieve details when needed.
+      output_key: long_term_themes
+      temperature: 0.4
+      max_tokens: 1500
+
+routings: []
