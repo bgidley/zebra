@@ -455,7 +455,7 @@ Output ONLY valid YAML, no explanations."""
         # Load and run the short-term compact workflow
         try:
             definition = self.library.get_workflow("Memory Compact Short")
-        except KeyError:
+        except ValueError:
             # Workflow not available, skip compaction
             return
 
@@ -526,7 +526,7 @@ Output ONLY valid YAML, no explanations."""
         # Load and run the long-term compact workflow
         try:
             definition = self.library.get_workflow("Memory Compact Long")
-        except KeyError:
+        except ValueError:
             # Workflow not available, skip compaction
             return
 
