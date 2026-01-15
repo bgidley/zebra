@@ -315,7 +315,12 @@ Output ONLY valid YAML, no explanations."""
 
         # Create process with goal as property
         process = await self.engine.create_process(
-            definition, properties={"goal": goal, "__llm_provider__": self.llm}
+            definition,
+            properties={
+                "goal": goal,
+                "__llm_provider_name__": self.provider_name,
+                "__llm_model__": self.model,
+            },
         )
 
         # Start and run to completion

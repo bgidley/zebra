@@ -118,14 +118,23 @@ class LLMCallAction(TaskAction):
         self, task: TaskInstance, context: ExecutionContext
     ) -> LLMProvider | None:
         """Get the LLM provider to use."""
-        # Check for provider in task properties
+        from zebra_tasks.llm.providers.registry import get_provider
+
+        # Check for provider in task properties first
         provider_name = task.properties.get("provider")
+        model = task.properties.get("model")
+
+        # Fall back to process properties
+        if not provider_name:
+            provider_name = context.process.properties.get("__llm_provider_name__")
+        if not model:
+            model = context.process.properties.get("__llm_model__")
+
+        # If we have a provider name, create the provider
         if provider_name:
-            from zebra_tasks.llm.providers.registry import get_provider
-            model = task.properties.get("model")
             return get_provider(provider_name, model)
 
-        # Use provider from process properties
+        # Legacy: check for provider object (not recommended)
         return context.process.properties.get("__llm_provider__")
 
     def _build_messages(
