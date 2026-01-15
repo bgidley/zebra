@@ -9,6 +9,7 @@ from zebra.storage.sqlite import SQLiteStore
 from zebra.tasks.registry import ActionRegistry
 
 from zebra_tasks.llm.action import LLMCallAction
+from zebra_tasks.compute import PythonExecAction
 
 from zebra_agent.library import WorkflowLibrary
 from zebra_agent.loop import AgentLoop
@@ -139,10 +140,11 @@ async def async_main():
     store = SQLiteStore(str(DEFAULT_STATE_DB))
     await store.initialize()
 
-    # Register LLM action
+    # Register custom actions
     registry = ActionRegistry()
     registry.register_defaults()
     registry.register_action("llm_call", LLMCallAction)
+    registry.register_action("python_exec", PythonExecAction)
 
     engine = WorkflowEngine(store, registry)
 
