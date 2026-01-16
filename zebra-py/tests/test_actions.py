@@ -228,6 +228,244 @@ class TestPromptTaskAction:
 
         assert sample_task.properties["__schema__"] == {"type": "object"}
 
+    # New tests for enhanced prompt features
+
+    async def test_prompt_number_type_valid(self, mock_context, sample_task):
+        """Test number input type with valid input."""
+        mock_context.task_definition.properties["prompt"] = "Enter age:"
+        mock_context.task_definition.properties["input_type"] = "number"
+        sample_task.properties["input"] = "25"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        assert result.output["response"] == 25
+        assert isinstance(result.output["response"], int)
+
+    async def test_prompt_number_type_float(self, mock_context, sample_task):
+        """Test number input type with float input."""
+        mock_context.task_definition.properties["prompt"] = "Enter price:"
+        mock_context.task_definition.properties["input_type"] = "number"
+        sample_task.properties["input"] = "19.99"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        assert result.output["response"] == 19.99
+        assert isinstance(result.output["response"], float)
+
+    async def test_prompt_number_type_invalid(self, mock_context, sample_task):
+        """Test number input type with invalid input."""
+        mock_context.task_definition.properties["prompt"] = "Enter age:"
+        mock_context.task_definition.properties["input_type"] = "number"
+        sample_task.properties["input"] = "not a number"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is False
+        assert "Invalid number" in result.error
+
+    async def test_prompt_boolean_type_yes(self, mock_context, sample_task):
+        """Test boolean input type with 'yes' input."""
+        mock_context.task_definition.properties["prompt"] = "Continue?"
+        mock_context.task_definition.properties["input_type"] = "boolean"
+        sample_task.properties["input"] = "yes"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        assert result.output["response"] is True
+
+    async def test_prompt_boolean_type_no(self, mock_context, sample_task):
+        """Test boolean input type with 'no' input."""
+        mock_context.task_definition.properties["prompt"] = "Continue?"
+        mock_context.task_definition.properties["input_type"] = "boolean"
+        sample_task.properties["input"] = "no"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        assert result.output["response"] is False
+
+    async def test_prompt_boolean_type_invalid(self, mock_context, sample_task):
+        """Test boolean input type with invalid input."""
+        mock_context.task_definition.properties["prompt"] = "Continue?"
+        mock_context.task_definition.properties["input_type"] = "boolean"
+        sample_task.properties["input"] = "maybe"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is False
+        assert "Invalid boolean" in result.error
+
+    async def test_prompt_choice_type_valid(self, mock_context, sample_task):
+        """Test choice input type with valid selection."""
+        mock_context.task_definition.properties["prompt"] = "Select:"
+        mock_context.task_definition.properties["input_type"] = "choice"
+        mock_context.task_definition.properties["options"] = ["a", "b", "c"]
+        sample_task.properties["input"] = "b"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        assert result.output["response"] == "b"
+
+    async def test_prompt_choice_type_invalid(self, mock_context, sample_task):
+        """Test choice input type with invalid selection."""
+        mock_context.task_definition.properties["prompt"] = "Select:"
+        mock_context.task_definition.properties["input_type"] = "choice"
+        mock_context.task_definition.properties["options"] = ["a", "b", "c"]
+        sample_task.properties["input"] = "d"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is False
+        assert "Invalid choice" in result.error
+
+    async def test_prompt_choice_with_dict_options(self, mock_context, sample_task):
+        """Test choice input type with value/label options."""
+        mock_context.task_definition.properties["prompt"] = "Select:"
+        mock_context.task_definition.properties["input_type"] = "choice"
+        mock_context.task_definition.properties["options"] = [
+            {"value": "fast", "label": "Fast"},
+            {"value": "slow", "label": "Slow"},
+        ]
+        sample_task.properties["input"] = "fast"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        assert result.output["response"] == "fast"
+
+    async def test_prompt_multi_choice_type(self, mock_context, sample_task):
+        """Test multi_choice input type."""
+        mock_context.task_definition.properties["prompt"] = "Select multiple:"
+        mock_context.task_definition.properties["input_type"] = "multi_choice"
+        mock_context.task_definition.properties["options"] = ["a", "b", "c"]
+        sample_task.properties["input"] = ["a", "c"]
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        assert result.output["response"] == ["a", "c"]
+
+    async def test_prompt_multi_choice_single_value(self, mock_context, sample_task):
+        """Test multi_choice converts single value to list."""
+        mock_context.task_definition.properties["prompt"] = "Select multiple:"
+        mock_context.task_definition.properties["input_type"] = "multi_choice"
+        mock_context.task_definition.properties["options"] = ["a", "b", "c"]
+        sample_task.properties["input"] = "a"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        assert result.output["response"] == ["a"]
+
+    async def test_prompt_required_empty_fails(self, mock_context, sample_task):
+        """Test required field with empty input fails."""
+        mock_context.task_definition.properties["prompt"] = "Enter name:"
+        mock_context.task_definition.properties["required"] = True
+        sample_task.properties["input"] = ""
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is False
+        assert "required" in result.error.lower()
+
+    async def test_prompt_required_with_value_passes(self, mock_context, sample_task):
+        """Test required field with value passes."""
+        mock_context.task_definition.properties["prompt"] = "Enter name:"
+        mock_context.task_definition.properties["required"] = True
+        sample_task.properties["input"] = "John"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        assert result.output["response"] == "John"
+
+    async def test_prompt_output_key_stores_value(self, mock_context, sample_task):
+        """Test output_key stores value in process properties."""
+        mock_context.task_definition.properties["prompt"] = "Enter name:"
+        mock_context.task_definition.properties["output_key"] = "user_name"
+        sample_task.properties["input"] = "Alice"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        mock_context.set_process_property.assert_called_with("user_name", "Alice")
+
+    async def test_prompt_custom_validation_error(self, mock_context, sample_task):
+        """Test custom validation error message."""
+        mock_context.task_definition.properties["prompt"] = "Enter age:"
+        mock_context.task_definition.properties["input_type"] = "number"
+        mock_context.task_definition.properties["validation_error"] = "Please enter a valid age"
+        sample_task.properties["input"] = "abc"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is False
+        assert result.error == "Please enter a valid age"
+
+    async def test_prompt_stores_metadata(self, mock_context, sample_task):
+        """Test that all metadata is stored in task properties."""
+        mock_context.task_definition.properties["prompt"] = "Enter value:"
+        mock_context.task_definition.properties["input_type"] = "number"
+        mock_context.task_definition.properties["options"] = []
+        mock_context.task_definition.properties["help"] = "Enter a number"
+        mock_context.task_definition.properties["required"] = True
+        action = PromptTaskAction()
+
+        await action.run(sample_task, mock_context)
+
+        assert sample_task.properties["__prompt__"] == "Enter value:"
+        assert sample_task.properties["__input_type__"] == "number"
+        assert sample_task.properties["__help__"] == "Enter a number"
+        assert sample_task.properties["__required__"] is True
+
+    async def test_prompt_invalid_input_type(self, mock_context, sample_task):
+        """Test that invalid input_type returns error."""
+        mock_context.task_definition.properties["prompt"] = "Enter value:"
+        mock_context.task_definition.properties["input_type"] = "invalid_type"
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is False
+        assert "Invalid input_type" in result.error
+
+    async def test_prompt_awaiting_includes_metadata(self, mock_context, sample_task):
+        """Test awaiting state includes all metadata."""
+        mock_context.task_definition.properties["prompt"] = "Select:"
+        mock_context.task_definition.properties["input_type"] = "choice"
+        mock_context.task_definition.properties["options"] = ["a", "b"]
+        mock_context.task_definition.properties["help"] = "Choose one"
+        mock_context.task_definition.properties["required"] = True
+        action = PromptTaskAction()
+
+        result = await action.run(sample_task, mock_context)
+
+        assert result.success is True
+        assert result.output["awaiting_input"] is True
+        assert result.output["input_type"] == "choice"
+        assert result.output["options"] == ["a", "b"]
+        assert result.output["help"] == "Choose one"
+        assert result.output["required"] is True
+
 
 class TestDecisionTaskAction:
     """Tests for DecisionTaskAction."""
