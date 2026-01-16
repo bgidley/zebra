@@ -10,6 +10,11 @@ from zebra.tasks.registry import ActionRegistry
 
 from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.compute import PythonExecAction
+from zebra_tasks.agent import (
+    MetricsAnalyzerAction,
+    WorkflowEvaluatorAction,
+    WorkflowOptimizerAction,
+)
 
 from zebra_agent.library import WorkflowLibrary
 from zebra_agent.loop import AgentLoop
@@ -40,6 +45,7 @@ def print_banner():
 ║    /list     - Show available workflows                   ║
 ║    /stats    - Show workflow statistics                   ║
 ║    /memory   - Show memory status                         ║
+║    /dream    - Run self-improvement cycle                 ║
 ║    /help     - Show this help                             ║
 ║    /quit     - Exit the agent                             ║
 ║                                                           ║
@@ -106,6 +112,7 @@ def cmd_help():
     /list     - Show all available workflows with descriptions
     /stats    - Show usage statistics and recent runs
     /memory   - Show memory status and usage
+    /dream    - Run self-improvement cycle (analyze & optimize workflows)
     /help     - Show this help message
     /quit     - Exit the agent (also: /exit, /q)
 
@@ -189,6 +196,97 @@ async def cmd_memory(memory: AgentMemory):
     print()
 
 
+async def cmd_dream(
+    library: WorkflowLibrary,
+    engine: WorkflowEngine,
+    metrics_db: Path,
+    provider: str = "anthropic",
+):
+    """Run the self-improvement dream cycle."""
+    from zebra.core.models import ProcessState
+
+    print("\n  Starting Dream Cycle...")
+    print("  " + "─" * 60)
+    print("  This will analyze performance and optimize workflows.")
+    print()
+
+    try:
+        # Load the dream cycle workflow
+        definition = library.get_workflow("Dream Cycle")
+    except ValueError:
+        print("  Error: Dream Cycle workflow not found.")
+        print("  Make sure the built-in workflows have been copied to your library.")
+        print()
+        return
+
+    # Create process with necessary properties
+    process = await engine.create_process(
+        definition,
+        properties={
+            "__llm_provider_name__": provider,
+            "__metrics_db_path__": str(metrics_db),
+            "__workflow_library_path__": str(library.library_path),
+        },
+    )
+
+    # Start and run
+    await engine.start_process(process.id)
+
+    print("  Running analysis...")
+
+    # Wait for completion with progress updates
+    import asyncio
+
+    max_wait = 300  # 5 minutes max for dream cycle
+    waited = 0
+    last_task = ""
+
+    while waited < max_wait:
+        process = await engine.store.load_process(process.id)
+
+        # Show current task
+        current_task = process.properties.get("__current_task__", "")
+        if current_task and current_task != last_task:
+            print(f"    → {current_task}")
+            last_task = current_task
+
+        if process.state == ProcessState.COMPLETE:
+            break
+        elif process.state == ProcessState.FAILED:
+            print(f"\n  Dream cycle failed: {process.error}")
+            print()
+            return
+
+        await asyncio.sleep(1)
+        waited += 1
+
+    if process.state != ProcessState.COMPLETE:
+        print("\n  Dream cycle timed out.")
+        print()
+        return
+
+    # Show results
+    print("\n  Dream Cycle Complete!")
+    print("  " + "─" * 60)
+
+    # Show summary if available
+    summary = process.properties.get("dream_summary")
+    if summary:
+        print(f"\n  {summary}\n")
+
+    # Show changes made
+    results = process.properties.get("optimization_results", {})
+    changes = results.get("changes_made", [])
+    if changes:
+        print("  Changes made:")
+        for change in changes:
+            print(f"    • {change.get('type', 'change')}: {change.get('workflow', 'unknown')}")
+    else:
+        print("  No changes were needed at this time.")
+
+    print()
+
+
 async def async_main():
     """Main async entry point."""
     # Ensure data directory exists
@@ -218,6 +316,9 @@ async def async_main():
     registry.register_defaults()
     registry.register_action("llm_call", LLMCallAction)
     registry.register_action("python_exec", PythonExecAction)
+    registry.register_action("metrics_analyzer", MetricsAnalyzerAction)
+    registry.register_action("workflow_evaluator", WorkflowEvaluatorAction)
+    registry.register_action("workflow_optimizer", WorkflowOptimizerAction)
 
     engine = WorkflowEngine(store, registry)
 
@@ -255,6 +356,8 @@ async def async_main():
                     await cmd_memory(memory)
                 elif cmd == "/help":
                     cmd_help()
+                elif cmd == "/dream":
+                    await cmd_dream(library, engine, DEFAULT_METRICS_DB, "anthropic")
                 else:
                     print(f"\n  Unknown command: {goal}")
                     print("  Type /help for available commands.\n")
