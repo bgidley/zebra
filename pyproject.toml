@@ -21,12 +21,12 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["zebra-py/tests", "zebra-tasks/tests"]
-pythonpath = ["zebra-py", "zebra-tasks"]
+testpaths = ["zebra-py/tests", "zebra-tasks/tests", "zebra-agent/tests"]
+pythonpath = ["zebra-py", "zebra-tasks", "zebra-agent"]
 addopts = "--import-mode=importlib"
 
 [tool.coverage.run]
-source = ["zebra", "zebra_tasks"]
+source = ["zebra", "zebra_tasks", "zebra_agent"]
 branch = true
 omit = [
     "*/mcp/server.py",  # MCP integration requires mcp package
