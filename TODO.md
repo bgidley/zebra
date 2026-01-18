@@ -9,6 +9,15 @@ This document tracks unimplemented features and improvements based on the DESIGN
 
 ## High Priority
 
+### 0.5 Tidy up ✅
+- [x] Move db to local postgresql (installed on VM using local user for login)
+  - Added `PostgreSQLStore` class in `zebra-py/zebra/storage/postgres.py`
+  - Implements full `StateStore` interface with PostgreSQL backend
+  - Uses asyncpg for high-performance async operations
+  - Supports connection pooling, advisory locks, and transactions
+  - Tests available in `zebra-py/tests/test_postgres_storage.py`
+
+
 ### 1. Task Actions Library Expansion ❌
 
 **Description:** The system currently has only 13 task actions. Need more built-in actions for common operations.
@@ -159,25 +168,7 @@ This document tracks unimplemented features and improvements based on the DESIGN
 - `zebra-agent/zebra_agent/collaboration/` - Multi-agent features
 - `zebra-tasks/zebra_tasks/agent/communication.py` - Agent messaging
 
-### 8. Workflow Marketplace ❌
 
-**Description:** Platform for sharing, discovering, and versioning workflow definitions.
-
-**Features Required:**
-- [ ] Workflow publishing and discovery
-- [ ] Version control for workflow definitions
-- [ ] Rating and review system
-- [ ] Tags and categories
-- [ ] Search and filtering
-- [ ] License management
-- [ ] Download and import workflows
-- [ ] Usage analytics
-- [ ] Community contributions
-
-**Reference:** DESIGN.md line 612 (Future Directions)  
-**Files to create:**
-- `zebra-marketplace/` - New package for marketplace
-- API integration with zebra-agent CLI
 
 ---
 
@@ -222,35 +213,6 @@ This document tracks unimplemented features and improvements based on the DESIGN
 - `zebra-tasks/zebra_tasks/synthesis/` - Workflow synthesis actions
 - `zebra-agent/zebra_agent/synthesis.py` - NL workflow generation
 
-### 12. Real-time Collaboration ❌
-
-**Description:** Enable multiple users to work on workflows simultaneously.
-
-**Features Required:**
-- [ ] Concurrent workflow editing with conflict resolution
-- [ ] Live process monitoring (multiple viewers)
-- [ ] User presence indicators
-- [ ] Collaborative debugging sessions
-- [ ] Chat/commenting system
-- [ ] Role-based access control (RBAC)
-- [ ] Audit trail of user actions
-- [ ] Notification system
-
-**Reference:** DESIGN.md line 610 (Future Directions)  
-**Files to create:**
-- `zebra-collaboration/` - New package
-- WebSocket integration for real-time updates
-
-### 13. Integration Ecosystem ❌
-
-**Description:** Pre-built integrations with popular tools and services.
-
-**Integrations Needed:**
-- [ ] GitHub (issues, PRs, actions)
-- [ ] Jira (ticket management)
-- [ ] Slack (notifications, bot commands)
-- [ ] Discord (notifications, bot integration)
-- [ ] AWS (S3, Lambda, EC2)
 - [ ] Google Cloud (Storage, Cloud Functions)
 - [ ] Docker (container management)
 - [ ] Kubernetes (pod orchestration)
@@ -428,72 +390,11 @@ This document tracks unimplemented features and improvements based on the DESIGN
 
 ---
 
-## Migration & Compatibility
-
-### 22. Java-to-Python Migration Tool ❌
-
-**Description:** Tool to convert legacy Java workflow definitions to Python/YAML.
-
-**Features Required:**
-- [ ] Parse Java workflow XML/annotations
-- [ ] Convert to YAML workflow definitions
-- [ ] Map Java actions to Python equivalents
-- [ ] Generate migration report (compatibility issues)
-- [ ] Interactive migration wizard
-- [ ] Validation of converted workflows
-
-**Reference:** DESIGN.md lines 620-625 (Historical Context)  
-**Files to create:**
-- `tools/migrate-java/` - Migration scripts
-- Migration documentation
-
-### 23. Backward Compatibility Tests ❌
-
-**Description:** Ensure compatibility across versions.
-
-**Tests Needed:**
-- [ ] Load workflows from previous versions
-- [ ] Ensure database schema migrations work
-- [ ] Test API compatibility
-- [ ] Verify workflow behavior consistency
-- [ ] Test serialization format compatibility
-
-**Files to create:**
-- `tests/compatibility/` - Version compatibility tests
-
----
-
-## Summary Statistics
-
-**Total Features Tracked:** 23  
-**Not Started:** 16 (❌)  
-**Partial Implementation:** 7 (⚠️)  
-**Complete:** 0 (✅) - This is a TODO list!
-
-**Priority Breakdown:**
-- High Priority: 4 features
-- Medium Priority: 4 features
-- Low Priority: 9 features
-- Testing/Quality: 2 features
-- Operational: 4 features
-
-**Estimated Effort (rough):**
-- High Priority: 6-12 months (full team)
-- Medium Priority: 4-6 months
-- Low Priority: 12+ months
-- Testing/Quality: 2-3 months
-- Operational: 3-4 months
-
-**Total Estimated Effort:** 27-37 months (assuming 3-5 person team)
-
----
-
 ## Contributing
 
 When working on items from this TODO:
 
 1. **Update status** - Change ❌ to ⚠️ when starting, ⚠️ to ✅ when complete
-2. **Link PRs** - Reference GitHub PR/issue numbers
 3. **Add completion date** - Note when feature was completed
 4. **Update DESIGN.md** - Reflect architectural changes
 5. **Add tests** - All new features require tests
