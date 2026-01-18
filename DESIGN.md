@@ -4,7 +4,7 @@
 
 Zebra is a workflow orchestration engine designed for AI-assisted development. It enables structured execution of complex, long-running workflows with support for parallel execution, conditional routing, synchronization points, and LLM integration.
 
-The system has evolved from a 2004 Java implementation to modern Python and Rust implementations, maintaining the core architectural principles while adapting to contemporary use cases.
+The system has evolved from a 2004 Java implementation to a modern Python implementation, maintaining the core architectural principles while adapting to contemporary use cases.
 
 ## Core Philosophy
 
@@ -47,13 +47,13 @@ TaskActions  StateStore
 
 ### Core Components
 
-| Component | Purpose | Python | Rust |
-|-----------|---------|--------|------|
-| **Engine** | Workflow execution controller | `zebra/core/engine.py` | `src/core/engine.rs` |
-| **Models** | Data structures (definitions & runtime state) | `zebra/core/models.py` | `src/core/models.rs` |
-| **Storage** | Persistence abstraction | `zebra/storage/` | `src/storage/` |
-| **Actions** | Pluggable task implementations | `zebra/tasks/` | `src/tasks/` |
-| **Loader** | YAML/JSON definition parsing | `zebra/definitions/loader.py` | `src/definitions/` |
+| Component | Purpose | Implementation |
+|-----------|---------|----------------|
+| **Engine** | Workflow execution controller | `zebra/core/engine.py` |
+| **Models** | Data structures (definitions & runtime state) | `zebra/core/models.py` |
+| **Storage** | Persistence abstraction | `zebra/storage/` |
+| **Actions** | Pluggable task implementations | `zebra/tasks/` |
+| **Loader** | YAML/JSON definition parsing | `zebra/definitions/loader.py` |
 
 ### Module Organization
 
@@ -61,7 +61,7 @@ The project uses a **monorepo structure** with clear separation of concerns:
 
 ```
 zebra/
-├── zebra-py/          # Python workflow engine (primary)
+├── zebra-py/          # Python workflow engine
 │   └── zebra/
 │       ├── core/      # Engine, models, exceptions
 │       ├── storage/   # SQLite & in-memory backends
@@ -83,12 +83,6 @@ zebra/
 │       ├── library.py # Workflow library management
 │       ├── memory.py  # Tiered memory system
 │       └── metrics.py # Performance tracking
-│
-├── zebra-rs/          # Rust implementation (alternative)
-│   └── src/
-│       ├── core/      # Engine, models, errors
-│       ├── storage/   # Persistence
-│       └── tasks/     # Task system
 │
 └── legacy/            # Original Java implementation (archived)
 ```
@@ -385,7 +379,7 @@ Workflows can trigger callbacks on state changes, enabling monitoring and integr
 
 ## Technology Stack
 
-### Python Implementation (Primary)
+### Python Implementation
 
 **Core**:
 - Python 3.11+
@@ -407,21 +401,6 @@ Workflows can trigger callbacks on state changes, enabling monitoring and integr
 - pytest-cov for coverage
 - Ruff for linting and formatting
 
-### Rust Implementation (Alternative)
-
-**Core**:
-- Rust Edition 2021
-- Tokio for async runtime
-- Serde for serialization
-
-**Persistence**:
-- SQLite via rusqlite
-- Custom async adapter
-
-**Testing**:
-- Cargo test
-- Criterion for benchmarks
-
 ### Legacy Java Implementation (Archived)
 
 **Technologies**:
@@ -430,7 +409,7 @@ Workflows can trigger callbacks on state changes, enabling monitoring and integr
 - Hibernate 3.3.2 ORM
 - Apache Tapestry IoC
 
-**Note**: The Java implementation is preserved in `legacy/` for historical reference. Modern development focuses on Python and Rust.
+**Note**: The Java implementation is preserved in `legacy/` for historical reference. Modern development focuses on Python.
 
 ## Usage Patterns
 
@@ -621,7 +600,7 @@ Flow of Execution tracking provides complete execution history, crucial for debu
 
 Zebra was originally developed by Anite (Central Government Division) in 2004 as a Java-based workflow engine for government business processes. Ben Gidley significantly modified it in 2010, improving the architecture and adding features.
 
-The modern Python and Rust implementations preserve the core architectural principles (state machines, FOE, interface-driven design) while adapting to contemporary use cases like AI-assisted development and autonomous agents.
+The modern Python implementation preserves the core architectural principles (state machines, FOE, interface-driven design) while adapting to contemporary use cases like AI-assisted development and autonomous agents.
 
 The legacy Java code is preserved in `legacy/` as a reference implementation and historical artifact.
 

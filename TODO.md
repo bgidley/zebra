@@ -1,0 +1,511 @@
+# Zebra Workflow Engine - TODO
+
+This document tracks unimplemented features and improvements based on the DESIGN.md specifications and current implementation analysis.
+
+**Last Updated:** 2026-01-18  
+**Status Legend:** ❌ Not Started | ⚠️ Partial | ✅ Complete
+
+---
+
+## High Priority
+
+### 1. Task Actions Library Expansion ❌
+
+**Description:** The system currently has only 13 task actions. Need more built-in actions for common operations.
+
+**Missing Actions:**
+- [ ] File I/O operations (read, write, copy, move, delete, search)
+- [ ] HTTP/REST API calling (GET, POST, PUT, DELETE with auth)
+- [ ] Database operations (query, insert, update, delete)
+- [ ] Git operations (clone, commit, push, pull, branch)
+- [ ] Email/notification sending (SMTP, webhooks)
+- [ ] Data transformations (CSV parsing, JSON processing, XML)
+- [ ] Archive operations (zip, tar, extract)
+- [ ] Template rendering (Jinja2, Mustache)
+
+**Reference:** DESIGN.md lines 148-162 (TaskAction Interface)  
+**Files to create:**
+- `zebra-tasks/zebra_tasks/filesystem/` - File operations
+- `zebra-tasks/zebra_tasks/http/` - HTTP client actions
+- `zebra-tasks/zebra_tasks/database/` - DB operations
+- `zebra-tasks/zebra_tasks/git/` - Git integration
+- `zebra-tasks/zebra_tasks/notifications/` - Email/webhooks
+- `zebra-tasks/zebra_tasks/data/` - Data transformation
+
+### 2. Web UI for Workflow Management ❌
+
+**Description:** Need web-based interface for workflow visualization, monitoring, and debugging.
+
+**Features Required:**
+- [ ] Workflow definition visualization (graph view)
+- [ ] Real-time process execution monitoring
+- [ ] Task state inspection and history
+- [ ] Flow of Execution (FOE) visualization
+- [ ] Property inspector for processes/tasks
+- [ ] Interactive workflow designer (drag-and-drop)
+- [ ] Debugging tools (breakpoints, step-through)
+- [ ] Performance metrics dashboard
+- [ ] Search and filter workflows/processes
+
+**Technology Stack:** React/Vue.js + FastAPI backend  
+**Reference:** DESIGN.md line 603 (Future Directions)  
+**Files to create:**
+- `zebra-web/` - New package for web UI
+- `zebra-py/zebra/api/` - REST API endpoints
+
+### 3. Advanced Guardrails System ⚠️
+
+**Description:** Current guardrails are basic (token/iteration limits). Need comprehensive safety system.
+
+**Features Required:**
+- [ ] Fine-grained scope restrictions (allowed actions, resources)
+- [ ] Resource usage limits (memory, CPU, disk, network)
+- [ ] Custom safety rules (domain-specific constraints)
+- [ ] Human-in-the-loop approval workflows
+- [ ] Escalation policies (configurable responses to violations)
+- [ ] Budget tracking (cost limits for LLM usage)
+- [ ] Rate limiting (requests per minute/hour)
+- [ ] Audit logging for all guardrail violations
+
+**Reference:** DESIGN.md lines 341-357 (Guardrails section)  
+**Files to modify:**
+- `zebra-agent/zebra_agent/guardrails.py` - Expand current implementation
+- `zebra-tasks/zebra_tasks/approval/` - Human approval actions
+
+### 4. Distributed Execution Support ❌
+
+**Description:** Enable workflow execution across multiple nodes for scalability and fault tolerance.
+
+**Features Required:**
+- [ ] Multi-node process execution
+- [ ] Task distribution and load balancing
+- [ ] State replication across nodes
+- [ ] Fault tolerance and automatic recovery
+- [ ] Distributed locking mechanism
+- [ ] Node discovery and health monitoring
+- [ ] Network partition handling
+- [ ] Consistent state synchronization
+
+**Technology Stack:** Redis/etcd for coordination, gRPC for communication  
+**Reference:** DESIGN.md line 609 (Future Directions)  
+**Files to create:**
+- `zebra-distributed/` - New package for distributed features
+- `zebra-py/zebra/storage/distributed.py` - Distributed StateStore
+
+---
+
+## Medium Priority
+
+### 5. Advanced Workflow Patterns ⚠️
+
+**Description:** Currently 9 of 43 control-flow patterns fully implemented. Add more useful patterns.
+
+**Priority Patterns to Implement:**
+- [ ] WCP-9: Structured Discriminator (first wins, ignore rest)
+- [ ] WCP-16: Deferred Choice (runtime path selection)
+- [ ] WCP-18: Milestone (state-based activation)
+- [ ] WCP-22: Recursion (self-referential workflows)
+- [ ] WCP-28: Blocking Discriminator (M-out-of-N completion)
+- [ ] WCP-33: Static Partial Join for Multiple Instances
+- [ ] WCP-41: Thread Merge (safe concurrent path merging)
+
+**Reference:** DESIGN.md lines 186-264 (Workflow Patterns), `zebra-py/workflows.md`  
+**Files to modify:**
+- `zebra-py/zebra/core/engine.py` - Add pattern support
+- `zebra-py/tests/test_patterns.py` - Add pattern tests
+
+**Status:** ⚠️ Core patterns working, advanced patterns missing
+
+### 6. Documentation Improvements ⚠️
+
+**Description:** Technical documentation exists, but missing user-facing guides.
+
+**Documents Needed:**
+- [ ] Getting Started Tutorial (step-by-step workflow creation)
+- [ ] User Guide (comprehensive feature documentation)
+- [ ] API Reference (auto-generated from docstrings)
+- [ ] Migration Guide (Java → Python for legacy users)
+- [ ] Performance Tuning Guide (optimization best practices)
+- [ ] Deployment Guide (production setup, Docker, K8s)
+- [ ] Security Best Practices
+- [ ] Troubleshooting Guide (common issues and solutions)
+- [ ] Video tutorials (workflow basics, agent setup)
+
+**Reference:** DESIGN.md lines 629-634 (References section)  
+**Files to create:**
+- `docs/` - New documentation directory
+- `docs/tutorial/` - Step-by-step guides
+- `docs/api/` - Generated API docs
+- `docs/deployment/` - Production guides
+
+**Status:** ⚠️ Architecture docs excellent, user guides missing
+
+### 7. Multi-Agent Collaboration ❌
+
+**Description:** Enable multiple agents to work together on shared goals.
+
+**Features Required:**
+- [ ] Agent-to-agent communication protocol
+- [ ] Shared goal pursuit and task allocation
+- [ ] Consensus mechanisms (voting, weighted decisions)
+- [ ] Conflict resolution strategies
+- [ ] Agent capability advertisement/discovery
+- [ ] Collaborative learning (shared experiences)
+- [ ] Team coordination workflows
+- [ ] Message passing infrastructure
+
+**Reference:** DESIGN.md line 615 (Future Directions)  
+**Files to create:**
+- `zebra-agent/zebra_agent/collaboration/` - Multi-agent features
+- `zebra-tasks/zebra_tasks/agent/communication.py` - Agent messaging
+
+### 8. Workflow Marketplace ❌
+
+**Description:** Platform for sharing, discovering, and versioning workflow definitions.
+
+**Features Required:**
+- [ ] Workflow publishing and discovery
+- [ ] Version control for workflow definitions
+- [ ] Rating and review system
+- [ ] Tags and categories
+- [ ] Search and filtering
+- [ ] License management
+- [ ] Download and import workflows
+- [ ] Usage analytics
+- [ ] Community contributions
+
+**Reference:** DESIGN.md line 612 (Future Directions)  
+**Files to create:**
+- `zebra-marketplace/` - New package for marketplace
+- API integration with zebra-agent CLI
+
+---
+
+## Low Priority / Future Enhancements
+
+### 10. Enhanced Memory System ⚠️
+
+**Description:** Current three-tier memory is functional but basic. Add advanced capabilities.
+
+**Features Required:**
+- [ ] Vector similarity search (embedding-based retrieval)
+- [ ] Automatic knowledge extraction from episodes
+- [ ] Cross-goal learning (generalize across different goals)
+- [ ] Memory pruning strategies (importance-based)
+- [ ] Memory visualization tools
+- [ ] External knowledge base integration
+- [ ] Semantic search across memories
+- [ ] Memory consolidation optimization
+
+**Reference:** DESIGN.md lines 316-339 (Memory System)  
+**Files to modify:**
+- `zebra-agent/zebra_agent/memory.py` - Enhance existing implementation
+- Add vector database integration (Chroma, Pinecone)
+
+**Status:** ⚠️ Basic three-tier memory works, advanced features missing
+
+### 11. Natural Language Workflow Generation ❌
+
+**Description:** Generate workflow definitions from plain English descriptions using LLMs.
+
+**Features Required:**
+- [ ] Natural language to YAML workflow conversion
+- [ ] Interactive refinement (chat-based workflow design)
+- [ ] Workflow validation and suggestion
+- [ ] Auto-optimization of generated workflows
+- [ ] Learning from user corrections
+- [ ] Template-based generation
+- [ ] Multi-turn conversation for complex workflows
+
+**Reference:** DESIGN.md line 616 (Future Directions)  
+**Files to create:**
+- `zebra-tasks/zebra_tasks/synthesis/` - Workflow synthesis actions
+- `zebra-agent/zebra_agent/synthesis.py` - NL workflow generation
+
+### 12. Real-time Collaboration ❌
+
+**Description:** Enable multiple users to work on workflows simultaneously.
+
+**Features Required:**
+- [ ] Concurrent workflow editing with conflict resolution
+- [ ] Live process monitoring (multiple viewers)
+- [ ] User presence indicators
+- [ ] Collaborative debugging sessions
+- [ ] Chat/commenting system
+- [ ] Role-based access control (RBAC)
+- [ ] Audit trail of user actions
+- [ ] Notification system
+
+**Reference:** DESIGN.md line 610 (Future Directions)  
+**Files to create:**
+- `zebra-collaboration/` - New package
+- WebSocket integration for real-time updates
+
+### 13. Integration Ecosystem ❌
+
+**Description:** Pre-built integrations with popular tools and services.
+
+**Integrations Needed:**
+- [ ] GitHub (issues, PRs, actions)
+- [ ] Jira (ticket management)
+- [ ] Slack (notifications, bot commands)
+- [ ] Discord (notifications, bot integration)
+- [ ] AWS (S3, Lambda, EC2)
+- [ ] Google Cloud (Storage, Cloud Functions)
+- [ ] Docker (container management)
+- [ ] Kubernetes (pod orchestration)
+- [ ] Kafka (event streaming)
+- [ ] RabbitMQ (message queuing)
+- [ ] Webhook support (generic HTTP callbacks)
+
+**Reference:** Implied by DESIGN.md extensibility philosophy  
+**Files to create:**
+- `zebra-integrations/` - New package for integrations
+- One module per integration
+
+### 14. Advanced Agent Features ⚠️
+
+**Description:** Enhancements to agent self-improvement and learning.
+
+**Features Required:**
+- [ ] Meta-learning (learn how to learn)
+- [ ] Transfer learning across domains
+- [ ] Automatic workflow optimization algorithms
+- [ ] A/B testing of workflow variations
+- [ ] Genetic algorithm for workflow evolution
+- [ ] Reinforcement learning integration
+- [ ] Explainable AI (justify decisions)
+- [ ] Counterfactual reasoning ("what if" analysis)
+
+**Reference:** DESIGN.md lines 359-367 (Learning & Self-Improvement)  
+**Files to modify:**
+- `zebra-agent/zebra_agent/learning.py` - New advanced learning module
+
+**Status:** ⚠️ Basic learning implemented, advanced algorithms missing
+
+### 15. Quantum-Inspired Optimization ❌
+
+**Description:** Experimental optimization algorithms for workflow routing.
+
+**Features Required:**
+- [ ] Quantum annealing for task scheduling
+- [ ] Quantum-inspired genetic algorithms
+- [ ] Optimization of parallel execution paths
+- [ ] Resource allocation optimization
+- [ ] Multi-objective optimization (cost vs. speed vs. quality)
+
+**Reference:** DESIGN.md line 617 (Future Directions)  
+**Files to create:**
+- `zebra-optimization/` - Experimental optimization package
+
+**Note:** Highly speculative, low practical priority
+
+### 16. Knowledge Graph Integration ❌
+
+**Description:** Integrate with knowledge graphs for semantic workflow understanding.
+
+**Features Required:**
+- [ ] Knowledge graph storage (Neo4j, Neptune)
+- [ ] Ontology-based workflow reasoning
+- [ ] Semantic task relationships
+- [ ] Automatic workflow generation from domain models
+- [ ] Query workflows using graph patterns
+- [ ] Workflow recommendation based on knowledge
+
+**Reference:** DESIGN.md line 618 (Future Directions)  
+**Files to create:**
+- `zebra-knowledge/` - Knowledge graph integration
+
+---
+
+## Testing & Quality Improvements
+
+### 17. Test Coverage Enhancements ⚠️
+
+**Current Status:** Good unit/integration coverage, but gaps exist.
+
+**Improvements Needed:**
+- [ ] End-to-end tests for complete workflows
+- [ ] Performance regression tests
+- [ ] Chaos testing (fault injection)
+- [ ] Load testing (high-volume workflows)
+- [ ] Security testing (injection attacks, access control)
+- [ ] Browser-based UI tests (when UI is built)
+- [ ] Multi-agent interaction tests
+
+**Files to create:**
+- `tests/e2e/` - End-to-end test suites
+- `tests/performance/` - Performance benchmarks
+- `tests/chaos/` - Fault injection tests
+
+**Status:** ⚠️ Good coverage, but not comprehensive
+
+---
+
+## Operational & Production Features
+
+### 18. Monitoring & Observability ❌
+
+**Description:** Production-grade monitoring and logging.
+
+**Features Required:**
+- [ ] Prometheus metrics export
+- [ ] OpenTelemetry tracing integration
+- [ ] Structured logging (JSON logs)
+- [ ] Health check endpoints
+- [ ] Performance profiling hooks
+- [ ] Error tracking integration (Sentry)
+- [ ] Custom metrics dashboard
+- [ ] Alerting rules (PagerDuty, OpsGenie)
+
+**Files to create:**
+- `zebra-py/zebra/monitoring/` - Monitoring infrastructure
+- `zebra-py/zebra/telemetry/` - OpenTelemetry integration
+
+### 19. Deployment Automation ❌
+
+**Description:** Production deployment tools and configurations.
+
+**Deliverables Needed:**
+- [ ] Docker images (optimized, multi-stage)
+- [ ] Docker Compose configurations
+- [ ] Kubernetes manifests (Deployments, Services, ConfigMaps)
+- [ ] Helm charts for K8s deployment
+- [ ] Terraform scripts (AWS, GCP, Azure)
+- [ ] CI/CD pipelines (GitHub Actions, GitLab CI)
+- [ ] Database migration scripts
+- [ ] Backup and restore procedures
+- [ ] Rolling update strategies
+- [ ] Blue-green deployment support
+
+**Files to create:**
+- `deploy/docker/` - Dockerfiles
+- `deploy/k8s/` - Kubernetes manifests
+- `deploy/helm/` - Helm charts
+- `deploy/terraform/` - Infrastructure as Code
+- `.github/workflows/` - CI/CD pipelines
+
+### 20. Security Hardening ❌
+
+**Description:** Security best practices and hardening.
+
+**Features Required:**
+- [ ] Authentication and authorization (JWT, OAuth)
+- [ ] Role-based access control (RBAC)
+- [ ] API rate limiting
+- [ ] Input validation and sanitization
+- [ ] SQL injection prevention
+- [ ] Secret management (Vault integration)
+- [ ] Encryption at rest (database)
+- [ ] Encryption in transit (TLS)
+- [ ] Security audit logging
+- [ ] Dependency vulnerability scanning
+- [ ] OWASP compliance
+
+**Files to create:**
+- `zebra-py/zebra/security/` - Security infrastructure
+- Security documentation and policies
+
+### 21. Performance Optimization ⚠️
+
+**Description:** Optimize for large-scale workflows.
+
+**Optimizations Needed:**
+- [ ] Database query optimization (indexing, query planning)
+- [ ] Connection pooling (database, HTTP)
+- [ ] Caching layer (Redis, Memcached)
+- [ ] Lazy loading of workflow definitions
+- [ ] Batch operations for task transitions
+- [ ] Asynchronous event processing
+- [ ] Memory profiling and optimization
+- [ ] Parallel task execution optimization
+
+**Files to modify:**
+- `zebra-py/zebra/storage/sqlite.py` - Add indexing, query optimization
+- `zebra-py/zebra/core/engine.py` - Batch operations
+
+**Status:** ⚠️ Works well for small/medium workflows, not optimized for scale
+
+---
+
+## Migration & Compatibility
+
+### 22. Java-to-Python Migration Tool ❌
+
+**Description:** Tool to convert legacy Java workflow definitions to Python/YAML.
+
+**Features Required:**
+- [ ] Parse Java workflow XML/annotations
+- [ ] Convert to YAML workflow definitions
+- [ ] Map Java actions to Python equivalents
+- [ ] Generate migration report (compatibility issues)
+- [ ] Interactive migration wizard
+- [ ] Validation of converted workflows
+
+**Reference:** DESIGN.md lines 620-625 (Historical Context)  
+**Files to create:**
+- `tools/migrate-java/` - Migration scripts
+- Migration documentation
+
+### 23. Backward Compatibility Tests ❌
+
+**Description:** Ensure compatibility across versions.
+
+**Tests Needed:**
+- [ ] Load workflows from previous versions
+- [ ] Ensure database schema migrations work
+- [ ] Test API compatibility
+- [ ] Verify workflow behavior consistency
+- [ ] Test serialization format compatibility
+
+**Files to create:**
+- `tests/compatibility/` - Version compatibility tests
+
+---
+
+## Summary Statistics
+
+**Total Features Tracked:** 23  
+**Not Started:** 16 (❌)  
+**Partial Implementation:** 7 (⚠️)  
+**Complete:** 0 (✅) - This is a TODO list!
+
+**Priority Breakdown:**
+- High Priority: 4 features
+- Medium Priority: 4 features
+- Low Priority: 9 features
+- Testing/Quality: 2 features
+- Operational: 4 features
+
+**Estimated Effort (rough):**
+- High Priority: 6-12 months (full team)
+- Medium Priority: 4-6 months
+- Low Priority: 12+ months
+- Testing/Quality: 2-3 months
+- Operational: 3-4 months
+
+**Total Estimated Effort:** 27-37 months (assuming 3-5 person team)
+
+---
+
+## Contributing
+
+When working on items from this TODO:
+
+1. **Update status** - Change ❌ to ⚠️ when starting, ⚠️ to ✅ when complete
+2. **Link PRs** - Reference GitHub PR/issue numbers
+3. **Add completion date** - Note when feature was completed
+4. **Update DESIGN.md** - Reflect architectural changes
+5. **Add tests** - All new features require tests
+6. **Update docs** - User-facing features need documentation
+
+---
+
+## Notes
+
+- This TODO is based on DESIGN.md specifications and current codebase analysis (2026-01-18)
+- Priorities may shift based on user needs and feedback
+- Some "future" features (quantum optimization, knowledge graphs) are speculative
+- Core engine is production-ready; focus should be on task actions, UI, and deployment
+
+**For questions or to propose new features, see:** `DESIGN.md`, `AGENTS.md`, or open an issue.
