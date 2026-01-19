@@ -1,0 +1,40 @@
+[project]
+name = "zebra-web"
+version = "0.1.0"
+description = "Web UI for Zebra workflow management"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Ben Gidley" }
+]
+keywords = ["workflow", "web", "ui", "django", "zebra"]
+
+dependencies = [
+    "django>=5.0",
+    "djangorestframework>=3.14",
+    "channels>=4.0",
+    "channels-redis>=4.1",
+    "daphne>=4.0",
+    "psycopg[binary]>=3.1",
+    "django-cors-headers>=4.3",
+    "zebra-workflow",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-django>=4.5",
+    "pytest-asyncio>=0.21",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["zebra_web"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "zebra_web.settings"
+python_files = ["test_*.py"]

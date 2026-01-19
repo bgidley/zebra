@@ -386,10 +386,13 @@ Workflows can trigger callbacks on state changes, enabling monitoring and integr
 - UV for package management
 - Pydantic for data validation
 - asyncio for concurrent execution
+- django for web app and REST api
 
 **Persistence**:
 - aiosqlite for async SQLite access
 - SQLAlchemy (optional, for complex queries)
+- Postgresql (long term likely only storage option)
+- PGVector to store embeddings 
 
 **LLM Integration**:
 - Anthropic SDK
