@@ -34,41 +34,30 @@ npm install
 
 ### Run Development Servers
 
-**Option 1: Local development (localhost only)**
+**Local development (localhost only)**
 
 ```bash
-# Terminal 1: Backend API server
-uv run zebra-serve
-
-# Terminal 2: Frontend dev server
-cd zebra-web/frontend
-npm run dev
+uv run zebra-dev
 ```
 
-Then open http://localhost:3000
+This starts both backend (port 8000) and frontend (port 3000). Open http://localhost:3000
 
-**Option 2: Remote access (Tailscale, SSH tunnels, etc.)**
+**Remote access (Tailscale, SSH tunnels, etc.)**
 
 ```bash
-# Terminal 1: Backend API server (all interfaces)
-uv run zebra-serve-public
-
-# Terminal 2: Frontend dev server (all interfaces)
-cd zebra-web/frontend
-npm run dev -- --host 0.0.0.0
+uv run zebra-dev-public
 ```
 
-Then open http://<your-ip>:3000
+This binds both servers to all interfaces. Open http://<your-ip>:3000
 
 ### Available Commands
 
 | Command | Description |
 |---------|-------------|
-| `uv run zebra-serve` | Start backend on localhost:8000 |
-| `uv run zebra-serve-public` | Start backend on 0.0.0.0:8000 (remote access) |
-| `npm run dev` | Start frontend dev server on localhost:3000 |
-| `npm run dev -- --host 0.0.0.0` | Start frontend on all interfaces |
-| `npm run build` | Build frontend for production |
+| `uv run zebra-dev` | Start both servers on localhost (recommended) |
+| `uv run zebra-dev-public` | Start both servers on all interfaces |
+| `uv run zebra-serve` | Start backend only on localhost:8000 |
+| `uv run zebra-serve-public` | Start backend only on 0.0.0.0:8000 |
 
 ## API Endpoints
 
