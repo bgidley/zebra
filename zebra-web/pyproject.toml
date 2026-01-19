@@ -38,3 +38,7 @@ packages = ["zebra_web"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "zebra_web.settings"
 python_files = ["test_*.py"]
+
+[project.scripts]
+zebra-serve = "zebra_web.cli:serve"
+zebra-serve-public = "zebra_web.cli:serve_public"

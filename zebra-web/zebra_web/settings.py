@@ -16,6 +16,10 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+# In DEBUG mode, allow all hosts for easier development (e.g., Tailscale access)
+if DEBUG:
+    ALLOWED_HOSTS = ["*"]
+
 # Application definition
 INSTALLED_APPS = [
     "daphne",  # ASGI server, must be first for channels
