@@ -77,6 +77,17 @@
                     {% include "partials/nav_item.html" with url="/processes/" icon="play" label="Processes" %}
                     {% include "partials/nav_item.html" with url="/tasks/" icon="clipboard" label="Pending Tasks" %}
                 </div>
+                
+                <!-- Agent Section -->
+                <div class="mt-8 pt-6 border-t border-gray-700">
+                    <p class="px-3 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Agent</p>
+                    <div class="space-y-1">
+                        {% include "partials/nav_item.html" with url="/agent/" icon="agent" label="Agent" %}
+                        {% include "partials/nav_item.html" with url="/agent/run/" icon="zap" label="Run Goal" %}
+                        {% include "partials/nav_item.html" with url="/agent/workflows/" icon="library" label="Workflows" %}
+                        {% include "partials/nav_item.html" with url="/agent/runs/" icon="history" label="History" %}
+                    </div>
+                </div>
             </nav>
         </aside>
         

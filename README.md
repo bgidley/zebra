@@ -7,7 +7,6 @@ A workflow engine for AI-assisted development tasks. Zebra enables structured ex
 ```
 zebra/
 ├── zebra-py/          # Python workflow engine (primary implementation)
-├── zebra-rs/          # Rust workflow engine (alternative implementation)
 ├── zebra-tasks/       # Reusable task actions library (Python)
 ├── zebra-agents/      # Self-improving AI agent framework (in development)
 └── legacy/            # Legacy Java implementation (archived)
@@ -18,7 +17,6 @@ zebra/
 | Package | Language | Description |
 |---------|----------|-------------|
 | **zebra-py** | Python | Core workflow engine with MCP server integration |
-| **zebra-rs** | Rust | High-performance workflow engine implementation |
 | **zebra-tasks** | Python | Reusable task actions (subtasks, LLM calling) |
 | **zebra-agents** | Python | Autonomous agent framework built on zebra workflows |
 
@@ -30,14 +28,6 @@ zebra/
 cd zebra-py
 uv sync
 uv run python -c "from zebra import WorkflowEngine; print('Ready!')"
-```
-
-### Rust (zebra-rs)
-
-```bash
-cd zebra-rs
-cargo build
-cargo run
 ```
 
 ## Building
@@ -61,13 +51,6 @@ cd zebra-py && uv sync
 cd zebra-tasks && uv sync
 ```
 
-### Rust Package
-
-```bash
-cd zebra-rs
-cargo build --release
-```
-
 ## Running Tests
 
 ### All Python Tests (Recommended)
@@ -87,12 +70,6 @@ uv run pytest zebra-py/tests/ -v
 uv run pytest zebra-tasks/tests/ -v
 ```
 
-### Rust Tests
-
-```bash
-cd zebra-rs
-cargo test
-```
 
 ### All Tests (Python + Rust)
 
@@ -152,7 +129,6 @@ routings:
 
 - [zebra-py README](zebra-py/README.md) - Full Python engine documentation
 - [zebra-tasks README](zebra-tasks/README.md) - Task actions documentation
-- [zebra-rs workflows](zebra-rs/workflows.md) - Rust workflow patterns
 - [Design Document](design.md) - Original design specification
 
 ## License

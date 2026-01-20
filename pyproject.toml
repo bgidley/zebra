@@ -3,13 +3,17 @@ name = "zebra-workspace"
 version = "0.1.0"
 description = "Zebra workflow engine workspace"
 requires-python = ">=3.11"
+dependencies = [
+    "djangorestframework-stubs>=3.16.7",
+]
 
 [tool.uv.workspace]
-members = ["zebra-py", "zebra-tasks", "zebra-agent"]
+members = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-web"]
 
 [tool.uv.sources]
 zebra-workflow = { workspace = true }
 zebra-tasks = { workspace = true }
+zebra-agent = { workspace = true }
 
 [dependency-groups]
 dev = [

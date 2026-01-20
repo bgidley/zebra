@@ -2,7 +2,7 @@
 
 from django.urls import include, path
 
-from zebra_web.api import web_views
+from zebra_web.api import web_views, agent_views
 
 urlpatterns = [
     # API endpoints (JSON)
@@ -29,4 +29,21 @@ urlpatterns = [
     path("tasks/", web_views.tasks_list, name="tasks_list"),
     path("tasks/<str:task_id>/", web_views.task_detail, name="task_detail"),
     path("tasks/<str:task_id>/complete/", web_views.task_complete, name="task_complete"),
+    # Agent
+    path("agent/", agent_views.agent_dashboard, name="agent_dashboard"),
+    path("agent/workflows/", agent_views.workflow_library, name="workflow_library"),
+    path("agent/workflows/create/", agent_views.workflow_create, name="workflow_create"),
+    path(
+        "agent/workflows/<str:workflow_name>/", agent_views.workflow_detail, name="workflow_detail"
+    ),
+    path(
+        "agent/workflows/<str:workflow_name>/delete/",
+        agent_views.workflow_delete,
+        name="workflow_delete",
+    ),
+    path("agent/run/", agent_views.run_goal_form, name="run_goal_form"),
+    path("agent/run/execute/", agent_views.run_goal_execute, name="run_goal_execute"),
+    path("agent/runs/", agent_views.recent_runs, name="recent_runs"),
+    path("agent/runs/<str:run_id>/", agent_views.run_detail, name="run_detail"),
+    path("agent/runs/<str:run_id>/rate/", agent_views.run_rate, name="run_rate"),
 ]

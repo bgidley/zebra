@@ -63,6 +63,15 @@ async def _async_init():
     registry = ActionRegistry()
     registry.register_defaults()
 
+    # Register LLM actions from zebra-tasks
+    try:
+        from zebra_tasks.llm.action import LLMCallAction
+
+        registry.register("llm_call", LLMCallAction())
+        logger.info("Registered llm_call action from zebra-tasks")
+    except ImportError:
+        logger.warning("zebra-tasks not available, llm_call action not registered")
+
     # Create engine
     _engine = WorkflowEngine(_store, registry)
 
