@@ -387,6 +387,7 @@ Workflows can trigger callbacks on state changes, enabling monitoring and integr
 - Pydantic for data validation
 - asyncio for concurrent execution
 - django for web app and REST api
+- Frontend Django Templates + HTMX + Alpine.js 
 
 **Persistence**:
 - aiosqlite for async SQLite access
@@ -403,16 +404,6 @@ Workflows can trigger callbacks on state changes, enabling monitoring and integr
 - pytest with pytest-asyncio
 - pytest-cov for coverage
 - Ruff for linting and formatting
-
-### Legacy Java Implementation (Archived)
-
-**Technologies**:
-- Java 1.5
-- Maven build system
-- Hibernate 3.3.2 ORM
-- Apache Tapestry IoC
-
-**Note**: The Java implementation is preserved in `legacy/` for historical reference. Modern development focuses on Python.
 
 ## Usage Patterns
 
@@ -598,14 +589,6 @@ Flow of Execution tracking provides complete execution history, crucial for debu
 - Automatic workflow synthesis from natural language
 - Quantum-inspired optimization algorithms
 - Integration with knowledge graphs
-
-## Historical Context
-
-Zebra was originally developed by Anite (Central Government Division) in 2004 as a Java-based workflow engine for government business processes. Ben Gidley significantly modified it in 2010, improving the architecture and adding features.
-
-The modern Python implementation preserves the core architectural principles (state machines, FOE, interface-driven design) while adapting to contemporary use cases like AI-assisted development and autonomous agents.
-
-The legacy Java code is preserved in `legacy/` as a reference implementation and historical artifact.
 
 ## References
 

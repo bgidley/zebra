@@ -1,19 +1,22 @@
 # Zebra Web UI
 
-Web-based interface for Zebra workflow management.
+Web-based interface for Zebra workflow management using Django Templates + HTMX + Alpine.js (the "HOT stack").
 
 ## Features
 
-- **REST API** for workflow definitions, processes, and tasks
-- **WebSocket** support for real-time updates
-- **React frontend** for visualization and monitoring
+- **Dashboard** with health status and stats
+- **Workflow Definitions** - Create, view, delete workflow definitions from YAML
+- **Process Management** - Start, pause, resume, delete workflow processes
+- **Task Completion** - Complete pending manual tasks
+- **Real-time Updates** via HTMX polling
+- **REST API** for programmatic access
 
 ## Quick Start
 
 ### Prerequisites
 
 - PostgreSQL running with a database (default: `opc`)
-- Node.js 22+ (for frontend development)
+- Python 3.11+
 
 ### Install Dependencies
 
@@ -26,40 +29,38 @@ uv pip install -e zebra-py/
 
 # Install zebra-web
 uv pip install -e zebra-web/
-
-# Install frontend dependencies
-cd zebra-web/frontend
-npm install
 ```
 
-### Run Development Servers
-
-**Local development (localhost only)**
+### Run the Server
 
 ```bash
-uv run zebra-dev
+# Local development (localhost only)
+uv run zebra-serve
+
+# Remote access (Tailscale, etc.)
+uv run zebra-serve-public
 ```
 
-This starts both backend (port 8000) and frontend (port 3000). Open http://localhost:3000
-
-**Remote access (Tailscale, SSH tunnels, etc.)**
-
-```bash
-uv run zebra-dev-public
-```
-
-This binds both servers to all interfaces. Open http://<your-ip>:3000
+Then open http://localhost:8000 (or your remote IP)
 
 ### Available Commands
 
 | Command | Description |
 |---------|-------------|
-| `uv run zebra-dev` | Start both servers on localhost (recommended) |
-| `uv run zebra-dev-public` | Start both servers on all interfaces |
-| `uv run zebra-serve` | Start backend only on localhost:8000 |
-| `uv run zebra-serve-public` | Start backend only on 0.0.0.0:8000 |
+| `uv run zebra-serve` | Start server on localhost:8000 |
+| `uv run zebra-serve-public` | Start server on 0.0.0.0:8000 (remote access) |
+
+## Tech Stack
+
+- **Django** - Web framework
+- **Django REST Framework** - JSON API
+- **HTMX** - Dynamic updates without JavaScript
+- **Alpine.js** - Lightweight reactivity for modals/interactions
+- **Tailwind CSS** (CDN) - Styling
 
 ## API Endpoints
+
+The JSON API is still available at `/api/`:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -74,46 +75,8 @@ This binds both servers to all interfaces. Open http://<your-ip>:3000
 | DELETE | `/api/processes/{id}/` | Delete process |
 | POST | `/api/processes/{id}/pause/` | Pause running process |
 | POST | `/api/processes/{id}/resume/` | Resume paused process |
-| GET | `/api/processes/{id}/tasks/` | Get tasks for process |
 | GET | `/api/tasks/` | Get all pending tasks |
-| GET | `/api/tasks/{id}/` | Get task details |
 | POST | `/api/tasks/{id}/complete/` | Complete pending task |
-
-### Query Parameters
-
-**GET /api/processes/**
-- `include_completed=true` - Include completed processes
-- `definition_id=<id>` - Filter by definition
-- `state=<state>` - Filter by state (running, paused, complete, failed)
-
-### Example: Create and Run a Workflow
-
-```bash
-# Create a workflow definition
-curl -X POST http://localhost:8000/api/definitions/ \
-  -H "Content-Type: application/json" \
-  -d '{"yaml_content": "name: Hello World\nversion: 1\nfirst_task: start\ntasks:\n  start:\n    name: Start\n    properties:\n      message: Hello!"}'
-
-# Start a process (use the definition ID from above)
-curl -X POST http://localhost:8000/api/processes/ \
-  -H "Content-Type: application/json" \
-  -d '{"definition_id": "<definition-id>", "properties": {}}'
-```
-
-## WebSocket
-
-Connect to `ws://localhost:8000/ws/` for real-time updates.
-
-**Subscribe to specific channels:**
-```javascript
-ws.send(JSON.stringify({action: "subscribe", channel: "process_abc123"}));
-```
-
-**Event types:**
-- `process_updated` - Process state changed
-- `task_updated` - Task state changed
-- `definition_created` - New workflow definition created
-- `definition_deleted` - Workflow definition deleted
 
 ## Configuration
 
@@ -128,7 +91,7 @@ ws.send(JSON.stringify({action: "subscribe", channel: "process_abc123"}));
 | `PGPORT` | `5432` | PostgreSQL port |
 | `PGDATABASE` | `opc` | Database name |
 | `PGUSER` | `opc` | Database user |
-| `PGPASSWORD` | (none) | Database password (optional for peer auth) |
+| `PGPASSWORD` | (none) | Database password |
 
 ### PostgreSQL Setup
 
@@ -147,51 +110,20 @@ sudo -u postgres createdb -O opc opc
 
 ```
 zebra-web/
-├── pyproject.toml          # Python package config with UV scripts
+├── pyproject.toml          # Python package config
 ├── manage.py               # Django management script
-├── zebra_web/
-│   ├── settings.py         # Django settings
-│   ├── urls.py             # Root URL config
-│   ├── asgi.py             # ASGI application (WebSocket)
-│   └── api/
-│       ├── views.py        # REST API views
-│       ├── serializers.py  # DRF serializers
-│       ├── consumers.py    # WebSocket consumers
-│       ├── engine.py       # Zebra engine singleton
-│       └── urls.py         # API URL config
-└── frontend/               # React frontend
-    ├── src/
-    │   ├── api/            # API client and types
-    │   ├── components/     # Reusable components
-    │   └── pages/          # Page components
-    └── package.json
-```
-
-## Development
-
-### Running Tests
-
-```bash
-uv run pytest
-```
-
-### Code Style
-
-```bash
-# Python (Ruff)
-uv run ruff check .
-uv run ruff format .
-
-# TypeScript (ESLint)
-cd frontend && npm run lint
-```
-
-### Building for Production
-
-```bash
-# Build frontend
-cd frontend && npm run build
-
-# The built files will be in frontend/dist/
-# Configure Django to serve these in production
+├── templates/              # Django templates
+│   ├── base.html          # Base layout with nav
+│   ├── pages/             # Full page templates
+│   ├── partials/          # HTMX partial templates
+│   └── components/        # Reusable components
+└── zebra_web/
+    ├── settings.py         # Django settings
+    ├── urls.py             # URL routing
+    ├── cli.py              # CLI entry points
+    └── api/
+        ├── views.py        # REST API views (JSON)
+        ├── web_views.py    # Web UI views (HTML)
+        ├── serializers.py  # DRF serializers
+        └── engine.py       # Zebra engine singleton
 ```

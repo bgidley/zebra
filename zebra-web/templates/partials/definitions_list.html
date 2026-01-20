@@ -1,0 +1,33 @@
+{% if definitions %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for def in definitions %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors">
+        <a href="/definitions/{{ def.id }}/" class="block p-6">
+            <div class="flex items-start justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">{{ def.name }}</h3>
+                    <p class="text-sm text-gray-400 mt-1">Version {{ def.version }}</p>
+                </div>
+                <span class="px-2 py-1 bg-gray-700 rounded text-xs text-gray-300">
+                    {{ def.task_count }} tasks
+                </span>
+            </div>
+            {% if def.description %}
+            <p class="text-gray-400 text-sm mt-3 line-clamp-2">{{ def.description }}</p>
+            {% endif %}
+            <p class="text-xs text-gray-500 mt-3 font-mono">{{ def.id }}</p>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12">
+    <svg class="h-12 w-12 text-gray-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+    </svg>
+    <p class="text-gray-400">No definitions yet</p>
+    <button @click="showCreate = true" class="mt-4 text-indigo-400 hover:text-indigo-300">
+        Create your first definition
+    </button>
+</div>
+{% endif %}

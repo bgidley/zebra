@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Definitions - Zebra{% endblock %}
+{% block page_title %}Definitions{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="{ showCreate: false }">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Workflow Definitions</h1>
+            <p class="text-gray-400 mt-1">Manage your workflow templates</p>
+        </div>
+        <button @click="showCreate = true"
+                class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            New Definition
+        </button>
+    </div>
+    
+    <!-- Create Modal -->
+    <div x-show="showCreate" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+         @keydown.escape.window="showCreate = false">
+        <div class="bg-gray-800 rounded-lg w-full max-w-2xl mx-4 border border-gray-700"
+             @click.away="showCreate = false">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+                <h2 class="text-lg font-semibold text-white">Create Definition</h2>
+                <button @click="showCreate = false" class="text-gray-400 hover:text-white">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <form hx-post="/definitions/create/" hx-target="body">
+                {% csrf_token %}
+                <div class="p-6">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">YAML Content</label>
+                    <textarea name="yaml_content" rows="15" required
+                              class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-indigo-500"
+                              placeholder="# Paste your workflow YAML here..."></textarea>
+                </div>
+                <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-700">
+                    <button type="button" @click="showCreate = false" class="px-4 py-2 text-gray-300 hover:text-white">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                        <span class="htmx-indicator">
+                            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                        </span>
+                        Create
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Definitions Grid -->
+    <div id="definitions-list">
+        {% include "partials/definitions_list.html" %}
+    </div>
+</div>
+{% endblock %}

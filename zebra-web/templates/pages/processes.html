@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Processes - Zebra{% endblock %}
+{% block page_title %}Processes{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="{ showStart: false }">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Processes</h1>
+            <p class="text-gray-400 mt-1">Monitor and manage running workflows</p>
+        </div>
+        <button @click="showStart = true"
+                class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Start Process
+        </button>
+    </div>
+    
+    <!-- Filters -->
+    <div class="flex gap-4">
+        <a href="/processes/"
+           class="px-3 py-1.5 rounded-lg text-sm {% if not include_completed and not state_filter %}bg-indigo-600 text-white{% else %}bg-gray-700 text-gray-300 hover:bg-gray-600{% endif %}">
+            Active
+        </a>
+        <a href="/processes/?include_completed=true"
+           class="px-3 py-1.5 rounded-lg text-sm {% if include_completed %}bg-indigo-600 text-white{% else %}bg-gray-700 text-gray-300 hover:bg-gray-600{% endif %}">
+            All
+        </a>
+    </div>
+    
+    <!-- Start Modal -->
+    <div x-show="showStart" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+         @keydown.escape.window="showStart = false">
+        <div class="bg-gray-800 rounded-lg w-full max-w-md mx-4 border border-gray-700"
+             @click.away="showStart = false">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+                <h2 class="text-lg font-semibold text-white">Start Process</h2>
+                <button @click="showStart = false" class="text-gray-400 hover:text-white">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <form hx-post="/processes/start/" hx-target="body">
+                {% csrf_token %}
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Definition</label>
+                        <select name="definition_id" required
+                                class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500">
+                            <option value="">Select a definition...</option>
+                            {% for def in definitions %}
+                            <option value="{{ def.id }}">{{ def.name }} (v{{ def.version }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Properties (JSON)</label>
+                        <textarea name="properties" rows="5"
+                                  class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-indigo-500">{}</textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-700">
+                    <button type="button" @click="showStart = false" class="px-4 py-2 text-gray-300 hover:text-white">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                        Start
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Processes List -->
+    <div id="processes-list">
+        {% include "partials/processes_list.html" %}
+    </div>
+</div>
+{% endblock %}
