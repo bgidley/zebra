@@ -1,0 +1,16 @@
+<div class="bg-gray-800 rounded-lg border border-red-800 p-6">
+    <div class="flex items-center gap-3 mb-4">
+        <div class="p-2 rounded-full bg-red-600">
+            <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+        </div>
+        <span class="text-lg font-medium text-red-400">Execution Error</span>
+    </div>
+    <div class="bg-red-900/20 border border-red-800 rounded-lg p-4 text-red-300">
+        {{ error }}
+    </div>
+    <p class="mt-4 text-sm text-gray-400">
+        Please try again or check the workflow configuration.
+    </p>
+</div>
