@@ -10,3 +10,4 @@ htmlcov/
 .pytest_cache/
 .env
 .env.local
+tmp

@@ -32,6 +32,8 @@ The engine handles:
 | Actions | `zebra/tasks/` | `src/tasks/` |
 | Loader | `zebra/definitions/loader.py` | `src/definitions/` |
 
+Subprojects have thier own AGENTS.md files.
+
 ## Core Concepts
 
 ### State Machines

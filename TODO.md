@@ -10,13 +10,8 @@ This document tracks unimplemented features and improvements based on the DESIGN
 ## High Priority
 
 ### 0.5 Tidy up ✅
-- [x] Move db to local postgresql (installed on VM using local user for login)
-  - Added `PostgreSQLStore` class in `zebra-py/zebra/storage/postgres.py`
-  - Implements full `StateStore` interface with PostgreSQL backend
-  - Uses asyncpg for high-performance async operations
-  - Supports connection pooling, advisory locks, and transactions
-  - Tests available in `zebra-py/tests/test_postgres_storage.py`
-
+- [ ] Make Zebra-web use zebra-agent as a library so it fully shares code for the agent and is just the ux
+- [ ] In Zebra-web unify storage between SQLite and Postgres for both the agent and the workflow engine
 
 ### 1. Task Actions Library Expansion ❌
 

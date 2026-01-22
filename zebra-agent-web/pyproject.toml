@@ -1,0 +1,47 @@
+[project]
+name = "zebra-agent-web"
+version = "0.1.0"
+description = "Web UI for Zebra Agent - goal-driven workflow automation"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Ben Gidley" }
+]
+keywords = ["workflow", "agent", "web", "ui", "django", "zebra"]
+
+dependencies = [
+    "django>=5.0",
+    "djangorestframework>=3.14",
+    "channels>=4.0",
+    "channels-redis>=4.1",
+    "daphne>=4.0",
+    "psycopg[binary]>=3.1",
+    "django-cors-headers>=4.3",
+    "zebra-workflow",
+    "zebra-agent",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-django>=4.5",
+    "pytest-asyncio>=0.21",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["zebra_agent_web"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "zebra_agent_web.settings"
+python_files = ["test_*.py"]
+
+[project.scripts]
+zebra-web-agent = "zebra_agent_web.cli:serve"
+zebra-web-agent-public = "zebra_agent_web.cli:serve_public"
+zebra-web-agent-dev = "zebra_agent_web.cli:dev"
+zebra-web-agent-dev-public = "zebra_agent_web.cli:dev_public"

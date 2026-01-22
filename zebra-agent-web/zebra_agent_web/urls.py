@@ -1,0 +1,36 @@
+"""URL configuration for zebra-agent-web project.
+
+This is an agent-only web application with simplified URL structure:
+- / -> Dashboard
+- /run/ -> Run Goal
+- /workflows/ -> Workflow Library
+- /runs/ -> Run History
+- /api/ -> REST API
+"""
+
+from django.urls import include, path
+
+from zebra_agent_web.api import web_views
+
+urlpatterns = [
+    # API endpoints (JSON)
+    path("api/", include("zebra_agent_web.api.urls")),
+    # Web UI (HTML + HTMX) - Agent focused
+    path("", web_views.dashboard, name="dashboard"),
+    # Run Goal
+    path("run/", web_views.run_goal_form, name="run_goal_form"),
+    path("run/execute/", web_views.run_goal_execute, name="run_goal_execute"),
+    # Workflows
+    path("workflows/", web_views.workflow_library, name="workflow_library"),
+    path("workflows/create/", web_views.workflow_create, name="workflow_create"),
+    path("workflows/<str:workflow_name>/", web_views.workflow_detail, name="workflow_detail"),
+    path(
+        "workflows/<str:workflow_name>/delete/",
+        web_views.workflow_delete,
+        name="workflow_delete",
+    ),
+    # Runs
+    path("runs/", web_views.recent_runs, name="recent_runs"),
+    path("runs/<str:run_id>/", web_views.run_detail, name="run_detail"),
+    path("runs/<str:run_id>/rate/", web_views.run_rate, name="run_rate"),
+]
