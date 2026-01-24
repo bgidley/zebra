@@ -13,12 +13,12 @@ Zebra is a multi-language workflow orchestration system for AI-assisted developm
 
 Each package has its own `AGENTS.md` with module-specific guidelines:
 
-| Package | Purpose | AGENTS.md |
-|---------|---------|-----------|
-| [zebra-py](zebra-py/) | Core workflow engine with MCP integration | [zebra-py/AGENTS.md](zebra-py/AGENTS.md) |
+| Package | Purpose                                        | AGENTS.md |
+|---------|------------------------------------------------|-----------|
+| [zebra-py](zebra-py/) | Core workflow engine with MCP integration      | [zebra-py/AGENTS.md](zebra-py/AGENTS.md) |
 | [zebra-tasks](zebra-tasks/) | Reusable task actions (LLM, subtasks, compute) | [zebra-tasks/AGENTS.md](zebra-tasks/AGENTS.md) |
-| [zebra-agent](zebra-agent/) | Self-improving agent console | [zebra-agent/AGENTS.md](zebra-agent/AGENTS.md) |
-| [zebra-agent-web](zebra-agent-web/) | Web UI for Zebra Agent | [zebra-agent-web/AGENTS.md](zebra-agent-web/AGENTS.md) |
+| [zebra-agent](zebra-agent/) | Self-improving agent library with cli          | [zebra-agent/AGENTS.md](zebra-agent/AGENTS.md) |
+| [zebra-agent-web](zebra-agent-web/) | Web UI for Zebra Agent                         | [zebra-agent-web/AGENTS.md](zebra-agent-web/AGENTS.md) |
 
 ## Architecture Overview
 
@@ -261,6 +261,8 @@ logger.error("Failed to execute task: %s", error)
 ```
 
 ## Testing Guidelines
+
+Don't hack tests to make them pass. Only change them if the business logic has changed, if you are not sure ask.
 
 ### Test Structure
 

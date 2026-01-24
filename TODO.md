@@ -9,10 +9,6 @@ This document tracks unimplemented features and improvements based on the DESIGN
 
 ## High Priority
 
-### 0.5 Tidy up ✅
-- [ ] Make Zebra-web use zebra-agent as a library so it fully shares code for the agent and is just the ux
-- [ ] In Zebra-web unify storage between SQLite and Postgres for both the agent and the workflow engine
-
 ### 1. Task Actions Library Expansion ❌
 
 **Description:** The system currently has only 13 task actions. Need more built-in actions for common operations.
@@ -36,26 +32,8 @@ This document tracks unimplemented features and improvements based on the DESIGN
 - `zebra-tasks/zebra_tasks/notifications/` - Email/webhooks
 - `zebra-tasks/zebra_tasks/data/` - Data transformation
 
-### 2. Web UI for Workflow Management ❌
-
-**Description:** Need web-based interface for workflow visualization, monitoring, and debugging.
-
-**Features Required:**
-- [ ] Workflow definition visualization (graph view)
-- [ ] Real-time process execution monitoring
-- [ ] Task state inspection and history
-- [ ] Flow of Execution (FOE) visualization
-- [ ] Property inspector for processes/tasks
-- [ ] Interactive workflow designer (drag-and-drop)
-- [ ] Debugging tools (breakpoints, step-through)
-- [ ] Performance metrics dashboard
-- [ ] Search and filter workflows/processes
-
-**Technology Stack:** React/Vue.js + FastAPI backend  
-**Reference:** DESIGN.md line 603 (Future Directions)  
-**Files to create:**
-- `zebra-web/` - New package for web UI
-- `zebra-py/zebra/api/` - REST API endpoints
+### 2. Resiliance 
+- [ ] Workflows are resumed on restart
 
 ### 3. Advanced Guardrails System ⚠️
 
@@ -239,21 +217,6 @@ This document tracks unimplemented features and improvements based on the DESIGN
 - `zebra-agent/zebra_agent/learning.py` - New advanced learning module
 
 **Status:** ⚠️ Basic learning implemented, advanced algorithms missing
-
-### 15. Quantum-Inspired Optimization ❌
-
-**Description:** Experimental optimization algorithms for workflow routing.
-
-**Features Required:**
-- [ ] Quantum annealing for task scheduling
-- [ ] Quantum-inspired genetic algorithms
-- [ ] Optimization of parallel execution paths
-- [ ] Resource allocation optimization
-- [ ] Multi-objective optimization (cost vs. speed vs. quality)
-
-**Reference:** DESIGN.md line 617 (Future Directions)  
-**Files to create:**
-- `zebra-optimization/` - Experimental optimization package
 
 **Note:** Highly speculative, low practical priority
 
