@@ -8,12 +8,13 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-members = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-web"]
+members = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-agent-web"]
 
 [tool.uv.sources]
 zebra-workflow = { workspace = true }
 zebra-tasks = { workspace = true }
 zebra-agent = { workspace = true }
+zebra-agent-web = { workspace = true }
 
 [dependency-groups]
 dev = [

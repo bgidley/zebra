@@ -22,6 +22,7 @@ urlpatterns = [
     path("runs/", views.runs_list, name="api_runs_list"),
     path("runs/<str:run_id>/", views.run_detail, name="api_run_detail"),
     path("runs/<str:run_id>/rate/", views.run_rate, name="api_run_rate"),
+    path("runs/<str:run_id>/status/", views.run_status, name="api_run_status"),
     # Execution monitoring (processes and tasks)
     path("processes/", views.processes_list, name="api_processes_list"),
     path("processes/<str:process_id>/", views.process_detail, name="api_process_detail"),

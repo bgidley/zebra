@@ -142,7 +142,12 @@ ZEBRA_SETTINGS = {
 # Zebra Agent settings
 ZEBRA_AGENT_SETTINGS = {
     "LIBRARY_PATH": os.environ.get("ZEBRA_LIBRARY_PATH", "~/.zebra/workflows"),
-    "METRICS_PATH": os.environ.get("ZEBRA_METRICS_PATH", "~/.zebra/metrics.db"),
+    # Metrics and Memory use PostgreSQL now (same DB as Zebra Engine)
+    "POSTGRES_HOST": os.environ.get("PGHOST", "/var/run/postgresql"),
+    "POSTGRES_PORT": int(os.environ.get("PGPORT", "5432")),
+    "POSTGRES_DATABASE": os.environ.get("PGDATABASE", "opc"),
+    "POSTGRES_USER": os.environ.get("PGUSER", "opc"),
+    "POSTGRES_PASSWORD": os.environ.get("PGPASSWORD", None),
     "LLM_PROVIDER": os.environ.get("ZEBRA_LLM_PROVIDER", "anthropic"),
     "LLM_MODEL": os.environ.get("ZEBRA_LLM_MODEL", None),
 }

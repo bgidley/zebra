@@ -31,7 +31,11 @@ def _get_agent_settings() -> dict:
         "ZEBRA_AGENT_SETTINGS",
         {
             "LIBRARY_PATH": "~/.zebra/workflows",
-            "METRICS_PATH": "~/.zebra/metrics.db",
+            "POSTGRES_HOST": "localhost",
+            "POSTGRES_PORT": 5432,
+            "POSTGRES_DATABASE": "opc",
+            "POSTGRES_USER": "opc",
+            "POSTGRES_PASSWORD": None,
             "LLM_PROVIDER": "anthropic",
             "LLM_MODEL": None,
         },
@@ -68,11 +72,16 @@ async def _async_init() -> None:
 
     agent_settings = _get_agent_settings()
 
-    # Initialize metrics store
-    metrics_path = Path(agent_settings["METRICS_PATH"]).expanduser()
-    logger.info(f"Initializing metrics store at {metrics_path}")
-    _metrics = MetricsStore(metrics_path)
-    await _metrics._ensure_initialized()
+    # Initialize metrics store (PostgreSQL)
+    logger.info("Initializing metrics store (PostgreSQL)")
+    _metrics = MetricsStore(
+        host=agent_settings.get("POSTGRES_HOST", "localhost"),
+        port=agent_settings.get("POSTGRES_PORT", 5432),
+        database=agent_settings.get("POSTGRES_DATABASE", "opc"),
+        user=agent_settings.get("POSTGRES_USER", "opc"),
+        password=agent_settings.get("POSTGRES_PASSWORD"),
+    )
+    await _metrics.initialize()
 
     # Initialize workflow library
     library_path = Path(agent_settings["LIBRARY_PATH"]).expanduser()

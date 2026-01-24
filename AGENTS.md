@@ -6,7 +6,6 @@ This file provides coding agents with essential guidelines for working on the Ze
 
 Zebra is a multi-language workflow orchestration system for AI-assisted development with:
 - **Python** (primary): Core workflow engine with MCP integration
-- **Rust**: High-performance alternative implementation
 - **Legacy Java**: Original 2004 implementation (archived, in `legacy/`)
 - **UV workspaces**: Monorepo structure with 3 Python packages (zebra-py, zebra-tasks, zebra-agent)
 

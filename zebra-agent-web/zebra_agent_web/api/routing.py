@@ -2,8 +2,9 @@
 
 from django.urls import path
 
-# WebSocket URL patterns - can be extended for real-time features
+from zebra_agent_web.api.consumers import GoalProgressConsumer
+
+# WebSocket URL patterns for real-time goal progress updates
 websocket_urlpatterns = [
-    # Add WebSocket consumers here if needed
-    # path("ws/agent/", AgentConsumer.as_asgi()),
+    path("ws/goal/<str:run_id>/", GoalProgressConsumer.as_asgi()),
 ]

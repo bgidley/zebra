@@ -24,30 +24,6 @@ def temp_dir():
 
 
 @pytest.fixture
-def temp_db(temp_dir):
-    """Create a temporary database file."""
-    return temp_dir / "metrics.db"
-
-
-@pytest.fixture
-def metrics(temp_db):
-    """Create a MetricsStore instance."""
-    return MetricsStore(temp_db)
-
-
-@pytest.fixture
-def memory_db(temp_dir):
-    """Create a temporary memory database file."""
-    return temp_dir / "memory.db"
-
-
-@pytest.fixture
-def memory(memory_db):
-    """Create an AgentMemory instance."""
-    return AgentMemory(memory_db, short_term_max_tokens=1000, long_term_max_tokens=2000)
-
-
-@pytest.fixture
 def library_path(temp_dir):
     """Create a library directory."""
     lib_path = temp_dir / "workflows"
@@ -244,7 +220,9 @@ class TestLLMProperty:
 class TestSelectWorkflow:
     """Tests for workflow selection."""
 
-    async def test_select_workflow_existing(self, library, mock_engine, metrics, sample_workflow_yaml):
+    async def test_select_workflow_existing(
+        self, library, mock_engine, metrics, sample_workflow_yaml
+    ):
         """Test selecting an existing workflow."""
         (library.library_path / "test.yaml").write_text(sample_workflow_yaml)
 
@@ -256,11 +234,13 @@ class TestSelectWorkflow:
         )
 
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "workflow_name": "Test Workflow",
-            "create_new": False,
-            "reasoning": "This workflow matches the goal",
-        })
+        mock_response.content = json.dumps(
+            {
+                "workflow_name": "Test Workflow",
+                "create_new": False,
+                "reasoning": "This workflow matches the goal",
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.complete = AsyncMock(return_value=mock_response)
@@ -281,12 +261,14 @@ class TestSelectWorkflow:
         )
 
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "workflow_name": None,
-            "create_new": True,
-            "reasoning": "No matching workflow",
-            "suggested_name": "New Workflow",
-        })
+        mock_response.content = json.dumps(
+            {
+                "workflow_name": None,
+                "create_new": True,
+                "reasoning": "No matching workflow",
+                "suggested_name": "New Workflow",
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.complete = AsyncMock(return_value=mock_response)
@@ -308,11 +290,13 @@ class TestSelectWorkflow:
 
         mock_response = MagicMock()
         # Even if LLM says don't create, should force create when no workflows
-        mock_response.content = json.dumps({
-            "workflow_name": "Test",
-            "create_new": False,
-            "reasoning": "Test",
-        })
+        mock_response.content = json.dumps(
+            {
+                "workflow_name": "Test",
+                "create_new": False,
+                "reasoning": "Test",
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.complete = AsyncMock(return_value=mock_response)
@@ -323,7 +307,9 @@ class TestSelectWorkflow:
         assert selection.create_new is True
         assert selection.workflow_name is None
 
-    async def test_select_workflow_json_in_code_block(self, library, mock_engine, metrics, sample_workflow_yaml):
+    async def test_select_workflow_json_in_code_block(
+        self, library, mock_engine, metrics, sample_workflow_yaml
+    ):
         """Test parsing JSON from code block."""
         (library.library_path / "test.yaml").write_text(sample_workflow_yaml)
 
@@ -667,11 +653,13 @@ routings: []
         )
 
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "workflow_name": "Test Workflow",
-            "create_new": False,
-            "reasoning": "Matches use_when",
-        })
+        mock_response.content = json.dumps(
+            {
+                "workflow_name": "Test Workflow",
+                "create_new": False,
+                "reasoning": "Matches use_when",
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.complete = AsyncMock(return_value=mock_response)
@@ -689,7 +677,9 @@ routings: []
 class TestSelectWorkflowCodeBlockParsing:
     """Tests for JSON parsing from various code block formats."""
 
-    async def test_select_workflow_plain_code_block(self, library, mock_engine, metrics, sample_workflow_yaml):
+    async def test_select_workflow_plain_code_block(
+        self, library, mock_engine, metrics, sample_workflow_yaml
+    ):
         """Test parsing JSON from plain code block (no language specifier)."""
         (library.library_path / "test.yaml").write_text(sample_workflow_yaml)
 
@@ -801,7 +791,9 @@ That should work."""
 class TestExecuteWorkflowOutputKeys:
     """Tests for workflow execution with various output keys."""
 
-    async def test_execute_workflow_summary_key(self, library, mock_engine, metrics, sample_workflow_yaml):
+    async def test_execute_workflow_summary_key(
+        self, library, mock_engine, metrics, sample_workflow_yaml
+    ):
         """Test execution with summary output key."""
         yaml_content = """name: "Summary Workflow"
 description: "A workflow that outputs summary"
@@ -841,7 +833,9 @@ routings: []
         assert output == "Test summary"
         assert tokens == 50
 
-    async def test_execute_workflow_fallback_to_properties(self, library, mock_engine, metrics, sample_workflow_yaml):
+    async def test_execute_workflow_fallback_to_properties(
+        self, library, mock_engine, metrics, sample_workflow_yaml
+    ):
         """Test execution falls back to all properties when no standard key."""
         yaml_content = """name: "Custom Workflow"
 description: "A workflow with custom output"
@@ -928,11 +922,13 @@ class TestProcessGoalWithMemoryCompaction:
         )
 
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "workflow_name": "Test Workflow",
-            "create_new": False,
-            "reasoning": "Matches",
-        })
+        mock_response.content = json.dumps(
+            {
+                "workflow_name": "Test Workflow",
+                "create_new": False,
+                "reasoning": "Matches",
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.complete = AsyncMock(return_value=mock_response)
@@ -972,11 +968,13 @@ class TestProcessGoalIntegration:
 
         # Mock LLM for selection
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "workflow_name": "Test Workflow",
-            "create_new": False,
-            "reasoning": "Matches",
-        })
+        mock_response.content = json.dumps(
+            {
+                "workflow_name": "Test Workflow",
+                "create_new": False,
+                "reasoning": "Matches",
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.complete = AsyncMock(return_value=mock_response)
@@ -1010,12 +1008,14 @@ class TestProcessGoalIntegration:
 
         # Mock LLM responses
         selector_response = MagicMock()
-        selector_response.content = json.dumps({
-            "workflow_name": None,
-            "create_new": True,
-            "reasoning": "No match",
-            "suggested_name": "New Workflow",
-        })
+        selector_response.content = json.dumps(
+            {
+                "workflow_name": None,
+                "create_new": True,
+                "reasoning": "No match",
+                "suggested_name": "New Workflow",
+            }
+        )
 
         creator_response = MagicMock()
         creator_response.content = """name: "New Workflow"
@@ -1065,11 +1065,13 @@ routings: []
         )
 
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "workflow_name": "Test Workflow",
-            "create_new": False,
-            "reasoning": "Matches",
-        })
+        mock_response.content = json.dumps(
+            {
+                "workflow_name": "Test Workflow",
+                "create_new": False,
+                "reasoning": "Matches",
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.complete = AsyncMock(return_value=mock_response)
@@ -1080,7 +1082,9 @@ routings: []
         assert result.success is False
         assert "Workflow error" in result.error
 
-    async def test_process_goal_with_memory(self, library, mock_engine, metrics, memory, sample_workflow_yaml):
+    async def test_process_goal_with_memory(
+        self, library, mock_engine, metrics, memory, sample_workflow_yaml
+    ):
         """Test goal processing updates memory."""
         (library.library_path / "test.yaml").write_text(sample_workflow_yaml)
 
@@ -1102,11 +1106,13 @@ routings: []
         )
 
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "workflow_name": "Test Workflow",
-            "create_new": False,
-            "reasoning": "Matches",
-        })
+        mock_response.content = json.dumps(
+            {
+                "workflow_name": "Test Workflow",
+                "create_new": False,
+                "reasoning": "Matches",
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.complete = AsyncMock(return_value=mock_response)
@@ -1147,11 +1153,13 @@ class TestProcessGoalFailureWithMemory:
         )
 
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "workflow_name": "Test Workflow",
-            "create_new": False,
-            "reasoning": "Matches",
-        })
+        mock_response.content = json.dumps(
+            {
+                "workflow_name": "Test Workflow",
+                "create_new": False,
+                "reasoning": "Matches",
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.complete = AsyncMock(return_value=mock_response)
@@ -1170,7 +1178,9 @@ class TestProcessGoalFailureWithMemory:
 class TestCreateWorkflowWithExistingWorkflows:
     """Tests for workflow creation with existing workflows for reference."""
 
-    async def test_create_workflow_includes_existing_for_reference(self, library, mock_engine, metrics):
+    async def test_create_workflow_includes_existing_for_reference(
+        self, library, mock_engine, metrics
+    ):
         """Test that existing workflows are included for reference."""
         # Create some existing workflows
         for i in range(2):
@@ -1233,7 +1243,9 @@ routings: []
 class TestExecuteWorkflowTimeout:
     """Tests for workflow execution timeout."""
 
-    async def test_execute_workflow_timeout(self, library, mock_engine, metrics, sample_workflow_yaml):
+    async def test_execute_workflow_timeout(
+        self, library, mock_engine, metrics, sample_workflow_yaml
+    ):
         """Test that workflow execution times out."""
         (library.library_path / "test.yaml").write_text(sample_workflow_yaml)
 
@@ -1270,6 +1282,7 @@ class TestExecuteWorkflowTimeout:
 
         # Patch asyncio.sleep to speed up the test
         import asyncio
+
         with patch.object(asyncio, "sleep", new_callable=AsyncMock):
             with pytest.raises(RuntimeError, match="timed out"):
                 await loop._execute_workflow("Test Workflow", "Test goal")
@@ -1321,11 +1334,13 @@ class TestProcessGoalWithLongTermCompaction:
         )
 
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "workflow_name": "Test Workflow",
-            "create_new": False,
-            "reasoning": "Matches",
-        })
+        mock_response.content = json.dumps(
+            {
+                "workflow_name": "Test Workflow",
+                "create_new": False,
+                "reasoning": "Matches",
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.complete = AsyncMock(return_value=mock_response)
@@ -1466,9 +1481,7 @@ routings: []
         assert summaries[0].summary == "Summarized content"
         assert summaries[0].entry_count == 3
 
-    async def test_compact_short_term_workflow_failed(
-        self, library, mock_engine, metrics, memory
-    ):
+    async def test_compact_short_term_workflow_failed(self, library, mock_engine, metrics, memory):
         """Test short-term compaction when workflow fails."""
         # Create the compact workflow
         compact_yaml = """name: "Memory Compact Short"
@@ -1523,9 +1536,7 @@ routings: []
         entries = await memory.get_short_term_entries()
         assert len(entries) == 1
 
-    async def test_compact_short_term_workflow_timeout(
-        self, library, mock_engine, metrics, memory
-    ):
+    async def test_compact_short_term_workflow_timeout(self, library, mock_engine, metrics, memory):
         """Test short-term compaction when workflow times out."""
         # Create the compact workflow
         compact_yaml = """name: "Memory Compact Short"
@@ -1574,6 +1585,7 @@ routings: []
         )
 
         import asyncio
+
         with patch.object(asyncio, "sleep", new_callable=AsyncMock):
             await loop._compact_short_term_memory()
 
@@ -1701,9 +1713,7 @@ routings: []
         assert themes[0].theme == "Extracted themes content"
         assert len(themes[0].short_term_refs) == 3
 
-    async def test_compact_long_term_workflow_failed(
-        self, library, mock_engine, metrics, memory
-    ):
+    async def test_compact_long_term_workflow_failed(self, library, mock_engine, metrics, memory):
         """Test long-term compaction when workflow fails."""
         # Create the compact workflow
         compact_yaml = """name: "Memory Compact Long"
@@ -1757,9 +1767,7 @@ routings: []
         summaries = await memory.get_short_term_summaries()
         assert len(summaries) == 1
 
-    async def test_compact_long_term_workflow_timeout(
-        self, library, mock_engine, metrics, memory
-    ):
+    async def test_compact_long_term_workflow_timeout(self, library, mock_engine, metrics, memory):
         """Test long-term compaction when workflow times out."""
         # Create the compact workflow
         compact_yaml = """name: "Memory Compact Long"
@@ -1807,6 +1815,7 @@ routings: []
         )
 
         import asyncio
+
         with patch.object(asyncio, "sleep", new_callable=AsyncMock):
             await loop._compact_long_term_memory()
 
@@ -1814,9 +1823,7 @@ routings: []
         summaries = await memory.get_short_term_summaries()
         assert len(summaries) == 1
 
-    async def test_compact_long_term_no_theme_output(
-        self, library, mock_engine, metrics, memory
-    ):
+    async def test_compact_long_term_no_theme_output(self, library, mock_engine, metrics, memory):
         """Test long-term compaction when workflow doesn't output themes."""
         # Create the compact workflow
         compact_yaml = """name: "Memory Compact Long"

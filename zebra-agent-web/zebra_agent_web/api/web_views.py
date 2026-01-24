@@ -8,16 +8,23 @@ All URLs are simplified since this is an agent-only application:
 - /runs/ -> Run History
 """
 
+import asyncio
 import logging
+import uuid
+from typing import Any
 
 from asgiref.sync import sync_to_async
-from django.shortcuts import render, redirect
+from channels.layers import get_channel_layer
 from django.http import HttpResponse
+from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
 from zebra_agent_web.api import agent_engine
 
 logger = logging.getLogger(__name__)
+
+# Track active background tasks for status checks
+_active_tasks: dict[str, asyncio.Task] = {}
 
 
 # =============================================================================
@@ -232,38 +239,92 @@ def _format_output(output):
 
 @require_http_methods(["POST"])
 async def run_goal_execute(request):
-    """Execute a goal using the agent loop."""
-    await agent_engine.ensure_initialized()
-    agent_loop = agent_engine.get_agent_loop()
+    """Start goal execution in background and return processing UI immediately.
 
+    The actual workflow execution happens in a background task, with progress
+    updates streamed via WebSocket to the client.
+    """
     goal = request.POST.get("goal", "").strip()
     if not goal:
         return HttpResponse("Goal is required", status=400)
 
+    # Generate run ID upfront so client can connect to WebSocket
+    run_id = str(uuid.uuid4())
+
+    # Start background task for goal execution
+    task = asyncio.create_task(_execute_goal_background(run_id, goal))
+    _active_tasks[run_id] = task
+
+    # Add cleanup callback
+    task.add_done_callback(lambda t: _active_tasks.pop(run_id, None))
+
+    # Return processing UI immediately
+    context = {"run_id": run_id, "goal": goal}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "partials/goal_processing.html", context)
+    return render(request, "pages/goal_processing.html", context)
+
+
+async def _execute_goal_background(run_id: str, goal: str) -> None:
+    """Execute goal in background, sending progress via WebSocket channel layer.
+
+    This function runs as an asyncio task, independent of the HTTP request.
+    Progress updates are sent to the channel group for the run_id, where
+    connected WebSocket clients receive them.
+    """
+    channel_layer = get_channel_layer()
+    group_name = f"goal_{run_id}"
+
+    async def progress_callback(event: str, data: dict[str, Any]) -> None:
+        """Send progress update to WebSocket clients."""
+        await channel_layer.group_send(
+            group_name,
+            {
+                "type": "goal.progress",
+                "data": {"event": event, "run_id": run_id, **data},
+            },
+        )
+
     try:
-        result = await agent_loop.process_goal(goal)
+        await agent_engine.ensure_initialized()
+        agent_loop = agent_engine.get_agent_loop()
 
-        context = {
-            "result": {
-                "run_id": result.run_id,
-                "workflow_name": result.workflow_name,
-                "goal": result.goal,
-                "success": result.success,
-                "output": _format_output(result.output),
-                "error": result.error,
-                "tokens_used": result.tokens_used,
-                "created_new_workflow": result.created_new_workflow,
-            }
-        }
+        result = await agent_loop.process_goal(
+            goal,
+            progress_callback=progress_callback,
+            run_id=run_id,
+        )
 
-        if request.headers.get("HX-Request"):
-            return render(request, "partials/goal_result.html", context)
-        return render(request, "pages/goal_result.html", context)
+        # Send completion event
+        if result.success:
+            await progress_callback(
+                "completed",
+                {
+                    "workflow_name": result.workflow_name,
+                    "success": True,
+                    "output": _format_output(result.output),
+                    "tokens_used": result.tokens_used,
+                    "created_new_workflow": result.created_new_workflow,
+                },
+            )
+        else:
+            await progress_callback(
+                "failed",
+                {
+                    "workflow_name": result.workflow_name,
+                    "error": result.error,
+                },
+            )
+
     except Exception as e:
-        logger.exception("Failed to execute goal")
-        if request.headers.get("HX-Request"):
-            return render(request, "partials/goal_error.html", {"error": str(e)})
-        return HttpResponse(f"Error: {e}", status=500)
+        logger.exception(f"Background goal execution failed for {run_id}")
+        await progress_callback("failed", {"error": str(e)})
+
+
+def is_task_active(run_id: str) -> bool:
+    """Check if a background task is still running for a given run ID."""
+    return run_id in _active_tasks
 
 
 async def run_detail(request, run_id):

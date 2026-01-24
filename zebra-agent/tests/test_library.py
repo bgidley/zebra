@@ -17,18 +17,6 @@ def temp_dir():
 
 
 @pytest.fixture
-def temp_db(temp_dir):
-    """Create a temporary database file."""
-    return temp_dir / "metrics.db"
-
-
-@pytest.fixture
-def metrics(temp_db):
-    """Create a MetricsStore instance."""
-    return MetricsStore(temp_db)
-
-
-@pytest.fixture
 def library_path(temp_dir):
     """Create a library directory."""
     lib_path = temp_dir / "workflows"

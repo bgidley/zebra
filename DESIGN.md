@@ -84,6 +84,9 @@ zebra/
 │       ├── memory.py  # Tiered memory system
 │       └── metrics.py # Performance tracking
 │
+├── zebra-agent-web/   # Web interface for agent management in Django
+│   └── zebra_agent_web/
+│
 └── legacy/            # Original Java implementation (archived)
 ```
 

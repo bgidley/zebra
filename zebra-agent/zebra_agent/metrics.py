@@ -2,11 +2,11 @@
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import aiosqlite
+import asyncpg
 
 
 @dataclass
@@ -31,7 +31,7 @@ class WorkflowRun:
             id=str(uuid.uuid4()),
             workflow_name=workflow_name,
             goal=goal,
-            started_at=datetime.now(),
+            started_at=datetime.now(timezone.utc),
         )
 
 
@@ -54,30 +54,59 @@ class WorkflowStats:
 
 
 class MetricsStore:
-    """SQLite-backed store for workflow performance metrics."""
+    """PostgreSQL-backed store for workflow performance metrics."""
 
-    def __init__(self, db_path: str | Path):
-        self.db_path = Path(db_path).expanduser()
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 5432,
+        database: str = "opc",
+        user: str = "opc",
+        password: str | None = None,
+        min_pool_size: int = 2,
+        max_pool_size: int = 10,
+    ):
+        self.host = host
+        self.port = port
+        self.database = database
+        self.user = user
+        self.password = password
+        self.min_pool_size = min_pool_size
+        self.max_pool_size = max_pool_size
+        self._pool: asyncpg.Pool | None = None
         self._initialized = False
 
-    async def _ensure_initialized(self) -> None:
-        """Ensure database tables exist."""
+    async def _ensure_pool(self) -> asyncpg.Pool:
+        """Ensure connection pool is initialized."""
+        if self._pool is None:
+            self._pool = await asyncpg.create_pool(
+                host=self.host,
+                port=self.port,
+                database=self.database,
+                user=self.user,
+                password=self.password,
+                min_size=self.min_pool_size,
+                max_size=self.max_pool_size,
+            )
+        return self._pool
+
+    async def initialize(self) -> None:
+        """Initialize database schema."""
         if self._initialized:
             return
 
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.executescript(
+        pool = await self._ensure_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS workflow_runs (
                     id TEXT PRIMARY KEY,
                     workflow_name TEXT NOT NULL,
                     goal TEXT NOT NULL,
-                    started_at TEXT NOT NULL,
-                    completed_at TEXT,
-                    success INTEGER NOT NULL DEFAULT 0,
-                    user_rating INTEGER,
+                    started_at TIMESTAMPTZ NOT NULL,
+                    completed_at TIMESTAMPTZ,
+                    success BOOLEAN NOT NULL DEFAULT FALSE,
+                    user_rating INTEGER CHECK (user_rating >= 1 AND user_rating <= 5),
                     tokens_used INTEGER DEFAULT 0,
                     error TEXT,
                     output TEXT
@@ -87,177 +116,184 @@ class MetricsStore:
                 ON workflow_runs(workflow_name);
 
                 CREATE INDEX IF NOT EXISTS idx_runs_started
-                ON workflow_runs(started_at);
+                ON workflow_runs(started_at DESC);
                 """
             )
-            await db.commit()
-
         self._initialized = True
+
+    async def _ensure_initialized(self) -> None:
+        """Backwards compatibility wrapper for initialize()."""
+        await self.initialize()
+
+    async def close(self) -> None:
+        """Close connection pool."""
+        if self._pool:
+            await self._pool.close()
+            self._pool = None
 
     async def record_run(self, run: WorkflowRun) -> None:
         """Record a workflow run."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                """
-                INSERT OR REPLACE INTO workflow_runs
-                (id, workflow_name, goal, started_at, completed_at,
-                 success, user_rating, tokens_used, error, output)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run.id,
-                    run.workflow_name,
-                    run.goal,
-                    run.started_at.isoformat(),
-                    run.completed_at.isoformat() if run.completed_at else None,
-                    1 if run.success else 0,
-                    run.user_rating,
-                    run.tokens_used,
-                    run.error,
-                    str(run.output) if run.output else None,
-                ),
-            )
-            await db.commit()
+        await pool.execute(
+            """
+            INSERT INTO workflow_runs
+            (id, workflow_name, goal, started_at, completed_at,
+             success, user_rating, tokens_used, error, output)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT (id) DO UPDATE SET
+                workflow_name = EXCLUDED.workflow_name,
+                goal = EXCLUDED.goal,
+                started_at = EXCLUDED.started_at,
+                completed_at = EXCLUDED.completed_at,
+                success = EXCLUDED.success,
+                user_rating = EXCLUDED.user_rating,
+                tokens_used = EXCLUDED.tokens_used,
+                error = EXCLUDED.error,
+                output = EXCLUDED.output
+            """,
+            run.id,
+            run.workflow_name,
+            run.goal,
+            run.started_at,
+            run.completed_at,
+            run.success,
+            run.user_rating,
+            run.tokens_used,
+            run.error,
+            str(run.output) if run.output else None,
+        )
 
     async def update_rating(self, run_id: str, rating: int) -> None:
         """Update the user rating for a run."""
-        await self._ensure_initialized()
-
         if not 1 <= rating <= 5:
             raise ValueError("Rating must be between 1 and 5")
 
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                "UPDATE workflow_runs SET user_rating = ? WHERE id = ?",
-                (rating, run_id),
-            )
-            await db.commit()
+        await self.initialize()
+        pool = await self._ensure_pool()
+
+        await pool.execute(
+            "UPDATE workflow_runs SET user_rating = $1 WHERE id = $2",
+            rating,
+            run_id,
+        )
 
     async def get_run(self, run_id: str) -> WorkflowRun | None:
         """Get a specific run by ID."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            async with db.execute(
-                "SELECT * FROM workflow_runs WHERE id = ?", (run_id,)
-            ) as cursor:
-                row = await cursor.fetchone()
-                if row:
-                    return self._row_to_run(row)
+        row = await pool.fetchrow("SELECT * FROM workflow_runs WHERE id = $1", run_id)
+        if row:
+            return self._row_to_run(row)
         return None
 
     async def get_stats(self, workflow_name: str) -> WorkflowStats:
         """Get aggregated stats for a workflow."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
+        row = await pool.fetchrow(
+            """
+            SELECT
+                COUNT(*) as total_runs,
+                SUM(CASE WHEN success THEN 1 ELSE 0 END) as successful_runs,
+                AVG(user_rating) as avg_rating,
+                MAX(started_at) as last_used
+            FROM workflow_runs
+            WHERE workflow_name = $1
+            """,
+            workflow_name,
+        )
 
-            # Get counts
-            async with db.execute(
-                """
-                SELECT
-                    COUNT(*) as total_runs,
-                    SUM(success) as successful_runs,
-                    AVG(user_rating) as avg_rating,
-                    MAX(started_at) as last_used
-                FROM workflow_runs
-                WHERE workflow_name = ?
-                """,
-                (workflow_name,),
-            ) as cursor:
-                row = await cursor.fetchone()
-
-                if row and row["total_runs"] > 0:
-                    last_used = None
-                    if row["last_used"]:
-                        last_used = datetime.fromisoformat(row["last_used"])
-
-                    return WorkflowStats(
-                        workflow_name=workflow_name,
-                        total_runs=row["total_runs"],
-                        successful_runs=row["successful_runs"] or 0,
-                        avg_rating=row["avg_rating"],
-                        last_used=last_used,
-                    )
+        if row and row["total_runs"] > 0:
+            return WorkflowStats(
+                workflow_name=workflow_name,
+                total_runs=row["total_runs"],
+                successful_runs=row["successful_runs"] or 0,
+                avg_rating=float(row["avg_rating"]) if row["avg_rating"] else None,
+                last_used=row["last_used"],
+            )
 
         return WorkflowStats(workflow_name=workflow_name)
 
     async def get_all_stats(self) -> list[WorkflowStats]:
         """Get stats for all workflows."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
+
+        rows = await pool.fetch(
+            """
+            SELECT
+                workflow_name,
+                COUNT(*) as total_runs,
+                SUM(CASE WHEN success THEN 1 ELSE 0 END) as successful_runs,
+                AVG(user_rating) as avg_rating,
+                MAX(started_at) as last_used
+            FROM workflow_runs
+            GROUP BY workflow_name
+            ORDER BY total_runs DESC
+            """
+        )
 
         stats = []
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-
-            async with db.execute(
-                """
-                SELECT
-                    workflow_name,
-                    COUNT(*) as total_runs,
-                    SUM(success) as successful_runs,
-                    AVG(user_rating) as avg_rating,
-                    MAX(started_at) as last_used
-                FROM workflow_runs
-                GROUP BY workflow_name
-                ORDER BY total_runs DESC
-                """
-            ) as cursor:
-                async for row in cursor:
-                    last_used = None
-                    if row["last_used"]:
-                        last_used = datetime.fromisoformat(row["last_used"])
-
-                    stats.append(
-                        WorkflowStats(
-                            workflow_name=row["workflow_name"],
-                            total_runs=row["total_runs"],
-                            successful_runs=row["successful_runs"] or 0,
-                            avg_rating=row["avg_rating"],
-                            last_used=last_used,
-                        )
-                    )
+        for row in rows:
+            stats.append(
+                WorkflowStats(
+                    workflow_name=row["workflow_name"],
+                    total_runs=row["total_runs"],
+                    successful_runs=row["successful_runs"] or 0,
+                    avg_rating=float(row["avg_rating"]) if row["avg_rating"] else None,
+                    last_used=row["last_used"],
+                )
+            )
 
         return stats
 
     async def get_recent_runs(self, limit: int = 10) -> list[WorkflowRun]:
         """Get the most recent workflow runs."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        runs = []
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
+        rows = await pool.fetch(
+            """
+            SELECT * FROM workflow_runs
+            ORDER BY started_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
 
-            async with db.execute(
-                """
-                SELECT * FROM workflow_runs
-                ORDER BY started_at DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ) as cursor:
-                async for row in cursor:
-                    runs.append(self._row_to_run(row))
+        return [self._row_to_run(row) for row in rows]
 
-        return runs
+    async def get_runs_for_workflow(self, workflow_name: str, limit: int = 10) -> list[WorkflowRun]:
+        """Get recent runs for a specific workflow."""
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-    def _row_to_run(self, row: aiosqlite.Row) -> WorkflowRun:
+        rows = await pool.fetch(
+            """
+            SELECT * FROM workflow_runs
+            WHERE workflow_name = $1
+            ORDER BY started_at DESC
+            LIMIT $2
+            """,
+            workflow_name,
+            limit,
+        )
+
+        return [self._row_to_run(row) for row in rows]
+
+    def _row_to_run(self, row: asyncpg.Record) -> WorkflowRun:
         """Convert a database row to a WorkflowRun."""
-        completed_at = None
-        if row["completed_at"]:
-            completed_at = datetime.fromisoformat(row["completed_at"])
-
         return WorkflowRun(
             id=row["id"],
             workflow_name=row["workflow_name"],
             goal=row["goal"],
-            started_at=datetime.fromisoformat(row["started_at"]),
-            completed_at=completed_at,
-            success=bool(row["success"]),
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
+            success=row["success"],
             user_rating=row["user_rating"],
             tokens_used=row["tokens_used"] or 0,
             error=row["error"],

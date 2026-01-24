@@ -9,8 +9,8 @@ resolution-markers = [
 [manifest]
 members = [
     "zebra-agent",
+    "zebra-agent-web",
     "zebra-tasks",
-    "zebra-web",
     "zebra-workflow",
     "zebra-workspace",
 ]
@@ -1864,7 +1864,7 @@ name = "zebra-agent"
 version = "0.1.0"
 source = { editable = "zebra-agent" }
 dependencies = [
-    { name = "aiosqlite" },
+    { name = "asyncpg" },
     { name = "pyyaml" },
     { name = "zebra-tasks", extra = ["anthropic"] },
     { name = "zebra-workflow" },
@@ -1878,11 +1878,52 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiosqlite", specifier = ">=0.19" },
+    { name = "asyncpg", specifier = ">=0.29" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "zebra-tasks", extras = ["anthropic"], editable = "zebra-tasks" },
+    { name = "zebra-workflow", editable = "zebra-py" },
+]
+provides-extras = ["dev"]
+
+[[package]]
+name = "zebra-agent-web"
+version = "0.1.0"
+source = { editable = "zebra-agent-web" }
+dependencies = [
+    { name = "channels" },
+    { name = "channels-redis" },
+    { name = "daphne" },
+    { name = "django", version = "5.2.10", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "django", version = "6.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "django-cors-headers" },
+    { name = "djangorestframework" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "zebra-agent" },
+    { name = "zebra-workflow" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-django" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "channels", specifier = ">=4.0" },
+    { name = "channels-redis", specifier = ">=4.1" },
+    { name = "daphne", specifier = ">=4.0" },
+    { name = "django", specifier = ">=5.0" },
+    { name = "django-cors-headers", specifier = ">=4.3" },
+    { name = "djangorestframework", specifier = ">=3.14" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
+    { name = "pytest-django", marker = "extra == 'dev'", specifier = ">=4.5" },
+    { name = "zebra-agent", editable = "zebra-agent" },
     { name = "zebra-workflow", editable = "zebra-py" },
 ]
 provides-extras = ["dev"]
@@ -1930,47 +1971,6 @@ requires-dist = [
     { name = "zebra-workflow", editable = "zebra-py" },
 ]
 provides-extras = ["anthropic", "openai", "all", "dev"]
-
-[[package]]
-name = "zebra-web"
-version = "0.1.0"
-source = { editable = "zebra-web" }
-dependencies = [
-    { name = "channels" },
-    { name = "channels-redis" },
-    { name = "daphne" },
-    { name = "django", version = "5.2.10", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "django", version = "6.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "django-cors-headers" },
-    { name = "djangorestframework" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "zebra-agent" },
-    { name = "zebra-workflow" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-django" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "channels", specifier = ">=4.0" },
-    { name = "channels-redis", specifier = ">=4.1" },
-    { name = "daphne", specifier = ">=4.0" },
-    { name = "django", specifier = ">=5.0" },
-    { name = "django-cors-headers", specifier = ">=4.3" },
-    { name = "djangorestframework", specifier = ">=3.14" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
-    { name = "pytest-django", marker = "extra == 'dev'", specifier = ">=4.5" },
-    { name = "zebra-agent", editable = "zebra-agent" },
-    { name = "zebra-workflow", editable = "zebra-py" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "zebra-workflow"

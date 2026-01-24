@@ -1,11 +1,12 @@
 """Interactive console CLI for the Zebra Agent."""
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
 from zebra.core.engine import WorkflowEngine
-from zebra.storage.sqlite import SQLiteStore
+from zebra.storage.postgres import PostgreSQLStore
 from zebra.tasks.registry import ActionRegistry
 
 from zebra_tasks.llm.action import LLMCallAction
@@ -25,12 +26,20 @@ from zebra_agent.metrics import MetricsStore
 # Default paths
 DEFAULT_DATA_DIR = Path("~/.zebra-agent").expanduser()
 DEFAULT_WORKFLOWS_DIR = DEFAULT_DATA_DIR / "workflows"
-DEFAULT_STATE_DB = DEFAULT_DATA_DIR / "state.db"
-DEFAULT_METRICS_DB = DEFAULT_DATA_DIR / "metrics.db"
-DEFAULT_MEMORY_DB = DEFAULT_DATA_DIR / "memory.db"
 
 # Built-in workflows location (relative to package)
 BUILTIN_WORKFLOWS = Path(__file__).parent.parent / "workflows"
+
+
+def get_pg_config():
+    """Get PostgreSQL configuration from environment variables."""
+    return {
+        "host": os.environ.get("PGHOST", "localhost"),
+        "port": int(os.environ.get("PGPORT", "5432")),
+        "database": os.environ.get("PGDATABASE", "opc"),
+        "user": os.environ.get("PGUSER", "opc"),
+        "password": os.environ.get("PGPASSWORD"),
+    }
 
 
 def print_banner():
@@ -187,7 +196,9 @@ async def cmd_memory(memory: AgentMemory):
         print("\n  Themes (long-term):")
         for t in themes:
             preview = t.theme[:150] + "..." if len(t.theme) > 150 else t.theme
-            print(f"    [{t.created_at.strftime('%Y-%m-%d')}] refs: {len(t.short_term_refs)} summaries")
+            print(
+                f"    [{t.created_at.strftime('%Y-%m-%d')}] refs: {len(t.short_term_refs)} summaries"
+            )
             print(f"      {preview}")
 
     if not entries and not summaries and not themes:
@@ -199,7 +210,7 @@ async def cmd_memory(memory: AgentMemory):
 async def cmd_dream(
     library: WorkflowLibrary,
     engine: WorkflowEngine,
-    metrics_db: Path,
+    metrics: MetricsStore,
     provider: str = "anthropic",
 ):
     """Run the self-improvement dream cycle."""
@@ -224,7 +235,6 @@ async def cmd_dream(
         definition,
         properties={
             "__llm_provider_name__": provider,
-            "__metrics_db_path__": str(metrics_db),
             "__workflow_library_path__": str(library.library_path),
         },
     )
@@ -292,12 +302,14 @@ async def async_main():
     # Ensure data directory exists
     DEFAULT_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+    pg_config = get_pg_config()
+
     # Initialize components
-    metrics = MetricsStore(DEFAULT_METRICS_DB)
+    metrics = MetricsStore(**pg_config)
     memory = AgentMemory(
-        DEFAULT_MEMORY_DB,
+        **pg_config,
         short_term_max_tokens=20000,  # 20k for recent details
-        long_term_max_tokens=30000,   # 30k for themes and patterns
+        long_term_max_tokens=30000,  # 30k for themes and patterns
     )
     library = WorkflowLibrary(DEFAULT_WORKFLOWS_DIR, metrics)
 
@@ -308,7 +320,7 @@ async def async_main():
             print(f"  Copied {copied} built-in workflows to library.")
 
     # Initialize workflow engine
-    store = SQLiteStore(str(DEFAULT_STATE_DB))
+    store = PostgreSQLStore(**pg_config)
     await store.initialize()
 
     # Register custom actions
@@ -357,7 +369,7 @@ async def async_main():
                 elif cmd == "/help":
                     cmd_help()
                 elif cmd == "/dream":
-                    await cmd_dream(library, engine, DEFAULT_METRICS_DB, "anthropic")
+                    await cmd_dream(library, engine, metrics, "anthropic")
                 else:
                     print(f"\n  Unknown command: {goal}")
                     print("  Type /help for available commands.\n")

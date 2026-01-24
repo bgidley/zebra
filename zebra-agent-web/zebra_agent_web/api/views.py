@@ -11,24 +11,22 @@ from asgiref.sync import sync_to_async
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-
 from zebra.core.models import TaskResult
 
 from zebra_agent_web.api import agent_engine, engine
 from zebra_agent_web.api.serializers import (
-    WorkflowInfoSerializer,
-    WorkflowDetailSerializer,
-    WorkflowRunSerializer,
     AgentResultSerializer,
-    WorkflowStatsSerializer,
-    ExecuteGoalRequestSerializer,
-    CreateWorkflowRequestSerializer,
-    RateRunRequestSerializer,
-    ProcessInstanceSerializer,
-    ProcessInstanceListSerializer,
-    ProcessInstanceDetailSerializer,
-    TaskInstanceSerializer,
     CompleteTaskRequestSerializer,
+    CreateWorkflowRequestSerializer,
+    ExecuteGoalRequestSerializer,
+    ProcessInstanceDetailSerializer,
+    ProcessInstanceListSerializer,
+    RateRunRequestSerializer,
+    TaskInstanceSerializer,
+    WorkflowDetailSerializer,
+    WorkflowInfoSerializer,
+    WorkflowRunSerializer,
+    WorkflowStatsSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -343,6 +341,63 @@ async def run_rate(request, run_id):
     except Exception as e:
         logger.exception("Failed to rate run")
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+async def run_status(request, run_id):
+    """Get current status of a run (for recovery if WebSocket disconnects).
+
+    Returns:
+    - status: "processing" | "completed" | "failed" | "not_found"
+    - Additional fields depending on status
+    """
+    await agent_engine.ensure_initialized()
+    metrics = agent_engine.get_metrics()
+
+    # Import here to avoid circular import
+    from zebra_agent_web.api.web_views import is_task_active
+
+    run = await metrics.get_run(run_id)
+
+    if run is None:
+        # Check if it's still being processed
+        if is_task_active(run_id):
+            return Response(
+                {
+                    "status": "processing",
+                    "run_id": run_id,
+                    "message": "Goal execution in progress",
+                }
+            )
+        return Response(
+            {"status": "not_found", "error": f"Run '{run_id}' not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Run exists - check if completed
+    if run.completed_at is None:
+        return Response(
+            {
+                "status": "processing",
+                "run_id": run.id,
+                "workflow_name": run.workflow_name,
+                "message": "Workflow execution in progress",
+            }
+        )
+
+    # Completed (success or failure)
+    return Response(
+        {
+            "status": "completed" if run.success else "failed",
+            "run_id": run.id,
+            "workflow_name": run.workflow_name,
+            "success": run.success,
+            "output": str(run.output) if run.output else None,
+            "error": run.error,
+            "tokens_used": run.tokens_used,
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        }
+    )
 
 
 # =============================================================================

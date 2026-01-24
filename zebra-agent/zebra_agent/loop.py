@@ -1,13 +1,14 @@
 """Main agent loop - select, execute, and learn from workflows."""
 
 import json
-from dataclasses import dataclass, field
+import uuid
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState
-
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
@@ -20,6 +21,9 @@ from zebra_agent.memory import (
     estimate_tokens,
 )
 from zebra_agent.metrics import MetricsStore, WorkflowRun
+
+# Type for progress callback: receives event name and data dict
+ProgressCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 
 @dataclass
@@ -147,7 +151,12 @@ Output ONLY valid YAML, no explanations."""
             self._llm = get_provider(self.provider_name, self.model)
         return self._llm
 
-    async def process_goal(self, goal: str) -> AgentResult:
+    async def process_goal(
+        self,
+        goal: str,
+        progress_callback: ProgressCallback | None = None,
+        run_id: str | None = None,
+    ) -> AgentResult:
         """
         Process a user goal through the agent loop.
 
@@ -158,10 +167,19 @@ Output ONLY valid YAML, no explanations."""
 
         Args:
             goal: The user's goal/request
+            progress_callback: Optional async callback for progress updates.
+                Called with (event_name, data_dict) at key points.
+            run_id: Optional run ID to use (for tracking from external callers)
 
         Returns:
             AgentResult with output, success status, etc.
         """
+
+        async def emit(event: str, data: dict[str, Any] | None = None) -> None:
+            """Emit progress event if callback is provided."""
+            if progress_callback:
+                await progress_callback(event, data or {})
+
         # Check if memory needs compaction first
         if self.memory:
             if await self.memory.needs_short_term_compaction():
@@ -169,27 +187,48 @@ Output ONLY valid YAML, no explanations."""
             if await self.memory.needs_long_term_compaction():
                 await self._compact_long_term_memory()
 
-        # Create run record
+        # Create run record with provided or generated ID
         run = WorkflowRun.create("pending", goal)
+        if run_id:
+            run.id = run_id
         created_new = False
+
+        await emit("started", {"run_id": run.id, "goal": goal})
 
         try:
             # Step 1: Select workflow
+            workflows = await self.library.list_workflows()
+            await emit(
+                "selecting_workflow",
+                {"available_count": len(workflows)},
+            )
+
             selection = await self._select_workflow(goal)
 
             if selection.create_new:
                 # Step 1b: Create new workflow
-                workflow_name = await self._create_workflow(
-                    goal, selection.suggested_name
+                await emit(
+                    "creating_workflow",
+                    {"suggested_name": selection.suggested_name},
                 )
+                workflow_name = await self._create_workflow(goal, selection.suggested_name)
                 created_new = True
             else:
                 workflow_name = selection.workflow_name
 
+            await emit(
+                "workflow_selected",
+                {
+                    "workflow_name": workflow_name,
+                    "created_new": created_new,
+                    "reasoning": selection.reasoning,
+                },
+            )
+
             run.workflow_name = workflow_name
 
-            # Step 2: Execute workflow
-            output, tokens = await self._execute_workflow(workflow_name, goal)
+            # Step 2: Execute workflow with progress tracking
+            output, tokens = await self._execute_workflow(workflow_name, goal, progress_callback)
 
             # Step 3: Record success
             run.completed_at = datetime.now()
@@ -210,6 +249,28 @@ Output ONLY valid YAML, no explanations."""
                 output=output,
                 success=True,
                 tokens_used=tokens,
+                created_new_workflow=created_new,
+            )
+
+        except Exception as e:
+            # Record failure
+            run.completed_at = datetime.now()
+            run.success = False
+            run.error = str(e)
+
+            await self.metrics.record_run(run)
+
+            # Still add to memory on failure
+            if self.memory:
+                await self._add_to_memory(run, f"Error: {e}")
+
+            return AgentResult(
+                run_id=run.id,
+                workflow_name=run.workflow_name,
+                goal=goal,
+                output=None,
+                success=False,
+                error=str(e),
                 created_new_workflow=created_new,
             )
 
@@ -331,15 +392,40 @@ Output ONLY valid YAML, no explanations."""
         # Add to library (validates YAML)
         return self.library.add_workflow(yaml_content)
 
-    async def _execute_workflow(self, workflow_name: str, goal: str) -> tuple[Any, int]:
+    async def _execute_workflow(
+        self,
+        workflow_name: str,
+        goal: str,
+        progress_callback: ProgressCallback | None = None,
+    ) -> tuple[Any, int]:
         """
         Execute a workflow and return the output.
+
+        Args:
+            workflow_name: Name of workflow to execute
+            goal: The user's goal
+            progress_callback: Optional callback for progress updates
 
         Returns:
             Tuple of (output, tokens_used)
         """
+        import asyncio
+
+        async def emit(event: str, data: dict[str, Any] | None = None) -> None:
+            """Emit progress event if callback is provided."""
+            if progress_callback:
+                await progress_callback(event, data or {})
+
         # Load workflow
         definition = self.library.get_workflow(workflow_name)
+
+        # Count total tasks for progress tracking
+        total_tasks = len(definition.tasks)
+
+        await emit(
+            "workflow_starting",
+            {"workflow_name": workflow_name, "total_tasks": total_tasks},
+        )
 
         # Create process with goal as property
         process = await self.engine.create_process(
@@ -354,19 +440,51 @@ Output ONLY valid YAML, no explanations."""
         # Start and run to completion
         await self.engine.start_process(process.id)
 
-        # Wait for completion (simple polling for now)
-        import asyncio
-
+        # Wait for completion with progress polling
         max_wait = 120  # 2 minutes max
         waited = 0
+        last_task_count = 0
 
         while waited < max_wait:
             process = await self.engine.store.load_process(process.id)
 
+            # Check for task progress via properties
+            # The engine stores task outputs in properties like __task_output_<task_id>
+            current_task_outputs = [k for k in process.properties if k.startswith("__task_output_")]
+            current_task_count = len(current_task_outputs)
+
+            # Emit progress for newly completed tasks
+            if current_task_count > last_task_count:
+                for key in current_task_outputs[last_task_count:]:
+                    task_id = key.replace("__task_output_", "")
+                    task_def = definition.tasks.get(task_id)
+                    task_name = task_def.name if task_def else task_id
+                    task_output = process.properties.get(key)
+
+                    # Get the output value (truncated for progress)
+                    output_preview = ""
+                    if isinstance(task_output, dict) and "response" in task_output:
+                        output_preview = str(task_output["response"])[:200]
+                    elif task_output:
+                        output_preview = str(task_output)[:200]
+
+                    await emit(
+                        "task_completed",
+                        {
+                            "task_name": task_name,
+                            "task_index": current_task_count,
+                            "total_tasks": total_tasks,
+                            "output_preview": output_preview,
+                        },
+                    )
+
+                last_task_count = current_task_count
+
             if process.state == ProcessState.COMPLETE:
                 break
             elif process.state == ProcessState.FAILED:
-                raise RuntimeError(f"Workflow failed: {process.error}")
+                error_detail = getattr(process, "error", None) or "unknown error"
+                raise RuntimeError(f"Workflow failed: {error_detail}")
 
             await asyncio.sleep(0.5)
             waited += 0.5
@@ -385,6 +503,8 @@ Output ONLY valid YAML, no explanations."""
             "solutions",
             "result",
             "output",
+            "complete_guide",
+            "techniques",
         ]:
             if key in process.properties:
                 output = process.properties[key]
@@ -392,11 +512,7 @@ Output ONLY valid YAML, no explanations."""
 
         # Fall back to all properties if no standard key found
         if output is None:
-            output = {
-                k: v
-                for k, v in process.properties.items()
-                if not k.startswith("__")
-            }
+            output = {k: v for k, v in process.properties.items() if not k.startswith("__")}
 
         # Get token usage
         tokens = process.properties.get("__total_tokens__", 0)
@@ -441,7 +557,6 @@ Output ONLY valid YAML, no explanations."""
             return
 
         import asyncio
-        import uuid
 
         # Get short-term content for compaction
         memory_content = await self.memory.get_short_term_content_for_compaction()
@@ -512,7 +627,6 @@ Output ONLY valid YAML, no explanations."""
             return
 
         import asyncio
-        import uuid
 
         # Get long-term content for compaction
         memory_content = await self.memory.get_long_term_content_for_compaction()

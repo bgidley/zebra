@@ -5,7 +5,6 @@ These serialize the Pydantic models from zebra-py and zebra-agent to JSON for th
 
 from rest_framework import serializers
 
-
 # =============================================================================
 # Agent-specific serializers
 # =============================================================================

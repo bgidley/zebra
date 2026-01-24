@@ -1,27 +1,10 @@
 """Tests for the metrics module."""
 
-import tempfile
-from datetime import datetime
-from pathlib import Path
+from datetime import datetime, timezone
 
 import pytest
 
-from zebra_agent.metrics import MetricsStore, WorkflowRun, WorkflowStats
-
-
-@pytest.fixture
-def temp_db():
-    """Create a temporary database file."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        yield Path(f.name)
-    # Cleanup
-    Path(f.name).unlink(missing_ok=True)
-
-
-@pytest.fixture
-def metrics(temp_db):
-    """Create a MetricsStore instance."""
-    return MetricsStore(temp_db)
+from zebra_agent.metrics import WorkflowRun, WorkflowStats
 
 
 class TestWorkflowRun:
@@ -33,7 +16,7 @@ class TestWorkflowRun:
             id="test-id",
             workflow_name="TestWorkflow",
             goal="Test goal",
-            started_at=datetime(2024, 1, 15, 10, 0),
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
         )
         assert run.id == "test-id"
         assert run.workflow_name == "TestWorkflow"
@@ -49,6 +32,7 @@ class TestWorkflowRun:
         assert run.id is not None
         assert len(run.id) == 36  # UUID length
         assert run.started_at is not None
+        assert run.started_at.tzinfo is not None
 
     def test_run_with_all_fields(self):
         """Test run with all fields populated."""
@@ -56,8 +40,8 @@ class TestWorkflowRun:
             id="test-id",
             workflow_name="TestWorkflow",
             goal="Test goal",
-            started_at=datetime(2024, 1, 15, 10, 0),
-            completed_at=datetime(2024, 1, 15, 10, 5),
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2024, 1, 15, 10, 5, tzinfo=timezone.utc),
             success=True,
             user_rating=5,
             tokens_used=100,
@@ -80,7 +64,7 @@ class TestWorkflowStats:
             total_runs=10,
             successful_runs=8,
             avg_rating=4.5,
-            last_used=datetime(2024, 1, 15, 12, 0),
+            last_used=datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc),
         )
         assert stats.workflow_name == "TestWorkflow"
         assert stats.total_runs == 10
@@ -135,16 +119,6 @@ class TestMetricsStoreInitialization:
         await metrics._ensure_initialized()
         assert metrics._initialized is True
 
-    async def test_creates_directory(self, temp_db):
-        """Test that metrics creates parent directories."""
-        nested_path = temp_db.parent / "metrics_subdir" / "metrics.db"
-        metrics = MetricsStore(nested_path)
-        await metrics._ensure_initialized()
-        assert nested_path.parent.exists()
-        # Cleanup
-        nested_path.unlink(missing_ok=True)
-        nested_path.parent.rmdir()
-
     async def test_double_initialization(self, metrics):
         """Test that double initialization is safe."""
         await metrics._ensure_initialized()
@@ -158,7 +132,7 @@ class TestRecordRun:
     async def test_record_run(self, metrics):
         """Test recording a workflow run."""
         run = WorkflowRun.create("TestWorkflow", "Test goal")
-        run.completed_at = datetime.now()
+        run.completed_at = datetime.now(timezone.utc)
         run.success = True
         run.tokens_used = 100
 
@@ -174,7 +148,7 @@ class TestRecordRun:
     async def test_record_run_with_error(self, metrics):
         """Test recording a failed run with error."""
         run = WorkflowRun.create("TestWorkflow", "Test goal")
-        run.completed_at = datetime.now()
+        run.completed_at = datetime.now(timezone.utc)
         run.success = False
         run.error = "Something went wrong"
 
@@ -188,7 +162,7 @@ class TestRecordRun:
     async def test_record_run_with_output(self, metrics):
         """Test recording a run with output."""
         run = WorkflowRun.create("TestWorkflow", "Test goal")
-        run.completed_at = datetime.now()
+        run.completed_at = datetime.now(timezone.utc)
         run.success = True
         run.output = {"result": "test"}
 
@@ -205,14 +179,14 @@ class TestRecordRun:
             id="fixed-id",
             workflow_name="TestWorkflow",
             goal="Original goal",
-            started_at=datetime.now(),
+            started_at=datetime.now(timezone.utc),
         )
         await metrics.record_run(run)
 
         # Update and record again
         run.goal = "Updated goal"
         run.success = True
-        run.completed_at = datetime.now()
+        run.completed_at = datetime.now(timezone.utc)
         await metrics.record_run(run)
 
         retrieved = await metrics.get_run("fixed-id")
@@ -243,8 +217,8 @@ class TestGetRun:
             id="test-id",
             workflow_name="TestWorkflow",
             goal="Test goal",
-            started_at=datetime(2024, 1, 15, 10, 0),
-            completed_at=datetime(2024, 1, 15, 10, 5),
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2024, 1, 15, 10, 5, tzinfo=timezone.utc),
             success=True,
             user_rating=4,
             tokens_used=150,
@@ -256,8 +230,8 @@ class TestGetRun:
         retrieved = await metrics.get_run(run.id)
         assert retrieved.workflow_name == "TestWorkflow"
         assert retrieved.goal == "Test goal"
-        assert retrieved.started_at == datetime(2024, 1, 15, 10, 0)
-        assert retrieved.completed_at == datetime(2024, 1, 15, 10, 5)
+        assert retrieved.started_at == datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)
+        assert retrieved.completed_at == datetime(2024, 1, 15, 10, 5, tzinfo=timezone.utc)
         assert retrieved.success is True
         assert retrieved.user_rating == 4
         assert retrieved.tokens_used == 150
@@ -328,7 +302,7 @@ class TestGetStats:
         # Create some runs
         for i in range(5):
             run = WorkflowRun.create("TestWorkflow", f"Goal {i}")
-            run.completed_at = datetime.now()
+            run.completed_at = datetime.now(timezone.utc)
             run.success = i < 3  # 3 successful, 2 failed
             if run.success:
                 run.user_rating = 4
@@ -344,7 +318,7 @@ class TestGetStats:
         ratings = [3, 4, 5]
         for i, rating in enumerate(ratings):
             run = WorkflowRun.create("TestWorkflow", f"Goal {i}")
-            run.completed_at = datetime.now()
+            run.completed_at = datetime.now(timezone.utc)
             run.success = True
             run.user_rating = rating
             await metrics.record_run(run)
@@ -458,12 +432,12 @@ class TestRowToRun:
     async def test_row_to_run_with_completed_at(self, metrics):
         """Test conversion with completed_at set."""
         run = WorkflowRun.create("TestWorkflow", "Test goal")
-        run.completed_at = datetime(2024, 1, 15, 12, 0)
+        run.completed_at = datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc)
         run.success = True
         await metrics.record_run(run)
 
         retrieved = await metrics.get_run(run.id)
-        assert retrieved.completed_at == datetime(2024, 1, 15, 12, 0)
+        assert retrieved.completed_at == datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc)
 
     async def test_row_to_run_without_completed_at(self, metrics):
         """Test conversion without completed_at set."""

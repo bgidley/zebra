@@ -2,11 +2,11 @@
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import aiosqlite
+import asyncpg
 
 
 @dataclass
@@ -66,7 +66,7 @@ class LongTermTheme:
 
 class AgentMemory:
     """
-    Agent memory with short-term and long-term storage.
+    Agent memory with short-term and long-term storage backed by PostgreSQL.
 
     Short-term memory:
     - Stores recent interaction details
@@ -82,40 +82,57 @@ class AgentMemory:
 
     def __init__(
         self,
-        db_path: str | Path,
+        host: str = "localhost",
+        port: int = 5432,
+        database: str = "opc",
+        user: str = "opc",
+        password: str | None = None,
         short_term_max_tokens: int = 20000,
         long_term_max_tokens: int = 30000,
         compact_threshold: float = 0.9,
+        min_pool_size: int = 2,
+        max_pool_size: int = 10,
     ):
-        """
-        Initialize agent memory.
-
-        Args:
-            db_path: Path to SQLite database
-            short_term_max_tokens: Max tokens for short-term memory
-            long_term_max_tokens: Max tokens for long-term memory
-            compact_threshold: Trigger compaction at this fraction of max
-        """
-        self.db_path = Path(db_path).expanduser()
+        self.host = host
+        self.port = port
+        self.database = database
+        self.user = user
+        self.password = password
         self.short_term_max_tokens = short_term_max_tokens
         self.long_term_max_tokens = long_term_max_tokens
         self.compact_threshold = compact_threshold
+        self.min_pool_size = min_pool_size
+        self.max_pool_size = max_pool_size
+        self._pool: asyncpg.Pool | None = None
         self._initialized = False
 
-    async def _ensure_initialized(self) -> None:
-        """Ensure database tables exist."""
+    async def _ensure_pool(self) -> asyncpg.Pool:
+        """Ensure connection pool is initialized."""
+        if self._pool is None:
+            self._pool = await asyncpg.create_pool(
+                host=self.host,
+                port=self.port,
+                database=self.database,
+                user=self.user,
+                password=self.password,
+                min_size=self.min_pool_size,
+                max_size=self.max_pool_size,
+            )
+        return self._pool
+
+    async def initialize(self) -> None:
+        """Initialize database schema."""
         if self._initialized:
             return
 
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.executescript(
+        pool = await self._ensure_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
                 """
                 -- Short-term: individual interaction entries
                 CREATE TABLE IF NOT EXISTS short_term_entries (
                     id TEXT PRIMARY KEY,
-                    timestamp TEXT NOT NULL,
+                    timestamp TIMESTAMPTZ NOT NULL,
                     goal TEXT NOT NULL,
                     workflow_used TEXT,
                     result_summary TEXT,
@@ -125,7 +142,7 @@ class AgentMemory:
                 -- Short-term: compacted summaries (detail-focused)
                 CREATE TABLE IF NOT EXISTS short_term_summaries (
                     id TEXT PRIMARY KEY,
-                    created_at TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL,
                     summary TEXT NOT NULL,
                     tokens INTEGER DEFAULT 0,
                     entry_count INTEGER DEFAULT 0
@@ -134,10 +151,10 @@ class AgentMemory:
                 -- Long-term: thematic summaries
                 CREATE TABLE IF NOT EXISTS long_term_themes (
                     id TEXT PRIMARY KEY,
-                    created_at TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL,
                     theme TEXT NOT NULL,
                     tokens INTEGER DEFAULT 0,
-                    short_term_refs TEXT  -- JSON array of short_term_summary IDs
+                    short_term_refs JSONB DEFAULT '[]'::jsonb
                 );
 
                 -- State tracking
@@ -147,90 +164,92 @@ class AgentMemory:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_short_term_timestamp
-                ON short_term_entries(timestamp);
+                ON short_term_entries(timestamp DESC);
 
                 CREATE INDEX IF NOT EXISTS idx_short_term_summary_created
-                ON short_term_summaries(created_at);
+                ON short_term_summaries(created_at DESC);
 
                 CREATE INDEX IF NOT EXISTS idx_long_term_created
-                ON long_term_themes(created_at);
+                ON long_term_themes(created_at DESC);
                 """
             )
-            await db.commit()
-
         self._initialized = True
+
+    async def _ensure_initialized(self) -> None:
+        """Backwards compatibility wrapper for initialize()."""
+        await self.initialize()
+
+    async def close(self) -> None:
+        """Close connection pool."""
+        if self._pool:
+            await self._pool.close()
+            self._pool = None
 
     # ==================== Short-Term Memory ====================
 
     async def add_entry(self, entry: MemoryEntry) -> None:
         """Add an entry to short-term memory."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                """
-                INSERT OR REPLACE INTO short_term_entries
-                (id, timestamp, goal, workflow_used, result_summary, tokens)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    entry.id,
-                    entry.timestamp.isoformat(),
-                    entry.goal,
-                    entry.workflow_used,
-                    entry.result_summary,
-                    entry.tokens,
-                ),
-            )
-            await db.commit()
+        await pool.execute(
+            """
+            INSERT INTO short_term_entries
+            (id, timestamp, goal, workflow_used, result_summary, tokens)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (id) DO UPDATE SET
+                timestamp = EXCLUDED.timestamp,
+                goal = EXCLUDED.goal,
+                workflow_used = EXCLUDED.workflow_used,
+                result_summary = EXCLUDED.result_summary,
+                tokens = EXCLUDED.tokens
+            """,
+            entry.id,
+            entry.timestamp,
+            entry.goal,
+            entry.workflow_used,
+            entry.result_summary,
+            entry.tokens,
+        )
 
     async def get_short_term_entries(self, limit: int | None = None) -> list[MemoryEntry]:
         """Get short-term entries, most recent first."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        entries = []
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            query = "SELECT * FROM short_term_entries ORDER BY timestamp DESC"
-            if limit:
-                query += f" LIMIT {limit}"
+        query = "SELECT * FROM short_term_entries ORDER BY timestamp DESC"
+        if limit:
+            query += f" LIMIT {limit}"
 
-            async with db.execute(query) as cursor:
-                async for row in cursor:
-                    entries.append(
-                        MemoryEntry(
-                            id=row["id"],
-                            timestamp=datetime.fromisoformat(row["timestamp"]),
-                            goal=row["goal"],
-                            workflow_used=row["workflow_used"] or "",
-                            result_summary=row["result_summary"] or "",
-                            tokens=row["tokens"] or 0,
-                        )
-                    )
+        rows = await pool.fetch(query)
 
-        return entries
+        return [
+            MemoryEntry(
+                id=row["id"],
+                timestamp=row["timestamp"],
+                goal=row["goal"],
+                workflow_used=row["workflow_used"] or "",
+                result_summary=row["result_summary"] or "",
+                tokens=row["tokens"] or 0,
+            )
+            for row in rows
+        ]
 
     async def get_short_term_tokens(self) -> int:
         """Get total tokens in short-term entries."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT COALESCE(SUM(tokens), 0) FROM short_term_entries"
-            ) as cursor:
-                row = await cursor.fetchone()
-                return row[0] if row else 0
+        val = await pool.fetchval("SELECT COALESCE(SUM(tokens), 0) FROM short_term_entries")
+        return val or 0
 
     async def get_short_term_summary_tokens(self) -> int:
         """Get total tokens in short-term summaries."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT COALESCE(SUM(tokens), 0) FROM short_term_summaries"
-            ) as cursor:
-                row = await cursor.fetchone()
-                return row[0] if row else 0
+        val = await pool.fetchval("SELECT COALESCE(SUM(tokens), 0) FROM short_term_summaries")
+        return val or 0
 
     async def needs_short_term_compaction(self) -> bool:
         """Check if short-term memory needs compaction."""
@@ -240,57 +259,49 @@ class AgentMemory:
 
     async def get_short_term_summaries(self, limit: int | None = None) -> list[ShortTermSummary]:
         """Get short-term summaries, most recent first."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        summaries = []
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            query = "SELECT * FROM short_term_summaries ORDER BY created_at DESC"
-            if limit:
-                query += f" LIMIT {limit}"
+        query = "SELECT * FROM short_term_summaries ORDER BY created_at DESC"
+        if limit:
+            query += f" LIMIT {limit}"
 
-            async with db.execute(query) as cursor:
-                async for row in cursor:
-                    summaries.append(
-                        ShortTermSummary(
-                            id=row["id"],
-                            created_at=datetime.fromisoformat(row["created_at"]),
-                            summary=row["summary"],
-                            tokens=row["tokens"] or 0,
-                            entry_count=row["entry_count"] or 0,
-                        )
-                    )
+        rows = await pool.fetch(query)
 
-        return summaries
+        return [
+            ShortTermSummary(
+                id=row["id"],
+                created_at=row["created_at"],
+                summary=row["summary"],
+                tokens=row["tokens"] or 0,
+                entry_count=row["entry_count"] or 0,
+            )
+            for row in rows
+        ]
 
     async def add_short_term_summary(self, summary: ShortTermSummary) -> None:
         """Add a compacted short-term summary."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                """
-                INSERT INTO short_term_summaries
-                (id, created_at, summary, tokens, entry_count)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    summary.id,
-                    summary.created_at.isoformat(),
-                    summary.summary,
-                    summary.tokens,
-                    summary.entry_count,
-                ),
-            )
-            await db.commit()
+        await pool.execute(
+            """
+            INSERT INTO short_term_summaries
+            (id, created_at, summary, tokens, entry_count)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            summary.id,
+            summary.created_at,
+            summary.summary,
+            summary.tokens,
+            summary.entry_count,
+        )
 
     async def clear_short_term_entries(self) -> None:
         """Clear all short-term entries (after compaction)."""
-        await self._ensure_initialized()
-
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("DELETE FROM short_term_entries")
-            await db.commit()
+        await self.initialize()
+        pool = await self._ensure_pool()
+        await pool.execute("DELETE FROM short_term_entries")
 
     async def get_short_term_content_for_compaction(self) -> str:
         """Get short-term content formatted for compaction."""
@@ -313,14 +324,11 @@ class AgentMemory:
 
     async def get_long_term_tokens(self) -> int:
         """Get total tokens in long-term themes."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT COALESCE(SUM(tokens), 0) FROM long_term_themes"
-            ) as cursor:
-                row = await cursor.fetchone()
-                return row[0] if row else 0
+        val = await pool.fetchval("SELECT COALESCE(SUM(tokens), 0) FROM long_term_themes")
+        return val or 0
 
     async def needs_long_term_compaction(self) -> bool:
         """Check if long-term memory needs compaction."""
@@ -334,85 +342,81 @@ class AgentMemory:
 
     async def get_long_term_themes(self, limit: int | None = None) -> list[LongTermTheme]:
         """Get long-term themes, most recent first."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
+
+        query = "SELECT * FROM long_term_themes ORDER BY created_at DESC"
+        if limit:
+            query += f" LIMIT {limit}"
+
+        rows = await pool.fetch(query)
 
         themes = []
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            query = "SELECT * FROM long_term_themes ORDER BY created_at DESC"
-            if limit:
-                query += f" LIMIT {limit}"
+        for row in rows:
+            # asyncpg automatically decodes JSONB to python dict/list
+            refs = row["short_term_refs"] if row["short_term_refs"] else []
+            if isinstance(refs, str):
+                refs = json.loads(refs)
 
-            async with db.execute(query) as cursor:
-                async for row in cursor:
-                    refs = json.loads(row["short_term_refs"]) if row["short_term_refs"] else []
-                    themes.append(
-                        LongTermTheme(
-                            id=row["id"],
-                            created_at=datetime.fromisoformat(row["created_at"]),
-                            theme=row["theme"],
-                            tokens=row["tokens"] or 0,
-                            short_term_refs=refs,
-                        )
-                    )
+            themes.append(
+                LongTermTheme(
+                    id=row["id"],
+                    created_at=row["created_at"],
+                    theme=row["theme"],
+                    tokens=row["tokens"] or 0,
+                    short_term_refs=refs,
+                )
+            )
 
         return themes
 
     async def add_long_term_theme(self, theme: LongTermTheme) -> None:
         """Add a long-term theme."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                """
-                INSERT INTO long_term_themes
-                (id, created_at, theme, tokens, short_term_refs)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    theme.id,
-                    theme.created_at.isoformat(),
-                    theme.theme,
-                    theme.tokens,
-                    json.dumps(theme.short_term_refs),
-                ),
-            )
-            await db.commit()
+        await pool.execute(
+            """
+            INSERT INTO long_term_themes
+            (id, created_at, theme, tokens, short_term_refs)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            theme.id,
+            theme.created_at,
+            theme.theme,
+            theme.tokens,
+            json.dumps(theme.short_term_refs),
+        )
 
     async def get_short_term_summary_by_id(self, summary_id: str) -> ShortTermSummary | None:
         """Get a specific short-term summary by ID."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            async with db.execute(
-                "SELECT * FROM short_term_summaries WHERE id = ?", (summary_id,)
-            ) as cursor:
-                row = await cursor.fetchone()
-                if row:
-                    return ShortTermSummary(
-                        id=row["id"],
-                        created_at=datetime.fromisoformat(row["created_at"]),
-                        summary=row["summary"],
-                        tokens=row["tokens"] or 0,
-                        entry_count=row["entry_count"] or 0,
-                    )
+        row = await pool.fetchrow("SELECT * FROM short_term_summaries WHERE id = $1", summary_id)
+        if row:
+            return ShortTermSummary(
+                id=row["id"],
+                created_at=row["created_at"],
+                summary=row["summary"],
+                tokens=row["tokens"] or 0,
+                entry_count=row["entry_count"] or 0,
+            )
         return None
 
     async def clear_short_term_summaries(self, keep_ids: list[str] | None = None) -> None:
         """Clear short-term summaries, optionally keeping some."""
-        await self._ensure_initialized()
+        await self.initialize()
+        pool = await self._ensure_pool()
 
-        async with aiosqlite.connect(self.db_path) as db:
-            if keep_ids:
-                placeholders = ",".join("?" * len(keep_ids))
-                await db.execute(
-                    f"DELETE FROM short_term_summaries WHERE id NOT IN ({placeholders})",
-                    keep_ids,
-                )
-            else:
-                await db.execute("DELETE FROM short_term_summaries")
-            await db.commit()
+        if keep_ids:
+            # asyncpg handles list parameters with ANY
+            await pool.execute(
+                "DELETE FROM short_term_summaries WHERE id != ANY($1)",
+                keep_ids,
+            )
+        else:
+            await pool.execute("DELETE FROM short_term_summaries")
 
     async def get_long_term_content_for_compaction(self) -> str:
         """Get long-term content formatted for compaction."""
@@ -484,7 +488,7 @@ class AgentMemory:
 
     async def get_stats(self) -> dict[str, Any]:
         """Get memory statistics."""
-        await self._ensure_initialized()
+        await self.initialize()
 
         short_entries = await self.get_short_term_tokens()
         short_summaries = await self.get_short_term_summary_tokens()
