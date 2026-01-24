@@ -7,9 +7,20 @@ This file provides coding agents with essential guidelines for working on the Ze
 Zebra is a multi-language workflow orchestration system for AI-assisted development with:
 - **Python** (primary): Core workflow engine with MCP integration
 - **Legacy Java**: Original 2004 implementation (archived, in `legacy/`)
-- **UV workspaces**: Monorepo structure with 3 Python packages (zebra-py, zebra-tasks, zebra-agent)
+- **UV workspaces**: Monorepo structure with 4 Python packages
 
-## Architecture
+## Monorepo Structure
+
+Each package has its own `AGENTS.md` with module-specific guidelines:
+
+| Package | Purpose | AGENTS.md |
+|---------|---------|-----------|
+| [zebra-py](zebra-py/) | Core workflow engine with MCP integration | [zebra-py/AGENTS.md](zebra-py/AGENTS.md) |
+| [zebra-tasks](zebra-tasks/) | Reusable task actions (LLM, subtasks, compute) | [zebra-tasks/AGENTS.md](zebra-tasks/AGENTS.md) |
+| [zebra-agent](zebra-agent/) | Self-improving agent console | [zebra-agent/AGENTS.md](zebra-agent/AGENTS.md) |
+| [zebra-agent-web](zebra-agent-web/) | Web UI for Zebra Agent | [zebra-agent-web/AGENTS.md](zebra-agent-web/AGENTS.md) |
+
+## Architecture Overview
 
 The workflow engine follows a layered, interface-driven architecture:
 
@@ -21,44 +32,7 @@ The engine handles:
 - Routing evaluation (serial vs parallel)
 - Synchronization/join points for parallel branches
 
-### Core Components
-
-| Component | Python | Rust |
-|-----------|--------|------|
-| Engine | `zebra/core/engine.py` | `src/core/engine.rs` |
-| Models | `zebra/core/models.py` | `src/core/models.rs` |
-| Storage | `zebra/storage/` | `src/storage/` |
-| Actions | `zebra/tasks/` | `src/tasks/` |
-| Loader | `zebra/definitions/loader.py` | `src/definitions/` |
-
-Subprojects have thier own AGENTS.md files.
-
-## Core Concepts
-
-### State Machines
-
-**ProcessState**: `created → running → complete` (optionally `paused` or `failed`)  
-**TaskState**: `pending → awaiting_sync → ready → running → complete` (or `failed`)
-
-Manual tasks wait in `ready` state until explicitly transitioned. Auto tasks execute immediately.
-
-### Flow of Execution (FOE)
-
-FOE tracks parallel execution branches. Serial routings inherit the parent FOE; parallel routings create new FOEs. Synchronized tasks wait for all incoming FOEs before executing (join point).
-
-### TaskAction Interface
-
-Custom actions implement: `async def run(task: TaskInstance, context: ExecutionContext) -> TaskResult`
-
-Register actions by name in `ActionRegistry`. Actions access task properties, resolve templates, and manipulate process state through the context.
-
-### StateStore Interface
-
-Abstracts persistence layer. Implementations:
-- `InMemoryStore` - For testing and simple workflows
-- `SQLiteStore` - For production with persistent state
-
-## Build & Test Commands
+## Workspace-Level Commands
 
 ### Setup & Build
 
@@ -68,9 +42,6 @@ uv sync --all-packages
 
 # Install individual package
 cd zebra-py && uv sync
-
-# Build Rust package
-cd zebra-rs && cargo build --release
 ```
 
 ### Running Tests
@@ -82,6 +53,11 @@ uv run pytest
 # Run all tests with coverage
 uv run pytest --cov
 
+# Run tests for a specific package
+uv run pytest zebra-py/tests/ -v
+uv run pytest zebra-tasks/tests/ -v
+uv run pytest zebra-agent/tests/ -v
+
 # Run single test file
 uv run pytest zebra-py/tests/test_engine.py -v
 
@@ -90,47 +66,22 @@ uv run pytest zebra-py/tests/test_engine.py::test_simple_workflow -v
 
 # Run tests matching pattern
 uv run pytest -k "parallel" -v
-
-# Run Rust tests
-cd zebra-rs && cargo test
-
-# Run single Rust test
-cd zebra-rs && cargo test test_engine -- --nocapture
-
-# Run Rust performance tests (release mode)
-cd zebra-rs && cargo test --release perf_
 ```
 
 ### Linting & Formatting
 
 ```bash
-# Python: Run Ruff linter (from project root)
+# Run Ruff linter (from project root)
 uv run ruff check .
 
-# Python: Auto-fix linting issues
+# Auto-fix linting issues
 uv run ruff check --fix .
 
-# Python: Format code
+# Format code
 uv run ruff format .
 
-# Python: Check formatting without changes
+# Check formatting without changes
 uv run ruff format --check .
-
-# Rust: Linting
-cd zebra-rs && cargo clippy
-
-# Rust: Check formatting
-cd zebra-rs && cargo fmt --check
-
-# Rust: Auto-format
-cd zebra-rs && cargo fmt
-```
-
-### Running MCP Server
-
-```bash
-cd zebra-py
-uv run python -m zebra.mcp.server
 ```
 
 ## Code Style Guidelines
@@ -331,21 +282,6 @@ def engine(store, registry):
     return WorkflowEngine(store, registry)
 ```
 
-### Test Actions
-
-Create simple test actions:
-
-```python
-class CountingAction(TaskAction):
-    """A test action that counts executions."""
-
-    execution_count = 0
-
-    async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        CountingAction.execution_count += 1
-        return TaskResult.ok(output={"count": CountingAction.execution_count})
-```
-
 ### Async Tests
 
 Tests are automatically async with `pytest-asyncio` (asyncio_mode = "auto"):
@@ -377,83 +313,10 @@ Coverage is configured to:
 6. **Use ActionRegistry** - All task actions must be registered before use
 7. **Handle async properly** - Engine is fully async; don't block the event loop
 
-## File Locations
-
-- **Core engine**: `zebra-py/zebra/core/`
-- **Task actions**: `zebra-tasks/zebra_tasks/`
-- **Tests**: `zebra-py/tests/`, `zebra-tasks/tests/`, `zebra-agent/tests/`
-- **Config**: `pyproject.toml` (workspace root and each package)
-- **Examples**: `zebra-py/zebra/templates/`
-
-## Common Tasks
-
-### Add a New Task Action
-
-1. Create class in `zebra-tasks/zebra_tasks/`
-2. Inherit from `TaskAction`
-3. Implement `async def run(task, context) -> TaskResult`
-4. Register in workflow or `ActionRegistry`
-5. Add tests in `zebra-tasks/tests/`
-
-**Example with template resolution and property access:**
-
-```python
-class MyAction(TaskAction):
-    async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        # Access task properties
-        value = task.properties.get("my_key")
-        
-        # Resolve templates from process properties
-        resolved = context.resolve_template("{{my_var}}")
-        
-        # Set process properties for downstream tasks
-        context.set_process_property("output_key", result)
-        
-        return TaskResult.ok(output={"result": result})
-```
-
-### Add a New Test
-
-1. Create test file in appropriate `tests/` directory
-2. Use pytest fixtures for setup
-3. Test async code with `async def test_*`
-4. Run: `uv run pytest path/to/test_file.py -v`
-
-### Debug a Workflow
-
-1. Check process state: `process.state`
-2. Check task states: `process.tasks[task_id].state`
-3. Review logs: `logger.debug()` statements throughout engine
-4. Use `InMemoryStore` for simpler debugging (no DB)
-
-## Extension Points
-
-### Custom TaskActions
-
-Implement the `TaskAction` base class and register with `ActionRegistry`:
-
-```python
-class CustomAction(TaskAction):
-    async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        # Your logic here
-        return TaskResult.ok(output=result)
-
-# Register
-registry.register_action("custom_action", CustomAction)
-```
-
-### Custom ConditionActions
-
-Implement `ConditionAction` for routing conditions that evaluate to boolean.
-
-### Custom Storage Backends
-
-Implement the `StateStore` abstract base class (Python) or trait (Rust) to create custom persistence layers beyond SQLite and in-memory storage.
-
 ## Related Documentation
 
-- **design.md** - Original Java architecture and design patterns
-- **zebra-py/README.md** - Python usage guide and YAML definition reference
-- **zebra-py/workflows.md** - Workflow Control-Flow Patterns (43 patterns mapped)
-- **zebra-tasks/README.md** - Task actions library documentation
-- **zebra-agent/DESIGN.md** - Agent framework design overview
+- **[DESIGN.md](DESIGN.md)** - Original Java architecture and design patterns
+- **[zebra-py/README.md](zebra-py/README.md)** - Python usage guide and YAML definition reference
+- **[zebra-py/workflows.md](zebra-py/workflows.md)** - Workflow Control-Flow Patterns (43 patterns mapped)
+- **[zebra-tasks/README.md](zebra-tasks/README.md)** - Task actions library documentation
+- **[zebra-agent/README.md](zebra-agent/README.md)** - Agent framework overview
