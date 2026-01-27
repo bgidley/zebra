@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "zebra-agent",
+    "zebra-agent-cli",
     "zebra-agent-web",
     "zebra-tasks",
     "zebra-workflow",
@@ -1882,6 +1883,32 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "zebra-tasks", extras = ["anthropic"], editable = "zebra-tasks" },
+    { name = "zebra-workflow", editable = "zebra-py" },
+]
+provides-extras = ["dev"]
+
+[[package]]
+name = "zebra-agent-cli"
+version = "0.1.0"
+source = { editable = "zebra-agent-cli" }
+dependencies = [
+    { name = "zebra-agent" },
+    { name = "zebra-tasks", extra = ["anthropic"] },
+    { name = "zebra-workflow" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
+    { name = "zebra-agent", editable = "zebra-agent" },
     { name = "zebra-tasks", extras = ["anthropic"], editable = "zebra-tasks" },
     { name = "zebra-workflow", editable = "zebra-py" },
 ]

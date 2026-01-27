@@ -1,23 +1,22 @@
 """Tests for the CLI module."""
 
 import tempfile
-from io import StringIO
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from zebra_agent.library import WorkflowLibrary
+from zebra_agent.memory import LongTermTheme, MemoryEntry, ShortTermSummary
+from zebra_agent.metrics import WorkflowRun, WorkflowStats
 
-from zebra_agent.cli import (
+from zebra_agent_cli.main import (
     cmd_help,
     cmd_list,
     cmd_memory,
     cmd_stats,
     print_banner,
 )
-from zebra_agent.library import WorkflowInfo, WorkflowLibrary
-from zebra_agent.memory import AgentMemory, MemoryEntry, ShortTermSummary, LongTermTheme
-from zebra_agent.metrics import MetricsStore, WorkflowRun, WorkflowStats
-from datetime import datetime
 
 
 @pytest.fixture
@@ -266,20 +265,19 @@ class TestAsyncMain:
 
     async def test_async_main_quit_command(self, temp_dir, capsys):
         """Test quitting with /quit command."""
-        from zebra_agent.cli import async_main
-        import asyncio
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=["/quit"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -290,19 +288,19 @@ class TestAsyncMain:
 
     async def test_async_main_exit_command(self, temp_dir, capsys):
         """Test quitting with /exit command."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=["/exit"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -313,19 +311,19 @@ class TestAsyncMain:
 
     async def test_async_main_q_command(self, temp_dir, capsys):
         """Test quitting with /q command."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=["/q"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -336,19 +334,19 @@ class TestAsyncMain:
 
     async def test_async_main_help_command(self, temp_dir, capsys):
         """Test /help command."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=["/help", "/quit"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -360,7 +358,7 @@ class TestAsyncMain:
 
     async def test_async_main_list_command(self, temp_dir, capsys):
         """Test /list command."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
@@ -370,13 +368,13 @@ class TestAsyncMain:
         mock_metrics.get_stats = AsyncMock(return_value=WorkflowStats("test"))
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore", return_value=mock_metrics),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore", return_value=mock_metrics),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=["/list", "/quit"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -387,7 +385,7 @@ class TestAsyncMain:
 
     async def test_async_main_stats_command(self, temp_dir, capsys):
         """Test /stats command."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
@@ -403,13 +401,13 @@ class TestAsyncMain:
         mock_metrics.get_recent_runs = AsyncMock(return_value=[])
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore", return_value=mock_metrics),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore", return_value=mock_metrics),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=["/stats", "/quit"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -421,7 +419,7 @@ class TestAsyncMain:
 
     async def test_async_main_memory_command(self, temp_dir, capsys):
         """Test /memory command."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
@@ -446,13 +444,13 @@ class TestAsyncMain:
         mock_memory.get_long_term_themes = AsyncMock(return_value=[])
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory", return_value=mock_memory),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory", return_value=mock_memory),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=["/memory", "/quit"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -463,19 +461,19 @@ class TestAsyncMain:
 
     async def test_async_main_unknown_command(self, temp_dir, capsys):
         """Test unknown command."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=["/unknown", "/quit"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -487,19 +485,19 @@ class TestAsyncMain:
 
     async def test_async_main_empty_input(self, temp_dir, capsys):
         """Test empty input is skipped."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=["", "   ", "/quit"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -511,19 +509,19 @@ class TestAsyncMain:
 
     async def test_async_main_eof_error(self, temp_dir, capsys):
         """Test EOFError handling."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=EOFError),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -534,19 +532,19 @@ class TestAsyncMain:
 
     async def test_async_main_keyboard_interrupt(self, temp_dir, capsys):
         """Test KeyboardInterrupt handling."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=[KeyboardInterrupt, "/quit"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -557,7 +555,7 @@ class TestAsyncMain:
 
     async def test_async_main_copies_builtin_workflows(self, temp_dir, capsys):
         """Test that builtin workflows are copied."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         builtin_path = temp_dir / "builtin"
         builtin_path.mkdir()
@@ -581,13 +579,13 @@ routings: []
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", builtin_path),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", builtin_path),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
             patch("builtins.input", side_effect=["/quit"]),
         ):
             (temp_dir / "workflows").mkdir(exist_ok=True)
@@ -598,8 +596,9 @@ routings: []
 
     async def test_async_main_process_goal_success(self, temp_dir, capsys):
         """Test processing a goal successfully."""
-        from zebra_agent.cli import async_main
         from zebra_agent.loop import AgentResult
+
+        from zebra_agent_cli.main import async_main
 
         mock_result = AgentResult(
             run_id="test-id",
@@ -615,14 +614,14 @@ routings: []
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
-            patch("zebra_agent.cli.AgentLoop") as mock_agent_class,
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
+            patch("zebra_agent_cli.main.AgentLoop") as mock_agent_class,
             patch("builtins.input", side_effect=["What is 2+2?", "", "/quit"]),
         ):
             mock_agent = MagicMock()
@@ -640,8 +639,9 @@ routings: []
 
     async def test_async_main_process_goal_new_workflow(self, temp_dir, capsys):
         """Test processing a goal that creates a new workflow."""
-        from zebra_agent.cli import async_main
         from zebra_agent.loop import AgentResult
+
+        from zebra_agent_cli.main import async_main
 
         mock_result = AgentResult(
             run_id="test-id",
@@ -657,14 +657,14 @@ routings: []
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
-            patch("zebra_agent.cli.AgentLoop") as mock_agent_class,
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
+            patch("zebra_agent_cli.main.AgentLoop") as mock_agent_class,
             patch("builtins.input", side_effect=["Create something new", "", "/quit"]),
         ):
             mock_agent = MagicMock()
@@ -679,8 +679,9 @@ routings: []
 
     async def test_async_main_process_goal_dict_output(self, temp_dir, capsys):
         """Test processing a goal with dict output."""
-        from zebra_agent.cli import async_main
         from zebra_agent.loop import AgentResult
+
+        from zebra_agent_cli.main import async_main
 
         mock_result = AgentResult(
             run_id="test-id",
@@ -695,14 +696,14 @@ routings: []
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
-            patch("zebra_agent.cli.AgentLoop") as mock_agent_class,
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
+            patch("zebra_agent_cli.main.AgentLoop") as mock_agent_class,
             patch("builtins.input", side_effect=["What is the meaning of life?", "", "/quit"]),
         ):
             mock_agent = MagicMock()
@@ -718,8 +719,9 @@ routings: []
 
     async def test_async_main_process_goal_with_rating(self, temp_dir, capsys):
         """Test processing a goal and giving a rating."""
-        from zebra_agent.cli import async_main
         from zebra_agent.loop import AgentResult
+
+        from zebra_agent_cli.main import async_main
 
         mock_result = AgentResult(
             run_id="test-id",
@@ -734,14 +736,14 @@ routings: []
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
-            patch("zebra_agent.cli.AgentLoop") as mock_agent_class,
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
+            patch("zebra_agent_cli.main.AgentLoop") as mock_agent_class,
             patch("builtins.input", side_effect=["Test", "5", "/quit"]),
         ):
             mock_agent = MagicMock()
@@ -758,8 +760,9 @@ routings: []
 
     async def test_async_main_process_goal_invalid_rating(self, temp_dir, capsys):
         """Test processing a goal with invalid rating."""
-        from zebra_agent.cli import async_main
         from zebra_agent.loop import AgentResult
+
+        from zebra_agent_cli.main import async_main
 
         mock_result = AgentResult(
             run_id="test-id",
@@ -774,14 +777,14 @@ routings: []
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
-            patch("zebra_agent.cli.AgentLoop") as mock_agent_class,
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
+            patch("zebra_agent_cli.main.AgentLoop") as mock_agent_class,
             patch("builtins.input", side_effect=["Test", "10", "/quit"]),
         ):
             mock_agent = MagicMock()
@@ -796,8 +799,9 @@ routings: []
 
     async def test_async_main_process_goal_skip_rating(self, temp_dir, capsys):
         """Test skipping rating with empty input."""
-        from zebra_agent.cli import async_main
         from zebra_agent.loop import AgentResult
+
+        from zebra_agent_cli.main import async_main
 
         mock_result = AgentResult(
             run_id="test-id",
@@ -812,14 +816,14 @@ routings: []
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
-            patch("zebra_agent.cli.AgentLoop") as mock_agent_class,
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
+            patch("zebra_agent_cli.main.AgentLoop") as mock_agent_class,
             patch("builtins.input", side_effect=["Test", "", "/quit"]),
         ):
             mock_agent = MagicMock()
@@ -835,8 +839,9 @@ routings: []
 
     async def test_async_main_process_goal_failure(self, temp_dir, capsys):
         """Test processing a goal that fails."""
-        from zebra_agent.cli import async_main
         from zebra_agent.loop import AgentResult
+
+        from zebra_agent_cli.main import async_main
 
         mock_result = AgentResult(
             run_id="test-id",
@@ -851,14 +856,14 @@ routings: []
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
-            patch("zebra_agent.cli.AgentLoop") as mock_agent_class,
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
+            patch("zebra_agent_cli.main.AgentLoop") as mock_agent_class,
             patch("builtins.input", side_effect=["Test goal", "/quit"]),
         ):
             mock_agent = MagicMock()
@@ -873,20 +878,20 @@ routings: []
 
     async def test_async_main_process_goal_exception(self, temp_dir, capsys):
         """Test handling exception during goal processing."""
-        from zebra_agent.cli import async_main
+        from zebra_agent_cli.main import async_main
 
         mock_store = MagicMock()
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
-            patch("zebra_agent.cli.AgentLoop") as mock_agent_class,
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
+            patch("zebra_agent_cli.main.AgentLoop") as mock_agent_class,
             patch("builtins.input", side_effect=["Test", "/quit"]),
         ):
             mock_agent = MagicMock()
@@ -901,8 +906,9 @@ routings: []
 
     async def test_async_main_rating_eof_error(self, temp_dir, capsys):
         """Test EOFError during rating input."""
-        from zebra_agent.cli import async_main
         from zebra_agent.loop import AgentResult
+
+        from zebra_agent_cli.main import async_main
 
         mock_result = AgentResult(
             run_id="test-id",
@@ -925,14 +931,14 @@ routings: []
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
-            patch("zebra_agent.cli.AgentLoop") as mock_agent_class,
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
+            patch("zebra_agent_cli.main.AgentLoop") as mock_agent_class,
             patch("builtins.input", side_effect=mock_input),
         ):
             mock_agent = MagicMock()
@@ -948,8 +954,9 @@ routings: []
 
     async def test_async_main_no_tokens_used(self, temp_dir, capsys):
         """Test output when no tokens are used."""
-        from zebra_agent.cli import async_main
         from zebra_agent.loop import AgentResult
+
+        from zebra_agent_cli.main import async_main
 
         mock_result = AgentResult(
             run_id="test-id",
@@ -964,14 +971,14 @@ routings: []
         mock_store.initialize = AsyncMock()
 
         with (
-            patch("zebra_agent.cli.DEFAULT_DATA_DIR", temp_dir),
-            patch("zebra_agent.cli.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
-            patch("zebra_agent.cli.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
-            patch("zebra_agent.cli.MetricsStore"),
-            patch("zebra_agent.cli.AgentMemory"),
-            patch("zebra_agent.cli.PostgreSQLStore", return_value=mock_store),
-            patch("zebra_agent.cli.WorkflowEngine"),
-            patch("zebra_agent.cli.AgentLoop") as mock_agent_class,
+            patch("zebra_agent_cli.main.DEFAULT_DATA_DIR", temp_dir),
+            patch("zebra_agent_cli.main.DEFAULT_WORKFLOWS_DIR", temp_dir / "workflows"),
+            patch("zebra_agent_cli.main.BUILTIN_WORKFLOWS", temp_dir / "builtin"),
+            patch("zebra_agent_cli.main.MetricsStore"),
+            patch("zebra_agent_cli.main.AgentMemory"),
+            patch("zebra_agent_cli.main.PostgreSQLStore", return_value=mock_store),
+            patch("zebra_agent_cli.main.WorkflowEngine"),
+            patch("zebra_agent_cli.main.AgentLoop") as mock_agent_class,
             patch("builtins.input", side_effect=["Test", "", "/quit"]),
         ):
             mock_agent = MagicMock()
@@ -991,20 +998,19 @@ class TestRunFunction:
 
     def test_run_normal_exit(self, temp_dir):
         """Test normal run and exit."""
-        from zebra_agent.cli import run
-        import asyncio
+        from zebra_agent_cli.main import run
 
-        with patch("zebra_agent.cli.asyncio.run") as mock_asyncio_run:
+        with patch("zebra_agent_cli.main.asyncio.run") as mock_asyncio_run:
             mock_asyncio_run.return_value = None
             run()
             mock_asyncio_run.assert_called_once()
 
     def test_run_keyboard_interrupt(self, temp_dir, capsys):
         """Test run with KeyboardInterrupt."""
-        from zebra_agent.cli import run
+        from zebra_agent_cli.main import run
 
         with (
-            patch("zebra_agent.cli.asyncio.run", side_effect=KeyboardInterrupt),
+            patch("zebra_agent_cli.main.asyncio.run", side_effect=KeyboardInterrupt),
             pytest.raises(SystemExit) as exc_info,
         ):
             run()

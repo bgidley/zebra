@@ -8,20 +8,17 @@ from pathlib import Path
 from zebra.core.engine import WorkflowEngine
 from zebra.storage.postgres import PostgreSQLStore
 from zebra.tasks.registry import ActionRegistry
-
-from zebra_tasks.llm.action import LLMCallAction
-from zebra_tasks.compute import PythonExecAction
+from zebra_agent.library import WorkflowLibrary
+from zebra_agent.loop import AgentLoop
+from zebra_agent.memory import AgentMemory
+from zebra_agent.metrics import MetricsStore
 from zebra_tasks.agent import (
     MetricsAnalyzerAction,
     WorkflowEvaluatorAction,
     WorkflowOptimizerAction,
 )
-
-from zebra_agent.library import WorkflowLibrary
-from zebra_agent.loop import AgentLoop
-from zebra_agent.memory import AgentMemory
-from zebra_agent.metrics import MetricsStore
-
+from zebra_tasks.compute import PythonExecAction
+from zebra_tasks.llm.action import LLMCallAction
 
 # Default paths
 DEFAULT_DATA_DIR = Path("~/.zebra-agent").expanduser()
@@ -196,9 +193,9 @@ async def cmd_memory(memory: AgentMemory):
         print("\n  Themes (long-term):")
         for t in themes:
             preview = t.theme[:150] + "..." if len(t.theme) > 150 else t.theme
-            print(
-                f"    [{t.created_at.strftime('%Y-%m-%d')}] refs: {len(t.short_term_refs)} summaries"
-            )
+            date_str = t.created_at.strftime("%Y-%m-%d")
+            refs_count = len(t.short_term_refs)
+            print(f"    [{date_str}] refs: {refs_count} summaries")
             print(f"      {preview}")
 
     if not entries and not summaries and not themes:
