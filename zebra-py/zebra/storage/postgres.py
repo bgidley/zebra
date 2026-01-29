@@ -3,10 +3,9 @@
 import asyncio
 import json
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import asyncpg
 
@@ -263,6 +262,19 @@ class PostgreSQLStore(StateStore):
         result = await pool.execute("DELETE FROM process_instances WHERE id = $1", process_id)
         return int(result.split()[-1]) > 0
 
+    async def get_running_processes(self) -> list[ProcessInstance]:
+        """Get all processes in RUNNING state (excluding PAUSED)."""
+        pool = self._ensure_pool()
+        rows = await pool.fetch(
+            """
+            SELECT * FROM process_instances 
+            WHERE state = $1
+            ORDER BY created_at DESC
+            """,
+            ProcessState.RUNNING.value,
+        )
+        return [self._row_to_process(row) for row in rows]
+
     def _row_to_process(self, row: asyncpg.Record) -> ProcessInstance:
         """Convert database row to ProcessInstance."""
         return ProcessInstance(
@@ -336,6 +348,24 @@ class PostgreSQLStore(StateStore):
         result = await pool.execute("DELETE FROM task_instances WHERE id = $1", task_id)
         return int(result.split()[-1]) > 0
 
+    async def get_running_tasks(self, process_id: str | None = None) -> list[TaskInstance]:
+        """Get all tasks in RUNNING state, optionally filtered by process_id."""
+        pool = self._ensure_pool()
+        conditions: list[str] = ["state = $1"]
+        params: list[Any] = [TaskState.RUNNING.value]
+        param_count = 2
+
+        if process_id:
+            conditions.append(f"process_id = ${param_count}")
+            params.append(process_id)
+            param_count += 1
+
+        where_clause = "WHERE " + " AND ".join(conditions)
+        query = f"SELECT * FROM task_instances {where_clause} ORDER BY created_at"
+
+        rows = await pool.fetch(query, *params)
+        return [self._row_to_task(row) for row in rows]
+
     def _row_to_task(self, row: asyncpg.Record) -> TaskInstance:
         """Convert database row to TaskInstance."""
         return TaskInstance(
@@ -403,6 +433,13 @@ class PostgreSQLStore(StateStore):
             )
             for row in rows
         ]
+
+    async def delete_foe(self, foe_id: str) -> bool:
+        """Delete a flow of execution. Returns True if deleted."""
+        pool = self._ensure_pool()
+        result = await pool.execute("DELETE FROM foes WHERE id = $1", foe_id)
+        # Result format: "DELETE N" where N is number of rows
+        return int(result.split()[-1]) > 0
 
     # =========================================================================
     # Locking Operations

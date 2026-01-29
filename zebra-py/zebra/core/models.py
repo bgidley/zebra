@@ -67,7 +67,8 @@ class TaskDefinition(BaseModel):
     id: str = Field(..., description="Unique identifier for this task within the process")
     name: str = Field(..., description="Human-readable name for the task")
     auto: bool = Field(
-        default=True, description="If True, task executes automatically. If False, waits for manual transition."
+        default=True,
+        description="If True, task executes automatically. If False, waits for manual transition.",
     )
     synchronized: bool = Field(
         default=False,
@@ -125,9 +126,7 @@ class ProcessDefinition(BaseModel):
     name: str = Field(..., description="Human-readable name for the workflow")
     version: int = Field(default=1, description="Version number for the definition")
     first_task_id: str = Field(..., description="ID of the entry point task")
-    tasks: dict[str, TaskDefinition] = Field(
-        ..., description="Map of task ID to task definition"
-    )
+    tasks: dict[str, TaskDefinition] = Field(..., description="Map of task ID to task definition")
     routings: list[RoutingDefinition] = Field(
         default_factory=list, description="List of routing definitions"
     )
@@ -198,6 +197,9 @@ class TaskInstance(BaseModel):
     )
     result: Any | None = Field(default=None, description="Output from task execution")
     error: str | None = Field(default=None, description="Error message if task failed")
+    execution_attempt: int = Field(
+        default=0, description="Number of times this task has been executed (for recovery)"
+    )
     created_at: datetime = Field(default_factory=_utc_now)
     updated_at: datetime = Field(default_factory=_utc_now)
     completed_at: datetime | None = Field(default=None)

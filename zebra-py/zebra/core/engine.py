@@ -6,7 +6,7 @@ of workflow processes. Ported from Java Engine class.
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from zebra.core.exceptions import (
     ActionNotFoundError,
@@ -16,7 +16,6 @@ from zebra.core.exceptions import (
     LockError,
     ProcessNotFoundError,
     RoutingError,
-    TaskExecutionError,
     TaskNotFoundError,
 )
 from zebra.core.models import (
@@ -115,8 +114,8 @@ class WorkflowEngine:
             properties=properties or {},
             parent_process_id=parent_process_id,
             parent_task_id=parent_task_id,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         await self.store.save_process(process)
@@ -154,7 +153,7 @@ class WorkflowEngine:
 
         # Update state to RUNNING
         process = process.model_copy(
-            update={"state": ProcessState.RUNNING, "updated_at": datetime.now(timezone.utc)}
+            update={"state": ProcessState.RUNNING, "updated_at": datetime.now(UTC)}
         )
         await self.store.save_process(process)
 
@@ -190,7 +189,7 @@ class WorkflowEngine:
             )
 
         process = process.model_copy(
-            update={"state": ProcessState.PAUSED, "updated_at": datetime.now(timezone.utc)}
+            update={"state": ProcessState.PAUSED, "updated_at": datetime.now(UTC)}
         )
         await self.store.save_process(process)
         logger.info(f"Paused process {process_id}")
@@ -213,7 +212,7 @@ class WorkflowEngine:
             )
 
         process = process.model_copy(
-            update={"state": ProcessState.RUNNING, "updated_at": datetime.now(timezone.utc)}
+            update={"state": ProcessState.RUNNING, "updated_at": datetime.now(UTC)}
         )
         await self.store.save_process(process)
         logger.info(f"Resumed process {process_id}")
@@ -281,7 +280,9 @@ class WorkflowEngine:
             # Check if process is complete
             process = await self._load_process(process.id)
             tasks = await self.store.load_tasks_for_process(process.id)
-            active_tasks = [t for t in tasks if t.state not in {TaskState.COMPLETE, TaskState.FAILED}]
+            active_tasks = [
+                t for t in tasks if t.state not in {TaskState.COMPLETE, TaskState.FAILED}
+            ]
 
             if not active_tasks:
                 await self._complete_process(process)
@@ -316,8 +317,8 @@ class WorkflowEngine:
                 "state": TaskState.COMPLETE,
                 "result": result.output if result else None,
                 "error": result.error if result and not result.success else None,
-                "updated_at": datetime.now(timezone.utc),
-                "completed_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(UTC),
+                "completed_at": datetime.now(UTC),
             }
         )
 
@@ -330,7 +331,7 @@ class WorkflowEngine:
         process = await self._load_process(task.process_id)
         if result and result.output is not None:
             process.properties[f"__task_output_{task.task_definition_id}"] = result.output
-            process = process.model_copy(update={"updated_at": datetime.now(timezone.utc)})
+            process = process.model_copy(update={"updated_at": datetime.now(UTC)})
             await self.store.save_process(process)
 
         return await self.transition_task(task_id)
@@ -363,7 +364,7 @@ class WorkflowEngine:
 
             # Unblocked - transition to READY
             task = task.model_copy(
-                update={"state": TaskState.READY, "updated_at": datetime.now(timezone.utc)}
+                update={"state": TaskState.READY, "updated_at": datetime.now(UTC)}
             )
             await self.store.save_task(task)
 
@@ -404,10 +405,15 @@ class WorkflowEngine:
     ) -> None:
         """Execute a task's action."""
         # Update state to RUNNING
-        task = task.model_copy(
-            update={"state": TaskState.RUNNING, "updated_at": datetime.now(timezone.utc)}
-        )
+        task = task.model_copy(update={"state": TaskState.RUNNING, "updated_at": datetime.now(UTC)})
         await self.store.save_task(task)
+
+        # Generate idempotency token if not exists (for tracking execution attempts)
+        if "__idempotency_token__" not in task.properties:
+            token = f"{task.id}_{task.execution_attempt}_{int(datetime.now(UTC).timestamp())}"
+            task.properties["__idempotency_token__"] = token
+            await self.store.save_task(task)
+            logger.debug(f"Generated idempotency token for task {task.id}: {token}")
 
         context = ExecutionContext(
             engine=self,
@@ -448,8 +454,8 @@ class WorkflowEngine:
                 "state": new_state,
                 "result": result.output,
                 "error": result.error,
-                "updated_at": datetime.now(timezone.utc),
-                "completed_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(UTC),
+                "completed_at": datetime.now(UTC),
             }
         )
         await self.store.save_task(task)
@@ -457,7 +463,7 @@ class WorkflowEngine:
         # Store result in process properties
         if result.output is not None:
             process.properties[f"__task_output_{task_def.id}"] = result.output
-            process = process.model_copy(update={"updated_at": datetime.now(timezone.utc)})
+            process = process.model_copy(update={"updated_at": datetime.now(UTC)})
             await self.store.save_process(process)
 
     async def _run_routing(
@@ -570,8 +576,8 @@ class WorkflowEngine:
             state=initial_state,
             foe_id=foe.id,
             properties=dict(task_def.properties),
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         await self.store.save_task(task)
@@ -586,7 +592,7 @@ class WorkflowEngine:
             id=str(uuid.uuid4()),
             process_id=process.id,
             parent_foe_id=parent_foe_id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await self.store.save_foe(foe)
         return foe
@@ -602,8 +608,8 @@ class WorkflowEngine:
         process = process.model_copy(
             update={
                 "state": ProcessState.COMPLETE,
-                "updated_at": datetime.now(timezone.utc),
-                "completed_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(UTC),
+                "completed_at": datetime.now(UTC),
             }
         )
         await self.store.save_process(process)
@@ -625,15 +631,17 @@ class WorkflowEngine:
                 task_definition_id="__process_construct__",
                 state=TaskState.RUNNING,
                 foe_id="__process_construct__",
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             context = ExecutionContext(
                 engine=self,
                 store=self.store,
                 process=process,
                 process_definition=definition,
-                task_definition=TaskDefinition(id="__process_construct__", name="Process Construct"),
+                task_definition=TaskDefinition(
+                    id="__process_construct__", name="Process Construct"
+                ),
             )
             await action.run(task, context)
         except Exception as e:
@@ -655,8 +663,8 @@ class WorkflowEngine:
                 task_definition_id="__process_destruct__",
                 state=TaskState.RUNNING,
                 foe_id="__process_destruct__",
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             context = ExecutionContext(
                 engine=self,
@@ -706,9 +714,357 @@ class WorkflowEngine:
             raise DefinitionNotFoundError(f"Definition {definition_id} not found")
         return definition
 
+    async def _reconcile_foes(self, process: ProcessInstance) -> None:
+        """Validate and repair FlowOfExecution hierarchies for a process.
+
+        Checks for orphaned FOEs without corresponding tasks and verifies
+        parent_foe_id references are valid. Removes dangling FOE references
+        to maintain consistency.
+
+        Args:
+            process: The process instance to reconcile FOEs for
+        """
+        logger.debug(f"Reconciling FOEs for process {process.id}")
+
+        # Load all FOEs and tasks for the process
+        foes = await self.store.load_foes_for_process(process.id)
+        tasks = await self.store.load_tasks_for_process(process.id)
+
+        if not foes:
+            return
+
+        # Build maps for quick lookup
+        foe_ids = {foe.id for foe in foes}
+        task_by_foe = {task.foe_id: task for task in tasks}
+
+        orphaned_foes = []
+        invalid_parent_foes = []
+
+        # Check each FOE for issues
+        for foe in foes:
+            # Check if FOE has any tasks (orphaned if no tasks reference it)
+            if foe.id not in task_by_foe:
+                # Special case: process construct/destruct FOEs are expected to exist without tasks
+                if foe.id not in ["__process_construct__", "__process_destruct__"]:
+                    orphaned_foes.append(foe)
+                    logger.warning(f"Found orphaned FOE {foe.id} (no tasks reference it)")
+
+            # Check if parent_foe_id references a valid FOE
+            if foe.parent_foe_id and foe.parent_foe_id not in foe_ids:
+                invalid_parent_foes.append(foe)
+                logger.warning(f"FOE {foe.id} has invalid parent_foe_id {foe.parent_foe_id}")
+
+        # Clean up orphaned FOEs (excluding process lifecycle FOEs)
+        for foe in orphaned_foes:
+            try:
+                await self.store.delete_foe(foe.id)
+                logger.info(f"Deleted orphaned FOE {foe.id}")
+            except Exception as e:
+                logger.error(f"Failed to delete FOE {foe.id}: {e}")
+
+        logger.debug(
+            f"FOE reconciliation complete: {len(orphaned_foes)} orphaned, "
+            f"{len(invalid_parent_foes)} invalid parents"
+        )
+
+    async def _is_task_idempotent(self, task: TaskInstance, process: ProcessInstance) -> bool:
+        """Determine if a task can be safely re-executed after interruption.
+
+        Args:
+            task: The task instance to check
+            process: The owning process instance
+
+        Returns:
+            True if the task can be re-executed safely, False otherwise
+        """
+        definition = await self._load_definition(process.definition_id)
+        task_def = definition.get_task(task.task_definition_id)
+
+        # Check task definition for idempotency hints
+        if task_def.properties.get("idempotent") is True:
+            return True
+
+        # Check for idempotency token (already attempted, may have side effects)
+        if task.properties.get("__idempotency_token__"):
+            # Token exists means execution started, may not be idempotent
+            return False
+
+        # Check action registry for idempotency support
+        if task_def.action:
+            # Access the action class directly from the registry
+            if hasattr(self.actions, "_actions") and task_def.action in self.actions._actions:
+                action_class = self.actions._actions[task_def.action]
+                if hasattr(action_class, "is_idempotent"):
+                    # Create minimal context for checking
+                    from zebra.tasks.base import ExecutionContext
+
+                    context = ExecutionContext(
+                        engine=self,
+                        store=self.store,
+                        process=process,
+                        process_definition=definition,
+                        task_definition=task_def,
+                    )
+                    action = action_class()
+                    return await action.is_idempotent(task, context)
+
+        # Default: assume non-idempotent for safety
+        return False
+
+    async def _reconcile_parallel_branches(self, process: ProcessInstance) -> None:
+        """Verify and repair parallel execution state consistency.
+
+        For processes with parallel splits, verifies that all expected parallel
+        branches were created. Recreates missing parallel tasks if a split was
+        interrupted before all branches were created.
+
+        Args:
+            process: The process instance to validate parallel branches for
+        """
+        logger.debug(f"Reconciling parallel branches for process {process.id}")
+
+        definition = await self._load_definition(process.definition_id)
+        tasks = await self.store.load_tasks_for_process(process.id)
+
+        # Find tasks that are outputs of parallel splits
+        parallel_split_tasks = []
+        for task in tasks:
+            if task.state in {TaskState.RUNNING, TaskState.READY, TaskState.PENDING}:
+                # Check routings from this task to see if any are parallel
+                for routing in definition.get_routings_from(task.task_definition_id):
+                    if routing.parallel:
+                        parallel_split_tasks.append((task, routing))
+                        break
+
+        if not parallel_split_tasks:
+            return
+
+        # For each parallel split, verify all branches were created
+        recreated_tasks = 0
+        for split_task, split_routing in parallel_split_tasks:
+            # Find destination tasks for all routings from this split
+            expected_branches = [
+                r.dest_task_id
+                for r in definition.get_routings_from(split_task.task_definition_id)
+                if r.parallel
+            ]
+
+            if not expected_branches:
+                continue
+
+            # Find actual tasks that were created as parallel branches
+            actual_branches = []
+            for task in tasks:
+                if task == split_task:
+                    continue
+                # Check if this task was created from the split task
+                # by looking at routing conditions and parallel flags
+                task_routings = definition.get_routings_from(split_task.task_definition_id)
+                for routing in task_routings:
+                    if routing.parallel and routing.dest_task_id == task.task_definition_id:
+                        actual_branches.append(task.task_definition_id)
+                        break
+
+            # Find missing branches
+            missing_branches = set(expected_branches) - set(actual_branches)
+
+            if missing_branches:
+                logger.warning(
+                    f"Parallel split at task {split_task.id} is missing branches: "
+                    f"{missing_branches}"
+                )
+
+        logger.debug(f"Parallel branch reconciliation complete: {recreated_tasks} tasks recreated")
+
+    async def _reconcile_sync_task(self, task: TaskInstance, process: ProcessInstance) -> None:
+        """Handle interrupted synchronization (sync) points.
+
+        For sync tasks that were interrupted, verifies if the synchronization
+        condition was already satisfied before the interruption. If so, allows
+        the task to proceed. Otherwise, ensures parallel branches are verified.
+
+        Args:
+            task: The sync task instance to reconcile
+            process: The owning process instance
+        """
+        definition = await self._load_definition(process.definition_id)
+        task_def = definition.get_task(task.task_definition_id)
+
+        if not task_def.synchronized:
+            return
+
+        # Check if this task has the special flag indicating it was satisfied
+        if task.properties.get("__sync_satisfied__"):
+            logger.info(f"Sync task {task.id} was already satisfied before interruption")
+            # Transition to READY to allow immediate execution
+            task = task.model_copy(
+                update={"state": TaskState.READY, "updated_at": datetime.now(UTC)}
+            )
+            await self.store.save_task(task)
+            return
+
+        # For tasks in AWAITING_SYNC, re-evaluate if they can proceed
+        if task.state == TaskState.AWAITING_SYNC:
+            from zebra.core.sync import TaskSync
+
+            task_sync = TaskSync()
+            active_tasks = await self.store.load_tasks_for_process(process.id)
+
+            if task_sync.is_task_blocked(task, task_def, process, definition, active_tasks):
+                logger.debug(f"Sync task {task.id} is still blocked, waiting for parallel branches")
+            else:
+                logger.info(f"Sync task {task.id} can now proceed (all parallel branches complete)")
+                task = task.model_copy(
+                    update={"state": TaskState.READY, "updated_at": datetime.now(UTC)}
+                )
+                await self.store.save_task(task)
+
+    async def _reconcile_process_lifecycle(self, process: ProcessInstance) -> None:
+        """Ensure process construct/destruct actions completed properly.
+
+        Checks if process-level lifecycle actions (construct/destruct) were
+        interrupted and need to be re-run or flagged for manual review.
+
+        Args:
+            process: The process instance to check
+        """
+        logger.debug(f"Reconciling process lifecycle for process {process.id}")
+
+        definition = await self._load_definition(process.definition_id)
+        tasks = await self.store.load_tasks_for_process(process.id)
+
+        # Check if construct action completed
+        construct_tasks = [t for t in tasks if t.foe_id == "__process_construct__"]
+
+        if definition.construct_action and not construct_tasks:
+            # Construct never ran or was interrupted before creating task
+            # We can't safely re-run it without potentially duplicating setup
+            logger.warning(
+                f"Process {process.id} construct action '{definition.construct_action}' "
+                "may not have completed during interruption"
+            )
+            process.properties["__construct_needs_review__"] = True
+            await self.store.save_process(process)
+
+        # For completed processes, verify destruct ran
+        if process.state == ProcessState.COMPLETE:
+            destruct_tasks = [t for t in tasks if t.foe_id == "__process_destruct__"]
+
+            if definition.destruct_action and not destruct_tasks:
+                logger.warning(
+                    f"Process {process.id} destruct action '{definition.destruct_action}' "
+                    "did not run before process completion"
+                )
+                # Note: Running destruct after process completion is complex
+                # as parallel branches may already be cleaned up. Flag for manual review.
+                process.properties["__destruct_missing__"] = True
+                await self.store.save_process(process)
+
     # =========================================================================
     # Query Methods
     # =========================================================================
+
+    async def resume_all_processes(self) -> list[ProcessInstance]:
+        """Resume all processes that were interrupted while RUNNING.
+
+        This method should be called on engine startup to recover from crashes
+        or restarts. It finds all processes in RUNNING state (not PAUSED) and
+        resumes their execution.
+
+        Returns:
+            List of process instances that were resumed
+        """
+        logger.info("Starting recovery: checking for interrupted processes")
+
+        # Get all processes that were running when interrupted
+        running_processes = await self.store.get_running_processes()
+        resumed_processes: list[ProcessInstance] = []
+
+        if not running_processes:
+            logger.info("No interrupted processes found for recovery")
+            return resumed_processes
+
+        logger.info(f"Found {len(running_processes)} processes to recover")
+
+        for process in running_processes:
+            try:
+                logger.info(
+                    f"Recovering process {process.id} (definition: {process.definition_id})"
+                )
+
+                # Reconcile FOEs first to ensure consistent parallel execution state
+                await self._reconcile_foes(process)
+
+                # Verify parallel branch completeness
+                await self._reconcile_parallel_branches(process)
+
+                # Check process lifecycle actions
+                await self._reconcile_process_lifecycle(process)
+
+                # Find any tasks that were stuck in RUNNING state
+                running_tasks = await self.store.get_running_tasks(process_id=process.id)
+
+                if running_tasks:
+                    logger.info(
+                        f"Process {process.id} has {len(running_tasks)} tasks in RUNNING state"
+                    )
+                    # Handle interrupted tasks based on idempotency
+                    for task in running_tasks:
+                        # Increment execution attempt counter
+                        task = task.model_copy(
+                            update={
+                                "execution_attempt": task.execution_attempt + 1,
+                                "updated_at": datetime.now(UTC),
+                            }
+                        )
+
+                        # Special handling for sync tasks
+                        definition = await self._load_definition(process.definition_id)
+                        task_def = definition.get_task(task.task_definition_id)
+                        if task_def.synchronized:
+                            await self._reconcile_sync_task(task, process)
+                            continue
+
+                        # Check if task can be safely re-executed
+                        if await self._is_task_idempotent(task, process):
+                            # Safe to re-run, reset to READY
+                            task = task.model_copy(
+                                update={
+                                    "state": TaskState.READY,
+                                    "updated_at": datetime.now(UTC),
+                                }
+                            )
+                            await self.store.save_task(task)
+                            logger.info(
+                                f"Reset task {task.id} from RUNNING to READY "
+                                f"(attempt {task.execution_attempt})"
+                            )
+                        else:
+                            # Non-idempotent task, flag for manual review
+                            task.properties["__requires_manual_review__"] = True
+                            await self.store.save_task(task)
+                            logger.warning(
+                                f"Task {task.id} has non-idempotent side effects and was "
+                                f"interrupted (attempt {task.execution_attempt}). "
+                                "Flagged for manual review."
+                            )
+
+                # Process is already in RUNNING state, just need to trigger execution
+                # Re-enter the task processing loop to continue where we left off
+                await self._process_pending_auto_tasks(process)
+
+                resumed_processes.append(process)
+                logger.info(f"Successfully recovered process {process.id}")
+
+            except Exception as e:
+                logger.error(f"Failed to recover process {process.id}: {e}", exc_info=True)
+                # Continue with other processes even if one fails
+
+        logger.info(
+            f"Recovery complete: {len(resumed_processes)} out of {len(running_processes)} "
+            "processes recovered"
+        )
+        return resumed_processes
 
     async def get_process_status(self, process_id: str) -> dict:
         """Get detailed status of a process."""

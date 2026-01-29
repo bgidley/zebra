@@ -5,8 +5,8 @@ must follow. Corresponds to Java IStateFactory.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from zebra.core.models import (
     FlowOfExecution,
@@ -75,6 +75,11 @@ class StateStore(ABC):
         """Delete a process instance and all related data. Returns True if deleted."""
         pass
 
+    @abstractmethod
+    async def get_running_processes(self) -> list[ProcessInstance]:
+        """Get all processes that are in RUNNING state (excluding PAUSED)."""
+        pass
+
     # =========================================================================
     # Task Instance Operations
     # =========================================================================
@@ -99,6 +104,11 @@ class StateStore(ABC):
         """Delete a task instance. Returns True if deleted."""
         pass
 
+    @abstractmethod
+    async def get_running_tasks(self, process_id: str | None = None) -> list[TaskInstance]:
+        """Get all tasks in RUNNING state, optionally filtered by process_id."""
+        pass
+
     # =========================================================================
     # Flow of Execution Operations
     # =========================================================================
@@ -118,12 +128,19 @@ class StateStore(ABC):
         """Load all FOEs for a process."""
         pass
 
+    @abstractmethod
+    async def delete_foe(self, foe_id: str) -> bool:
+        """Delete a flow of execution. Returns True if deleted, False if not found."""
+        pass
+
     # =========================================================================
     # Locking Operations
     # =========================================================================
 
     @abstractmethod
-    async def acquire_lock(self, process_id: str, owner: str, timeout_seconds: float = 30.0) -> bool:
+    async def acquire_lock(
+        self, process_id: str, owner: str, timeout_seconds: float = 30.0
+    ) -> bool:
         """Acquire an exclusive lock on a process instance.
 
         Args:
@@ -150,7 +167,9 @@ class StateStore(ABC):
         pass
 
     @asynccontextmanager
-    async def lock(self, process_id: str, owner: str, timeout_seconds: float = 30.0) -> AsyncIterator[bool]:
+    async def lock(
+        self, process_id: str, owner: str, timeout_seconds: float = 30.0
+    ) -> AsyncIterator[bool]:
         """Context manager for acquiring and releasing a process lock.
 
         Usage:

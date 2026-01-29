@@ -1,8 +1,8 @@
 """In-memory storage implementation for testing and ephemeral workflows."""
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from zebra.core.models import (
     FlowOfExecution,
@@ -10,6 +10,7 @@ from zebra.core.models import (
     ProcessInstance,
     ProcessState,
     TaskInstance,
+    TaskState,
 )
 from zebra.storage.base import StateStore
 
@@ -80,6 +81,10 @@ class InMemoryStore(StateStore):
         self._foes = {k: v for k, v in self._foes.items() if v.process_id != process_id}
         return True
 
+    async def get_running_processes(self) -> list[ProcessInstance]:
+        """Get all processes in RUNNING state (excluding PAUSED)."""
+        return [p for p in self._processes.values() if p.state == ProcessState.RUNNING]
+
     # =========================================================================
     # Task Instance Operations
     # =========================================================================
@@ -99,6 +104,13 @@ class InMemoryStore(StateStore):
             return True
         return False
 
+    async def get_running_tasks(self, process_id: str | None = None) -> list[TaskInstance]:
+        """Get all tasks in RUNNING state, optionally filtered by process_id."""
+        tasks = self._tasks.values()
+        if process_id:
+            tasks = [t for t in tasks if t.process_id == process_id]
+        return [t for t in tasks if t.state == TaskState.RUNNING]
+
     # =========================================================================
     # Flow of Execution Operations
     # =========================================================================
@@ -112,11 +124,20 @@ class InMemoryStore(StateStore):
     async def load_foes_for_process(self, process_id: str) -> list[FlowOfExecution]:
         return [f for f in self._foes.values() if f.process_id == process_id]
 
+    async def delete_foe(self, foe_id: str) -> bool:
+        """Delete a flow of execution. Returns True if deleted."""
+        if foe_id in self._foes:
+            del self._foes[foe_id]
+            return True
+        return False
+
     # =========================================================================
     # Locking Operations
     # =========================================================================
 
-    async def acquire_lock(self, process_id: str, owner: str, timeout_seconds: float = 30.0) -> bool:
+    async def acquire_lock(
+        self, process_id: str, owner: str, timeout_seconds: float = 30.0
+    ) -> bool:
         """Acquire a lock on a process. Uses asyncio.Event for waiting."""
         deadline = asyncio.get_event_loop().time() + timeout_seconds
 
@@ -145,7 +166,7 @@ class InMemoryStore(StateStore):
                     timeout=min(remaining, 1.0),
                 )
                 self._lock_events[process_id].clear()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
 
     async def release_lock(self, process_id: str, owner: str) -> bool:

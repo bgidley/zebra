@@ -3,10 +3,11 @@
 import asyncio
 import json
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 
@@ -15,8 +16,6 @@ from zebra.core.models import (
     ProcessDefinition,
     ProcessInstance,
     ProcessState,
-    RoutingDefinition,
-    TaskDefinition,
     TaskInstance,
     TaskState,
 )
@@ -200,9 +199,7 @@ class SQLiteStore(StateStore):
 
     async def load_process(self, process_id: str) -> ProcessInstance | None:
         conn = self._ensure_connected()
-        cursor = await conn.execute(
-            "SELECT * FROM process_instances WHERE id = ?", (process_id,)
-        )
+        cursor = await conn.execute("SELECT * FROM process_instances WHERE id = ?", (process_id,))
         row = await cursor.fetchone()
         if row is None:
             return None
@@ -235,11 +232,23 @@ class SQLiteStore(StateStore):
         await conn.execute("DELETE FROM task_instances WHERE process_id = ?", (process_id,))
         await conn.execute("DELETE FROM foes WHERE process_id = ?", (process_id,))
         await conn.execute("DELETE FROM process_locks WHERE process_id = ?", (process_id,))
-        cursor = await conn.execute(
-            "DELETE FROM process_instances WHERE id = ?", (process_id,)
-        )
+        cursor = await conn.execute("DELETE FROM process_instances WHERE id = ?", (process_id,))
         await conn.commit()
         return cursor.rowcount > 0
+
+    async def get_running_processes(self) -> list[ProcessInstance]:
+        """Get all processes in RUNNING state (excluding PAUSED)."""
+        conn = self._ensure_connected()
+        cursor = await conn.execute(
+            """
+            SELECT * FROM process_instances 
+            WHERE state = ?
+            ORDER BY created_at DESC
+            """,
+            (ProcessState.RUNNING.value,),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_process(row) for row in rows]
 
     def _row_to_process(self, row: aiosqlite.Row) -> ProcessInstance:
         return ProcessInstance(
@@ -251,7 +260,9 @@ class SQLiteStore(StateStore):
             parent_task_id=row["parent_task_id"],
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
-            completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
+            completed_at=datetime.fromisoformat(row["completed_at"])
+            if row["completed_at"]
+            else None,
         )
 
     # =========================================================================
@@ -292,9 +303,7 @@ class SQLiteStore(StateStore):
 
     async def load_task(self, task_id: str) -> TaskInstance | None:
         conn = self._ensure_connected()
-        cursor = await conn.execute(
-            "SELECT * FROM task_instances WHERE id = ?", (task_id,)
-        )
+        cursor = await conn.execute("SELECT * FROM task_instances WHERE id = ?", (task_id,))
         row = await cursor.fetchone()
         if row is None:
             return None
@@ -311,11 +320,25 @@ class SQLiteStore(StateStore):
 
     async def delete_task(self, task_id: str) -> bool:
         conn = self._ensure_connected()
-        cursor = await conn.execute(
-            "DELETE FROM task_instances WHERE id = ?", (task_id,)
-        )
+        cursor = await conn.execute("DELETE FROM task_instances WHERE id = ?", (task_id,))
         await conn.commit()
         return cursor.rowcount > 0
+
+    async def get_running_tasks(self, process_id: str | None = None) -> list[TaskInstance]:
+        """Get all tasks in RUNNING state, optionally filtered by process_id."""
+        conn = self._ensure_connected()
+        query = "SELECT * FROM task_instances WHERE state = ?"
+        params: list[Any] = [TaskState.RUNNING.value]
+
+        if process_id:
+            query += " AND process_id = ?"
+            params.append(process_id)
+
+        query += " ORDER BY created_at"
+
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+        return [self._row_to_task(row) for row in rows]
 
     def _row_to_task(self, row: aiosqlite.Row) -> TaskInstance:
         return TaskInstance(
@@ -329,7 +352,9 @@ class SQLiteStore(StateStore):
             error=row["error"],
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
-            completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
+            completed_at=datetime.fromisoformat(row["completed_at"])
+            if row["completed_at"]
+            else None,
         )
 
     # =========================================================================
@@ -377,6 +402,13 @@ class SQLiteStore(StateStore):
             for row in rows
         ]
 
+    async def delete_foe(self, foe_id: str) -> bool:
+        """Delete a flow of execution. Returns True if deleted."""
+        conn = self._ensure_connected()
+        cursor = await conn.execute("DELETE FROM foes WHERE id = ?", (foe_id,))
+        await conn.commit()
+        return cursor.rowcount > 0
+
     # =========================================================================
     # Locking Operations
     # =========================================================================
@@ -390,8 +422,8 @@ class SQLiteStore(StateStore):
         lock_duration = 60.0  # Lock expires after 60 seconds
 
         while time.time() < deadline:
-            now = datetime.now(timezone.utc).isoformat()
-            expires_at = datetime.fromtimestamp(time.time() + lock_duration, tz=timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
+            expires_at = datetime.fromtimestamp(time.time() + lock_duration, tz=UTC).isoformat()
 
             # Try to insert new lock or take over expired lock
             try:

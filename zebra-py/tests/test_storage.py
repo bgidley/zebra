@@ -236,3 +236,117 @@ class TestInMemoryStore:
 
         assert len(store._definitions) == 0
         assert len(store._processes) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_running_processes(self, store, sample_definition):
+        """Test get_running_processes returns only RUNNING processes."""
+        # Create processes in different states
+        process1 = ProcessInstance(
+            id="proc1",
+            definition_id="def1",
+            state=ProcessState.RUNNING,
+            properties={},
+        )
+        process2 = ProcessInstance(
+            id="proc2",
+            definition_id="def1",
+            state=ProcessState.PAUSED,
+            properties={},
+        )
+        process3 = ProcessInstance(
+            id="proc3",
+            definition_id="def1",
+            state=ProcessState.COMPLETE,
+            properties={},
+        )
+        process4 = ProcessInstance(
+            id="proc4",
+            definition_id="def1",
+            state=ProcessState.RUNNING,
+            properties={},
+        )
+
+        await store.save_definition(sample_definition)
+        await store.save_process(process1)
+        await store.save_process(process2)
+        await store.save_process(process3)
+        await store.save_process(process4)
+
+        # Should return only RUNNING processes
+        running = await store.get_running_processes()
+        assert len(running) == 2
+        assert {p.id for p in running} == {"proc1", "proc4"}
+
+        for proc in running:
+            assert proc.state == ProcessState.RUNNING
+
+    @pytest.mark.asyncio
+    async def test_get_running_processes_empty(self, store):
+        """Test get_running_processes returns empty list when no running processes."""
+        running = await store.get_running_processes()
+        assert len(running) == 0
+        assert isinstance(running, list)
+
+    @pytest.mark.asyncio
+    async def test_get_running_tasks(self, store, sample_definition, sample_process):
+        """Test get_running_tasks returns only RUNNING tasks."""
+        # Save definition and process
+        await store.save_definition(sample_definition)
+        await store.save_process(sample_process)
+
+        # Create tasks in different states
+        task1 = TaskInstance(
+            id="task1",
+            process_id="proc1",
+            task_definition_id="start",
+            state=TaskState.RUNNING,
+            foe_id="foe1",
+            properties={},
+        )
+        task2 = TaskInstance(
+            id="task2",
+            process_id="proc1",
+            task_definition_id="start",
+            state=TaskState.READY,
+            foe_id="foe1",
+            properties={},
+        )
+        task3 = TaskInstance(
+            id="task3",
+            process_id="proc1",
+            task_definition_id="start",
+            state=TaskState.RUNNING,
+            foe_id="foe1",
+            properties={},
+        )
+        task4 = TaskInstance(
+            id="task4",
+            process_id="proc1",
+            task_definition_id="start",
+            state=TaskState.COMPLETE,
+            foe_id="foe1",
+            properties={},
+        )
+
+        await store.save_task(task1)
+        await store.save_task(task2)
+        await store.save_task(task3)
+        await store.save_task(task4)
+
+        # Get all running tasks
+        running = await store.get_running_tasks()
+        assert len(running) == 2
+        task_ids = {t.id for t in running}
+        assert task_ids == {"task1", "task3"}
+
+        for task in running:
+            assert task.state == TaskState.RUNNING
+
+        # Get running tasks for specific process
+        running_proc = await store.get_running_tasks(process_id="proc1")
+        assert len(running_proc) == 2
+        assert {t.id for t in running_proc} == {"task1", "task3"}
+
+        # Get running tasks for non-existent process
+        running_empty = await store.get_running_tasks(process_id="nonexistent")
+        assert len(running_empty) == 0

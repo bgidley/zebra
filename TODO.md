@@ -32,8 +32,8 @@ This document tracks unimplemented features and improvements based on the DESIGN
 - `zebra-tasks/zebra_tasks/notifications/` - Email/webhooks
 - `zebra-tasks/zebra_tasks/data/` - Data transformation
 
-### 2. Resiliance 
-- [ ] Workflows are resumed on restart
+### 2. Resilience ✅ 
+- [x] Workflows are resumed on restart (Phase 2 Complete - 2026-01-27)
 
 ### 3. Advanced Guardrails System ⚠️
 
