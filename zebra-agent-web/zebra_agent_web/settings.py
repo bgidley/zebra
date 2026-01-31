@@ -78,17 +78,16 @@ CHANNEL_LAYERS = {
 #     },
 # }
 
-# Database - PostgreSQL configuration
+# Database - Oracle configuration
 # Note: We don't use Django's ORM for Zebra data - we use the zebra-py StateStore directly.
 # This database config is only used if Django needs its own tables (sessions, etc.)
+# Oracle connection uses the same environment variables as Zebra
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("PGDATABASE", "opc"),
-        "USER": os.environ.get("PGUSER", "opc"),
-        "PASSWORD": os.environ.get("PGPASSWORD", ""),
-        "HOST": os.environ.get("PGHOST", "/var/run/postgresql"),
-        "PORT": os.environ.get("PGPORT", "5432"),
+        "ENGINE": "django.db.backends.oracle",
+        "NAME": os.environ.get("ORACLE_DSN", ""),
+        "USER": os.environ.get("ORACLE_USERNAME", ""),
+        "PASSWORD": os.environ.get("ORACLE_PASSWORD", ""),
     }
 }
 
@@ -131,23 +130,23 @@ CORS_ALLOWED_ORIGINS = [
 
 # Zebra-specific settings for workflow engine (used by agent for execution)
 ZEBRA_SETTINGS = {
-    # PostgreSQL connection for Zebra StateStore
-    "POSTGRES_HOST": os.environ.get("PGHOST", "/var/run/postgresql"),
-    "POSTGRES_PORT": int(os.environ.get("PGPORT", "5432")),
-    "POSTGRES_DATABASE": os.environ.get("PGDATABASE", "opc"),
-    "POSTGRES_USER": os.environ.get("PGUSER", "opc"),
-    "POSTGRES_PASSWORD": os.environ.get("PGPASSWORD", None),
+    # Oracle connection for Zebra StateStore
+    "ORACLE_USER": os.environ.get("ORACLE_USERNAME"),
+    "ORACLE_PASSWORD": os.environ.get("ORACLE_PASSWORD"),
+    "ORACLE_DSN": os.environ.get("ORACLE_DSN"),
+    "ORACLE_WALLET_LOCATION": os.environ.get("ORACLE_WALLET_LOCATION"),
+    "ORACLE_WALLET_PASSWORD": os.environ.get("ORACLE_WALLET_PASSWORD"),
 }
 
 # Zebra Agent settings
 ZEBRA_AGENT_SETTINGS = {
     "LIBRARY_PATH": os.environ.get("ZEBRA_LIBRARY_PATH", "~/.zebra/workflows"),
-    # Metrics and Memory use PostgreSQL now (same DB as Zebra Engine)
-    "POSTGRES_HOST": os.environ.get("PGHOST", "/var/run/postgresql"),
-    "POSTGRES_PORT": int(os.environ.get("PGPORT", "5432")),
-    "POSTGRES_DATABASE": os.environ.get("PGDATABASE", "opc"),
-    "POSTGRES_USER": os.environ.get("PGUSER", "opc"),
-    "POSTGRES_PASSWORD": os.environ.get("PGPASSWORD", None),
+    # Metrics and Memory use Oracle (same DB as Zebra Engine)
+    "ORACLE_USER": os.environ.get("ORACLE_USERNAME"),
+    "ORACLE_PASSWORD": os.environ.get("ORACLE_PASSWORD"),
+    "ORACLE_DSN": os.environ.get("ORACLE_DSN"),
+    "ORACLE_WALLET_LOCATION": os.environ.get("ORACLE_WALLET_LOCATION"),
+    "ORACLE_WALLET_PASSWORD": os.environ.get("ORACLE_WALLET_PASSWORD"),
     "LLM_PROVIDER": os.environ.get("ZEBRA_LLM_PROVIDER", "anthropic"),
     "LLM_MODEL": os.environ.get("ZEBRA_LLM_MODEL", None),
 }

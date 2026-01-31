@@ -6,12 +6,12 @@ import sys
 from pathlib import Path
 
 from zebra.core.engine import WorkflowEngine
-from zebra.storage.postgres import PostgreSQLStore
+from zebra.storage.oracle import OracleStore
 from zebra.tasks.registry import ActionRegistry
 from zebra_agent.library import WorkflowLibrary
 from zebra_agent.loop import AgentLoop
-from zebra_agent.memory import AgentMemory
-from zebra_agent.metrics import MetricsStore
+from zebra_agent.oracle_memory import OracleAgentMemory
+from zebra_agent.oracle_metrics import OracleMetricsStore
 from zebra_tasks.agent import (
     MetricsAnalyzerAction,
     WorkflowEvaluatorAction,
@@ -28,14 +28,14 @@ DEFAULT_WORKFLOWS_DIR = DEFAULT_DATA_DIR / "workflows"
 BUILTIN_WORKFLOWS = Path(__file__).parent.parent / "workflows"
 
 
-def get_pg_config():
-    """Get PostgreSQL configuration from environment variables."""
+def get_oracle_config():
+    """Get Oracle configuration from environment variables."""
     return {
-        "host": os.environ.get("PGHOST", "localhost"),
-        "port": int(os.environ.get("PGPORT", "5432")),
-        "database": os.environ.get("PGDATABASE", "opc"),
-        "user": os.environ.get("PGUSER", "opc"),
-        "password": os.environ.get("PGPASSWORD"),
+        "user": os.environ.get("ORACLE_USERNAME"),
+        "password": os.environ.get("ORACLE_PASSWORD"),
+        "dsn": os.environ.get("ORACLE_DSN"),
+        "wallet_location": os.environ.get("ORACLE_WALLET_LOCATION"),
+        "wallet_password": os.environ.get("ORACLE_WALLET_PASSWORD"),
     }
 
 
@@ -81,7 +81,7 @@ async def cmd_list(library: WorkflowLibrary):
         print()
 
 
-async def cmd_stats(metrics: MetricsStore):
+async def cmd_stats(metrics: OracleMetricsStore):
     """Show workflow statistics."""
     all_stats = await metrics.get_all_stats()
     recent_runs = await metrics.get_recent_runs(5)
@@ -138,7 +138,7 @@ def cmd_help():
     )
 
 
-async def cmd_memory(memory: AgentMemory):
+async def cmd_memory(memory: OracleAgentMemory):
     """Show memory status."""
     print("\n  Memory Status:")
     print("  " + "─" * 60)
@@ -207,7 +207,7 @@ async def cmd_memory(memory: AgentMemory):
 async def cmd_dream(
     library: WorkflowLibrary,
     engine: WorkflowEngine,
-    metrics: MetricsStore,
+    metrics: OracleMetricsStore,
     provider: str = "anthropic",
 ):
     """Run the self-improvement dream cycle."""
@@ -299,12 +299,12 @@ async def async_main():
     # Ensure data directory exists
     DEFAULT_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    pg_config = get_pg_config()
+    oracle_config = get_oracle_config()
 
     # Initialize components
-    metrics = MetricsStore(**pg_config)
-    memory = AgentMemory(
-        **pg_config,
+    metrics = OracleMetricsStore(**oracle_config)
+    memory = OracleAgentMemory(
+        **oracle_config,
         short_term_max_tokens=20000,  # 20k for recent details
         long_term_max_tokens=30000,  # 30k for themes and patterns
     )
@@ -317,7 +317,7 @@ async def async_main():
             print(f"  Copied {copied} built-in workflows to library.")
 
     # Initialize workflow engine
-    store = PostgreSQLStore(**pg_config)
+    store = OracleStore(**oracle_config)
     await store.initialize()
 
     # Register custom actions

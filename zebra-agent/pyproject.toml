@@ -19,7 +19,7 @@ classifiers = [
 dependencies = [
     "zebra-workflow",
     "zebra-tasks[anthropic]",
-    "asyncpg>=0.29",
+    "oracledb>=2.0",
     "pyyaml>=6.0",
 ]
 
