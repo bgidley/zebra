@@ -30,6 +30,27 @@ from zebra.storage.base import StateStore
 
 logger = logging.getLogger(__name__)
 
+
+def _read_clob(value: Any) -> str | None:
+    """Safely read a CLOB value from Oracle.
+
+    Handles cases where the value might be:
+    - Already a string
+    - A file-like object with .read()
+    - A dict (JSON data)
+    - None
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return json.dumps(value)
+    if hasattr(value, "read"):
+        return value.read()
+    return str(value)
+
+
 # Oracle schema for all workflow state tables (Oracle 21c+ with native JSON)
 SCHEMA_SQL = """
 -- Process Definitions
@@ -292,7 +313,7 @@ class OracleStore(StateStore):
                 row = await cursor.fetchone()
                 if row is None:
                     return None
-                return ProcessDefinition.model_validate_json(row[0].read())
+                return ProcessDefinition.model_validate_json(_read_clob(row[0]) or "{}")
 
     async def list_definitions(self) -> list[ProcessDefinition]:
         """List all available process definitions."""
@@ -302,7 +323,10 @@ class OracleStore(StateStore):
             async with conn.cursor() as cursor:
                 await cursor.execute("SELECT data FROM process_definitions ORDER BY name")
                 rows = await cursor.fetchall()
-                return [ProcessDefinition.model_validate_json(row[0].read()) for row in rows]
+                return [
+                    ProcessDefinition.model_validate_json(_read_clob(row[0]) or "{}")
+                    for row in rows
+                ]
 
     async def delete_definition(self, definition_id: str) -> bool:
         """Delete a process definition. Returns True if deleted, False if not found."""
@@ -450,10 +474,8 @@ class OracleStore(StateStore):
         """Convert database row to ProcessInstance."""
         # Row order: id, definition_id, state, properties, parent_process_id,
         #            parent_task_id, created_at, updated_at, completed_at
-        properties_data = row[3]
-        if hasattr(properties_data, "read"):
-            properties_data = properties_data.read()
-        properties = json.loads(properties_data) if isinstance(properties_data, str) else {}
+        properties_data = _read_clob(row[3])
+        properties = json.loads(properties_data) if properties_data else {}
 
         return ProcessInstance(
             id=row[0],
@@ -591,21 +613,15 @@ class OracleStore(StateStore):
         #            properties, result, error, created_at, updated_at, completed_at
 
         # Handle CLOB for properties
-        properties_data = row[5]
-        if hasattr(properties_data, "read"):
-            properties_data = properties_data.read()
+        properties_data = _read_clob(row[5])
         properties = json.loads(properties_data) if properties_data else {}
 
         # Handle CLOB for result
-        result_data = row[6]
-        if hasattr(result_data, "read"):
-            result_data = result_data.read()
+        result_data = _read_clob(row[6])
         result = json.loads(result_data) if result_data else None
 
         # Handle CLOB for error
-        error_data = row[7]
-        if hasattr(error_data, "read"):
-            error_data = error_data.read()
+        error_data = _read_clob(row[7])
 
         return TaskInstance(
             id=row[0],

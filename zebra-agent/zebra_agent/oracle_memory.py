@@ -13,6 +13,26 @@ import oracledb
 logger = logging.getLogger(__name__)
 
 
+def _read_clob(value: Any) -> str | None:
+    """Safely read a CLOB value from Oracle.
+
+    Handles cases where the value might be:
+    - Already a string
+    - A file-like object with .read()
+    - A dict (JSON data)
+    - None
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return json.dumps(value)
+    if hasattr(value, "read"):
+        return value.read()
+    return str(value)
+
+
 @dataclass
 class MemoryEntry:
     """A single memory entry."""
@@ -347,7 +367,7 @@ class OracleAgentMemory:
             ShortTermSummary(
                 id=row[0],
                 created_at=row[1],
-                summary=row[2] if isinstance(row[2], str) else row[2].read(),
+                summary=_read_clob(row[2]) or "",
                 tokens=row[3] or 0,
                 entry_count=row[4] or 0,
             )
@@ -366,7 +386,13 @@ class OracleAgentMemory:
                     INSERT INTO short_term_summaries (id, created_at, summary, tokens, entry_count)
                     VALUES (:1, :2, :3, :4, :5)
                     """,
-                    [summary.id, summary.created_at, summary.summary, summary.tokens, summary.entry_count],
+                    [
+                        summary.id,
+                        summary.created_at,
+                        summary.summary,
+                        summary.tokens,
+                        summary.entry_count,
+                    ],
                 )
             await conn.commit()
 
@@ -435,9 +461,7 @@ class OracleAgentMemory:
 
         themes = []
         for row in rows:
-            refs_data = row[4]
-            if hasattr(refs_data, "read"):
-                refs_data = refs_data.read()
+            refs_data = _read_clob(row[4])
             refs = json.loads(refs_data) if refs_data else []
             if isinstance(refs, str):
                 refs = json.loads(refs)
@@ -446,7 +470,7 @@ class OracleAgentMemory:
                 LongTermTheme(
                     id=row[0],
                     created_at=row[1],
-                    theme=row[2] if isinstance(row[2], str) else row[2].read(),
+                    theme=_read_clob(row[2]) or "",
                     tokens=row[3] or 0,
                     short_term_refs=refs,
                 )
@@ -466,7 +490,13 @@ class OracleAgentMemory:
                     INSERT INTO long_term_themes (id, created_at, theme, tokens, short_term_refs)
                     VALUES (:1, :2, :3, :4, :5)
                     """,
-                    [theme.id, theme.created_at, theme.theme, theme.tokens, json.dumps(theme.short_term_refs)],
+                    [
+                        theme.id,
+                        theme.created_at,
+                        theme.theme,
+                        theme.tokens,
+                        json.dumps(theme.short_term_refs),
+                    ],
                 )
             await conn.commit()
 
@@ -486,7 +516,7 @@ class OracleAgentMemory:
                     return ShortTermSummary(
                         id=row[0],
                         created_at=row[1],
-                        summary=row[2] if isinstance(row[2], str) else row[2].read(),
+                        summary=_read_clob(row[2]) or "",
                         tokens=row[3] or 0,
                         entry_count=row[4] or 0,
                     )
@@ -501,7 +531,7 @@ class OracleAgentMemory:
             async with conn.cursor() as cursor:
                 if keep_ids:
                     # Delete where id NOT IN (keep_ids)
-                    placeholders = ", ".join([f":{i+1}" for i in range(len(keep_ids))])
+                    placeholders = ", ".join([f":{i + 1}" for i in range(len(keep_ids))])
                     await cursor.execute(
                         f"DELETE FROM short_term_summaries WHERE id NOT IN ({placeholders})",
                         keep_ids,
