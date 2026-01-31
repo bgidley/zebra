@@ -13,13 +13,13 @@ from django.conf import settings
 if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
     from zebra_agent.loop import AgentLoop
-    from zebra_agent.metrics import MetricsStore
+    from zebra_agent.oracle_metrics import OracleMetricsStore
 
 logger = logging.getLogger(__name__)
 
 # Global instances
 _library: "WorkflowLibrary | None" = None
-_metrics: "MetricsStore | None" = None
+_metrics: "OracleMetricsStore | None" = None
 _agent_loop: "AgentLoop | None" = None
 _initialized = False
 
@@ -31,11 +31,11 @@ def _get_agent_settings() -> dict:
         "ZEBRA_AGENT_SETTINGS",
         {
             "LIBRARY_PATH": "~/.zebra/workflows",
-            "POSTGRES_HOST": "localhost",
-            "POSTGRES_PORT": 5432,
-            "POSTGRES_DATABASE": "opc",
-            "POSTGRES_USER": "opc",
-            "POSTGRES_PASSWORD": None,
+            "ORACLE_USER": None,
+            "ORACLE_PASSWORD": None,
+            "ORACLE_DSN": None,
+            "ORACLE_WALLET_LOCATION": None,
+            "ORACLE_WALLET_PASSWORD": None,
             "LLM_PROVIDER": "anthropic",
             "LLM_MODEL": None,
         },
@@ -65,21 +65,21 @@ async def _async_init() -> None:
     # Import here to avoid issues at module load time
     from zebra_agent.library import WorkflowLibrary
     from zebra_agent.loop import AgentLoop
-    from zebra_agent.metrics import MetricsStore
+    from zebra_agent.oracle_metrics import OracleMetricsStore
 
     from zebra_agent_web.api.engine import ensure_initialized as ensure_workflow_engine
     from zebra_agent_web.api.engine import get_engine
 
     agent_settings = _get_agent_settings()
 
-    # Initialize metrics store (PostgreSQL)
-    logger.info("Initializing metrics store (PostgreSQL)")
-    _metrics = MetricsStore(
-        host=agent_settings.get("POSTGRES_HOST", "localhost"),
-        port=agent_settings.get("POSTGRES_PORT", 5432),
-        database=agent_settings.get("POSTGRES_DATABASE", "opc"),
-        user=agent_settings.get("POSTGRES_USER", "opc"),
-        password=agent_settings.get("POSTGRES_PASSWORD"),
+    # Initialize metrics store (Oracle)
+    logger.info("Initializing metrics store (Oracle)")
+    _metrics = OracleMetricsStore(
+        user=agent_settings.get("ORACLE_USER"),
+        password=agent_settings.get("ORACLE_PASSWORD"),
+        dsn=agent_settings.get("ORACLE_DSN"),
+        wallet_location=agent_settings.get("ORACLE_WALLET_LOCATION"),
+        wallet_password=agent_settings.get("ORACLE_WALLET_PASSWORD"),
     )
     await _metrics.initialize()
 
@@ -129,8 +129,8 @@ def get_library() -> "WorkflowLibrary":
     return _library
 
 
-def get_metrics() -> "MetricsStore":
-    """Get the MetricsStore instance.
+def get_metrics() -> "OracleMetricsStore":
+    """Get the OracleMetricsStore instance.
 
     Raises:
         RuntimeError: If metrics hasn't been initialized.

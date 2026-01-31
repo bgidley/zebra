@@ -1,7 +1,7 @@
 """Zebra workflow engine singleton for the agent web API.
 
 Provides a shared WorkflowEngine instance that can be used across all views.
-The engine is initialized when Django starts and uses PostgreSQL for storage.
+The engine is initialized when Django starts and uses Oracle for storage.
 """
 
 import asyncio
@@ -12,18 +12,18 @@ from django.conf import settings
 
 if TYPE_CHECKING:
     from zebra.core.engine import WorkflowEngine
-    from zebra.storage.postgres import PostgreSQLStore
+    from zebra.storage.oracle import OracleStore
 
 logger = logging.getLogger(__name__)
 
 # Global instances
-_store: "PostgreSQLStore | None" = None
+_store: "OracleStore | None" = None
 _engine: "WorkflowEngine | None" = None
 _initialized = False
 
 
 def initialize():
-    """Initialize the Zebra engine with PostgreSQL storage.
+    """Initialize the Zebra engine with Oracle storage.
 
     Called once when Django starts (from ApiConfig.ready()).
     """
@@ -44,18 +44,18 @@ async def _async_init():
 
     # Import here to avoid issues at module load time
     from zebra.core.engine import WorkflowEngine
-    from zebra.storage.postgres import PostgreSQLStore
+    from zebra.storage.oracle import OracleStore
     from zebra.tasks.registry import ActionRegistry
 
     zebra_settings = settings.ZEBRA_SETTINGS
 
-    logger.info("Initializing PostgreSQL store...")
-    _store = PostgreSQLStore(
-        host=zebra_settings["POSTGRES_HOST"],
-        port=zebra_settings["POSTGRES_PORT"],
-        database=zebra_settings["POSTGRES_DATABASE"],
-        user=zebra_settings["POSTGRES_USER"],
-        password=zebra_settings["POSTGRES_PASSWORD"],
+    logger.info("Initializing Oracle store...")
+    _store = OracleStore(
+        user=zebra_settings.get("ORACLE_USER"),
+        password=zebra_settings.get("ORACLE_PASSWORD"),
+        dsn=zebra_settings.get("ORACLE_DSN"),
+        wallet_location=zebra_settings.get("ORACLE_WALLET_LOCATION"),
+        wallet_password=zebra_settings.get("ORACLE_WALLET_PASSWORD"),
     )
     await _store.initialize()
 
@@ -78,8 +78,8 @@ async def _async_init():
     logger.info("Zebra engine initialized successfully")
 
 
-def get_store() -> "PostgreSQLStore":
-    """Get the PostgreSQL store instance.
+def get_store() -> "OracleStore":
+    """Get the Oracle store instance.
 
     Raises:
         RuntimeError: If the store hasn't been initialized.

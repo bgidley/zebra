@@ -9,6 +9,20 @@ Provides commands to run the development and production servers:
 
 import os
 import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+def _load_env():
+    """Load environment variables from .env file."""
+    # Try to find .env in current directory or parent directories
+    current = Path.cwd()
+    for path in [current, current.parent, current.parent.parent]:
+        env_file = path / ".env"
+        if env_file.exists():
+            load_dotenv(env_file)
+            break
 
 
 def _setup_django():
@@ -18,6 +32,7 @@ def _setup_django():
 
 def serve():
     """Run the production ASGI server with Daphne on localhost:8000."""
+    _load_env()
     _setup_django()
     from daphne.cli import CommandLineInterface
 
@@ -27,6 +42,7 @@ def serve():
 
 def serve_public():
     """Run the production ASGI server with Daphne on 0.0.0.0:8000."""
+    _load_env()
     _setup_django()
     from daphne.cli import CommandLineInterface
 
@@ -36,6 +52,7 @@ def serve_public():
 
 def dev():
     """Run the Django development server on localhost:8000."""
+    _load_env()
     _setup_django()
     from django.core.management import execute_from_command_line
 
@@ -45,6 +62,7 @@ def dev():
 
 def dev_public():
     """Run the Django development server on 0.0.0.0:8000."""
+    _load_env()
     _setup_django()
     from django.core.management import execute_from_command_line
 

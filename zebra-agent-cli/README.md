@@ -5,17 +5,21 @@ Interactive command-line interface for the Zebra Agent.
 ## Installation
 
 ```bash
-# From the workspace root
+# From the workspace root - syncs all packages and creates venv
 uv sync --all-packages
 
-# Or install directly
-uv pip install zebra-agent-cli
+# Activate the virtual environment
+source .venv/bin/activate
 ```
 
 ## Usage
 
 ```bash
-# Start the interactive CLI
+# Using uv (recommended) - runs without activating venv
+uv run zebra-agent
+
+# Or with activated virtual environment
+source .venv/bin/activate
 zebra-agent
 ```
 
@@ -39,7 +43,34 @@ Simply type your goal or question and press Enter. The agent will:
 3. Display the results
 4. Ask for a rating (1-5) to improve future selections
 
-## Environment Variables
+## Database Configuration
+
+This CLI uses Oracle by default. Set these environment variables:
+
+### Oracle (Default)
+
+```bash
+export ORACLE_USERNAME="ZEBRA"
+export ORACLE_PASSWORD="your_password"
+export ORACLE_DSN="(description=(address=(protocol=tcps)(port=1522)(host=your-host.oraclecloud.com))(connect_data=(service_name=your_service.adb.oraclecloud.com)))"
+# Optional: for mTLS with Oracle Cloud Wallet
+export ORACLE_WALLET_LOCATION="/path/to/wallet"
+export ORACLE_WALLET_PASSWORD="wallet_password"
+```
+
+**Environment Variables:**
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ORACLE_USERNAME` | Oracle database user | Yes |
+| `ORACLE_PASSWORD` | Oracle database password | Yes |
+| `ORACLE_DSN` | Oracle connection string (TNS) | Yes |
+| `ORACLE_WALLET_LOCATION` | Path to Oracle wallet (for mTLS) | Optional |
+| `ORACLE_WALLET_PASSWORD` | Wallet password (if encrypted) | Optional |
+
+### PostgreSQL (Alternative)
+
+To use PostgreSQL instead, you'll need to modify the CLI code to import PostgreSQL-backed classes. See the `zebra-agent` README for details.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -70,6 +101,9 @@ uv run pytest zebra-agent-cli/tests/ -v
 
 # Run linter
 uv run ruff check zebra-agent-cli/
+
+# Run with specific database configuration
+ORACLE_USERNAME=ZEBRA ORACLE_PASSWORD=secret ORACLE_DSN="..." uv run zebra-agent
 ```
 
 ## License

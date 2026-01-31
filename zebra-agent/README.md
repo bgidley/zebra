@@ -13,7 +13,10 @@ Self-improving agent console that uses zebra workflows to achieve goals.
 
 ```bash
 # From the zebra workspace root
-uv pip install -e zebra-agent
+uv sync --all-packages
+
+# Or activate the virtual environment
+source .venv/bin/activate
 ```
 
 ## Usage
@@ -66,3 +69,60 @@ Data is stored in `~/.zebra-agent/`:
 - `workflows/` - Workflow YAML definitions
 - `state.db` - Workflow execution state
 - `metrics.db` - Performance metrics
+
+### Database Configuration
+
+This package supports both Oracle and PostgreSQL backends for persistent storage (memory and metrics).
+
+#### Oracle (Default)
+
+Set these environment variables:
+
+```bash
+export ORACLE_USERNAME="ZEBRA"
+export ORACLE_PASSWORD="your_password"
+export ORACLE_DSN="(description=(address=(protocol=tcps)(port=1522)(host=your-host.oraclecloud.com))(connect_data=(service_name=your_service.adb.oraclecloud.com)))"
+# Optional: for mTLS with Oracle Cloud Wallet
+export ORACLE_WALLET_LOCATION="/path/to/wallet"
+export ORACLE_WALLET_PASSWORD="wallet_password"
+```
+
+#### PostgreSQL (Alternative)
+
+If you prefer PostgreSQL, modify your code to use the PostgreSQL-backed classes instead:
+
+```python
+from zebra_agent.memory import AgentMemory  # PostgreSQL version
+from zebra_agent.metrics import MetricsStore  # PostgreSQL version
+from zebra.storage.postgres import PostgreSQLStore  # PostgreSQL version
+
+# Then configure with PostgreSQL connection details
+memory = AgentMemory(
+    host="localhost",
+    port=5432,
+    database="zebra",
+    user="zebra",
+    password="your_password"
+)
+metrics = MetricsStore(
+    host="localhost",
+    port=5432,
+    database="zebra",
+    user="zebra",
+    password="your_password"
+)
+store = PostgreSQLStore(
+    host="localhost",
+    port=5432,
+    database="zebra",
+    user="zebra",
+    password="your_password"
+)
+```
+
+**Environment variables for PostgreSQL:**
+- `PGHOST` - PostgreSQL host (default: `localhost`)
+- `PGPORT` - PostgreSQL port (default: `5432`)
+- `PGDATABASE` - Database name (default: `opc`)
+- `PGUSER` - Database user (default: `opc`)
+- `PGPASSWORD` - Database password
