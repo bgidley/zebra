@@ -21,6 +21,7 @@ dependencies = [
     "pydantic>=2.0",
     "httpx>=0.25",
     "python-dotenv>=1.0",
+    "aiofiles>=23.0",
 ]
 
 [tool.uv.sources]

@@ -1,0 +1,271 @@
+name: "File Operations"
+description: "Perform basic file operations: read, write, copy, move, delete, or get info"
+tags: ["files", "read", "write", "copy", "move", "delete", "info", "filesystem"]
+use_when: "User needs to perform a simple file operation like reading a file, writing content, copying/moving files, deleting files, or checking if a file exists"
+version: 1
+first_task: determine_operation
+
+tasks:
+  determine_operation:
+    name: "Determine the file operation"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        Determine what file operation the user wants to perform.
+        
+        Respond in JSON format with ONE of these operation types:
+        - "read": Read and display file contents
+        - "write": Write or append content to a file
+        - "copy": Copy a file or directory
+        - "move": Move or rename a file
+        - "delete": Delete a file or directory
+        - "info": Get information about a file
+        - "exists": Check if a file/directory exists
+        - "list": List directory contents
+        
+        {
+          "operation": "read|write|copy|move|delete|info|exists|list",
+          "source_path": "primary file or directory path",
+          "destination_path": "destination path (for copy/move/write)",
+          "content": "content to write (for write operation)",
+          "append": false,
+          "recursive": false
+        }
+      prompt: "File operation request: {{goal}}"
+      output_key: operation
+      response_format: json
+      temperature: 0.1
+
+  # Read operation
+  do_read:
+    name: "Read file"
+    action: file_read
+    auto: true
+    properties:
+      path: "{{operation.source_path}}"
+      output_key: file_content
+      allow_absolute: true
+
+  show_read_result:
+    name: "Show file content"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        Present the file content to the user in a helpful way.
+        If it's code, format it appropriately.
+        If it's very long, summarize key parts.
+      prompt: |
+        User wanted to read: {{operation.source_path}}
+        
+        File content:
+        {{file_content}}
+        
+        Present this content clearly.
+      output_key: result
+
+  # Write operation
+  do_write:
+    name: "Write to file"
+    action: file_write
+    auto: true
+    properties:
+      path: "{{operation.destination_path}}"
+      content: "{{operation.content}}"
+      mode: "{{operation.append ? 'append' : 'write'}}"
+      create_dirs: true
+      allow_absolute: true
+
+  show_write_result:
+    name: "Confirm write"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: |
+        File written successfully to: {{operation.destination_path}}
+        
+        Confirm this to the user with a friendly message.
+      output_key: result
+
+  # Copy operation
+  do_copy:
+    name: "Copy file"
+    action: file_copy
+    auto: true
+    properties:
+      source: "{{operation.source_path}}"
+      destination: "{{operation.destination_path}}"
+      recursive: "{{operation.recursive}}"
+      allow_absolute: true
+
+  show_copy_result:
+    name: "Confirm copy"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: |
+        Copied: {{operation.source_path}}
+        To: {{operation.destination_path}}
+        
+        Confirm this to the user.
+      output_key: result
+
+  # Move operation
+  do_move:
+    name: "Move file"
+    action: file_move
+    auto: true
+    properties:
+      source: "{{operation.source_path}}"
+      destination: "{{operation.destination_path}}"
+      create_dirs: true
+      allow_absolute: true
+
+  show_move_result:
+    name: "Confirm move"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: |
+        Moved: {{operation.source_path}}
+        To: {{operation.destination_path}}
+        
+        Confirm this to the user.
+      output_key: result
+
+  # Delete operation
+  do_delete:
+    name: "Delete file"
+    action: file_delete
+    auto: true
+    properties:
+      path: "{{operation.source_path}}"
+      recursive: "{{operation.recursive}}"
+      allow_absolute: true
+
+  show_delete_result:
+    name: "Confirm delete"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: |
+        Deleted: {{operation.source_path}}
+        
+        Confirm this to the user (mention if it was recursive).
+      output_key: result
+
+  # Info operation
+  do_info:
+    name: "Get file info"
+    action: file_info
+    auto: true
+    properties:
+      path: "{{operation.source_path}}"
+      output_key: file_info
+      allow_absolute: true
+
+  show_info_result:
+    name: "Show file info"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: |
+        File information for: {{operation.source_path}}
+        
+        {{file_info}}
+        
+        Present this information clearly to the user.
+      output_key: result
+
+  # Exists operation
+  do_exists:
+    name: "Check if exists"
+    action: file_exists
+    auto: true
+    properties:
+      path: "{{operation.source_path}}"
+      output_key: exists_result
+      allow_absolute: true
+
+  show_exists_result:
+    name: "Show exists result"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: |
+        Checking if exists: {{operation.source_path}}
+        
+        Result: {{exists_result}}
+        
+        Tell the user whether the file/directory exists.
+      output_key: result
+
+  # List operation
+  do_list:
+    name: "List directory"
+    action: directory_list
+    auto: true
+    properties:
+      path: "{{operation.source_path}}"
+      recursive: "{{operation.recursive}}"
+      output_key: directory_contents
+      allow_absolute: true
+
+  show_list_result:
+    name: "Show directory listing"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: |
+        Directory listing for: {{operation.source_path}}
+        
+        Contents: {{directory_contents}}
+        
+        Present this directory listing clearly.
+      output_key: result
+
+routings:
+  # Route to appropriate operation based on determined operation type
+  - from: determine_operation
+    to: do_read
+    name: read
+  - from: determine_operation
+    to: do_write
+    name: write
+  - from: determine_operation
+    to: do_copy
+    name: copy
+  - from: determine_operation
+    to: do_move
+    name: move
+  - from: determine_operation
+    to: do_delete
+    name: delete
+  - from: determine_operation
+    to: do_info
+    name: info
+  - from: determine_operation
+    to: do_exists
+    name: exists
+  - from: determine_operation
+    to: do_list
+    name: list
+
+  # Route from operations to their result display
+  - from: do_read
+    to: show_read_result
+  - from: do_write
+    to: show_write_result
+  - from: do_copy
+    to: show_copy_result
+  - from: do_move
+    to: show_move_result
+  - from: do_delete
+    to: show_delete_result
+  - from: do_info
+    to: show_info_result
+  - from: do_exists
+    to: show_exists_result
+  - from: do_list
+    to: show_list_result

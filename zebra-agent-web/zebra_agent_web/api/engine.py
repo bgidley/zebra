@@ -72,6 +72,33 @@ async def _async_init():
     except ImportError:
         logger.warning("zebra-tasks not available, llm_call action not registered")
 
+    # Register filesystem actions from zebra-tasks
+    try:
+        from zebra_tasks.filesystem import (
+            DirectoryListAction,
+            FileCopyAction,
+            FileDeleteAction,
+            FileExistsAction,
+            FileInfoAction,
+            FileMoveAction,
+            FileReadAction,
+            FileSearchAction,
+            FileWriteAction,
+        )
+
+        registry.register_action("file_read", FileReadAction)
+        registry.register_action("file_write", FileWriteAction)
+        registry.register_action("file_copy", FileCopyAction)
+        registry.register_action("file_move", FileMoveAction)
+        registry.register_action("file_delete", FileDeleteAction)
+        registry.register_action("file_search", FileSearchAction)
+        registry.register_action("file_exists", FileExistsAction)
+        registry.register_action("file_info", FileInfoAction)
+        registry.register_action("directory_list", DirectoryListAction)
+        logger.info("Registered 9 filesystem actions from zebra-tasks")
+    except ImportError:
+        logger.warning("zebra-tasks filesystem not available")
+
     # Create engine
     _engine = WorkflowEngine(_store, registry)
 
