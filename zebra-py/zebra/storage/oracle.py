@@ -31,12 +31,13 @@ from zebra.storage.base import StateStore
 logger = logging.getLogger(__name__)
 
 
-def _read_clob(value: Any) -> str | None:
-    """Safely read a CLOB value from Oracle.
+async def _read_clob_async(value: Any) -> str | None:
+    """Safely read a CLOB value from Oracle asynchronously.
 
     Handles cases where the value might be:
     - Already a string
-    - A file-like object with .read()
+    - An AsyncLOB object with async .read()
+    - A file-like object with sync .read()
     - A dict (JSON data)
     - None
     """
@@ -47,7 +48,32 @@ def _read_clob(value: Any) -> str | None:
     if isinstance(value, dict):
         return json.dumps(value)
     if hasattr(value, "read"):
-        return value.read()
+        result = value.read()
+        # Handle async LOB objects (coroutines)
+        if asyncio.iscoroutine(result):
+            return await result
+        return result
+    return str(value)
+
+
+def _read_clob(value: Any) -> str | None:
+    """Safely read a CLOB value from Oracle (sync version for non-LOB data).
+
+    NOTE: This function cannot handle AsyncLOB objects. Use _read_clob_async
+    for data that may contain LOB objects from async queries.
+
+    Handles cases where the value might be:
+    - Already a string
+    - A dict (JSON data)
+    - None
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return json.dumps(value)
+    # Don't call .read() here as it may return a coroutine
     return str(value)
 
 
@@ -313,7 +339,8 @@ class OracleStore(StateStore):
                 row = await cursor.fetchone()
                 if row is None:
                     return None
-                return ProcessDefinition.model_validate_json(_read_clob(row[0]) or "{}")
+                data = await _read_clob_async(row[0])
+                return ProcessDefinition.model_validate_json(data or "{}")
 
     async def list_definitions(self) -> list[ProcessDefinition]:
         """List all available process definitions."""
