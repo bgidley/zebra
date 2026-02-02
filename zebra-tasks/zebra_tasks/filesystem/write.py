@@ -4,7 +4,7 @@ import base64
 
 import aiofiles
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.filesystem.base import (
     FileSystemConfig,
@@ -53,6 +53,85 @@ class FileWriteAction(TaskAction):
         - output.bytes_written: Number of bytes written
         - output.mode: Write mode used
     """
+
+    description = "Write content to a file, with options for append mode and directory creation."
+
+    inputs = [
+        ParameterDef(
+            name="path",
+            type="string",
+            description="File path to write (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="content",
+            type="string",
+            description="Content to write (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="encoding",
+            type="string",
+            description="Text encoding for writing the file",
+            required=False,
+            default="utf-8",
+        ),
+        ParameterDef(
+            name="mode",
+            type="string",
+            description="Write mode: 'write' (overwrite) or 'append'",
+            required=False,
+            default="write",
+        ),
+        ParameterDef(
+            name="binary",
+            type="bool",
+            description="If True, content is base64-encoded and will be decoded before writing",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
+            name="create_dirs",
+            type="bool",
+            description="Create parent directories if they don't exist",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="overwrite",
+            type="bool",
+            description="Allow overwriting existing files",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="base_directory",
+            type="string",
+            description="Sandbox directory for security (paths must be within)",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="path",
+            type="string",
+            description="The resolved file path",
+            required=True,
+        ),
+        ParameterDef(
+            name="bytes_written",
+            type="int",
+            description="Number of bytes written",
+            required=True,
+        ),
+        ParameterDef(
+            name="mode",
+            type="string",
+            description="Write mode used ('write' or 'append')",
+            required=True,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Write content to file."""

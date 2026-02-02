@@ -3,7 +3,7 @@
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 
 class DataEntryAction(TaskAction):
@@ -78,6 +78,58 @@ class DataEntryAction(TaskAction):
         ```
     """
 
+    description = "Request structured data entry from a human via an external UI or API."
+
+    inputs = [
+        ParameterDef(
+            name="title",
+            type="string",
+            description="Title for the data entry form",
+            required=False,
+            default="Data Entry",
+        ),
+        ParameterDef(
+            name="fields",
+            type="list[dict]",
+            description="List of field definitions with name, label, type, required, default, description, options",
+            required=True,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the collected data",
+            required=False,
+            default="user_input",
+        ),
+        ParameterDef(
+            name="timeout",
+            type="float",
+            description="Timeout in seconds (informational, not enforced)",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="status",
+            type="string",
+            description="Status of the data entry request ('waiting_for_input')",
+            required=True,
+        ),
+        ParameterDef(
+            name="title",
+            type="string",
+            description="Title displayed to the user",
+            required=True,
+        ),
+        ParameterDef(
+            name="fields",
+            type="list[dict]",
+            description="Field definitions for the form",
+            required=True,
+        ),
+    ]
+
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Initialize data entry and wait for external completion."""
         # Validate required properties
@@ -94,12 +146,15 @@ class DataEntryAction(TaskAction):
 
         # Store the data entry request in task properties for external systems
         # This allows UI/API to retrieve the form schema
-        context.set_process_property(f"__data_entry_{task.id}__", {
-            "title": title,
-            "fields": fields,
-            "task_id": task.id,
-            "status": "waiting",
-        })
+        context.set_process_property(
+            f"__data_entry_{task.id}__",
+            {
+                "title": title,
+                "fields": fields,
+                "task_id": task.id,
+                "status": "waiting",
+            },
+        )
 
         # Return a special result that indicates waiting for external input
         # The task will remain in RUNNING state until engine.complete_task() is called

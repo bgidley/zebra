@@ -5,7 +5,7 @@ import json
 import re
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import LLMProvider, Message, MessageRole, TokenUsage
 
@@ -62,6 +62,96 @@ class LLMCallAction(TaskAction):
         ```
     """
 
+    description = "Call an LLM provider to generate text or structured responses."
+
+    inputs = [
+        ParameterDef(
+            name="prompt",
+            type="string",
+            description="User prompt text (supports {{var}} templates)",
+            required=False,
+        ),
+        ParameterDef(
+            name="system_prompt",
+            type="string",
+            description="System prompt to set LLM behavior",
+            required=False,
+        ),
+        ParameterDef(
+            name="messages",
+            type="list[dict]",
+            description="Full message history as list of {role, content} dicts",
+            required=False,
+        ),
+        ParameterDef(
+            name="temperature",
+            type="float",
+            description="LLM temperature (0.0-2.0, higher = more creative)",
+            required=False,
+            default=0.7,
+        ),
+        ParameterDef(
+            name="max_tokens",
+            type="int",
+            description="Maximum tokens in response",
+            required=False,
+            default=4096,
+        ),
+        ParameterDef(
+            name="response_format",
+            type="string",
+            description="Expected response format: 'text' or 'json'",
+            required=False,
+            default="text",
+        ),
+        ParameterDef(
+            name="json_schema",
+            type="dict",
+            description="JSON schema for structured output validation",
+            required=False,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the response",
+            required=False,
+            default="llm_response",
+        ),
+        ParameterDef(
+            name="provider",
+            type="string",
+            description="LLM provider name (e.g., 'anthropic', 'openai')",
+            required=False,
+        ),
+        ParameterDef(
+            name="model",
+            type="string",
+            description="Model name override (e.g., 'claude-3-opus-20240229')",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="response",
+            type="any",
+            description="LLM response (string or parsed JSON dict)",
+            required=True,
+        ),
+        ParameterDef(
+            name="tokens_used",
+            type="int",
+            description="Total tokens used in this call",
+            required=True,
+        ),
+        ParameterDef(
+            name="model",
+            type="string",
+            description="Model that was used for the completion",
+            required=True,
+        ),
+    ]
+
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Execute the LLM call."""
         # Get LLM provider
@@ -98,25 +188,28 @@ class LLMCallAction(TaskAction):
             context.set_process_property(output_key, output)
 
             # Also store metadata
-            context.set_process_property(f"{output_key}_usage", {
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-                "total_tokens": response.usage.total_tokens,
-                "model": response.model,
-            })
+            context.set_process_property(
+                f"{output_key}_usage",
+                {
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                    "model": response.model,
+                },
+            )
 
-            return TaskResult.ok(output={
-                "response": output,
-                "tokens_used": response.usage.total_tokens,
-                "model": response.model,
-            })
+            return TaskResult.ok(
+                output={
+                    "response": output,
+                    "tokens_used": response.usage.total_tokens,
+                    "model": response.model,
+                }
+            )
 
         except Exception as e:
             return TaskResult.fail(f"LLM call failed: {str(e)}")
 
-    def _get_provider(
-        self, task: TaskInstance, context: ExecutionContext
-    ) -> LLMProvider | None:
+    def _get_provider(self, task: TaskInstance, context: ExecutionContext) -> LLMProvider | None:
         """Get the LLM provider to use."""
         from zebra_tasks.llm.providers.registry import get_provider
 
@@ -137,9 +230,7 @@ class LLMCallAction(TaskAction):
         # Legacy: check for provider object (not recommended)
         return context.process.properties.get("__llm_provider__")
 
-    def _build_messages(
-        self, task: TaskInstance, context: ExecutionContext
-    ) -> list[Message]:
+    def _build_messages(self, task: TaskInstance, context: ExecutionContext) -> list[Message]:
         """Build message list from task properties."""
         # Check for explicit messages
         messages_prop = task.properties.get("messages")
@@ -187,8 +278,8 @@ class LLMCallAction(TaskAction):
         """Extract JSON from content, handling code blocks."""
         # Try to extract from code blocks using regex
         patterns = [
-            r'```json\s*(.*?)\s*```',  # ```json ... ```
-            r'```\s*(.*?)\s*```',       # ``` ... ```
+            r"```json\s*(.*?)\s*```",  # ```json ... ```
+            r"```\s*(.*?)\s*```",  # ``` ... ```
         ]
         for pattern in patterns:
             match = re.search(pattern, content, re.DOTALL)
@@ -203,9 +294,11 @@ class LLMCallAction(TaskAction):
 
         # Also track per-task breakdown
         token_history = context.get_process_property("__token_history__", [])
-        token_history.append({
-            "input": usage.input_tokens,
-            "output": usage.output_tokens,
-            "total": usage.total_tokens,
-        })
+        token_history.append(
+            {
+                "input": usage.input_tokens,
+                "output": usage.output_tokens,
+                "total": usage.total_tokens,
+            }
+        )
         context.set_process_property("__token_history__", token_history)

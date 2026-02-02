@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
@@ -63,6 +63,64 @@ class WorkflowSelectorAction(TaskAction):
     Output:
         WorkflowSelection with workflow_name, create_new flag, and reasoning
     """
+
+    description = "Use LLM to select the best workflow for a given goal."
+
+    inputs = [
+        ParameterDef(
+            name="goal",
+            type="string",
+            description="The user's goal/request",
+            required=True,
+        ),
+        ParameterDef(
+            name="available_workflows",
+            type="list[dict]",
+            description="List of workflow info dicts with name, description, tags, success_rate",
+            required=False,
+            default=[],
+        ),
+        ParameterDef(
+            name="provider",
+            type="string",
+            description="LLM provider name",
+            required=False,
+            default="anthropic",
+        ),
+        ParameterDef(
+            name="model",
+            type="string",
+            description="LLM model name",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="workflow_name",
+            type="string",
+            description="Name of the selected workflow (null if creating new)",
+            required=False,
+        ),
+        ParameterDef(
+            name="create_new",
+            type="bool",
+            description="Whether a new workflow should be created",
+            required=True,
+        ),
+        ParameterDef(
+            name="reasoning",
+            type="string",
+            description="Explanation for the selection",
+            required=True,
+        ),
+        ParameterDef(
+            name="suggested_name",
+            type="string",
+            description="Suggested name for new workflow (if create_new is true)",
+            required=False,
+        ),
+    ]
 
     SYSTEM_PROMPT = """You are a workflow selector. Given a user goal and available workflows,
 select the best match or recommend creating a new one.

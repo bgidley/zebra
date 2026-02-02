@@ -8,7 +8,7 @@ from zebra.core.models import (
     TaskInstance,
     TaskResult,
 )
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra.definitions.loader import load_definition_from_yaml
 
 
@@ -41,6 +41,77 @@ class SubworkflowAction(TaskAction):
               output_key: analysis_result
         ```
     """
+
+    description = "Spawn and execute a sub-workflow as a child process."
+
+    inputs = [
+        ParameterDef(
+            name="workflow",
+            type="any",
+            description="Workflow definition (inline dict, YAML string, or definition ID)",
+            required=False,
+        ),
+        ParameterDef(
+            name="workflow_file",
+            type="string",
+            description="Path to workflow YAML file (alternative to workflow)",
+            required=False,
+        ),
+        ParameterDef(
+            name="properties",
+            type="dict",
+            description="Properties to pass to the sub-workflow",
+            required=False,
+            default={},
+        ),
+        ParameterDef(
+            name="wait",
+            type="bool",
+            description="Whether to wait for sub-workflow completion",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="timeout",
+            type="float",
+            description="Timeout in seconds for waiting",
+            required=False,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the result",
+            required=False,
+            default="subworkflow_result",
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="process_id",
+            type="string",
+            description="ID of the spawned sub-process",
+            required=True,
+        ),
+        ParameterDef(
+            name="success",
+            type="bool",
+            description="Whether the sub-workflow completed successfully (when wait=True)",
+            required=False,
+        ),
+        ParameterDef(
+            name="properties",
+            type="dict",
+            description="Final properties of the sub-workflow (when wait=True)",
+            required=False,
+        ),
+        ParameterDef(
+            name="output",
+            type="any",
+            description="Output from the sub-workflow's __output__ property (when wait=True)",
+            required=False,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Execute the sub-workflow."""
@@ -91,9 +162,7 @@ class SubworkflowAction(TaskAction):
 
         # Wait for completion
         timeout = task.properties.get("timeout")
-        result = await self._wait_for_completion(
-            context, sub_process.id, timeout
-        )
+        result = await self._wait_for_completion(context, sub_process.id, timeout)
 
         # Store result
         output_key = task.properties.get("output_key", "subworkflow_result")

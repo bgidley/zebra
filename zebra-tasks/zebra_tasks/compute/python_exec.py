@@ -8,7 +8,7 @@ from contextlib import redirect_stdout, redirect_stderr
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 
 class PythonExecAction(TaskAction):
@@ -53,6 +53,59 @@ class PythonExecAction(TaskAction):
         Code runs in the same process with limited restrictions.
         Do not execute untrusted code.
     """
+
+    description = "Execute Python code in a restricted environment and capture the result."
+
+    inputs = [
+        ParameterDef(
+            name="code",
+            type="string",
+            description="Python code to execute (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="timeout",
+            type="int",
+            description="Maximum execution time in seconds (not strictly enforced)",
+            required=False,
+            default=30,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the result",
+            required=False,
+            default="result",
+        ),
+        ParameterDef(
+            name="capture_prints",
+            type="bool",
+            description="Whether to capture print statements",
+            required=False,
+            default=True,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="result",
+            type="any",
+            description="The value assigned to 'result' variable in the code",
+            required=False,
+        ),
+        ParameterDef(
+            name="stdout",
+            type="string",
+            description="Captured standard output from print statements",
+            required=True,
+        ),
+        ParameterDef(
+            name="stderr",
+            type="string",
+            description="Captured standard error output",
+            required=True,
+        ),
+    ]
 
     # Allowed built-in modules
     ALLOWED_MODULES = {
@@ -150,32 +203,30 @@ class PythonExecAction(TaskAction):
     def _build_globals(self, context: ExecutionContext) -> dict[str, Any]:
         """Build the global namespace for code execution."""
         # Start with safe builtins
-        safe_builtins = {
-            k: v
-            for k, v in __builtins__.items()
-            if k not in self.BLOCKED_BUILTINS
-        } if isinstance(__builtins__, dict) else {
-            k: getattr(__builtins__, k)
-            for k in dir(__builtins__)
-            if not k.startswith("_") and k not in self.BLOCKED_BUILTINS
-        }
+        safe_builtins = (
+            {k: v for k, v in __builtins__.items() if k not in self.BLOCKED_BUILTINS}
+            if isinstance(__builtins__, dict)
+            else {
+                k: getattr(__builtins__, k)
+                for k in dir(__builtins__)
+                if not k.startswith("_") and k not in self.BLOCKED_BUILTINS
+            }
+        )
 
         # Create a restricted __import__ that only allows certain modules
         def safe_import(name, *args, **kwargs):
             if name.split(".")[0] not in self.ALLOWED_MODULES:
                 raise ImportError(f"Module '{name}' is not allowed")
-            return __builtins__["__import__"](name, *args, **kwargs) if isinstance(
-                __builtins__, dict
-            ) else __import__(name, *args, **kwargs)
+            return (
+                __builtins__["__import__"](name, *args, **kwargs)
+                if isinstance(__builtins__, dict)
+                else __import__(name, *args, **kwargs)
+            )
 
         safe_builtins["__import__"] = safe_import
 
         # Build globals with process properties accessible
-        props = {
-            k: v
-            for k, v in context.process.properties.items()
-            if not k.startswith("__")
-        }
+        props = {k: v for k, v in context.process.properties.items() if not k.startswith("__")}
 
         return {
             "__builtins__": safe_builtins,

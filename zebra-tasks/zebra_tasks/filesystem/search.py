@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.filesystem.base import (
     FileSystemConfig,
@@ -54,6 +54,104 @@ class FileSearchAction(TaskAction):
         - output.count: Number of matches found
         - output.truncated: Whether results were truncated due to max_results
     """
+
+    description = "Search for files matching glob patterns with optional content filtering."
+
+    inputs = [
+        ParameterDef(
+            name="pattern",
+            type="string",
+            description="Glob pattern to match (e.g., '*.txt', '**/*.py')",
+            required=True,
+        ),
+        ParameterDef(
+            name="directory",
+            type="string",
+            description="Base directory for search",
+            required=False,
+            default=".",
+        ),
+        ParameterDef(
+            name="recursive",
+            type="bool",
+            description="Search recursively in subdirectories",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="include_dirs",
+            type="bool",
+            description="Include directories in results",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
+            name="include_files",
+            type="bool",
+            description="Include files in results",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="content_pattern",
+            type="string",
+            description="Regex pattern to search within file contents",
+            required=False,
+        ),
+        ParameterDef(
+            name="min_size",
+            type="int",
+            description="Minimum file size in bytes",
+            required=False,
+        ),
+        ParameterDef(
+            name="max_size",
+            type="int",
+            description="Maximum file size in bytes",
+            required=False,
+        ),
+        ParameterDef(
+            name="max_results",
+            type="int",
+            description="Maximum number of results to return",
+            required=False,
+            default=1000,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the file paths",
+            required=False,
+            default="found_files",
+        ),
+        ParameterDef(
+            name="base_directory",
+            type="string",
+            description="Sandbox directory for security (paths must be within)",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="matches",
+            type="list[dict]",
+            description="List of matching file info objects with path, name, type, size",
+            required=True,
+        ),
+        ParameterDef(
+            name="count",
+            type="int",
+            description="Number of matches found",
+            required=True,
+        ),
+        ParameterDef(
+            name="truncated",
+            type="bool",
+            description="Whether results were truncated due to max_results",
+            required=True,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Search for files."""

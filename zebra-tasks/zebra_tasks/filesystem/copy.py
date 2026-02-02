@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.filesystem.base import (
     FileSystemConfig,
@@ -50,6 +50,77 @@ class FileCopyAction(TaskAction):
         - output.type: "file" or "directory"
         - output.files_copied: Number of files copied (for directories)
     """
+
+    description = "Copy a file or directory to a new location."
+
+    inputs = [
+        ParameterDef(
+            name="source",
+            type="string",
+            description="Source path (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="destination",
+            type="string",
+            description="Destination path (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="overwrite",
+            type="bool",
+            description="Allow overwriting existing files",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
+            name="recursive",
+            type="bool",
+            description="Copy directories recursively",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="preserve_metadata",
+            type="bool",
+            description="Preserve file metadata (timestamps, permissions)",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="base_directory",
+            type="string",
+            description="Sandbox directory for security (paths must be within)",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="source",
+            type="string",
+            description="The resolved source path",
+            required=True,
+        ),
+        ParameterDef(
+            name="destination",
+            type="string",
+            description="The resolved destination path",
+            required=True,
+        ),
+        ParameterDef(
+            name="type",
+            type="string",
+            description="Type of item copied: 'file' or 'directory'",
+            required=True,
+        ),
+        ParameterDef(
+            name="files_copied",
+            type="int",
+            description="Number of files copied",
+            required=True,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Copy file or directory."""

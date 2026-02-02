@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message
 
@@ -47,6 +47,96 @@ class WorkflowOptimizerAction(TaskAction):
               output_key: optimization_results
         ```
     """
+
+    description = "Create new workflows or optimize existing ones based on evaluation results."
+
+    inputs = [
+        ParameterDef(
+            name="evaluation",
+            type="dict",
+            description="Output from WorkflowEvaluatorAction",
+            required=True,
+        ),
+        ParameterDef(
+            name="workflow_library_path",
+            type="string",
+            description="Path to workflow YAML files for saving",
+            required=False,
+        ),
+        ParameterDef(
+            name="existing_workflows",
+            type="dict",
+            description="Dict of workflow name -> YAML content",
+            required=False,
+            default={},
+        ),
+        ParameterDef(
+            name="max_changes",
+            type="int",
+            description="Maximum number of changes to make",
+            required=False,
+            default=3,
+        ),
+        ParameterDef(
+            name="dry_run",
+            type="bool",
+            description="If True, only generate changes without saving",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the results",
+            required=False,
+            default="optimization_results",
+        ),
+        ParameterDef(
+            name="provider",
+            type="string",
+            description="LLM provider name",
+            required=False,
+        ),
+        ParameterDef(
+            name="model",
+            type="string",
+            description="LLM model name",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="changes_made",
+            type="list[dict]",
+            description="List of changes that were made",
+            required=True,
+        ),
+        ParameterDef(
+            name="new_workflows",
+            type="list[dict]",
+            description="New workflow definitions created",
+            required=True,
+        ),
+        ParameterDef(
+            name="modified_workflows",
+            type="list[dict]",
+            description="Existing workflows that were modified",
+            required=True,
+        ),
+        ParameterDef(
+            name="skipped",
+            type="list[dict]",
+            description="Changes that were skipped and why",
+            required=True,
+        ),
+        ParameterDef(
+            name="dry_run",
+            type="bool",
+            description="Whether this was a dry run",
+            required=True,
+        ),
+    ]
 
     SYSTEM_PROMPT = """You are an expert workflow designer for the Zebra workflow engine.
 Your task is to create or modify workflow definitions based on improvement recommendations.
@@ -148,11 +238,13 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
             # Handle new workflow suggestions first
             for suggestion in new_suggestions:
                 if changes_count >= max_changes:
-                    results["skipped"].append({
-                        "type": "new_workflow",
-                        "name": suggestion.get("name"),
-                        "reason": "max_changes limit reached",
-                    })
+                    results["skipped"].append(
+                        {
+                            "type": "new_workflow",
+                            "name": suggestion.get("name"),
+                            "reason": "max_changes limit reached",
+                        }
+                    )
                     continue
 
                 workflow_yaml = await self._create_new_workflow(
@@ -161,30 +253,36 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
 
                 if workflow_yaml:
                     name = suggestion.get("name", "new_workflow")
-                    results["new_workflows"].append({
-                        "name": name,
-                        "yaml": workflow_yaml,
-                        "reason": suggestion.get("rationale", ""),
-                    })
+                    results["new_workflows"].append(
+                        {
+                            "name": name,
+                            "yaml": workflow_yaml,
+                            "reason": suggestion.get("rationale", ""),
+                        }
+                    )
 
                     if not dry_run and library_path:
                         self._save_workflow(library_path, name, workflow_yaml)
 
-                    results["changes_made"].append({
-                        "type": "create",
-                        "workflow": name,
-                        "description": suggestion.get("description", ""),
-                    })
+                    results["changes_made"].append(
+                        {
+                            "type": "create",
+                            "workflow": name,
+                            "description": suggestion.get("description", ""),
+                        }
+                    )
                     changes_count += 1
 
             # Handle improvements to existing workflows
             for priority in priorities:
                 if changes_count >= max_changes:
-                    results["skipped"].append({
-                        "type": priority.get("type"),
-                        "target": priority.get("target"),
-                        "reason": "max_changes limit reached",
-                    })
+                    results["skipped"].append(
+                        {
+                            "type": priority.get("type"),
+                            "target": priority.get("target"),
+                            "reason": "max_changes limit reached",
+                        }
+                    )
                     continue
 
                 if priority.get("type") == "create":
@@ -195,20 +293,24 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
 
                     if workflow_yaml:
                         name = priority.get("target", "new_workflow")
-                        results["new_workflows"].append({
-                            "name": name,
-                            "yaml": workflow_yaml,
-                            "reason": priority.get("rationale", ""),
-                        })
+                        results["new_workflows"].append(
+                            {
+                                "name": name,
+                                "yaml": workflow_yaml,
+                                "reason": priority.get("rationale", ""),
+                            }
+                        )
 
                         if not dry_run and library_path:
                             self._save_workflow(library_path, name, workflow_yaml)
 
-                        results["changes_made"].append({
-                            "type": "create",
-                            "workflow": name,
-                            "action": priority.get("action", ""),
-                        })
+                        results["changes_made"].append(
+                            {
+                                "type": "create",
+                                "workflow": name,
+                                "action": priority.get("action", ""),
+                            }
+                        )
                         changes_count += 1
 
                 elif priority.get("type") in ("fix", "enhance"):
@@ -223,28 +325,34 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                         )
 
                         if modified_yaml:
-                            results["modified_workflows"].append({
-                                "name": target,
-                                "original_yaml": existing_workflows[target],
-                                "modified_yaml": modified_yaml,
-                                "reason": priority.get("rationale", ""),
-                            })
+                            results["modified_workflows"].append(
+                                {
+                                    "name": target,
+                                    "original_yaml": existing_workflows[target],
+                                    "modified_yaml": modified_yaml,
+                                    "reason": priority.get("rationale", ""),
+                                }
+                            )
 
                             if not dry_run and library_path:
                                 self._save_workflow(library_path, target, modified_yaml)
 
-                            results["changes_made"].append({
-                                "type": "modify",
-                                "workflow": target,
-                                "action": priority.get("action", ""),
-                            })
+                            results["changes_made"].append(
+                                {
+                                    "type": "modify",
+                                    "workflow": target,
+                                    "action": priority.get("action", ""),
+                                }
+                            )
                             changes_count += 1
                     else:
-                        results["skipped"].append({
-                            "type": priority.get("type"),
-                            "target": target,
-                            "reason": "workflow not found in existing_workflows",
-                        })
+                        results["skipped"].append(
+                            {
+                                "type": priority.get("type"),
+                                "target": target,
+                                "reason": "workflow not found in existing_workflows",
+                            }
+                        )
 
             # Store result
             context.set_process_property(output_key, results)
@@ -280,10 +388,10 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
         """Create a new workflow based on a suggestion."""
         prompt = f"""Create a new workflow with the following requirements:
 
-Name: {suggestion.get('name', 'New Workflow')}
-Description: {suggestion.get('description', 'No description provided')}
-Use Case: {suggestion.get('use_case', 'General purpose')}
-Rationale: {suggestion.get('rationale', '')}
+Name: {suggestion.get("name", "New Workflow")}
+Description: {suggestion.get("description", "No description provided")}
+Use Case: {suggestion.get("use_case", "General purpose")}
+Rationale: {suggestion.get("rationale", "")}
 
 """
         if existing_workflows:
@@ -313,10 +421,10 @@ Rationale: {suggestion.get('rationale', '')}
         """Create a workflow based on an improvement priority."""
         prompt = f"""Create a new workflow to address this improvement priority:
 
-Target: {priority.get('target', 'New capability')}
-Action needed: {priority.get('action', '')}
-Expected impact: {priority.get('expected_impact', 'medium')}
-Rationale: {priority.get('rationale', '')}
+Target: {priority.get("target", "New capability")}
+Action needed: {priority.get("action", "")}
+Expected impact: {priority.get("expected_impact", "medium")}
+Rationale: {priority.get("rationale", "")}
 
 """
         if existing_workflows:
@@ -361,17 +469,17 @@ Current workflow:
 ```
 
 Improvement needed:
-- Type: {priority.get('type', 'fix')}
-- Action: {priority.get('action', '')}
-- Rationale: {priority.get('rationale', '')}
+- Type: {priority.get("type", "fix")}
+- Action: {priority.get("action", "")}
+- Rationale: {priority.get("rationale", "")}
 """
 
         if workflow_eval:
             prompt += f"""
 Evaluation findings:
-- Effectiveness score: {workflow_eval.get('effectiveness_score', 'N/A')}/100
-- Weaknesses: {', '.join(workflow_eval.get('weaknesses', []))}
-- Suggested improvements: {', '.join(workflow_eval.get('specific_improvements', []))}
+- Effectiveness score: {workflow_eval.get("effectiveness_score", "N/A")}/100
+- Weaknesses: {", ".join(workflow_eval.get("weaknesses", []))}
+- Suggested improvements: {", ".join(workflow_eval.get("specific_improvements", []))}
 """
 
         prompt += """

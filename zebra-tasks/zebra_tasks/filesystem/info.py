@@ -6,7 +6,7 @@ import stat
 from datetime import UTC, datetime
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.filesystem.base import (
     FileSystemConfig,
@@ -47,6 +47,58 @@ class FileExistsAction(TaskAction):
         - output.path: The resolved path
         - output.type: "file", "directory", or null if not exists
     """
+
+    description = "Check if a file or directory exists."
+
+    inputs = [
+        ParameterDef(
+            name="path",
+            type="string",
+            description="Path to check (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="type",
+            type="string",
+            description="Expected type: 'any', 'file', or 'directory'",
+            required=False,
+            default="any",
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the result",
+            required=False,
+            default="file_exists",
+        ),
+        ParameterDef(
+            name="base_directory",
+            type="string",
+            description="Sandbox directory for security (paths must be within)",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="exists",
+            type="bool",
+            description="Whether the path exists (and matches expected type)",
+            required=True,
+        ),
+        ParameterDef(
+            name="path",
+            type="string",
+            description="The resolved path",
+            required=True,
+        ),
+        ParameterDef(
+            name="type",
+            type="string",
+            description="Type of item: 'file', 'directory', 'other', or null if not found",
+            required=False,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Check if path exists."""
@@ -141,6 +193,105 @@ class FileInfoAction(TaskAction):
         - output.is_writable: Whether file is writable
         - output.is_executable: Whether file is executable
     """
+
+    description = "Get detailed metadata about a file or directory."
+
+    inputs = [
+        ParameterDef(
+            name="path",
+            type="string",
+            description="Path to inspect (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the result",
+            required=False,
+            default="file_info",
+        ),
+        ParameterDef(
+            name="base_directory",
+            type="string",
+            description="Sandbox directory for security (paths must be within)",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="path",
+            type="string",
+            description="The resolved path",
+            required=True,
+        ),
+        ParameterDef(
+            name="name",
+            type="string",
+            description="File or directory name",
+            required=True,
+        ),
+        ParameterDef(
+            name="type",
+            type="string",
+            description="Type: 'file', 'directory', or 'other'",
+            required=True,
+        ),
+        ParameterDef(
+            name="size",
+            type="int",
+            description="Size in bytes",
+            required=True,
+        ),
+        ParameterDef(
+            name="size_human",
+            type="string",
+            description="Human-readable size (e.g., '1.5 KB')",
+            required=True,
+        ),
+        ParameterDef(
+            name="created",
+            type="string",
+            description="Creation timestamp (ISO format)",
+            required=True,
+        ),
+        ParameterDef(
+            name="modified",
+            type="string",
+            description="Last modified timestamp (ISO format)",
+            required=True,
+        ),
+        ParameterDef(
+            name="accessed",
+            type="string",
+            description="Last access timestamp (ISO format)",
+            required=True,
+        ),
+        ParameterDef(
+            name="permissions",
+            type="string",
+            description="Permission string (e.g., 'rwxr-xr-x')",
+            required=True,
+        ),
+        ParameterDef(
+            name="is_readable",
+            type="bool",
+            description="Whether the file is readable",
+            required=True,
+        ),
+        ParameterDef(
+            name="is_writable",
+            type="bool",
+            description="Whether the file is writable",
+            required=True,
+        ),
+        ParameterDef(
+            name="is_executable",
+            type="bool",
+            description="Whether the file is executable",
+            required=True,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Get file information."""
@@ -248,6 +399,80 @@ class DirectoryListAction(TaskAction):
         - output.entries: List of entry objects with name, type, path
         - output.count: Number of entries found
     """
+
+    description = "List contents of a directory with optional filtering."
+
+    inputs = [
+        ParameterDef(
+            name="path",
+            type="string",
+            description="Directory path to list (supports {{var}} templates)",
+            required=False,
+            default=".",
+        ),
+        ParameterDef(
+            name="pattern",
+            type="string",
+            description="Glob pattern to filter results (e.g., '*.txt')",
+            required=False,
+            default="*",
+        ),
+        ParameterDef(
+            name="recursive",
+            type="bool",
+            description="List recursively in subdirectories",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
+            name="include_dirs",
+            type="bool",
+            description="Include directories in results",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="include_files",
+            type="bool",
+            description="Include files in results",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the file paths",
+            required=False,
+            default="directory_contents",
+        ),
+        ParameterDef(
+            name="base_directory",
+            type="string",
+            description="Sandbox directory for security (paths must be within)",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="path",
+            type="string",
+            description="The resolved directory path",
+            required=True,
+        ),
+        ParameterDef(
+            name="entries",
+            type="list[dict]",
+            description="List of entry objects with name, path, relative_path, and type",
+            required=True,
+        ),
+        ParameterDef(
+            name="count",
+            type="int",
+            description="Number of entries found",
+            required=True,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """List directory contents."""

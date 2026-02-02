@@ -9,6 +9,12 @@ This document tracks unimplemented features and improvements based on the DESIGN
 
 ## High Priority
 
+### .5 Learning loops
+- [ ] LLM can define new workflows using existing + memory data sources
+- [ ] Long term memory signposts to detail memory as needed
+- [ ] Dream workflows run daily to optimize memory
+- [ ] When not sure LLM can run 2 parallel workflows to compare results and show to human for vote
+
 ### 1. Task Actions Library Expansion ⚠️
 
 **Description:** The system currently has only 13 task actions. Need more built-in actions for common operations.

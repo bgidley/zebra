@@ -6,7 +6,7 @@ from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
@@ -26,6 +26,63 @@ class WorkflowCreatorAction(TaskAction):
     Output:
         Dictionary with 'yaml' (string) and 'name' (string)
     """
+
+    description = "Use LLM to create a new workflow definition in YAML format."
+
+    inputs = [
+        ParameterDef(
+            name="goal",
+            type="string",
+            description="The user's goal that the workflow should achieve",
+            required=True,
+        ),
+        ParameterDef(
+            name="suggested_name",
+            type="string",
+            description="Suggested name for the workflow",
+            required=False,
+        ),
+        ParameterDef(
+            name="existing_workflows",
+            type="list",
+            description="List of existing workflow summaries for reference",
+            required=False,
+        ),
+        ParameterDef(
+            name="provider",
+            type="string",
+            description="LLM provider name",
+            required=False,
+            default="anthropic",
+        ),
+        ParameterDef(
+            name="model",
+            type="string",
+            description="LLM model name",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="yaml",
+            type="string",
+            description="The generated workflow YAML",
+            required=True,
+        ),
+        ParameterDef(
+            name="name",
+            type="string",
+            description="Name of the created workflow",
+            required=True,
+        ),
+        ParameterDef(
+            name="definition_id",
+            type="string",
+            description="ID of the workflow definition",
+            required=True,
+        ),
+    ]
 
     SYSTEM_PROMPT = """You are a workflow designer for the Zebra workflow engine.
 Create workflow definitions in YAML format.

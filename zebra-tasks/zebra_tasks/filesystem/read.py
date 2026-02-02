@@ -4,7 +4,7 @@ import base64
 
 import aiofiles
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.filesystem.base import (
     FileSystemConfig,
@@ -47,6 +47,77 @@ class FileReadAction(TaskAction):
         - output.size: File size in bytes
         - output.encoding: Encoding used (or "binary")
     """
+
+    description = "Read file contents and store in process properties."
+
+    inputs = [
+        ParameterDef(
+            name="path",
+            type="string",
+            description="File path to read (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="encoding",
+            type="string",
+            description="Text encoding for reading the file",
+            required=False,
+            default="utf-8",
+        ),
+        ParameterDef(
+            name="binary",
+            type="bool",
+            description="If True, read as binary and return base64-encoded content",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the content",
+            required=False,
+            default="file_content",
+        ),
+        ParameterDef(
+            name="base_directory",
+            type="string",
+            description="Sandbox directory for security (paths must be within)",
+            required=False,
+        ),
+        ParameterDef(
+            name="max_file_size",
+            type="int",
+            description="Maximum file size to read in bytes",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="content",
+            type="string",
+            description="The file content (text or base64-encoded)",
+            required=True,
+        ),
+        ParameterDef(
+            name="path",
+            type="string",
+            description="The resolved file path",
+            required=True,
+        ),
+        ParameterDef(
+            name="size",
+            type="int",
+            description="File size in bytes",
+            required=True,
+        ),
+        ParameterDef(
+            name="encoding",
+            type="string",
+            description="Encoding used ('binary' for binary mode)",
+            required=True,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Read file contents."""

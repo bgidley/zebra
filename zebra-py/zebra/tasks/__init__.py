@@ -1,11 +1,19 @@
 """Pluggable task system for workflow actions."""
 
-from zebra.tasks.base import ConditionAction, ExecutionContext, TaskAction
+from zebra.tasks.base import (
+    ActionMetadata,
+    ConditionAction,
+    ExecutionContext,
+    ParameterDef,
+    TaskAction,
+)
 from zebra.tasks.registry import ActionRegistry
 
 __all__ = [
-    "TaskAction",
+    "ActionMetadata",
     "ConditionAction",
     "ExecutionContext",
+    "ParameterDef",
+    "TaskAction",
     "ActionRegistry",
 ]

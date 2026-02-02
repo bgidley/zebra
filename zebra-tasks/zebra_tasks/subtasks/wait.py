@@ -3,7 +3,7 @@
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 
 class WaitForSubworkflowAction(TaskAction):
@@ -41,6 +41,63 @@ class WaitForSubworkflowAction(TaskAction):
               output_key: analysis_result
         ```
     """
+
+    description = "Wait for a previously spawned sub-workflow to complete."
+
+    inputs = [
+        ParameterDef(
+            name="process_id",
+            type="string",
+            description="ID of the sub-process to wait for (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="timeout",
+            type="float",
+            description="Timeout in seconds for waiting",
+            required=False,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the result",
+            required=False,
+            default="subworkflow_result",
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="success",
+            type="bool",
+            description="Whether the sub-workflow completed successfully",
+            required=True,
+        ),
+        ParameterDef(
+            name="process_id",
+            type="string",
+            description="ID of the completed sub-process",
+            required=True,
+        ),
+        ParameterDef(
+            name="properties",
+            type="dict",
+            description="Final properties of the sub-workflow",
+            required=False,
+        ),
+        ParameterDef(
+            name="output",
+            type="any",
+            description="Output from the sub-workflow's __output__ property",
+            required=False,
+        ),
+        ParameterDef(
+            name="error",
+            type="string",
+            description="Error message if the sub-workflow failed",
+            required=False,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Wait for the sub-workflow to complete."""

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 
 class MetricsAnalyzerAction(TaskAction):
@@ -44,6 +44,101 @@ class MetricsAnalyzerAction(TaskAction):
         ```
     """
 
+    description = "Analyze workflow performance metrics from a SQLite database."
+
+    inputs = [
+        ParameterDef(
+            name="metrics_db_path",
+            type="string",
+            description="Path to the metrics SQLite database",
+            required=False,
+        ),
+        ParameterDef(
+            name="days_to_analyze",
+            type="int",
+            description="Number of days to look back for analysis",
+            required=False,
+            default=7,
+        ),
+        ParameterDef(
+            name="min_runs_for_analysis",
+            type="int",
+            description="Minimum runs needed to analyze a workflow",
+            required=False,
+            default=3,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the analysis",
+            required=False,
+            default="metrics_analysis",
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="analysis_period_days",
+            type="int",
+            description="Number of days analyzed",
+            required=True,
+        ),
+        ParameterDef(
+            name="total_runs_analyzed",
+            type="int",
+            description="Total number of workflow runs analyzed",
+            required=True,
+        ),
+        ParameterDef(
+            name="unique_workflows",
+            type="int",
+            description="Number of unique workflows",
+            required=True,
+        ),
+        ParameterDef(
+            name="workflow_stats",
+            type="list[dict]",
+            description="Per-workflow statistics",
+            required=True,
+        ),
+        ParameterDef(
+            name="low_performers",
+            type="list[dict]",
+            description="Workflows with success rate < 70%",
+            required=True,
+        ),
+        ParameterDef(
+            name="high_performers",
+            type="list[dict]",
+            description="Workflows with success rate >= 90%",
+            required=True,
+        ),
+        ParameterDef(
+            name="unrated_runs_count",
+            type="int",
+            description="Number of runs without user ratings",
+            required=True,
+        ),
+        ParameterDef(
+            name="failure_patterns",
+            type="list[dict]",
+            description="Common failure reasons grouped by workflow",
+            required=True,
+        ),
+        ParameterDef(
+            name="usage_trends",
+            type="dict",
+            description="Workflow usage trends over time",
+            required=True,
+        ),
+        ParameterDef(
+            name="recommendations",
+            type="list[string]",
+            description="Initial recommendations based on metrics",
+            required=True,
+        ),
+    ]
+
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Analyze metrics from the database."""
         import aiosqlite
@@ -71,9 +166,7 @@ class MetricsAnalyzerAction(TaskAction):
         except Exception as e:
             return TaskResult.fail(f"Metrics analysis failed: {str(e)}")
 
-    async def _analyze_metrics(
-        self, db_path: str, days: int, min_runs: int
-    ) -> dict[str, Any]:
+    async def _analyze_metrics(self, db_path: str, days: int, min_runs: int) -> dict[str, Any]:
         """Perform the actual metrics analysis."""
         import aiosqlite
 
@@ -91,11 +184,11 @@ class MetricsAnalyzerAction(TaskAction):
 
             # Categorize workflows
             low_performers = [
-                w for w in workflow_stats
-                if w["success_rate"] < 0.7 and w["total_runs"] >= min_runs
+                w for w in workflow_stats if w["success_rate"] < 0.7 and w["total_runs"] >= min_runs
             ]
             high_performers = [
-                w for w in workflow_stats
+                w
+                for w in workflow_stats
                 if w["success_rate"] >= 0.9 and w["total_runs"] >= min_runs
             ]
 
@@ -126,9 +219,7 @@ class MetricsAnalyzerAction(TaskAction):
                 "recommendations": recommendations,
             }
 
-    async def _get_workflow_stats(
-        self, db, cutoff_str: str, min_runs: int
-    ) -> list[dict[str, Any]]:
+    async def _get_workflow_stats(self, db, cutoff_str: str, min_runs: int) -> list[dict[str, Any]]:
         """Get statistics for each workflow."""
         query = """
             SELECT
@@ -149,15 +240,17 @@ class MetricsAnalyzerAction(TaskAction):
             async for row in cursor:
                 total = row["total_runs"]
                 successful = row["successful_runs"]
-                results.append({
-                    "workflow_name": row["workflow_name"],
-                    "total_runs": total,
-                    "successful_runs": successful,
-                    "success_rate": successful / total if total > 0 else 0,
-                    "avg_rating": row["avg_rating"],
-                    "avg_tokens": row["avg_tokens"],
-                    "last_used": row["last_used"],
-                })
+                results.append(
+                    {
+                        "workflow_name": row["workflow_name"],
+                        "total_runs": total,
+                        "successful_runs": successful,
+                        "success_rate": successful / total if total > 0 else 0,
+                        "avg_rating": row["avg_rating"],
+                        "avg_tokens": row["avg_tokens"],
+                        "last_used": row["last_used"],
+                    }
+                )
 
         return results
 
@@ -175,17 +268,19 @@ class MetricsAnalyzerAction(TaskAction):
         results = []
         async with db.execute(query, (cutoff_str,)) as cursor:
             async for row in cursor:
-                results.append({
-                    "id": row["id"],
-                    "workflow_name": row["workflow_name"],
-                    "goal": row["goal"],
-                    "started_at": row["started_at"],
-                    "completed_at": row["completed_at"],
-                    "success": bool(row["success"]),
-                    "user_rating": row["user_rating"],
-                    "tokens_used": row["tokens_used"],
-                    "error": row["error"],
-                })
+                results.append(
+                    {
+                        "id": row["id"],
+                        "workflow_name": row["workflow_name"],
+                        "goal": row["goal"],
+                        "started_at": row["started_at"],
+                        "completed_at": row["completed_at"],
+                        "success": bool(row["success"]),
+                        "user_rating": row["user_rating"],
+                        "tokens_used": row["tokens_used"],
+                        "error": row["error"],
+                    }
+                )
 
         return results
 
@@ -213,12 +308,14 @@ class MetricsAnalyzerAction(TaskAction):
                 error_key = error.split("\n")[0][:50] if error else "Unknown"
                 error_types[error_key] = error_types.get(error_key, 0) + 1
 
-            patterns.append({
-                "workflow_name": workflow,
-                "failure_count": len(workflow_failures),
-                "error_types": error_types,
-                "sample_goals": [f["goal"][:100] for f in workflow_failures[:3]],
-            })
+            patterns.append(
+                {
+                    "workflow_name": workflow,
+                    "failure_count": len(workflow_failures),
+                    "error_types": error_types,
+                    "sample_goals": [f["goal"][:100] for f in workflow_failures[:3]],
+                }
+            )
 
         # Sort by failure count
         patterns.sort(key=lambda x: x["failure_count"], reverse=True)
@@ -243,15 +340,10 @@ class MetricsAnalyzerAction(TaskAction):
             workflow_daily[wf][date] = workflow_daily[wf].get(date, 0) + 1
 
         # Calculate workflow totals
-        workflow_totals = {
-            wf: sum(counts.values())
-            for wf, counts in workflow_daily.items()
-        }
+        workflow_totals = {wf: sum(counts.values()) for wf, counts in workflow_daily.items()}
 
         # Sort by usage
-        most_used = sorted(
-            workflow_totals.items(), key=lambda x: x[1], reverse=True
-        )[:5]
+        most_used = sorted(workflow_totals.items(), key=lambda x: x[1], reverse=True)[:5]
 
         return {
             "daily_counts": daily,
@@ -280,22 +372,18 @@ class MetricsAnalyzerAction(TaskAction):
         for fp in failure_patterns[:2]:
             name = fp["workflow_name"]
             count = fp["failure_count"]
-            recommendations.append(
-                f"Investigate failures in '{name}' - {count} failures detected"
-            )
+            recommendations.append(f"Investigate failures in '{name}' - {count} failures detected")
 
         # High usage low rating
         for ws in workflow_stats:
-            if (
-                ws["total_runs"] >= 5
-                and ws["avg_rating"] is not None
-                and ws["avg_rating"] < 3.0
-            ):
+            if ws["total_runs"] >= 5 and ws["avg_rating"] is not None and ws["avg_rating"] < 3.0:
                 recommendations.append(
                     f"Improve '{ws['workflow_name']}' - avg rating {ws['avg_rating']:.1f}/5"
                 )
 
         if not recommendations:
-            recommendations.append("All workflows performing well - consider adding new capabilities")
+            recommendations.append(
+                "All workflows performing well - consider adding new capabilities"
+            )
 
         return recommendations

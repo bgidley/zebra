@@ -4,7 +4,7 @@ import asyncio
 import shutil
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.filesystem.base import (
     FileSystemConfig,
@@ -44,6 +44,58 @@ class FileDeleteAction(TaskAction):
         - output.deleted: Whether anything was actually deleted
         - output.type: "file" or "directory" (null if didn't exist)
     """
+
+    description = "Delete a file or directory."
+
+    inputs = [
+        ParameterDef(
+            name="path",
+            type="string",
+            description="Path to delete (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="recursive",
+            type="bool",
+            description="Delete directories and their contents recursively",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
+            name="missing_ok",
+            type="bool",
+            description="Don't fail if path doesn't exist",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="base_directory",
+            type="string",
+            description="Sandbox directory for security (paths must be within)",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="path",
+            type="string",
+            description="The resolved path",
+            required=True,
+        ),
+        ParameterDef(
+            name="deleted",
+            type="bool",
+            description="Whether anything was actually deleted",
+            required=True,
+        ),
+        ParameterDef(
+            name="type",
+            type="string",
+            description="Type of item deleted: 'file', 'directory', or null if not found",
+            required=False,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Delete file or directory."""

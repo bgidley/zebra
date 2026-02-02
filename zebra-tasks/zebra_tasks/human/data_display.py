@@ -3,7 +3,7 @@
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 
 class DataDisplayAction(TaskAction):
@@ -79,6 +79,94 @@ class DataDisplayAction(TaskAction):
         ```
     """
 
+    description = "Display structured data to a human and wait for acknowledgment."
+
+    inputs = [
+        ParameterDef(
+            name="title",
+            type="string",
+            description="Title for the display",
+            required=True,
+        ),
+        ParameterDef(
+            name="message",
+            type="string",
+            description="Main message or description text",
+            required=False,
+        ),
+        ParameterDef(
+            name="fields",
+            type="list[dict]",
+            description="List of field data with label, value, and format",
+            required=False,
+        ),
+        ParameterDef(
+            name="data",
+            type="dict",
+            description="Raw dict of data to display (alternative to fields)",
+            required=False,
+        ),
+        ParameterDef(
+            name="require_confirmation",
+            type="bool",
+            description="Whether to require explicit confirmation from user",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the acknowledgment",
+            required=False,
+            default="display_acknowledged",
+        ),
+        ParameterDef(
+            name="timeout",
+            type="float",
+            description="Timeout in seconds (informational, not enforced)",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="status",
+            type="string",
+            description="Status of the display request ('waiting_acknowledgment')",
+            required=True,
+        ),
+        ParameterDef(
+            name="title",
+            type="string",
+            description="Title displayed to the user",
+            required=True,
+        ),
+        ParameterDef(
+            name="message",
+            type="string",
+            description="Message displayed to the user",
+            required=False,
+        ),
+        ParameterDef(
+            name="fields",
+            type="list[dict]",
+            description="Resolved field data with label, value, and format",
+            required=False,
+        ),
+        ParameterDef(
+            name="data",
+            type="dict",
+            description="Resolved raw data dict",
+            required=False,
+        ),
+        ParameterDef(
+            name="require_confirmation",
+            type="bool",
+            description="Whether confirmation was required",
+            required=True,
+        ),
+    ]
+
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Initialize data display and wait for acknowledgment."""
         # Get properties
@@ -103,19 +191,19 @@ class DataDisplayAction(TaskAction):
                     return TaskResult.fail(f"Invalid field definition: {field}")
 
                 if "label" not in field or "value" not in field:
-                    return TaskResult.fail(
-                        f"Field missing required 'label' or 'value': {field}"
-                    )
+                    return TaskResult.fail(f"Field missing required 'label' or 'value': {field}")
 
                 resolved_value = field["value"]
                 if isinstance(resolved_value, str):
                     resolved_value = context.resolve_template(resolved_value)
 
-                resolved_fields.append({
-                    "label": field["label"],
-                    "value": resolved_value,
-                    "format": field.get("format", "text"),
-                })
+                resolved_fields.append(
+                    {
+                        "label": field["label"],
+                        "value": resolved_value,
+                        "format": field.get("format", "text"),
+                    }
+                )
 
         # Resolve templates in message
         if message and isinstance(message, str):
@@ -153,9 +241,7 @@ class DataDisplayAction(TaskAction):
             error=None,
         )
 
-    def _resolve_data_templates(
-        self, data: Any, context: ExecutionContext
-    ) -> Any:
+    def _resolve_data_templates(self, data: Any, context: ExecutionContext) -> Any:
         """Recursively resolve templates in data structure."""
         if isinstance(data, str):
             return context.resolve_template(data)
@@ -180,8 +266,12 @@ class DataDisplayAction(TaskAction):
         # Store the acknowledgment result in the specified output key
         if task.result:
             output_key = task.properties.get("output_key", "display_acknowledged")
-            acknowledgment = task.result if isinstance(task.result, dict) else {
-                "acknowledged": True,
-                "result": task.result,
-            }
+            acknowledgment = (
+                task.result
+                if isinstance(task.result, dict)
+                else {
+                    "acknowledged": True,
+                    "result": task.result,
+                }
+            )
             context.set_process_property(output_key, acknowledgment)

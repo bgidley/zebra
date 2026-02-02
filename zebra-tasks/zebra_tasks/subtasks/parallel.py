@@ -3,7 +3,7 @@
 from typing import Any
 
 from zebra.core.models import ProcessDefinition, TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra.definitions.loader import load_definition_from_yaml
 
 
@@ -47,6 +47,70 @@ class ParallelSubworkflowsAction(TaskAction):
               output_key: analysis_results
         ```
     """
+
+    description = "Spawn multiple sub-workflows in parallel and wait for all to complete."
+
+    inputs = [
+        ParameterDef(
+            name="workflows",
+            type="list[dict]",
+            description="List of workflow configs with workflow/workflow_file, properties, and key",
+            required=True,
+        ),
+        ParameterDef(
+            name="timeout",
+            type="float",
+            description="Timeout in seconds for all workflows",
+            required=False,
+        ),
+        ParameterDef(
+            name="fail_fast",
+            type="bool",
+            description="Stop all workflows on first failure",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the results dict",
+            required=False,
+            default="parallel_results",
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="<workflow_key>",
+            type="dict",
+            description="Result for each workflow, keyed by the 'key' from workflow config",
+            required=True,
+        ),
+        ParameterDef(
+            name="<workflow_key>.success",
+            type="bool",
+            description="Whether the individual workflow completed successfully",
+            required=True,
+        ),
+        ParameterDef(
+            name="<workflow_key>.process_id",
+            type="string",
+            description="ID of the spawned sub-process",
+            required=True,
+        ),
+        ParameterDef(
+            name="<workflow_key>.properties",
+            type="dict",
+            description="Final properties of the sub-workflow",
+            required=False,
+        ),
+        ParameterDef(
+            name="<workflow_key>.output",
+            type="any",
+            description="Output from the sub-workflow's __output__ property",
+            required=False,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Execute multiple sub-workflows in parallel."""
@@ -109,10 +173,7 @@ class ParallelSubworkflowsAction(TaskAction):
             return key, result
 
         # Create tasks for waiting
-        wait_tasks = [
-            asyncio.create_task(wait_for_one(key, pid))
-            for key, pid in spawned
-        ]
+        wait_tasks = [asyncio.create_task(wait_for_one(key, pid)) for key, pid in spawned]
 
         # Gather results
         if fail_fast:
@@ -147,9 +208,7 @@ class ParallelSubworkflowsAction(TaskAction):
             return TaskResult.ok(output=results)
         else:
             return TaskResult(
-                success=True,
-                output=results,
-                next_route="partial_failure" if results else "failure"
+                success=True, output=results, next_route="partial_failure" if results else "failure"
             )
 
     async def _get_workflow_definition(

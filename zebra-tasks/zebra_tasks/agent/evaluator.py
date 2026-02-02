@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message
 
@@ -41,6 +41,70 @@ class WorkflowEvaluatorAction(TaskAction):
               output_key: evaluation
         ```
     """
+
+    description = "Use LLM to evaluate workflow effectiveness and identify improvements."
+
+    inputs = [
+        ParameterDef(
+            name="metrics_analysis",
+            type="dict",
+            description="Output from MetricsAnalyzerAction",
+            required=True,
+        ),
+        ParameterDef(
+            name="workflow_definitions",
+            type="dict",
+            description="Dict of workflow name -> YAML content",
+            required=False,
+            default={},
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the evaluation",
+            required=False,
+            default="workflow_evaluation",
+        ),
+        ParameterDef(
+            name="provider",
+            type="string",
+            description="LLM provider name",
+            required=False,
+        ),
+        ParameterDef(
+            name="model",
+            type="string",
+            description="LLM model name",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="overall_assessment",
+            type="dict",
+            description="Summary of system health with health_score, summary, key_issues",
+            required=True,
+        ),
+        ParameterDef(
+            name="workflow_evaluations",
+            type="list[dict]",
+            description="Per-workflow detailed evaluation",
+            required=True,
+        ),
+        ParameterDef(
+            name="improvement_priorities",
+            type="list[dict]",
+            description="Ranked list of improvements with priority, type, target, action",
+            required=True,
+        ),
+        ParameterDef(
+            name="new_workflow_suggestions",
+            type="list[dict]",
+            description="Ideas for new workflows with name, description, use_case",
+            required=True,
+        ),
+    ]
 
     SYSTEM_PROMPT = """You are an AI workflow optimization expert. Your role is to analyze
 workflow performance metrics and definitions to identify improvement opportunities.
@@ -147,9 +211,7 @@ Respond with JSON only:
 
             # Track tokens
             current = context.get_process_property("__total_tokens__", 0)
-            context.set_process_property(
-                "__total_tokens__", current + response.usage.total_tokens
-            )
+            context.set_process_property("__total_tokens__", current + response.usage.total_tokens)
 
             return TaskResult.ok(output=evaluation)
 
@@ -180,7 +242,9 @@ Respond with JSON only:
         prompt_parts = ["## Performance Metrics Analysis\n"]
 
         # Add summary stats
-        prompt_parts.append(f"Analysis period: {metrics_analysis.get('analysis_period_days', 'N/A')} days")
+        prompt_parts.append(
+            f"Analysis period: {metrics_analysis.get('analysis_period_days', 'N/A')} days"
+        )
         prompt_parts.append(f"Total runs: {metrics_analysis.get('total_runs_analyzed', 0)}")
         prompt_parts.append(f"Unique workflows: {metrics_analysis.get('unique_workflows', 0)}")
         prompt_parts.append("")
@@ -190,7 +254,7 @@ Respond with JSON only:
         for ws in metrics_analysis.get("workflow_stats", []):
             prompt_parts.append(
                 f"- {ws['workflow_name']}: {ws['total_runs']} runs, "
-                f"{ws['success_rate']*100:.0f}% success, "
+                f"{ws['success_rate'] * 100:.0f}% success, "
                 f"avg rating: {ws.get('avg_rating', 'N/A')}"
             )
         prompt_parts.append("")
@@ -201,7 +265,7 @@ Respond with JSON only:
             prompt_parts.append("### Low-Performing Workflows (< 70% success)")
             for lp in low_performers:
                 prompt_parts.append(
-                    f"- {lp['workflow_name']}: {lp['success_rate']*100:.0f}% success"
+                    f"- {lp['workflow_name']}: {lp['success_rate'] * 100:.0f}% success"
                 )
             prompt_parts.append("")
 
@@ -253,8 +317,8 @@ Respond with JSON only:
 
         # Try to extract JSON from code blocks
         patterns = [
-            r'```json\s*(.*?)\s*```',
-            r'```\s*(.*?)\s*```',
+            r"```json\s*(.*?)\s*```",
+            r"```\s*(.*?)\s*```",
         ]
         for pattern in patterns:
             match = re.search(pattern, content, re.DOTALL)

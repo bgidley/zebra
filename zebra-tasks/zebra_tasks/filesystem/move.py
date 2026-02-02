@@ -4,7 +4,7 @@ import asyncio
 import shutil
 
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, TaskAction
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.filesystem.base import (
     FileSystemConfig,
@@ -48,6 +48,64 @@ class FileMoveAction(TaskAction):
         - output.destination: The resolved destination path
         - output.type: "file" or "directory"
     """
+
+    description = "Move or rename a file or directory."
+
+    inputs = [
+        ParameterDef(
+            name="source",
+            type="string",
+            description="Source path (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="destination",
+            type="string",
+            description="Destination path (supports {{var}} templates)",
+            required=True,
+        ),
+        ParameterDef(
+            name="overwrite",
+            type="bool",
+            description="Allow overwriting existing files",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
+            name="create_dirs",
+            type="bool",
+            description="Create parent directories if they don't exist",
+            required=False,
+            default=True,
+        ),
+        ParameterDef(
+            name="base_directory",
+            type="string",
+            description="Sandbox directory for security (paths must be within)",
+            required=False,
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(
+            name="source",
+            type="string",
+            description="The original source path",
+            required=True,
+        ),
+        ParameterDef(
+            name="destination",
+            type="string",
+            description="The resolved destination path",
+            required=True,
+        ),
+        ParameterDef(
+            name="type",
+            type="string",
+            description="Type of item moved: 'file' or 'directory'",
+            required=True,
+        ),
+    ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Move file or directory."""
