@@ -331,10 +331,60 @@ async def run_detail(request, run_id):
     """View details of a specific run."""
     await agent_engine.ensure_initialized()
     metrics = agent_engine.get_metrics()
+    library = agent_engine.get_library()
 
     run = await metrics.get_run(run_id)
     if not run:
         return HttpResponse("Run not found", status=404)
+
+    # Load task executions for this run
+    task_executions = await metrics.get_task_executions(run_id)
+
+    # Load workflow definition for diagram
+    workflow_svg = None
+    workflow_definition = None
+    if run.workflow_name:
+        try:
+            workflow_definition = library.get_workflow(run.workflow_name)
+
+            # Generate SVG diagram
+            from zebra_agent_web.diagram import generate_workflow_svg
+
+            workflow_svg = generate_workflow_svg(workflow_definition, task_executions)
+        except ValueError:
+            # Workflow not found in library (may have been deleted)
+            pass
+
+    # Format task executions for template
+    formatted_executions = []
+    for exec in task_executions:
+        # Get task definition properties if available
+        task_props = {}
+        if workflow_definition and exec.task_definition_id in workflow_definition.tasks:
+            task_def = workflow_definition.tasks[exec.task_definition_id]
+            task_props = task_def.properties
+
+        # Calculate duration
+        duration = None
+        if exec.started_at and exec.completed_at:
+            delta = exec.completed_at - exec.started_at
+            duration = f"{delta.total_seconds():.2f}s"
+
+        formatted_executions.append(
+            {
+                "id": exec.id,
+                "task_id": exec.task_definition_id,
+                "task_name": exec.task_name,
+                "execution_order": exec.execution_order,
+                "state": exec.state,
+                "started_at": exec.started_at,
+                "completed_at": exec.completed_at,
+                "duration": duration,
+                "output": _format_output(exec.output),
+                "error": exec.error,
+                "properties": task_props,
+            }
+        )
 
     context = {
         "run": {
@@ -348,7 +398,9 @@ async def run_detail(request, run_id):
             "user_rating": run.user_rating,
             "started_at": run.started_at,
             "completed_at": run.completed_at,
-        }
+        },
+        "workflow_svg": workflow_svg,
+        "task_executions": formatted_executions,
     }
 
     return render(request, "pages/run_detail.html", context)

@@ -13,13 +13,14 @@ from django.conf import settings
 if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
     from zebra_agent.loop import AgentLoop
-    from zebra_agent.oracle_metrics import OracleMetricsStore
+
+    from zebra_agent_web.metrics_store import DjangoMetricsStore
 
 logger = logging.getLogger(__name__)
 
 # Global instances
 _library: "WorkflowLibrary | None" = None
-_metrics: "OracleMetricsStore | None" = None
+_metrics: "DjangoMetricsStore | None" = None
 _agent_loop: "AgentLoop | None" = None
 _initialized = False
 
@@ -31,11 +32,6 @@ def _get_agent_settings() -> dict:
         "ZEBRA_AGENT_SETTINGS",
         {
             "LIBRARY_PATH": "~/.zebra/workflows",
-            "ORACLE_USER": None,
-            "ORACLE_PASSWORD": None,
-            "ORACLE_DSN": None,
-            "ORACLE_WALLET_LOCATION": None,
-            "ORACLE_WALLET_PASSWORD": None,
             "LLM_PROVIDER": "anthropic",
             "LLM_MODEL": None,
         },
@@ -65,22 +61,16 @@ async def _async_init() -> None:
     # Import here to avoid issues at module load time
     from zebra_agent.library import WorkflowLibrary
     from zebra_agent.loop import AgentLoop
-    from zebra_agent.oracle_metrics import OracleMetricsStore
 
     from zebra_agent_web.api.engine import ensure_initialized as ensure_workflow_engine
     from zebra_agent_web.api.engine import get_engine
+    from zebra_agent_web.metrics_store import DjangoMetricsStore
 
     agent_settings = _get_agent_settings()
 
-    # Initialize metrics store (Oracle)
-    logger.info("Initializing metrics store (Oracle)")
-    _metrics = OracleMetricsStore(
-        user=agent_settings.get("ORACLE_USER"),
-        password=agent_settings.get("ORACLE_PASSWORD"),
-        dsn=agent_settings.get("ORACLE_DSN"),
-        wallet_location=agent_settings.get("ORACLE_WALLET_LOCATION"),
-        wallet_password=agent_settings.get("ORACLE_WALLET_PASSWORD"),
-    )
+    # Initialize metrics store (Django ORM)
+    logger.info("Initializing metrics store (Django)")
+    _metrics = DjangoMetricsStore()
     await _metrics.initialize()
 
     # Initialize workflow library
@@ -129,8 +119,8 @@ def get_library() -> "WorkflowLibrary":
     return _library
 
 
-def get_metrics() -> "OracleMetricsStore":
-    """Get the OracleMetricsStore instance.
+def get_metrics() -> "DjangoMetricsStore":
+    """Get the DjangoMetricsStore instance.
 
     Raises:
         RuntimeError: If metrics hasn't been initialized.

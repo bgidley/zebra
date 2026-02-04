@@ -4,7 +4,7 @@
 {% block page_title %}Run Details{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-6" x-data="{ selectedTask: null, expandedOutputs: {} }">
     <!-- Header -->
     <div class="flex items-center gap-3">
         <a href="/runs/" class="text-gray-400 hover:text-white">
@@ -78,13 +78,162 @@
         <div class="p-6 text-gray-200">{{ run.goal }}</div>
     </div>
     
+    <!-- Workflow Execution Diagram -->
+    {% if workflow_svg %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700">
+            <h2 class="text-lg font-semibold text-white">Execution Flow</h2>
+            <p class="text-sm text-gray-400 mt-1">Click a task to view details</p>
+        </div>
+        <div class="p-6 overflow-x-auto">
+            {{ workflow_svg|safe }}
+        </div>
+    </div>
+    
+    <!-- Task Execution Details -->
+    {% if task_executions %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700">
+            <h2 class="text-lg font-semibold text-white">Task Execution Details</h2>
+            <p class="text-sm text-gray-400 mt-1">{{ task_executions|length }} task{{ task_executions|length|pluralize }} executed</p>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for task in task_executions %}
+            <div class="task-detail-panel" 
+                 id="task-panel-{{ task.task_id }}"
+                 :class="selectedTask === '{{ task.task_id }}' ? 'bg-gray-700/50' : ''"
+                 x-data="{ expanded: false }">
+                <!-- Task Header -->
+                <div class="px-6 py-4 cursor-pointer hover:bg-gray-700/30 transition-colors"
+                     @click="expanded = !expanded; selectedTask = '{{ task.task_id }}'">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <!-- Execution order -->
+                            <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-700 text-xs text-gray-300 font-mono">
+                                {{ task.execution_order }}
+                            </span>
+                            <!-- Task name -->
+                            <span class="font-medium text-white">{{ task.task_name }}</span>
+                            <span class="text-sm text-gray-500">({{ task.task_id }})</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <!-- Duration -->
+                            {% if task.duration %}
+                            <span class="text-sm text-gray-400">{{ task.duration }}</span>
+                            {% endif %}
+                            <!-- Status badge -->
+                            {% if task.state == "complete" %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-900/50 text-green-400 text-xs">
+                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Complete
+                            </span>
+                            {% elif task.state == "failed" %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-900/50 text-red-400 text-xs">
+                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Failed
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-700 text-gray-400 text-xs">
+                                {{ task.state }}
+                            </span>
+                            {% endif %}
+                            <!-- Expand icon -->
+                            <svg class="h-5 w-5 text-gray-400 transition-transform" 
+                                 :class="expanded ? 'rotate-180' : ''" 
+                                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Task Details (expandable) -->
+                <div x-show="expanded" x-collapse class="px-6 pb-4 space-y-4">
+                    <!-- Timing -->
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <span class="text-gray-500">Started:</span>
+                            <span class="text-gray-300 ml-2">{{ task.started_at|date:"H:i:s.u" }}</span>
+                        </div>
+                        {% if task.completed_at %}
+                        <div>
+                            <span class="text-gray-500">Completed:</span>
+                            <span class="text-gray-300 ml-2">{{ task.completed_at|date:"H:i:s.u" }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Task Properties (from definition) -->
+                    {% if task.properties %}
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-400 mb-2">Task Properties</h4>
+                        <pre class="bg-gray-900 rounded-lg p-3 text-xs text-gray-300 overflow-x-auto">{% for key, value in task.properties.items %}{{ key }}: {{ value|truncatechars:200 }}
+{% endfor %}</pre>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Error message -->
+                    {% if task.error %}
+                    <div>
+                        <h4 class="text-sm font-medium text-red-400 mb-2">Error</h4>
+                        <div class="bg-red-900/20 border border-red-800/50 rounded-lg p-3 text-sm text-red-300">
+                            {{ task.error }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Output -->
+                    {% if task.output %}
+                    <div x-data="{ showFull: false }">
+                        <h4 class="text-sm font-medium text-gray-400 mb-2">Output</h4>
+                        <div class="bg-gray-900 rounded-lg p-3 text-xs font-mono overflow-x-auto">
+                            {% if task.output|length > 500 %}
+                            <pre x-show="!showFull" class="text-gray-300 whitespace-pre-wrap">{{ task.output|truncatechars:500 }}</pre>
+                            <pre x-show="showFull" class="text-gray-300 whitespace-pre-wrap">{{ task.output }}</pre>
+                            <button @click="showFull = !showFull" 
+                                    class="mt-2 text-indigo-400 hover:text-indigo-300 text-xs">
+                                <span x-show="!showFull">Show more...</span>
+                                <span x-show="showFull">Show less</span>
+                            </button>
+                            {% else %}
+                            <pre class="text-gray-300 whitespace-pre-wrap">{{ task.output }}</pre>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+    
     <!-- Output or Error -->
     {% if run.success %}
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-6 py-4 border-b border-gray-700">
-            <h2 class="text-lg font-semibold text-white">Output</h2>
+            <h2 class="text-lg font-semibold text-white">Final Output</h2>
         </div>
-        <pre class="p-6 text-gray-200 whitespace-pre-wrap font-mono text-sm overflow-x-auto">{{ run.output }}</pre>
+        <div x-data="{ showFull: false }">
+            {% if run.output|length > 1000 %}
+            <pre x-show="!showFull" class="p-6 text-gray-200 whitespace-pre-wrap font-mono text-sm overflow-x-auto">{{ run.output|truncatechars:1000 }}</pre>
+            <pre x-show="showFull" class="p-6 text-gray-200 whitespace-pre-wrap font-mono text-sm overflow-x-auto">{{ run.output }}</pre>
+            <div class="px-6 pb-4">
+                <button @click="showFull = !showFull" 
+                        class="text-indigo-400 hover:text-indigo-300 text-sm">
+                    <span x-show="!showFull">Show full output...</span>
+                    <span x-show="showFull">Show less</span>
+                </button>
+            </div>
+            {% else %}
+            <pre class="p-6 text-gray-200 whitespace-pre-wrap font-mono text-sm overflow-x-auto">{{ run.output }}</pre>
+            {% endif %}
+        </div>
     </div>
     {% else %}
     <div class="bg-gray-800 rounded-lg border border-red-800">
@@ -119,4 +268,29 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+// Function to handle clicking on task nodes in the SVG diagram
+function selectTask(taskId) {
+    // Scroll to the task panel
+    const panel = document.getElementById('task-panel-' + taskId);
+    if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Trigger Alpine.js to expand the panel and set it as selected
+        // We use a small delay to ensure scrolling happens first
+        setTimeout(() => {
+            const expandButton = panel.querySelector('[x-data]');
+            if (expandButton && expandButton._x_dataStack) {
+                expandButton._x_dataStack[0].expanded = true;
+            }
+            // Update selected task in parent scope
+            const container = document.querySelector('[x-data*="selectedTask"]');
+            if (container && container._x_dataStack) {
+                container._x_dataStack[0].selectedTask = taskId;
+            }
+        }, 100);
+    }
+}
+</script>
 {% endblock %}

@@ -19,7 +19,6 @@ classifiers = [
 dependencies = [
     "zebra-workflow",
     "zebra-tasks[anthropic]",
-    "oracledb>=2.0",
     "pyyaml>=6.0",
 ]
 

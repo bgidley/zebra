@@ -344,22 +344,13 @@ class TestPerformance:
 
 
 # =============================================================================
-# Database Comparison Tests: Oracle vs PostgreSQL vs InMemory
+# Database Comparison Tests: PostgreSQL vs InMemory
 # =============================================================================
 
 
 def has_postgres_config() -> bool:
     """Check if PostgreSQL configuration is available."""
     return bool(os.environ.get("PGHOST") or os.environ.get("PGDATABASE"))
-
-
-def has_oracle_config() -> bool:
-    """Check if Oracle configuration is available."""
-    return bool(
-        os.environ.get("ORACLE_USERNAME")
-        and os.environ.get("ORACLE_PASSWORD")
-        and os.environ.get("ORACLE_DSN")
-    )
 
 
 async def create_postgres_store() -> StateStore:
@@ -377,24 +368,9 @@ async def create_postgres_store() -> StateStore:
     return store
 
 
-async def create_oracle_store() -> StateStore:
-    """Create and initialize an Oracle store."""
-    from zebra.storage.oracle import OracleStore
-
-    store = OracleStore(
-        user=os.environ.get("ORACLE_USERNAME"),
-        password=os.environ.get("ORACLE_PASSWORD"),
-        dsn=os.environ.get("ORACLE_DSN"),
-        wallet_location=os.environ.get("ORACLE_WALLET_LOCATION"),
-        wallet_password=os.environ.get("ORACLE_WALLET_PASSWORD"),
-    )
-    await store.initialize()
-    return store
-
-
 @pytest.mark.skipif(
-    not (has_postgres_config() or has_oracle_config()),
-    reason="No database configuration available (set PGHOST/ORACLE_* env vars)",
+    not has_postgres_config(),
+    reason="No database configuration available (set PGHOST env vars)",
 )
 class TestDatabaseComparison:
     """Compare performance across different storage backends."""
@@ -452,25 +428,6 @@ class TestDatabaseComparison:
             except Exception as e:
                 print(f"  PostgreSQL: SKIPPED ({e})")
 
-        # Test 3: Oracle (if available)
-        if has_oracle_config():
-            try:
-                oracle_store = await create_oracle_store()
-                oracle_engine = create_engine(oracle_store)
-                result = await run_perf_test(
-                    oracle_engine,
-                    definition,
-                    NUM_WORKFLOWS,
-                    TASKS_PER_WORKFLOW,
-                    "Oracle",
-                    "sequential",
-                )
-                results.append(result)
-                print(f"  Oracle:     {result}")
-                await oracle_store.close()
-            except Exception as e:
-                print(f"  Oracle:     SKIPPED ({e})")
-
         # Print comparison summary
         if len(results) > 1:
             baseline = results[0]  # InMemory
@@ -490,7 +447,6 @@ class TestDatabaseComparison:
         Runs 50 workflows with 5 parallel branches each on:
         - InMemory (baseline)
         - PostgreSQL (if configured)
-        - Oracle (if configured)
         """
         NUM_WORKFLOWS = 50
         BRANCHES_PER_WORKFLOW = 5
@@ -539,25 +495,6 @@ class TestDatabaseComparison:
             except Exception as e:
                 print(f"  PostgreSQL: SKIPPED ({e})")
 
-        # Test 3: Oracle (if available)
-        if has_oracle_config():
-            try:
-                oracle_store = await create_oracle_store()
-                oracle_engine = create_engine(oracle_store)
-                result = await run_perf_test(
-                    oracle_engine,
-                    definition,
-                    NUM_WORKFLOWS,
-                    TASKS_PER_WORKFLOW,
-                    "Oracle",
-                    "parallel",
-                )
-                results.append(result)
-                print(f"  Oracle:     {result}")
-                await oracle_store.close()
-            except Exception as e:
-                print(f"  Oracle:     SKIPPED ({e})")
-
         # Print comparison summary
         if len(results) > 1:
             baseline = results[0]  # InMemory
@@ -577,7 +514,6 @@ class TestDatabaseComparison:
         Runs 200 workflows with 5 sequential tasks each on:
         - InMemory (baseline)
         - PostgreSQL (if configured)
-        - Oracle (if configured)
 
         This tests sustained throughput under higher load.
         """
@@ -626,25 +562,6 @@ class TestDatabaseComparison:
             except Exception as e:
                 print(f"  PostgreSQL: SKIPPED ({e})")
 
-        # Test 3: Oracle (if available)
-        if has_oracle_config():
-            try:
-                oracle_store = await create_oracle_store()
-                oracle_engine = create_engine(oracle_store)
-                result = await run_perf_test(
-                    oracle_engine,
-                    definition,
-                    NUM_WORKFLOWS,
-                    TASKS_PER_WORKFLOW,
-                    "Oracle",
-                    "high_volume",
-                )
-                results.append(result)
-                print(f"  Oracle:     {result}")
-                await oracle_store.close()
-            except Exception as e:
-                print(f"  Oracle:     SKIPPED ({e})")
-
         # Print comparison summary
         if len(results) > 1:
             baseline = results[0]  # InMemory
@@ -656,66 +573,3 @@ class TestDatabaseComparison:
                 )
 
         assert len(results) >= 1
-
-    @pytest.mark.asyncio
-    async def test_oracle_vs_postgres_direct(self):
-        """Direct comparison between Oracle and PostgreSQL only.
-
-        Runs 100 workflows with 10 sequential tasks each.
-        Skips if either database is not configured.
-        """
-        if not has_postgres_config():
-            pytest.skip("PostgreSQL not configured")
-        if not has_oracle_config():
-            pytest.skip("Oracle not configured")
-
-        NUM_WORKFLOWS = 100
-        TASKS_PER_WORKFLOW = 10
-
-        definition = create_sequential_workflow(TASKS_PER_WORKFLOW)
-
-        print("\n" + "=" * 70)
-        print("DIRECT COMPARISON: Oracle vs PostgreSQL")
-        print(f"Workflows: {NUM_WORKFLOWS} | Tasks/workflow: {TASKS_PER_WORKFLOW}")
-        print("=" * 70)
-
-        # PostgreSQL
-        pg_store = await create_postgres_store()
-        pg_engine = create_engine(pg_store)
-        pg_result = await run_perf_test(
-            pg_engine,
-            definition,
-            NUM_WORKFLOWS,
-            TASKS_PER_WORKFLOW,
-            "PostgreSQL",
-            "direct_comparison",
-        )
-        await pg_store.close()
-        print(f"\n  PostgreSQL: {pg_result}")
-
-        # Oracle
-        oracle_store = await create_oracle_store()
-        oracle_engine = create_engine(oracle_store)
-        oracle_result = await run_perf_test(
-            oracle_engine,
-            definition,
-            NUM_WORKFLOWS,
-            TASKS_PER_WORKFLOW,
-            "Oracle",
-            "direct_comparison",
-        )
-        await oracle_store.close()
-        print(f"  Oracle:     {oracle_result}")
-
-        # Comparison
-        print("\n  Results:")
-        if oracle_result.elapsed_seconds < pg_result.elapsed_seconds:
-            speedup = pg_result.elapsed_seconds / oracle_result.elapsed_seconds
-            print(f"    Oracle is {speedup:.2f}x faster than PostgreSQL")
-        else:
-            speedup = oracle_result.elapsed_seconds / pg_result.elapsed_seconds
-            print(f"    PostgreSQL is {speedup:.2f}x faster than Oracle")
-
-        print(f"\n  Throughput comparison:")
-        print(f"    PostgreSQL: {pg_result.tasks_per_second:.1f} tasks/sec")
-        print(f"    Oracle:     {oracle_result.tasks_per_second:.1f} tasks/sec")

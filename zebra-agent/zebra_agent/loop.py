@@ -4,7 +4,7 @@ import json
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from zebra.core.engine import WorkflowEngine
@@ -20,7 +20,7 @@ from zebra_agent.memory import (
     ShortTermSummary,
     estimate_tokens,
 )
-from zebra_agent.metrics import MetricsStore, WorkflowRun
+from zebra_agent.metrics import MetricsStore, TaskExecution, WorkflowRun
 
 # Type for progress callback: receives event name and data dict
 ProgressCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
@@ -227,8 +227,10 @@ Output ONLY valid YAML, no explanations."""
 
             run.workflow_name = workflow_name
 
-            # Step 2: Execute workflow with progress tracking
-            output, tokens = await self._execute_workflow(workflow_name, goal, progress_callback)
+            # Step 2: Execute workflow with progress tracking and task execution capture
+            output, tokens, task_executions = await self._execute_workflow(
+                workflow_name, goal, progress_callback, run_id=run.id
+            )
 
             # Step 3: Record success
             run.completed_at = datetime.now()
@@ -237,6 +239,10 @@ Output ONLY valid YAML, no explanations."""
             run.output = output
 
             await self.metrics.record_run(run)
+
+            # Step 3b: Record task executions
+            if task_executions:
+                await self.metrics.record_task_executions(task_executions)
 
             # Step 4: Update memory
             if self.memory:
@@ -249,28 +255,6 @@ Output ONLY valid YAML, no explanations."""
                 output=output,
                 success=True,
                 tokens_used=tokens,
-                created_new_workflow=created_new,
-            )
-
-        except Exception as e:
-            # Record failure
-            run.completed_at = datetime.now()
-            run.success = False
-            run.error = str(e)
-
-            await self.metrics.record_run(run)
-
-            # Still add to memory on failure
-            if self.memory:
-                await self._add_to_memory(run, f"Error: {e}")
-
-            return AgentResult(
-                run_id=run.id,
-                workflow_name=run.workflow_name,
-                goal=goal,
-                output=None,
-                success=False,
-                error=str(e),
                 created_new_workflow=created_new,
             )
 
@@ -397,7 +381,8 @@ Output ONLY valid YAML, no explanations."""
         workflow_name: str,
         goal: str,
         progress_callback: ProgressCallback | None = None,
-    ) -> tuple[Any, int]:
+        run_id: str | None = None,
+    ) -> tuple[Any, int, list[TaskExecution]]:
         """
         Execute a workflow and return the output.
 
@@ -405,9 +390,10 @@ Output ONLY valid YAML, no explanations."""
             workflow_name: Name of workflow to execute
             goal: The user's goal
             progress_callback: Optional callback for progress updates
+            run_id: Optional run ID for tracking task executions
 
         Returns:
-            Tuple of (output, tokens_used)
+            Tuple of (output, tokens_used, task_executions)
         """
         import asyncio
 
@@ -440,10 +426,16 @@ Output ONLY valid YAML, no explanations."""
         # Start and run to completion
         await self.engine.start_process(process.id)
 
+        # Track task executions
+        task_executions: list[TaskExecution] = []
+        task_start_times: dict[str, datetime] = {}
+        execution_order = 0
+
         # Wait for completion with progress polling
         max_wait = 120  # 2 minutes max
         waited = 0
         last_task_count = 0
+        processed_tasks: set[str] = set()
 
         while waited < max_wait:
             process = await self.engine.store.load_process(process.id)
@@ -453,10 +445,18 @@ Output ONLY valid YAML, no explanations."""
             current_task_outputs = [k for k in process.properties if k.startswith("__task_output_")]
             current_task_count = len(current_task_outputs)
 
-            # Emit progress for newly completed tasks
+            # Emit progress and record task executions for newly completed tasks
             if current_task_count > last_task_count:
-                for key in current_task_outputs[last_task_count:]:
+                for key in current_task_outputs:
                     task_id = key.replace("__task_output_", "")
+
+                    # Skip already processed tasks
+                    if task_id in processed_tasks:
+                        continue
+
+                    processed_tasks.add(task_id)
+                    execution_order += 1
+
                     task_def = definition.tasks.get(task_id)
                     task_name = task_def.name if task_def else task_id
                     task_output = process.properties.get(key)
@@ -471,12 +471,33 @@ Output ONLY valid YAML, no explanations."""
                     await emit(
                         "task_completed",
                         {
+                            "task_id": task_id,
                             "task_name": task_name,
-                            "task_index": current_task_count,
+                            "task_index": execution_order,
                             "total_tasks": total_tasks,
                             "output_preview": output_preview,
                         },
                     )
+
+                    # Record task execution if we have a run_id
+                    if run_id:
+                        # Use tracked start time or estimate from now
+                        started_at = task_start_times.get(task_id, datetime.now(UTC))
+                        completed_at = datetime.now(UTC)
+
+                        task_exec = TaskExecution(
+                            id=str(uuid.uuid4()),
+                            run_id=run_id,
+                            task_definition_id=task_id,
+                            task_name=task_name,
+                            execution_order=execution_order,
+                            state="complete",
+                            started_at=started_at,
+                            completed_at=completed_at,
+                            output=task_output,
+                            error=None,
+                        )
+                        task_executions.append(task_exec)
 
                 last_task_count = current_task_count
 
@@ -484,6 +505,12 @@ Output ONLY valid YAML, no explanations."""
                 break
             elif process.state == ProcessState.FAILED:
                 error_detail = getattr(process, "error", None) or "unknown error"
+
+                # Mark the last task as failed if we have any executions
+                if task_executions and run_id:
+                    task_executions[-1].state = "failed"
+                    task_executions[-1].error = str(error_detail)
+
                 raise RuntimeError(f"Workflow failed: {error_detail}")
 
             await asyncio.sleep(0.5)
@@ -517,7 +544,7 @@ Output ONLY valid YAML, no explanations."""
         # Get token usage
         tokens = process.properties.get("__total_tokens__", 0)
 
-        return output, tokens
+        return output, tokens, task_executions
 
     async def record_rating(self, run_id: str, rating: int) -> None:
         """Record a user rating for a run."""

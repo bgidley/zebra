@@ -10,6 +10,9 @@ This document tracks unimplemented features and improvements based on the DESIGN
 ## High Priority
 
 ### .5 Learning loops
+- [ ] Run page when error occurs just hangs
+- [ ] Need a page to show all in progress runs
+- [ ] on run goals page should load the workflow vizualization from history and show it progressing
 - [ ] LLM can define new workflows using existing + memory data sources
 - [ ] Long term memory signposts to detail memory as needed
 - [ ] Dream workflows run daily to optimize memory

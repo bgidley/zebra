@@ -1,29 +1,28 @@
 """Zebra workflow engine singleton for the agent web API.
 
 Provides a shared WorkflowEngine instance that can be used across all views.
-The engine is initialized when Django starts and uses Oracle for storage.
+The engine is initialized when Django starts and uses Django ORM for storage.
 """
 
 import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from django.conf import settings
-
 if TYPE_CHECKING:
     from zebra.core.engine import WorkflowEngine
-    from zebra.storage.oracle import OracleStore
+
+    from zebra_agent_web.storage import DjangoStore
 
 logger = logging.getLogger(__name__)
 
 # Global instances
-_store: "OracleStore | None" = None
+_store: "DjangoStore | None" = None
 _engine: "WorkflowEngine | None" = None
 _initialized = False
 
 
 def initialize():
-    """Initialize the Zebra engine with Oracle storage.
+    """Initialize the Zebra engine with Django storage.
 
     Called once when Django starts (from ApiConfig.ready()).
     """
@@ -44,19 +43,12 @@ async def _async_init():
 
     # Import here to avoid issues at module load time
     from zebra.core.engine import WorkflowEngine
-    from zebra.storage.oracle import OracleStore
     from zebra.tasks.registry import ActionRegistry
 
-    zebra_settings = settings.ZEBRA_SETTINGS
+    from zebra_agent_web.storage import DjangoStore
 
-    logger.info("Initializing Oracle store...")
-    _store = OracleStore(
-        user=zebra_settings.get("ORACLE_USER"),
-        password=zebra_settings.get("ORACLE_PASSWORD"),
-        dsn=zebra_settings.get("ORACLE_DSN"),
-        wallet_location=zebra_settings.get("ORACLE_WALLET_LOCATION"),
-        wallet_password=zebra_settings.get("ORACLE_WALLET_PASSWORD"),
-    )
+    logger.info("Initializing Django store...")
+    _store = DjangoStore()
     await _store.initialize()
 
     # Create action registry with defaults
@@ -105,8 +97,8 @@ async def _async_init():
     logger.info("Zebra engine initialized successfully")
 
 
-def get_store() -> "OracleStore":
-    """Get the Oracle store instance.
+def get_store() -> "DjangoStore":
+    """Get the DjangoStore instance.
 
     Raises:
         RuntimeError: If the store hasn't been initialized.

@@ -8,13 +8,12 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-members = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-agent-cli", "zebra-agent-web"]
+members = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-agent-web"]
 
 [tool.uv.sources]
 zebra-workflow = { workspace = true }
 zebra-tasks = { workspace = true }
 zebra-agent = { workspace = true }
-zebra-agent-cli = { workspace = true }
 zebra-agent-web = { workspace = true }
 
 [dependency-groups]
@@ -27,12 +26,12 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["zebra-py/tests", "zebra-tasks/tests", "zebra-agent/tests", "zebra-agent-cli/tests"]
-pythonpath = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-agent-cli"]
+testpaths = ["zebra-py/tests", "zebra-tasks/tests", "zebra-agent/tests"]
+pythonpath = ["zebra-py", "zebra-tasks", "zebra-agent"]
 addopts = "--import-mode=importlib"
 
 [tool.coverage.run]
-source = ["zebra", "zebra_tasks", "zebra_agent", "zebra_agent_cli"]
+source = ["zebra", "zebra_tasks", "zebra_agent"]
 branch = true
 omit = [
     "*/mcp/server.py",  # MCP integration requires mcp package

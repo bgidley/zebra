@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from zebra_agent.metrics import WorkflowRun, WorkflowStats
+from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
 
 
 class TestWorkflowRun:
@@ -472,3 +472,279 @@ class TestRowToRun:
 
         retrieved = await metrics.get_run(run.id)
         assert retrieved.tokens_used == 0
+
+
+class TestTaskExecution:
+    """Tests for TaskExecution dataclass."""
+
+    def test_create_task_execution(self):
+        """Test creating a task execution."""
+        exec = TaskExecution(
+            id="test-id",
+            run_id="run-123",
+            task_definition_id="analyze",
+            task_name="Analyze Input",
+            execution_order=1,
+            state="complete",
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+        )
+        assert exec.id == "test-id"
+        assert exec.run_id == "run-123"
+        assert exec.task_definition_id == "analyze"
+        assert exec.task_name == "Analyze Input"
+        assert exec.execution_order == 1
+        assert exec.state == "complete"
+
+    def test_create_factory(self):
+        """Test the create factory method."""
+        exec = TaskExecution.create(
+            run_id="run-123",
+            task_definition_id="process",
+            task_name="Process Data",
+            execution_order=2,
+        )
+        assert exec.run_id == "run-123"
+        assert exec.task_definition_id == "process"
+        assert exec.task_name == "Process Data"
+        assert exec.execution_order == 2
+        assert exec.state == "running"
+        assert exec.id is not None
+        assert len(exec.id) == 36  # UUID length
+        assert exec.started_at is not None
+
+    def test_execution_with_all_fields(self):
+        """Test execution with all fields populated."""
+        exec = TaskExecution(
+            id="test-id",
+            run_id="run-123",
+            task_definition_id="summarize",
+            task_name="Summarize Results",
+            execution_order=3,
+            state="complete",
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2024, 1, 15, 10, 1, tzinfo=timezone.utc),
+            output={"summary": "Test summary"},
+            error=None,
+        )
+        assert exec.completed_at is not None
+        assert exec.output == {"summary": "Test summary"}
+        assert exec.error is None
+
+    def test_execution_failed_state(self):
+        """Test execution with failed state and error."""
+        exec = TaskExecution(
+            id="test-id",
+            run_id="run-123",
+            task_definition_id="failing_task",
+            task_name="Failing Task",
+            execution_order=1,
+            state="failed",
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2024, 1, 15, 10, 0, 30, tzinfo=timezone.utc),
+            error="Something went wrong",
+        )
+        assert exec.state == "failed"
+        assert exec.error == "Something went wrong"
+
+
+class TestRecordTaskExecution:
+    """Tests for recording task executions."""
+
+    async def test_record_task_execution(self, metrics):
+        """Test recording a task execution."""
+        # First create a workflow run (needed for foreign key)
+        run = WorkflowRun.create("TestWorkflow", "Test goal")
+        await metrics.record_run(run)
+
+        # Create and record task execution
+        exec = TaskExecution.create(
+            run_id=run.id,
+            task_definition_id="analyze",
+            task_name="Analyze",
+            execution_order=1,
+        )
+        exec.state = "complete"
+        exec.completed_at = datetime.now(timezone.utc)
+        exec.output = {"result": "success"}
+
+        await metrics.record_task_execution(exec)
+
+        # Verify it was stored
+        executions = await metrics.get_task_executions(run.id)
+        assert len(executions) == 1
+        assert executions[0].task_definition_id == "analyze"
+        assert executions[0].state == "complete"
+
+    async def test_record_task_execution_with_dict_output(self, metrics):
+        """Test recording task execution with dict output."""
+        run = WorkflowRun.create("TestWorkflow", "Test goal")
+        await metrics.record_run(run)
+
+        exec = TaskExecution.create(
+            run_id=run.id,
+            task_definition_id="process",
+            task_name="Process",
+            execution_order=1,
+        )
+        exec.state = "complete"
+        exec.output = {"key": "value", "nested": {"inner": 42}}
+
+        await metrics.record_task_execution(exec)
+
+        executions = await metrics.get_task_executions(run.id)
+        assert len(executions) == 1
+        assert executions[0].output == {"key": "value", "nested": {"inner": 42}}
+
+    async def test_record_task_execution_with_string_output(self, metrics):
+        """Test recording task execution with string output."""
+        run = WorkflowRun.create("TestWorkflow", "Test goal")
+        await metrics.record_run(run)
+
+        exec = TaskExecution.create(
+            run_id=run.id,
+            task_definition_id="summarize",
+            task_name="Summarize",
+            execution_order=1,
+        )
+        exec.state = "complete"
+        exec.output = "This is a plain string output"
+
+        await metrics.record_task_execution(exec)
+
+        executions = await metrics.get_task_executions(run.id)
+        assert len(executions) == 1
+        assert executions[0].output == "This is a plain string output"
+
+    async def test_record_multiple_task_executions(self, metrics):
+        """Test recording multiple task executions for a run."""
+        run = WorkflowRun.create("TestWorkflow", "Test goal")
+        await metrics.record_run(run)
+
+        # Record multiple executions
+        for i, task_id in enumerate(["start", "process", "finish"], 1):
+            exec = TaskExecution.create(
+                run_id=run.id,
+                task_definition_id=task_id,
+                task_name=task_id.capitalize(),
+                execution_order=i,
+            )
+            exec.state = "complete"
+            exec.completed_at = datetime.now(timezone.utc)
+            await metrics.record_task_execution(exec)
+
+        executions = await metrics.get_task_executions(run.id)
+        assert len(executions) == 3
+        # Should be ordered by execution_order
+        assert executions[0].task_definition_id == "start"
+        assert executions[1].task_definition_id == "process"
+        assert executions[2].task_definition_id == "finish"
+
+    async def test_record_task_executions_batch(self, metrics):
+        """Test batch recording task executions."""
+        run = WorkflowRun.create("TestWorkflow", "Test goal")
+        await metrics.record_run(run)
+
+        executions_to_record = []
+        for i in range(3):
+            exec = TaskExecution.create(
+                run_id=run.id,
+                task_definition_id=f"task_{i}",
+                task_name=f"Task {i}",
+                execution_order=i + 1,
+            )
+            exec.state = "complete"
+            executions_to_record.append(exec)
+
+        await metrics.record_task_executions(executions_to_record)
+
+        executions = await metrics.get_task_executions(run.id)
+        assert len(executions) == 3
+
+    async def test_record_task_execution_with_error(self, metrics):
+        """Test recording a failed task execution."""
+        run = WorkflowRun.create("TestWorkflow", "Test goal")
+        await metrics.record_run(run)
+
+        exec = TaskExecution.create(
+            run_id=run.id,
+            task_definition_id="failing_task",
+            task_name="Failing Task",
+            execution_order=1,
+        )
+        exec.state = "failed"
+        exec.completed_at = datetime.now(timezone.utc)
+        exec.error = "Task failed with error"
+
+        await metrics.record_task_execution(exec)
+
+        executions = await metrics.get_task_executions(run.id)
+        assert len(executions) == 1
+        assert executions[0].state == "failed"
+        assert executions[0].error == "Task failed with error"
+
+
+class TestGetTaskExecutions:
+    """Tests for getting task executions."""
+
+    async def test_get_task_executions_empty(self, metrics):
+        """Test getting task executions when none exist."""
+        run = WorkflowRun.create("TestWorkflow", "Test goal")
+        await metrics.record_run(run)
+
+        executions = await metrics.get_task_executions(run.id)
+        assert executions == []
+
+    async def test_get_task_executions_ordered(self, metrics):
+        """Test that task executions are ordered by execution_order."""
+        run = WorkflowRun.create("TestWorkflow", "Test goal")
+        await metrics.record_run(run)
+
+        # Record in non-sequential order
+        for order in [3, 1, 2]:
+            exec = TaskExecution(
+                id=f"exec-{order}",
+                run_id=run.id,
+                task_definition_id=f"task_{order}",
+                task_name=f"Task {order}",
+                execution_order=order,
+                state="complete",
+                started_at=datetime.now(timezone.utc),
+            )
+            await metrics.record_task_execution(exec)
+
+        executions = await metrics.get_task_executions(run.id)
+        assert len(executions) == 3
+        assert executions[0].execution_order == 1
+        assert executions[1].execution_order == 2
+        assert executions[2].execution_order == 3
+
+    async def test_get_task_executions_filters_by_run(self, metrics):
+        """Test that task executions are filtered by run_id."""
+        # Create two runs
+        run1 = WorkflowRun.create("TestWorkflow", "Goal 1")
+        run2 = WorkflowRun.create("TestWorkflow", "Goal 2")
+        await metrics.record_run(run1)
+        await metrics.record_run(run2)
+
+        # Add executions to each run
+        for run, count in [(run1, 2), (run2, 3)]:
+            for i in range(count):
+                exec = TaskExecution.create(
+                    run_id=run.id,
+                    task_definition_id=f"task_{i}",
+                    task_name=f"Task {i}",
+                    execution_order=i + 1,
+                )
+                exec.state = "complete"
+                await metrics.record_task_execution(exec)
+
+        exec1 = await metrics.get_task_executions(run1.id)
+        exec2 = await metrics.get_task_executions(run2.id)
+
+        assert len(exec1) == 2
+        assert len(exec2) == 3
+
+    async def test_get_task_executions_nonexistent_run(self, metrics):
+        """Test getting task executions for nonexistent run."""
+        executions = await metrics.get_task_executions("nonexistent-run-id")
+        assert executions == []

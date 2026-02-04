@@ -1,9 +1,8 @@
 """Performance metrics tracking for workflows."""
 
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from pathlib import Path
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import asyncpg
@@ -31,7 +30,42 @@ class WorkflowRun:
             id=str(uuid.uuid4()),
             workflow_name=workflow_name,
             goal=goal,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
+        )
+
+
+@dataclass
+class TaskExecution:
+    """Record of a single task execution within a workflow run."""
+
+    id: str
+    run_id: str  # Foreign key to WorkflowRun.id
+    task_definition_id: str  # Task ID from definition (e.g., "analyze")
+    task_name: str  # Human-readable name
+    execution_order: int  # Order in execution sequence (1-based)
+    state: str  # "complete" | "failed" | "skipped"
+    started_at: datetime
+    completed_at: datetime | None = None
+    output: Any = None  # Task result/output
+    error: str | None = None  # Error message if failed
+
+    @classmethod
+    def create(
+        cls,
+        run_id: str,
+        task_definition_id: str,
+        task_name: str,
+        execution_order: int,
+    ) -> "TaskExecution":
+        """Create a new task execution record."""
+        return cls(
+            id=str(uuid.uuid4()),
+            run_id=run_id,
+            task_definition_id=task_definition_id,
+            task_name=task_name,
+            execution_order=execution_order,
+            state="running",
+            started_at=datetime.now(UTC),
         )
 
 
@@ -117,6 +151,25 @@ class MetricsStore:
 
                 CREATE INDEX IF NOT EXISTS idx_runs_started
                 ON workflow_runs(started_at DESC);
+
+                CREATE TABLE IF NOT EXISTS workflow_task_executions (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+                    task_definition_id TEXT NOT NULL,
+                    task_name TEXT NOT NULL,
+                    execution_order INTEGER NOT NULL,
+                    state TEXT NOT NULL,
+                    started_at TIMESTAMPTZ NOT NULL,
+                    completed_at TIMESTAMPTZ,
+                    output TEXT,
+                    error TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_task_exec_run
+                ON workflow_task_executions(run_id);
+
+                CREATE INDEX IF NOT EXISTS idx_task_exec_order
+                ON workflow_task_executions(run_id, execution_order);
                 """
             )
         self._initialized = True
@@ -298,4 +351,94 @@ class MetricsStore:
             tokens_used=row["tokens_used"] or 0,
             error=row["error"],
             output=row["output"],
+        )
+
+    # =========================================================================
+    # Task Execution Tracking
+    # =========================================================================
+
+    async def record_task_execution(self, execution: TaskExecution) -> None:
+        """Record a task execution."""
+        await self.initialize()
+        pool = await self._ensure_pool()
+
+        # Serialize output to JSON string if it's not already a string
+        import json
+
+        output_str = None
+        if execution.output is not None:
+            if isinstance(execution.output, str):
+                output_str = execution.output
+            else:
+                output_str = json.dumps(execution.output, ensure_ascii=False, default=str)
+
+        await pool.execute(
+            """
+            INSERT INTO workflow_task_executions
+            (id, run_id, task_definition_id, task_name, execution_order,
+             state, started_at, completed_at, output, error)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT (id) DO UPDATE SET
+                state = EXCLUDED.state,
+                completed_at = EXCLUDED.completed_at,
+                output = EXCLUDED.output,
+                error = EXCLUDED.error
+            """,
+            execution.id,
+            execution.run_id,
+            execution.task_definition_id,
+            execution.task_name,
+            execution.execution_order,
+            execution.state,
+            execution.started_at,
+            execution.completed_at,
+            output_str,
+            execution.error,
+        )
+
+    async def record_task_executions(self, executions: list[TaskExecution]) -> None:
+        """Record multiple task executions in batch."""
+        for execution in executions:
+            await self.record_task_execution(execution)
+
+    async def get_task_executions(self, run_id: str) -> list[TaskExecution]:
+        """Get all task executions for a workflow run, ordered by execution order."""
+        await self.initialize()
+        pool = await self._ensure_pool()
+
+        rows = await pool.fetch(
+            """
+            SELECT * FROM workflow_task_executions
+            WHERE run_id = $1
+            ORDER BY execution_order ASC
+            """,
+            run_id,
+        )
+
+        return [self._row_to_task_execution(row) for row in rows]
+
+    def _row_to_task_execution(self, row: asyncpg.Record) -> TaskExecution:
+        """Convert a database row to a TaskExecution."""
+        import json
+
+        # Parse output from JSON string if present
+        output = row["output"]
+        if output is not None:
+            try:
+                output = json.loads(output)
+            except (json.JSONDecodeError, TypeError):
+                # Keep as string if not valid JSON
+                pass
+
+        return TaskExecution(
+            id=row["id"],
+            run_id=row["run_id"],
+            task_definition_id=row["task_definition_id"],
+            task_name=row["task_name"],
+            execution_order=row["execution_order"],
+            state=row["state"],
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
+            output=output,
+            error=row["error"],
         )

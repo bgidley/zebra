@@ -828,7 +828,7 @@ routings: []
             provider="anthropic",
         )
 
-        output, tokens = await loop._execute_workflow("Summary Workflow", "Test goal")
+        output, tokens, _ = await loop._execute_workflow("Summary Workflow", "Test goal")
 
         assert output == "Test summary"
         assert tokens == 50
@@ -875,7 +875,7 @@ routings: []
             provider="anthropic",
         )
 
-        output, tokens = await loop._execute_workflow("Custom Workflow", "Test goal")
+        output, tokens, _ = await loop._execute_workflow("Custom Workflow", "Test goal")
 
         # Should fall back to non-private properties
         assert isinstance(output, dict)

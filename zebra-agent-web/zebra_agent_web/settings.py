@@ -128,25 +128,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
 ]
 
-# Zebra-specific settings for workflow engine (used by agent for execution)
-ZEBRA_SETTINGS = {
-    # Oracle connection for Zebra StateStore
-    "ORACLE_USER": os.environ.get("ORACLE_USERNAME"),
-    "ORACLE_PASSWORD": os.environ.get("ORACLE_PASSWORD"),
-    "ORACLE_DSN": os.environ.get("ORACLE_DSN"),
-    "ORACLE_WALLET_LOCATION": os.environ.get("ORACLE_WALLET_LOCATION"),
-    "ORACLE_WALLET_PASSWORD": os.environ.get("ORACLE_WALLET_PASSWORD"),
-}
-
 # Zebra Agent settings
+# Storage is handled by Django ORM (see DATABASES config above)
 ZEBRA_AGENT_SETTINGS = {
     "LIBRARY_PATH": os.environ.get("ZEBRA_LIBRARY_PATH", "~/.zebra/workflows"),
-    # Metrics and Memory use Oracle (same DB as Zebra Engine)
-    "ORACLE_USER": os.environ.get("ORACLE_USERNAME"),
-    "ORACLE_PASSWORD": os.environ.get("ORACLE_PASSWORD"),
-    "ORACLE_DSN": os.environ.get("ORACLE_DSN"),
-    "ORACLE_WALLET_LOCATION": os.environ.get("ORACLE_WALLET_LOCATION"),
-    "ORACLE_WALLET_PASSWORD": os.environ.get("ORACLE_WALLET_PASSWORD"),
     "LLM_PROVIDER": os.environ.get("ZEBRA_LLM_PROVIDER", "anthropic"),
     "LLM_MODEL": os.environ.get("ZEBRA_LLM_MODEL", None),
 }

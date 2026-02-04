@@ -40,14 +40,14 @@ async def metrics(pg_pool):
     )
     await store.initialize()
 
-    # Clean up before test
-    await store._pool.execute("TRUNCATE TABLE workflow_runs")
+    # Clean up before test (task executions first due to FK constraint)
+    await store._pool.execute("TRUNCATE TABLE workflow_task_executions, workflow_runs CASCADE")
 
     yield store
 
     # Clean up after test
     if store._pool:
-        await store._pool.execute("TRUNCATE TABLE workflow_runs")
+        await store._pool.execute("TRUNCATE TABLE workflow_task_executions, workflow_runs CASCADE")
     await store.close()
 
 
