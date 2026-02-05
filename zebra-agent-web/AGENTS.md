@@ -18,7 +18,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 - **Django Channels**: WebSocket support
 - **Daphne**: ASGI server
 - **Channels Redis**: WebSocket channel layer
-- **PostgreSQL**: Database (via psycopg)
+- **Django ORM**: Database abstraction (PostgreSQL, Oracle, SQLite via Django)
 
 ## File Locations
 
@@ -38,6 +38,10 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/urls.py` | API URL routing |
 | `zebra_agent_web/api/engine.py` | Engine integration |
 | `zebra_agent_web/api/agent_engine.py` | Agent engine wrapper |
+| `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
+| `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory) |
+| `zebra_agent_web/metrics_store.py` | DjangoMetricsStore (MetricsStore for metrics) |
+| `zebra_agent_web/api/models.py` | Django models for workflow data |
 | `templates/` | Django templates |
 | `templates/pages/` | Full page templates |
 | `templates/partials/` | Partial templates (HTMX) |
@@ -185,7 +189,7 @@ Key settings in `settings.py`:
 | Setting | Purpose |
 |---------|---------|
 | `CHANNEL_LAYERS` | Redis configuration for WebSockets |
-| `DATABASES` | PostgreSQL connection |
+| `DATABASES` | Database connection (via Django ORM) |
 | `CORS_ALLOWED_ORIGINS` | CORS configuration |
 | `REST_FRAMEWORK` | DRF settings |
 

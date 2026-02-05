@@ -2,7 +2,7 @@
 
 import json
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
@@ -896,7 +896,7 @@ class TestProcessGoalWithMemoryCompaction:
         # Add enough entries to trigger compaction (90% of 1000 = 900 tokens)
         entry = MemoryEntry(
             id="test",
-            timestamp=datetime.now(),
+            timestamp=datetime.now(timezone.utc),
             goal="Test",
             workflow_used="Test",
             result_summary="Test",
@@ -1300,7 +1300,7 @@ class TestProcessGoalWithLongTermCompaction:
         # Add enough to trigger long-term compaction (90% of 2000 = 1800)
         summary = ShortTermSummary(
             id="sum-1",
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             summary="Test summary",
             tokens=1000,
             entry_count=10,
@@ -1309,7 +1309,7 @@ class TestProcessGoalWithLongTermCompaction:
 
         theme = LongTermTheme(
             id="theme-1",
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             theme="Test theme",
             tokens=900,
             short_term_refs=["sum-1"],

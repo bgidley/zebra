@@ -20,19 +20,36 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/cli.py` | Interactive console CLI |
 | `zebra_agent/loop.py` | Main agent loop logic |
 | `zebra_agent/library.py` | Workflow library management |
-| `zebra_agent/metrics.py` | Performance metrics tracking |
+| `zebra_agent/metrics.py` | Metrics dataclasses |
+| `zebra_agent/memory.py` | Memory dataclasses |
+| `zebra_agent/storage/` | Pluggable storage backends |
+| `zebra_agent/storage/interfaces.py` | Abstract storage interfaces (MemoryStore, MetricsStore) |
+| `zebra_agent/storage/memory.py` | InMemoryMemoryStore implementation |
+| `zebra_agent/storage/metrics.py` | InMemoryMetricsStore implementation |
 | `workflows/` | Built-in workflow definitions |
 | `tests/` | Test suite |
 
 ## Data Storage
 
-Agent data is stored in `~/.zebra-agent/`:
+### Storage Architecture
+zebra-agent uses pluggable storage interfaces defined in `zebra_agent/storage/interfaces.py`:
+- `MemoryStore`: Interface for agent memory (short-term/long-term)
+- `MetricsStore`: Interface for workflow metrics tracking
 
-| Path | Purpose |
-|------|---------|
-| `~/.zebra-agent/workflows/` | Workflow YAML definitions |
-| `~/.zebra-agent/state.db` | Workflow execution state |
-| `~/.zebra-agent/metrics.db` | Performance metrics |
+### Standalone Usage (In-Memory - Default)
+When used directly via the CLI, in-memory implementations are used:
+
+| Component | Implementation | Persistence |
+|-----------|---------------|-------------|
+| Workflows | File-based (`~/.zebra-agent/workflows/`) | Persistent (YAML files) |
+| Memory | `InMemoryMemoryStore` | Transient (lost on exit) |
+| Metrics | `InMemoryMetricsStore` | Transient (lost on exit) |
+
+### Web Usage (Django ORM)
+When used through `zebra-agent-web`, Django ORM implementations are used:
+- `DjangoMemoryStore` implements `MemoryStore`
+- `DjangoMetricsStore` implements `MetricsStore`
+- Database backend configured via Django's `DATABASES` setting
 
 ## Module-Specific Commands
 

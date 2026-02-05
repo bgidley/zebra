@@ -14,57 +14,56 @@ source .venv/bin/activate
 
 ## Database Configuration
 
-This web application uses Oracle by default for both Django's database and the Zebra workflow engine.
+Storage is handled by Django's ORM. The application uses Django models for both workflow state persistence and metrics tracking.
 
-### Oracle (Default)
+### Storage Implementation
 
-Set these environment variables before running the server:
+This package implements the storage interfaces defined in `zebra-agent`:
 
-```bash
-export ORACLE_USERNAME="ZEBRA"
-export ORACLE_PASSWORD="your_password"
-export ORACLE_DSN="(description=(address=(protocol=tcps)(port=1522)(host=your-host.oraclecloud.com))(connect_data=(service_name=your_service.adb.oraclecloud.com)))"
-# Optional: for mTLS with Oracle Cloud Wallet
-export ORACLE_WALLET_LOCATION="/path/to/wallet"
-export ORACLE_WALLET_PASSWORD="wallet_password"
-```
+- **`zebra_agent_web/api/models.py`** - Django models for all storage data
+- **`zebra_agent_web/storage.py`** - `DjangoStore` (StateStore for workflow state)
+- **`zebra_agent_web/memory_store.py`** - `DjangoMemoryStore` (MemoryStore for agent memory)
+- **`zebra_agent_web/metrics_store.py`** - `DjangoMetricsStore` (MetricsStore for metrics)
 
-**Environment Variables:**
+### Database Backend
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `ORACLE_USERNAME` | Oracle database user | Yes |
-| `ORACLE_PASSWORD` | Oracle database password | Yes |
-| `ORACLE_DSN` | Oracle connection string (TNS) | Yes |
-| `ORACLE_WALLET_LOCATION` | Path to Oracle wallet (for mTLS) | Optional |
-| `ORACLE_WALLET_PASSWORD` | Wallet password (if encrypted) | Optional |
+Configure your database backend via the standard Django `DATABASES` setting in `zebra_agent_web/settings.py`.
 
-### PostgreSQL (Alternative)
-
-To use PostgreSQL instead, modify `zebra_agent_web/settings.py`:
+**Example configurations:**
 
 ```python
-# Change DATABASES to use PostgreSQL
+# Oracle
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("PGDATABASE", "zebra"),
-        "USER": os.environ.get("PGUSER", "zebra"),
-        "PASSWORD": os.environ.get("PGPASSWORD", ""),
-        "HOST": os.environ.get("PGHOST", "localhost"),
-        "PORT": os.environ.get("PGPORT", "5432"),
+        "ENGINE": "django.db.backends.oracle",
+        "NAME": os.environ.get("ORACLE_DSN", ""),
+        "USER": os.environ.get("ORACLE_USERNAME", ""),
+        "PASSWORD": os.environ.get("ORACLE_PASSWORD", ""),
     }
 }
 
-# Update ZEBRA_SETTINGS and ZEBRA_AGENT_SETTINGS to use PostgreSQL
-ZEBRA_SETTINGS = {
-    "POSTGRES_HOST": os.environ.get("PGHOST", "localhost"),
-    "POSTGRES_PORT": int(os.environ.get("PGPORT", "5432")),
-    "POSTGRES_DATABASE": os.environ.get("PGDATABASE", "zebra"),
-    "POSTGRES_USER": os.environ.get("PGUSER", "zebra"),
-    "POSTGRES_PASSWORD": os.environ.get("PGPASSWORD", None),
+# PostgreSQL
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "zebra",
+        "USER": "zebra",
+        "PASSWORD": os.environ.get("PGPASSWORD", ""),
+        "HOST": "localhost",
+        "PORT": "5432",
+    }
+}
+
+# SQLite (for development)
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
 }
 ```
+
+See Django documentation for other database backends.
 
 ## Usage
 
@@ -126,7 +125,7 @@ uv run pytest zebra-agent-web/tests/ -v
 uv run ruff check zebra-agent-web/
 
 # Run with specific configuration
-ORACLE_USERNAME=ZEBRA ORACLE_PASSWORD=secret uv run zebra-web-agent-dev
+uv run zebra-web-agent-dev
 ```
 
 ## License

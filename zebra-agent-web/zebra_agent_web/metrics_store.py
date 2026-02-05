@@ -1,80 +1,34 @@
 """Django ORM implementation for agent metrics tracking.
 
 This module provides a Django-based storage backend for tracking workflow
-runs and task executions, replacing the raw Oracle implementation.
+runs and task executions, implementing the MetricsStore interface from zebra-agent.
 """
+
+from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
 from django.db.models import Avg, Count, Max, Sum
 
+from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
+from zebra_agent.storage.interfaces import MetricsStore
+
 from .api.models import TaskExecutionModel, WorkflowRunModel
+
+if TYPE_CHECKING:
+    pass
 
 logger = logging.getLogger(__name__)
 
 
-# Re-export dataclasses from zebra_agent.metrics for compatibility
-# These are the same dataclasses used by the agent loop
-@dataclass
-class WorkflowRun:
-    """Record of a single workflow execution."""
-
-    id: str
-    workflow_name: str
-    goal: str
-    started_at: datetime
-    completed_at: datetime | None = None
-    success: bool = False
-    user_rating: int | None = None  # 1-5
-    tokens_used: int = 0
-    error: str | None = None
-    output: Any = None
-
-
-@dataclass
-class TaskExecution:
-    """Record of a single task execution within a workflow run."""
-
-    id: str
-    run_id: str
-    task_definition_id: str
-    task_name: str
-    execution_order: int
-    state: str
-    started_at: datetime
-    completed_at: datetime | None = None
-    output: Any = None
-    error: str | None = None
-
-
-@dataclass
-class WorkflowStats:
-    """Aggregated statistics for a workflow."""
-
-    workflow_name: str
-    total_runs: int = 0
-    successful_runs: int = 0
-    avg_rating: float | None = None
-    last_used: datetime | None = None
-
-    @property
-    def success_rate(self) -> float:
-        """Calculate success rate as a fraction."""
-        if self.total_runs == 0:
-            return 0.0
-        return self.successful_runs / self.total_runs
-
-
-class DjangoMetricsStore:
+class DjangoMetricsStore(MetricsStore):
     """Django ORM implementation for agent metrics tracking.
 
-    Provides the same interface as the original MetricsStore
-    but uses Django's ORM for database operations.
+    Implements the MetricsStore interface using Django's ORM for
+    database operations.
     """
 
     def __init__(self):

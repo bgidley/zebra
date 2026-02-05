@@ -6,10 +6,11 @@ A workflow engine for AI-assisted development tasks. Zebra enables structured ex
 
 ```
 zebra/
-├── zebra-py/          # Python workflow engine (primary implementation)
-├── zebra-tasks/       # Reusable task actions library (Python)
-├── zebra-agents/      # Self-improving AI agent framework (in development)
-└── legacy/            # Legacy Java implementation (archived)
+├── zebra-py/              # Python workflow engine (primary implementation)
+├── zebra-tasks/           # Reusable task actions library (Python)
+├── zebra-agent/           # Self-improving AI agent framework
+├── zebra-agent-web/       # Web UI for Zebra Agent (Django)
+└── legacy/                # Legacy Java implementation (archived)
 ```
 
 ### Components
@@ -18,7 +19,8 @@ zebra/
 |---------|----------|-------------|
 | **zebra-py** | Python | Core workflow engine with MCP server integration |
 | **zebra-tasks** | Python | Reusable task actions (subtasks, LLM calling) |
-| **zebra-agents** | Python | Autonomous agent framework built on zebra workflows |
+| **zebra-agent** | Python | Self-improving agent framework built on zebra workflows |
+| **zebra-agent-web** | Python | Web UI for Zebra Agent with Django ORM storage |
 
 ## Quick Start
 
@@ -53,29 +55,41 @@ cd zebra-tasks && uv sync
 
 ## Running Tests
 
-### All Python Tests (Recommended)
+Run tests using `uv run pytest` from the project root.
+
+### All Tests
 
 ```bash
-# From project root - runs all Python tests
+# Run all tests across all packages (866 tests)
 uv run pytest
 ```
 
 ### Individual Package Tests
 
 ```bash
-# zebra-py tests only
+# Core workflow engine (272 tests)
 uv run pytest zebra-py/tests/ -v
 
-# zebra-tasks tests only
+# Task actions library (406 tests)
 uv run pytest zebra-tasks/tests/ -v
+
+# Agent framework (168 tests)
+uv run pytest zebra-agent/tests/ -v
+
+# Web UI tests (20 tests)
+uv run pytest zebra-agent-web/tests/ -v
 ```
 
-
-### All Tests (Python + Rust)
+### Test with Coverage
 
 ```bash
-uv run pytest && cd zebra-rs && cargo test
+# All tests with coverage
+uv run pytest --cov
+
+# Coverage for specific package
+uv run pytest zebra-py/tests/ --cov=zebra
 ```
+
 
 ## Running the MCP Server
 

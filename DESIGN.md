@@ -81,8 +81,12 @@ zebra/
 │       ├── cli.py     # Command-line interface
 │       ├── loop.py    # Agent OODA loop
 │       ├── library.py # Workflow library management
-│       ├── memory.py  # Tiered memory system
-│       └── metrics.py # Performance tracking
+│       ├── memory.py  # Memory dataclasses
+│       ├── metrics.py # Metrics dataclasses
+│       └── storage/   # Pluggable storage backends
+│           ├── interfaces.py  # MemoryStore, MetricsStore ABCs
+│           ├── memory.py      # InMemoryMemoryStore
+│           └── metrics.py     # InMemoryMetricsStore
 │
 ├── zebra-agent-web/   # Web interface for agent management in Django
 │   └── zebra_agent_web/
@@ -393,10 +397,10 @@ Workflows can trigger callbacks on state changes, enabling monitoring and integr
 - Frontend Django Templates + HTMX + Alpine.js 
 
 **Persistence**:
-- aiosqlite for async SQLite access
-- SQLAlchemy (optional, for complex queries)
-- Postgresql (long term likely only storage option)
-- PGVector to store embeddings 
+- zebra-py: aiosqlite/SQLite for workflow state persistence
+- zebra-agent: In-memory by default, pluggable storage interfaces
+- zebra-agent-web: Django ORM (PostgreSQL, Oracle, SQLite supported)
+- Future: PGVector for embeddings (planned) 
 
 **LLM Integration**:
 - Anthropic SDK

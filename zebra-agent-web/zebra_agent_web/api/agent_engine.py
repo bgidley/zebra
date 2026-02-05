@@ -1,6 +1,6 @@
 """Zebra agent singleton for the web API.
 
-Provides shared WorkflowLibrary, MetricsStore, and AgentLoop instances
+Provides shared WorkflowLibrary, MetricsStore, MemoryStore, and AgentLoop instances
 that can be used across all agent views.
 """
 
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
     from zebra_agent.loop import AgentLoop
 
+    from zebra_agent_web.memory_store import DjangoMemoryStore
     from zebra_agent_web.metrics_store import DjangoMetricsStore
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 # Global instances
 _library: "WorkflowLibrary | None" = None
 _metrics: "DjangoMetricsStore | None" = None
+_memory: "DjangoMemoryStore | None" = None
 _agent_loop: "AgentLoop | None" = None
 _initialized = False
 
@@ -53,7 +55,7 @@ def initialize() -> None:
 
 async def _async_init() -> None:
     """Async initialization of agent components."""
-    global _library, _metrics, _agent_loop
+    global _library, _metrics, _memory, _agent_loop
 
     if _library is not None:
         return
@@ -64,6 +66,7 @@ async def _async_init() -> None:
 
     from zebra_agent_web.api.engine import ensure_initialized as ensure_workflow_engine
     from zebra_agent_web.api.engine import get_engine
+    from zebra_agent_web.memory_store import DjangoMemoryStore
     from zebra_agent_web.metrics_store import DjangoMetricsStore
 
     agent_settings = _get_agent_settings()
@@ -72,6 +75,11 @@ async def _async_init() -> None:
     logger.info("Initializing metrics store (Django)")
     _metrics = DjangoMetricsStore()
     await _metrics.initialize()
+
+    # Initialize memory store (Django ORM)
+    logger.info("Initializing memory store (Django)")
+    _memory = DjangoMemoryStore()
+    await _memory.initialize()
 
     # Initialize workflow library
     library_path = Path(agent_settings["LIBRARY_PATH"]).expanduser()
@@ -96,11 +104,12 @@ async def _async_init() -> None:
     await ensure_workflow_engine()
     engine = get_engine()
 
-    # Initialize agent loop
+    # Initialize agent loop with memory
     _agent_loop = AgentLoop(
         library=_library,
         engine=engine,
         metrics=_metrics,
+        memory=_memory,
         provider=agent_settings.get("LLM_PROVIDER", "anthropic"),
         model=agent_settings.get("LLM_MODEL"),
     )
@@ -128,6 +137,17 @@ def get_metrics() -> "DjangoMetricsStore":
     if _metrics is None:
         raise RuntimeError("Metrics not initialized. Call ensure_initialized() first.")
     return _metrics
+
+
+def get_memory() -> "DjangoMemoryStore":
+    """Get the DjangoMemoryStore instance.
+
+    Raises:
+        RuntimeError: If memory hasn't been initialized.
+    """
+    if _memory is None:
+        raise RuntimeError("Memory not initialized. Call ensure_initialized() first.")
+    return _memory
 
 
 def get_agent_loop() -> "AgentLoop":

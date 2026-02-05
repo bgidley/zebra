@@ -188,3 +188,75 @@ class TaskExecutionModel(models.Model):
 
     def __str__(self):
         return f"{self.task_name} ({self.state}) - order {self.execution_order}"
+
+
+# =============================================================================
+# MemoryStore Models (Agent Memory)
+# =============================================================================
+
+
+class MemoryEntryModel(models.Model):
+    """A single memory entry representing an agent interaction."""
+
+    id = models.CharField(max_length=255, primary_key=True)
+    timestamp = models.DateTimeField(db_index=True)
+    goal = models.TextField(help_text="User's goal or request")
+    workflow_used = models.CharField(max_length=255)
+    result_summary = models.TextField(help_text="Summary of the result")
+    tokens = models.IntegerField(default=0)
+
+    class Meta:
+        db_table = "zebra_memory_entries"
+        verbose_name = "Memory Entry"
+        verbose_name_plural = "Memory Entries"
+        indexes = [
+            models.Index(fields=["-timestamp"]),
+        ]
+
+    def __str__(self):
+        return f"Entry {self.id} ({self.timestamp})"
+
+
+class ShortTermSummaryModel(models.Model):
+    """A compacted short-term memory summary."""
+
+    id = models.CharField(max_length=255, primary_key=True)
+    created_at = models.DateTimeField(db_index=True)
+    summary = models.TextField(help_text="Compacted summary text")
+    tokens = models.IntegerField(default=0)
+    entry_count = models.IntegerField(default=0, help_text="Number of entries summarized")
+
+    class Meta:
+        db_table = "zebra_memory_summaries"
+        verbose_name = "Short-Term Summary"
+        verbose_name_plural = "Short-Term Summaries"
+        indexes = [
+            models.Index(fields=["-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Summary {self.id} ({self.entry_count} entries)"
+
+
+class LongTermThemeModel(models.Model):
+    """A long-term memory theme extracted from short-term summaries."""
+
+    id = models.CharField(max_length=255, primary_key=True)
+    created_at = models.DateTimeField(db_index=True)
+    theme = models.TextField(help_text="Theme text")
+    tokens = models.IntegerField(default=0)
+    short_term_refs = models.JSONField(
+        default=list,
+        help_text="List of short-term summary IDs this theme references",
+    )
+
+    class Meta:
+        db_table = "zebra_memory_themes"
+        verbose_name = "Long-Term Theme"
+        verbose_name_plural = "Long-Term Themes"
+        indexes = [
+            models.Index(fields=["-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Theme {self.id}"

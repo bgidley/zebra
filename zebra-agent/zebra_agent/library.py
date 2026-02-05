@@ -10,7 +10,7 @@ import yaml
 from zebra.core.models import ProcessDefinition
 from zebra.definitions.loader import load_definition
 
-from zebra_agent.metrics import MetricsStore
+from zebra_agent.metrics import MetricsStore, WorkflowStats
 
 
 @dataclass
@@ -44,16 +44,17 @@ class WorkflowLibrary:
     Manages a library of workflow definitions.
 
     Workflows are stored as YAML files in a directory structure.
-    Metrics are stored in a separate SQLite database.
+    Metrics are optionally tracked via a MetricsStore.
     """
 
-    def __init__(self, library_path: Path, metrics_store: MetricsStore):
+    def __init__(self, library_path: Path, metrics_store: MetricsStore | None = None):
         """
         Initialize the workflow library.
 
         Args:
             library_path: Directory containing workflow YAML files
-            metrics_store: Store for workflow metrics
+            metrics_store: Optional store for workflow metrics. If None,
+                          workflows will have default stats (0 uses, 0% success).
         """
         self.library_path = Path(library_path).expanduser()
         self.metrics = metrics_store
@@ -103,8 +104,11 @@ class WorkflowLibrary:
             version = data.get("version", 1)
             use_when = data.get("use_when")  # LLM selection hint
 
-            # Get stats from metrics store
-            stats = await self.metrics.get_stats(name)
+            # Get stats from metrics store (if available)
+            if self.metrics is not None:
+                stats = await self.metrics.get_stats(name)
+            else:
+                stats = WorkflowStats(workflow_name=name)
 
             return WorkflowInfo(
                 name=name,

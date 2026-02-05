@@ -78,10 +78,16 @@ CHANNEL_LAYERS = {
 #     },
 # }
 
-# Database - Oracle configuration
-# Note: We don't use Django's ORM for Zebra data - we use the zebra-py StateStore directly.
-# This database config is only used if Django needs its own tables (sessions, etc.)
-# Oracle connection uses the same environment variables as Zebra
+# Database Configuration
+# This Django application uses Django ORM for all data persistence:
+# - Workflow state (ProcessInstance, TaskInstance, FlowOfExecution)
+# - Metrics (WorkflowRun, TaskExecution)
+# - Process definitions
+#
+# The DjangoStore and DjangoMetricsStore implementations use these models
+# defined in zebra_agent_web/api/models.py
+#
+# Configure your preferred database backend below (Oracle, PostgreSQL, SQLite, etc.)
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.oracle",
@@ -90,6 +96,27 @@ DATABASES = {
         "PASSWORD": os.environ.get("ORACLE_PASSWORD", ""),
     }
 }
+
+# Alternative configurations:
+# PostgreSQL:
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.postgresql",
+#         "NAME": os.environ.get("PGDATABASE", "zebra"),
+#         "USER": os.environ.get("PGUSER", "zebra"),
+#         "PASSWORD": os.environ.get("PGPASSWORD", ""),
+#         "HOST": os.environ.get("PGHOST", "localhost"),
+#         "PORT": os.environ.get("PGPORT", "5432"),
+#     }
+# }
+#
+# SQLite (development):
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
 
 # Internationalization
 LANGUAGE_CODE = "en-us"
