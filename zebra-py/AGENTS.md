@@ -1,6 +1,6 @@
 # AGENTS.md - zebra-py (Core Workflow Engine)
 
-This file provides coding agent guidelines specific to the `zebra-py` package - the core workflow engine with MCP integration.
+This file provides coding agent guidelines specific to the `zebra-py` package - the core workflow engine.
 
 > **Note**: For project-wide guidelines (code style, testing patterns, important rules), see the [root AGENTS.md](../AGENTS.md).
 
@@ -9,7 +9,6 @@ This file provides coding agent guidelines specific to the `zebra-py` package - 
 `zebra-py` is the core workflow engine package containing:
 - **Workflow Engine**: Process lifecycle, task state transitions, routing evaluation
 - **Storage Layer**: Persistence abstractions (SQLite, In-Memory)
-- **MCP Server**: Model Context Protocol integration for Claude
 - **Definition Loader**: YAML/JSON workflow parsing
 
 ## Core Concepts
@@ -54,7 +53,6 @@ Abstracts persistence layer. Implementations:
 | `zebra/tasks/base.py` | TaskAction, ExecutionContext |
 | `zebra/tasks/registry.py` | ActionRegistry |
 | `zebra/tasks/actions/` | Built-in actions (shell, prompt) |
-| `zebra/mcp/` | MCP server implementation |
 | `zebra/templates/` | Example workflow definitions |
 | `tests/` | Test suite |
 
@@ -69,9 +67,6 @@ uv run pytest zebra-py/tests/test_engine.py -v
 
 # Run single test function
 uv run pytest zebra-py/tests/test_engine.py::test_simple_workflow -v
-
-# Run MCP server
-uv run python -m zebra.mcp.server
 ```
 
 ## Common Tasks
@@ -144,33 +139,6 @@ Implement `ConditionAction` for routing conditions that evaluate to boolean.
 ### Custom Storage Backends
 
 Implement the `StateStore` abstract base class to create custom persistence layers beyond SQLite and in-memory storage.
-
-## MCP Server
-
-The MCP server enables Claude to create and manage workflows.
-
-### Running
-
-```bash
-uv run python -m zebra.mcp.server
-```
-
-### Available Tools
-
-| Tool | Description |
-|------|-------------|
-| `create_workflow` | Create a workflow from YAML definition |
-| `start_workflow` | Start a created workflow |
-| `get_workflow_status` | Get current status of a workflow |
-| `list_workflows` | List all active workflows |
-| `get_pending_tasks` | Get tasks waiting for input |
-| `complete_task` | Complete a pending task with a result |
-| `pause_workflow` | Pause a running workflow |
-| `resume_workflow` | Resume a paused workflow |
-
-### Data Location
-
-Workflows are stored in SQLite at `~/.zebra/workflows.db`.
 
 ## Related Documentation
 

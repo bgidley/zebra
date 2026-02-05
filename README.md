@@ -90,29 +90,6 @@ uv run pytest --cov
 uv run pytest zebra-py/tests/ --cov=zebra
 ```
 
-
-## Running the MCP Server
-
-The MCP server enables Claude and other AI tools to create and manage workflows.
-
-```bash
-cd zebra-py
-uv run python -m zebra.mcp.server
-```
-
-Configure in Claude Code settings:
-
-```json
-{
-  "mcpServers": {
-    "zebra-workflow": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/zebra-py", "python", "-m", "zebra.mcp.server"]
-    }
-  }
-}
-```
-
 ## Example Workflow
 
 ```yaml
