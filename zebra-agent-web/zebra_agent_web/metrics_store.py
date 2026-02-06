@@ -169,6 +169,18 @@ class DjangoMetricsStore(MetricsStore):
 
         return await _get()
 
+    async def get_in_progress_runs(self) -> list[WorkflowRun]:
+        """Get all runs that are currently in progress (not completed)."""
+
+        @sync_to_async
+        def _get():
+            models = WorkflowRunModel.objects.filter(completed_at__isnull=True).order_by(
+                "-started_at"
+            )
+            return [self._model_to_run(m) for m in models]
+
+        return await _get()
+
     async def get_runs_for_workflow(self, workflow_name: str, limit: int = 10) -> list[WorkflowRun]:
         """Get recent runs for a specific workflow."""
 

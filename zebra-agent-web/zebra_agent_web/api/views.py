@@ -400,6 +400,76 @@ async def run_status(request, run_id):
     )
 
 
+def _run_diagram_impl(run_id):
+    """Implementation for run_diagram that handles async operations."""
+    from asgiref.sync import async_to_sync
+
+    from zebra_agent_web.diagram import generate_workflow_svg
+
+    # Initialize and get data using async_to_sync
+    async def _get_data():
+        await agent_engine.ensure_initialized()
+        metrics = agent_engine.get_metrics()
+        library = agent_engine.get_library()
+
+        run = await metrics.get_run(run_id)
+        if run is None:
+            return None, None, None, "not_found"
+
+        if not run.workflow_name:
+            return None, None, None, "no_workflow"
+
+        try:
+            workflow_definition = library.get_workflow(run.workflow_name)
+        except ValueError:
+            return None, None, None, "workflow_not_found"
+
+        task_executions = await metrics.get_task_executions(run_id)
+        return run, workflow_definition, task_executions, None
+
+    run, workflow_definition, task_executions, error = async_to_sync(_get_data)()
+
+    if error:
+        return None, error
+
+    workflow_svg = generate_workflow_svg(workflow_definition, task_executions)
+    return {
+        "run_id": run_id,
+        "workflow_name": run.workflow_name,
+        "svg": workflow_svg,
+        "task_count": len(task_executions),
+        "completed": run.completed_at is not None,
+    }, None
+
+
+@api_view(["GET"])
+def run_diagram(request, run_id):
+    """Get the workflow diagram SVG for a run.
+
+    Returns the workflow visualization with current task execution states.
+    This endpoint is used for live updates during goal processing.
+    """
+    result, error = _run_diagram_impl(run_id)
+
+    if error == "not_found":
+        return Response(
+            {"error": f"Run '{run_id}' not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if error == "no_workflow":
+        return Response(
+            {"error": "Workflow not yet selected"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if error == "workflow_not_found":
+        return Response(
+            {"error": "Workflow not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    return Response(result)
+
+
 # =============================================================================
 # Execution monitoring endpoints (read-only + task completion)
 # =============================================================================

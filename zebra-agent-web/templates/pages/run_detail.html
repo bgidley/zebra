@@ -85,8 +85,8 @@
             <h2 class="text-lg font-semibold text-white">Execution Flow</h2>
             <p class="text-sm text-gray-400 mt-1">Click a task to view details</p>
         </div>
-        <div class="p-6 overflow-x-auto">
-            {{ workflow_svg|safe }}
+        <div class="p-6">
+            {% include "partials/workflow_diagram.html" with run_id=run.id workflow_name=run.workflow_name workflow_svg=workflow_svg show_header="false" auto_refresh="false" %}
         </div>
     </div>
     
@@ -269,28 +269,4 @@
     {% endif %}
 </div>
 
-<script>
-// Function to handle clicking on task nodes in the SVG diagram
-function selectTask(taskId) {
-    // Scroll to the task panel
-    const panel = document.getElementById('task-panel-' + taskId);
-    if (panel) {
-        panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        // Trigger Alpine.js to expand the panel and set it as selected
-        // We use a small delay to ensure scrolling happens first
-        setTimeout(() => {
-            const expandButton = panel.querySelector('[x-data]');
-            if (expandButton && expandButton._x_dataStack) {
-                expandButton._x_dataStack[0].expanded = true;
-            }
-            // Update selected task in parent scope
-            const container = document.querySelector('[x-data*="selectedTask"]');
-            if (container && container._x_dataStack) {
-                container._x_dataStack[0].selectedTask = taskId;
-            }
-        }, 100);
-    }
-}
-</script>
 {% endblock %}

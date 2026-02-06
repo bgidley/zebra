@@ -461,3 +461,28 @@ async def recent_runs(request):
     if request.headers.get("HX-Request"):
         return render(request, "partials/recent_runs_list.html", context)
     return render(request, "pages/recent_runs.html", context)
+
+
+async def in_progress_runs(request):
+    """List all currently in-progress runs."""
+    await agent_engine.ensure_initialized()
+    metrics = agent_engine.get_metrics()
+
+    runs = await metrics.get_in_progress_runs()
+
+    runs_data = [
+        {
+            "id": r.id,
+            "workflow_name": r.workflow_name,
+            "goal": r.goal[:80] + "..." if len(r.goal) > 80 else r.goal,
+            "started_at": r.started_at,
+            "tokens_used": r.tokens_used,
+        }
+        for r in runs
+    ]
+
+    context = {"runs": runs_data}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "partials/in_progress_runs_list.html", context)
+    return render(request, "pages/in_progress_runs.html", context)

@@ -31,6 +31,7 @@ urlpatterns = [
     ),
     # Runs
     path("runs/", web_views.recent_runs, name="recent_runs"),
+    path("runs/in-progress/", web_views.in_progress_runs, name="in_progress_runs"),
     path("runs/<str:run_id>/", web_views.run_detail, name="run_detail"),
     path("runs/<str:run_id>/rate/", web_views.run_rate, name="run_rate"),
 ]

@@ -1,0 +1,45 @@
+{% comment %}
+Shared Workflow Diagram Component
+
+Usage:
+  include "partials/workflow_diagram.html" with run_id=run.id workflow_name=run.workflow_name auto_refresh="true"
+  
+Parameters:
+  - run_id: The run ID to fetch diagram for
+  - workflow_name: The workflow name to display (optional, will be fetched if not provided)
+  - workflow_svg: Pre-rendered SVG content (optional, for static display)
+  - auto_refresh: Whether to auto-refresh the diagram (default: "false")
+  - refresh_interval: Refresh interval in ms (default: "2000")
+  - show_header: Whether to show the header with workflow name (default: "true")
+  
+Note: All boolean parameters should be passed as strings ("true"/"false")
+{% endcomment %}
+
+<div class="workflow-diagram-component" 
+     data-run-id="{{ run_id }}"
+     data-auto-refresh="{{ auto_refresh|default:'false' }}"
+     data-refresh-interval="{{ refresh_interval|default:'2000' }}">
+    
+    {% if show_header != "false" and show_header != False %}
+    <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-medium text-gray-300">Workflow Execution</h3>
+        <span class="workflow-name-badge text-xs px-2 py-1 bg-gray-700 rounded text-gray-300">
+            {{ workflow_name|default:"Loading..." }}
+        </span>
+    </div>
+    {% endif %}
+    
+    <div class="workflow-diagram-svg overflow-x-auto bg-gray-900 rounded-lg p-4">
+        {% if workflow_svg %}
+            {{ workflow_svg|safe }}
+        {% else %}
+            <div class="diagram-loading flex items-center justify-center py-8 text-gray-500">
+                <svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Loading diagram...</span>
+            </div>
+        {% endif %}
+    </div>
+</div>

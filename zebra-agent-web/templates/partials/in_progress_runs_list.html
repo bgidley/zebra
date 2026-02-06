@@ -1,0 +1,40 @@
+<div id="runs-list-content" class="divide-y divide-gray-700">
+    {% for run in runs %}
+    <a href="/runs/{{ run.id }}/" 
+       class="flex items-center justify-between px-6 py-4 hover:bg-gray-750 first:rounded-t-lg last:rounded-b-lg">
+        <div class="min-w-0 flex-1">
+            <p class="text-white font-medium truncate">{{ run.goal }}</p>
+            <div class="flex items-center gap-4 mt-1 text-sm text-gray-400">
+                {% if run.workflow_name %}
+                <span>{{ run.workflow_name }}</span>
+                {% else %}
+                <span class="text-yellow-400">Selecting workflow...</span>
+                {% endif %}
+                <span>{{ run.started_at|date:"M d, H:i" }}</span>
+                {% if run.tokens_used %}
+                <span>{{ run.tokens_used }} tokens</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="ml-4 flex items-center gap-3">
+            <!-- Running indicator -->
+            <span class="inline-flex items-center gap-2 px-2 py-1 text-xs font-medium rounded bg-blue-900 text-blue-300">
+                <svg class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                running
+            </span>
+        </div>
+    </a>
+    {% empty %}
+    <div class="px-6 py-12 text-center text-gray-500">
+        <svg class="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="mt-2 text-sm">No runs currently in progress</p>
+        <a href="/run/" class="mt-1 text-indigo-400 hover:text-indigo-300 text-xs">Start a new goal</a>
+    </div>
+    {% endfor %}
+</div>

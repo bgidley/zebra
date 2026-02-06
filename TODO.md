@@ -10,12 +10,8 @@ This document tracks unimplemented features and improvements based on the DESIGN
 ## High Priority
 
 ### .1 Tidying Up
-- [x] Make zebra-agent in memory only with interfaces for the real implementation (Completed 2026-02-05)
-- [x] Remove rust references (Completed 2026-02-05)
-- [ ] move zebra mcp server from zebra-py to zebra-agent-web 
 
 ### .5 Learning loops
-- [ ] Run page when error occurs just hangs
 - [ ] Need a page to show all in progress runs
 - [ ] on run goals page should load the workflow vizualization from history and show it progressing
 - [ ] LLM can define new workflows and saves them to disk so can survive db wipe

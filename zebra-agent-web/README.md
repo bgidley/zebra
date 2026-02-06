@@ -2,6 +2,15 @@
 
 Web UI for Zebra Agent - goal-driven workflow automation.
 
+## Features
+
+- **Run Goal** - Enter natural language goals and watch them execute
+- **In-Progress Runs** - Monitor currently executing goals with live workflow diagrams
+- **Run History** - View completed runs with execution details
+- **Workflow Library** - Browse and manage workflow definitions
+- **Live Workflow Visualization** - SVG diagrams show task progress in real-time
+- **WebSocket Updates** - Real-time progress updates during execution
+
 ## Installation
 
 ```bash
@@ -115,6 +124,17 @@ python zebra-agent-web/manage.py migrate
 | `ZEBRA_LLM_PROVIDER` | LLM provider | `anthropic` |
 | `ZEBRA_LLM_MODEL` | LLM model | (provider default) |
 
+## Web Pages
+
+| URL | Description |
+|-----|-------------|
+| `/` | Dashboard with quick actions and recent activity |
+| `/run/` | Enter a goal to execute |
+| `/runs/in-progress/` | View all currently running goals with live diagrams |
+| `/runs/` | Browse run history |
+| `/runs/<id>/` | View run details with workflow diagram |
+| `/workflows/` | Browse workflow library |
+
 ## Development
 
 ```bash
@@ -127,6 +147,24 @@ uv run ruff check zebra-agent-web/
 # Run with specific configuration
 uv run zebra-web-agent-dev
 ```
+
+## Architecture
+
+### Templates
+
+- **`templates/pages/`** - Full page templates extending `base.html`
+- **`templates/partials/`** - Reusable partial templates for HTMX updates
+- **`templates/components/`** - Small reusable UI components
+
+### Key Partials
+
+- **`workflow_diagram.html`** - Reusable workflow visualization component
+- **`goal_processing.html`** - Live goal execution progress UI
+- **`nav_item.html`** - Navigation sidebar items
+
+### Static Assets
+
+- **`static/js/workflow-diagram.js`** - Shared JavaScript for diagram auto-refresh
 
 ## License
 

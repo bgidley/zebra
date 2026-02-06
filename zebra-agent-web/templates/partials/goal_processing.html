@@ -11,6 +11,11 @@
         <span class="font-medium">Goal:</span> {{ goal }}
     </div>
     
+    <!-- Workflow Diagram Container (initially hidden) -->
+    <div id="workflow-diagram-container" class="hidden border-t border-gray-700 pt-4 mt-4">
+        {% include "partials/workflow_diagram.html" with run_id=run_id auto_refresh="true" refresh_interval="2000" %}
+    </div>
+    
     <!-- Progress log -->
     <div id="progress-log" class="space-y-2 text-sm font-mono text-gray-300 max-h-80 overflow-y-auto bg-gray-900 rounded-lg p-4">
         <div class="text-gray-500">Connecting to server...</div>
@@ -27,10 +32,13 @@
     const progressTitle = document.getElementById('progress-title');
     const progressSpinner = document.getElementById('progress-spinner');
     const progressContainer = document.getElementById('goal-progress');
+    const diagramContainer = document.getElementById('workflow-diagram-container');
     
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 3;
     let ws = null;
+    let workflowDiagram = null;
+    let currentWorkflowName = null;
     
     function addLog(message, className = '') {
         const div = document.createElement('div');
@@ -40,9 +48,30 @@
         progressLog.scrollTop = progressLog.scrollHeight;
     }
     
+    function showDiagram(workflowName) {
+        currentWorkflowName = workflowName;
+        diagramContainer.classList.remove('hidden');
+        
+        // Initialize the shared WorkflowDiagram component
+        const diagramElement = diagramContainer.querySelector('.workflow-diagram-component');
+        if (diagramElement && !workflowDiagram) {
+            workflowDiagram = new WorkflowDiagram(diagramElement);
+            workflowDiagram.start();
+        } else if (workflowDiagram) {
+            workflowDiagram.refresh();
+        }
+    }
+    
+    function stopDiagramRefresh() {
+        if (workflowDiagram) {
+            workflowDiagram.stop();
+        }
+    }
+    
     function showCompletion(success, data) {
-        // Stop spinner
+        // Stop spinner and diagram refresh
         progressSpinner.classList.remove('animate-spin');
+        stopDiagramRefresh();
         
         if (success) {
             progressSpinner.classList.remove('border-indigo-500');
@@ -132,16 +161,34 @@
                     if (data.reasoning) {
                         addLog(`  Reason: ${data.reasoning}`, 'text-gray-500 ml-4');
                     }
+                    // Show the workflow diagram
+                    showDiagram(data.workflow_name);
                     break;
                     
                 case 'workflow_starting':
                     addLog(`Starting workflow execution (${data.total_tasks} tasks)...`);
+                    // Refresh diagram to show initial state
+                    if (workflowDiagram) {
+                        workflowDiagram.refresh();
+                    }
+                    break;
+                    
+                case 'task_started':
+                    addLog(`Starting task: ${data.task_name}`, 'text-blue-400');
+                    // Refresh diagram to show task in progress
+                    if (workflowDiagram) {
+                        workflowDiagram.refresh();
+                    }
                     break;
                     
                 case 'task_completed':
                     addLog(`Task ${data.task_index}/${data.total_tasks}: ${data.task_name}`, 'text-green-400');
                     if (data.output_preview) {
                         addLog(`  ${data.output_preview.substring(0, 100)}...`, 'text-gray-500 ml-4 truncate');
+                    }
+                    // Refresh diagram to show completed task
+                    if (workflowDiagram) {
+                        workflowDiagram.refresh();
                     }
                     break;
                     
@@ -200,6 +247,10 @@
                     showCompletion(false, data);
                 } else if (data.status === 'processing') {
                     addLog('Still processing...', 'text-gray-400');
+                    // Try to show diagram if we have a workflow name
+                    if (data.workflow_name && !currentWorkflowName) {
+                        showDiagram(data.workflow_name);
+                    }
                     setTimeout(pollStatus, 3000);
                 } else {
                     addLog(`Status: ${data.status}`, 'text-gray-400');

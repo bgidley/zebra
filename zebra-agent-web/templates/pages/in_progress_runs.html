@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}In Progress Runs - Zebra Agent{% endblock %}
+{% block page_title %}In Progress Runs{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">In Progress Runs</h1>
+            <p class="text-gray-400 mt-1">Currently executing goals</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <a href="/runs/" 
+               class="inline-flex items-center gap-2 px-4 py-2 text-gray-400 hover:text-white transition-colors">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                View History
+            </a>
+            <a href="/run/" 
+               class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Run Goal
+            </a>
+        </div>
+    </div>
+    
+    <!-- In Progress Runs with Diagrams -->
+    <div id="runs-container" class="space-y-4">
+        {% for run in runs %}
+        <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+            <!-- Run Header -->
+            <div class="px-6 py-4 border-b border-gray-700">
+                <div class="flex items-center justify-between">
+                    <div class="min-w-0 flex-1">
+                        <p class="text-white font-medium truncate">{{ run.goal }}</p>
+                        <div class="flex items-center gap-4 mt-1 text-sm text-gray-400">
+                            {% if run.workflow_name %}
+                            <span>{{ run.workflow_name }}</span>
+                            {% else %}
+                            <span class="text-yellow-400">Selecting workflow...</span>
+                            {% endif %}
+                            <span>{{ run.started_at|date:"M d, H:i" }}</span>
+                        </div>
+                    </div>
+                    <div class="ml-4 flex items-center gap-3">
+                        <span class="inline-flex items-center gap-2 px-2 py-1 text-xs font-medium rounded bg-blue-900 text-blue-300">
+                            <svg class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            running
+                        </span>
+                        <a href="/runs/{{ run.id }}/" class="text-indigo-400 hover:text-indigo-300 text-sm">
+                            View Details
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Workflow Diagram (only if workflow is selected) -->
+            {% if run.workflow_name %}
+            <div class="p-4">
+                {% include "partials/workflow_diagram.html" with run_id=run.id workflow_name=run.workflow_name auto_refresh="true" refresh_interval="3000" show_header="false" %}
+            </div>
+            {% endif %}
+        </div>
+        {% empty %}
+        <div class="bg-gray-800 rounded-lg border border-gray-700 px-6 py-12 text-center text-gray-500">
+            <svg class="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p class="mt-2 text-sm">No runs currently in progress</p>
+            <a href="/run/" class="mt-1 text-indigo-400 hover:text-indigo-300 text-xs">Start a new goal</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+// Initialize all workflow diagrams on page load
+document.addEventListener('DOMContentLoaded', function() {
+    WorkflowDiagram.initAll();
+});
+
+// Re-initialize diagrams after HTMX swaps (if we add HTMX refresh later)
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    WorkflowDiagram.initAll();
+});
+</script>
+{% endblock %}

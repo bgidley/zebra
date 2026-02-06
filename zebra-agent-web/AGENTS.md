@@ -42,11 +42,13 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory) |
 | `zebra_agent_web/metrics_store.py` | DjangoMetricsStore (MetricsStore for metrics) |
 | `zebra_agent_web/api/models.py` | Django models for workflow data |
+| `zebra_agent_web/diagram.py` | Workflow SVG diagram generator |
 | `templates/` | Django templates |
 | `templates/pages/` | Full page templates |
 | `templates/partials/` | Partial templates (HTMX) |
 | `templates/components/` | Reusable components |
 | `static/` | Static assets (CSS, JS) |
+| `static/js/workflow-diagram.js` | Shared workflow diagram JavaScript |
 | `manage.py` | Django management script |
 
 ## Module-Specific Commands
@@ -182,6 +184,45 @@ def workflow_status_partial(request, workflow_id):
     return render(request, "partials/workflow_status.html", {"workflow": workflow})
 ```
 
+### Add Reusable Template Partial
+
+For shared components used across multiple pages:
+
+1. Create template in `templates/partials/`
+2. Use `{% include %}` with parameters
+
+**Example - Workflow Diagram Component:**
+
+```html
+<!-- templates/partials/workflow_diagram.html -->
+{% comment %}
+Parameters passed via include:
+  - run_id: The run ID to fetch diagram for
+  - workflow_name: Workflow name to display
+  - auto_refresh: "true" or "false" (string, not boolean)
+  - show_header: "true" or "false" (string, not boolean)
+{% endcomment %}
+
+<div class="workflow-diagram-component" 
+     data-run-id="{{ run_id }}"
+     data-auto-refresh="{{ auto_refresh|default:'false' }}">
+    <!-- diagram content -->
+</div>
+```
+
+**Usage:**
+
+```html
+<!-- In another template -->
+{% include "partials/workflow_diagram.html" with run_id=run.id auto_refresh="true" show_header="false" %}
+```
+
+**Important Template Rules:**
+
+1. **Use `{% comment %}` for documentation** - HTML comments (`<!-- -->`) do NOT prevent Django template tags from being parsed
+2. **Pass booleans as strings** - Use `show_header="false"` not `show_header=False` to avoid template resolution issues
+3. **Check for string values** - Use `{% if show_header != "false" %}` instead of `{% if show_header %}`
+
 ## Django Settings
 
 Key settings in `settings.py`:
@@ -192,6 +233,48 @@ Key settings in `settings.py`:
 | `DATABASES` | Database connection (via Django ORM) |
 | `CORS_ALLOWED_ORIGINS` | CORS configuration |
 | `REST_FRAMEWORK` | DRF settings |
+
+## Async Views and DRF
+
+### DRF API Views with Async
+
+Django REST Framework's `@api_view` decorator has issues with async views. If you need to call async functions from an API view, use a sync view with `async_to_sync`:
+
+```python
+from asgiref.sync import async_to_sync
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+def _get_data_impl(run_id):
+    """Sync helper that uses async_to_sync internally."""
+    async def _get_data():
+        await agent_engine.ensure_initialized()
+        metrics = agent_engine.get_metrics()
+        return await metrics.get_run(run_id)
+    
+    return async_to_sync(_get_data)()
+
+@api_view(["GET"])
+def my_api_view(request, run_id):
+    """Sync view that calls async functions via async_to_sync."""
+    data = _get_data_impl(run_id)
+    if data is None:
+        return Response({"error": "Not found"}, status=404)
+    return Response({"data": data})
+```
+
+**Do NOT use `async def` with `@api_view`** - it will return a coroutine instead of a Response.
+
+### Web Views (Non-DRF)
+
+Regular Django web views can be async:
+
+```python
+async def my_web_view(request):
+    await agent_engine.ensure_initialized()
+    data = await get_async_data()
+    return render(request, "pages/my_page.html", {"data": data})
+```
 
 ## Testing
 
@@ -223,6 +306,58 @@ uv run pytest zebra-agent-web/ -v
 # Run with Django settings
 DJANGO_SETTINGS_MODULE=zebra_agent_web.settings uv run pytest -v
 ```
+
+## Key Components
+
+### Workflow Diagram (`diagram.py`)
+
+Generates SVG workflow visualizations showing:
+- Task nodes with state coloring (pending, running, complete, failed)
+- Execution order badges
+- Parallel/serial flow edges
+- Clickable tasks that scroll to detail panels
+
+**Usage:**
+
+```python
+from zebra_agent_web.diagram import generate_workflow_svg
+
+svg = generate_workflow_svg(workflow_definition, task_executions)
+```
+
+### Workflow Diagram JavaScript (`static/js/workflow-diagram.js`)
+
+Shared client-side component for live diagram updates:
+
+```javascript
+// Initialize all diagrams on page
+WorkflowDiagram.initAll();
+
+// Or create manually
+const diagram = new WorkflowDiagram(element);
+diagram.start();  // Begin auto-refresh
+diagram.stop();   // Stop auto-refresh
+diagram.refresh(); // Manual refresh
+```
+
+### URL Routes
+
+| URL | View | Purpose |
+|-----|------|---------|
+| `/` | `dashboard` | Main dashboard |
+| `/run/` | `run_goal_form` | Goal input form |
+| `/run/execute/` | `run_goal_execute` | Start goal execution |
+| `/runs/` | `recent_runs` | Run history |
+| `/runs/in-progress/` | `in_progress_runs` | Currently running goals |
+| `/runs/<id>/` | `run_detail` | Run details with diagram |
+| `/workflows/` | `workflow_library` | Workflow library |
+| `/api/runs/<id>/diagram/` | `run_diagram` | Get workflow diagram SVG (API) |
+
+### WebSocket Routes
+
+| URL | Consumer | Purpose |
+|-----|----------|---------|
+| `/ws/goal/<run_id>/` | `GoalExecutionConsumer` | Real-time goal execution updates |
 
 ## Related Documentation
 

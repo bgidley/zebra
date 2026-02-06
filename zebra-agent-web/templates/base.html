@@ -29,6 +29,9 @@
     <!-- Alpine.js -->
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
+    <!-- Workflow Diagram JS -->
+    <script src="/static/js/workflow-diagram.js"></script>
+    
     <!-- Custom styles -->
     <style>
         [x-cloak] { display: none !important; }
@@ -74,6 +77,7 @@
                 <div class="space-y-1">
                     {% include "partials/nav_item.html" with url="/" icon="dashboard" label="Dashboard" %}
                     {% include "partials/nav_item.html" with url="/run/" icon="zap" label="Run Goal" %}
+                    {% include "partials/nav_item.html" with url="/runs/in-progress/" icon="spinner" label="In Progress" %}
                     {% include "partials/nav_item.html" with url="/workflows/" icon="library" label="Workflows" %}
                     {% include "partials/nav_item.html" with url="/runs/" icon="history" label="History" %}
                 </div>
