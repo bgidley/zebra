@@ -10,10 +10,12 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from typing import Any
 
 from asgiref.sync import sync_to_async
 from django.db import transaction
 from django.utils import timezone as django_timezone
+from zebra.core.exceptions import SerializationError
 from zebra.core.models import (
     FlowOfExecution,
     ProcessDefinition,
@@ -23,6 +25,27 @@ from zebra.core.models import (
     TaskState,
 )
 from zebra.storage.base import StateStore
+
+
+def _serialize_json(data: Any, context: str) -> str:
+    """Serialize data to JSON, raising SerializationError on failure.
+
+    Args:
+        data: The data to serialize.
+        context: Description for error messages (e.g., "process 'abc123' properties").
+
+    Raises:
+        SerializationError: If the data is not JSON-serializable.
+    """
+    try:
+        return json.dumps(data)
+    except (TypeError, ValueError) as e:
+        raise SerializationError(
+            f"Failed to serialize {context}: {e}. "
+            f"All property values must be JSON-serializable "
+            f"(strings, numbers, booleans, lists, dicts, and None)."
+        ) from e
+
 
 from .api.models import (
     FlowOfExecutionModel,
@@ -122,7 +145,9 @@ class DjangoStore(StateStore):
                 defaults={
                     "definition_id": process.definition_id,
                     "state": process.state.value,
-                    "properties": json.dumps(process.properties),
+                    "properties": _serialize_json(
+                        process.properties, f"process '{process.id}' properties"
+                    ),
                     "parent_process_id": process.parent_process_id,
                     "parent_task_id": process.parent_task_id,
                     "created_at": process.created_at,
@@ -219,7 +244,11 @@ class DjangoStore(StateStore):
 
         @sync_to_async
         def _save():
-            result_json = json.dumps(task.result) if task.result is not None else None
+            result_json = (
+                _serialize_json(task.result, f"task '{task.id}' result")
+                if task.result is not None
+                else None
+            )
 
             TaskInstanceModel.objects.update_or_create(
                 id=task.id,
@@ -228,7 +257,7 @@ class DjangoStore(StateStore):
                     "task_definition_id": task.task_definition_id,
                     "state": task.state.value,
                     "foe_id": task.foe_id,
-                    "properties": json.dumps(task.properties),
+                    "properties": _serialize_json(task.properties, f"task '{task.id}' properties"),
                     "result": result_json,
                     "error": task.error,
                     "execution_attempt": task.execution_attempt,

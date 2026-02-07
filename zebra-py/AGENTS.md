@@ -94,8 +94,10 @@ class MyAction(TaskAction):
         resolved = context.resolve_template("{{my_var}}")
         
         # Set process properties for downstream tasks
+        # Note: values must be JSON-serializable (str, int, float, bool, list, dict, None)
         context.set_process_property("output_key", result)
         
+        # TaskResult.output is stored into process properties, so must also be JSON-serializable
         return TaskResult.ok(output={"result": result})
 ```
 

@@ -9,6 +9,7 @@ from typing import Any
 
 import asyncpg
 
+from zebra.core.exceptions import SerializationError
 from zebra.core.models import (
     FlowOfExecution,
     ProcessDefinition,
@@ -18,6 +19,27 @@ from zebra.core.models import (
     TaskState,
 )
 from zebra.storage.base import StateStore
+
+
+def _serialize_json(data: Any, context: str) -> str:
+    """Serialize data to JSON, raising SerializationError on failure.
+
+    Args:
+        data: The data to serialize.
+        context: Description for error messages (e.g., "process 'abc123' properties").
+
+    Raises:
+        SerializationError: If the data is not JSON-serializable.
+    """
+    try:
+        return json.dumps(data)
+    except (TypeError, ValueError) as e:
+        raise SerializationError(
+            f"Failed to serialize {context}: {e}. "
+            f"All property values must be JSON-serializable "
+            f"(strings, numbers, booleans, lists, dicts, and None)."
+        ) from e
+
 
 # PostgreSQL schema for all workflow state tables
 SCHEMA_SQL = """
@@ -214,7 +236,7 @@ class PostgreSQLStore(StateStore):
             process.id,
             process.definition_id,
             process.state.value,
-            json.dumps(process.properties),
+            _serialize_json(process.properties, f"process '{process.id}' properties"),
             process.parent_process_id,
             process.parent_task_id,
             process.created_at,
@@ -317,8 +339,10 @@ class PostgreSQLStore(StateStore):
             task.task_definition_id,
             task.state.value,
             task.foe_id,
-            json.dumps(task.properties),
-            json.dumps(task.result) if task.result is not None else None,
+            _serialize_json(task.properties, f"task '{task.id}' properties"),
+            _serialize_json(task.result, f"task '{task.id}' result")
+            if task.result is not None
+            else None,
             task.error,
             task.created_at,
             task.updated_at,

@@ -4,11 +4,37 @@ This module defines the data structures used throughout the workflow engine,
 including both definition models (workflow blueprints) and runtime state models.
 """
 
+import json
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+def _validate_json_serializable(properties: dict[str, Any], context: str) -> None:
+    """Validate that a properties dict is JSON-serializable.
+
+    Properties are persisted to storage via json.dumps(), so all values must be
+    JSON-serializable (strings, numbers, booleans, lists, dicts, and None).
+
+    Args:
+        properties: The properties dict to validate.
+        context: A description of the model/field for error messages.
+
+    Raises:
+        ValueError: If any value in the dict is not JSON-serializable.
+    """
+    if not properties:
+        return
+    try:
+        json.dumps(properties)
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            f"Properties on {context} must be JSON-serializable "
+            f"(strings, numbers, booleans, lists, dicts, and None). "
+            f"Serialization failed: {e}"
+        ) from e
 
 
 def _utc_now() -> datetime:
@@ -84,10 +110,17 @@ class TaskDefinition(BaseModel):
         default=None, description="Action to run after task completion (cleanup)"
     )
     properties: dict[str, Any] = Field(
-        default_factory=dict, description="Task-specific configuration properties"
+        default_factory=dict,
+        description="Task-specific configuration properties. "
+        "Values must be JSON-serializable (strings, numbers, booleans, lists, dicts, null).",
     )
 
     model_config = {"frozen": True}
+
+    @model_validator(mode="after")
+    def _check_properties_serializable(self) -> "TaskDefinition":
+        _validate_json_serializable(self.properties, "TaskDefinition")
+        return self
 
 
 class RoutingDefinition(BaseModel):
@@ -137,10 +170,17 @@ class ProcessDefinition(BaseModel):
         default=None, description="Action to run when process completes"
     )
     properties: dict[str, Any] = Field(
-        default_factory=dict, description="Process-level configuration properties"
+        default_factory=dict,
+        description="Process-level configuration properties. "
+        "Values must be JSON-serializable (strings, numbers, booleans, lists, dicts, null).",
     )
 
     model_config = {"frozen": True}
+
+    @model_validator(mode="after")
+    def _check_properties_serializable(self) -> "ProcessDefinition":
+        _validate_json_serializable(self.properties, "ProcessDefinition")
+        return self
 
     def get_task(self, task_id: str) -> TaskDefinition:
         """Get a task definition by ID."""
@@ -193,7 +233,9 @@ class TaskInstance(BaseModel):
     state: TaskState = Field(default=TaskState.PENDING)
     foe_id: str = Field(..., description="Flow of Execution ID for parallel tracking")
     properties: dict[str, Any] = Field(
-        default_factory=dict, description="Runtime properties (can be modified during execution)"
+        default_factory=dict,
+        description="Runtime properties (can be modified during execution). "
+        "Values must be JSON-serializable (strings, numbers, booleans, lists, dicts, null).",
     )
     result: Any | None = Field(default=None, description="Output from task execution")
     error: str | None = Field(default=None, description="Error message if task failed")
@@ -205,6 +247,11 @@ class TaskInstance(BaseModel):
     completed_at: datetime | None = Field(default=None)
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def _check_properties_serializable(self) -> "TaskInstance":
+        _validate_json_serializable(self.properties, "TaskInstance")
+        return self
 
 
 class ProcessInstance(BaseModel):
@@ -218,7 +265,9 @@ class ProcessInstance(BaseModel):
     definition_id: str = Field(..., description="ID of the process definition")
     state: ProcessState = Field(default=ProcessState.CREATED)
     properties: dict[str, Any] = Field(
-        default_factory=dict, description="Runtime properties accessible to all tasks"
+        default_factory=dict,
+        description="Runtime properties accessible to all tasks. "
+        "Values must be JSON-serializable (strings, numbers, booleans, lists, dicts, null).",
     )
     parent_process_id: str | None = Field(
         default=None, description="Parent process ID for subflows"
@@ -231,6 +280,11 @@ class ProcessInstance(BaseModel):
     completed_at: datetime | None = Field(default=None)
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def _check_properties_serializable(self) -> "ProcessInstance":
+        _validate_json_serializable(self.properties, "ProcessInstance")
+        return self
 
 
 # =============================================================================
@@ -245,7 +299,12 @@ class TaskResult(BaseModel):
     """
 
     success: bool = Field(..., description="Whether the task completed successfully")
-    output: Any | None = Field(default=None, description="Output data from the task")
+    output: Any | None = Field(
+        default=None,
+        description="Output data from the task. Must be JSON-serializable (strings, numbers, "
+        "booleans, lists, dicts, null) as it is stored into process properties for "
+        "downstream tasks and persisted to storage.",
+    )
     error: str | None = Field(default=None, description="Error message if failed")
     next_route: str | None = Field(
         default=None,

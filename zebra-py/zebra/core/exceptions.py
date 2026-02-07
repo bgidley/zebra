@@ -83,3 +83,14 @@ class ActionNotFoundError(ActionError):
     """Raised when a referenced action is not registered."""
 
     pass
+
+
+class SerializationError(StateError):
+    """Raised when properties or data cannot be serialized for storage.
+
+    Properties on processes and tasks must be JSON-serializable (strings,
+    numbers, booleans, lists, dicts, and None). This error is raised when
+    a non-serializable value is detected during persistence.
+    """
+
+    pass

@@ -123,7 +123,7 @@ Tasks are the building blocks of workflows. Each task has:
 - **action**: Name of the TaskAction to execute
 - **auto**: If True, executes automatically; if False, waits for manual completion
 - **synchronized**: If True, waits for all incoming parallel branches
-- **properties**: Configuration passed to the action
+- **properties**: Configuration passed to the action (values must be JSON-serializable)
 
 ### Routings
 
@@ -211,7 +211,7 @@ tasks:
 | `action` | string | null | Action to execute (`prompt`, `shell`) |
 | `auto` | bool | true | If false, waits for manual completion |
 | `synchronized` | bool | false | Join point for parallel branches |
-| `properties` | object | {} | Configuration passed to the action |
+| `properties` | object | {} | Configuration passed to the action. **Values must be JSON-serializable** (strings, numbers, booleans, lists, dicts, null). |
 
 ### Routing Definition
 

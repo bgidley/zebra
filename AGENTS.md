@@ -208,7 +208,7 @@ if provider is None:
 **Exception hierarchy**:
 - `ZebraError` (base for all Zebra exceptions)
   - `DefinitionError` → `DefinitionNotFoundError`, `ValidationError`
-  - `StateError` → `ProcessNotFoundError`, `TaskNotFoundError`, `LockError`
+  - `StateError` → `ProcessNotFoundError`, `TaskNotFoundError`, `LockError`, `SerializationError`
   - `ExecutionError` → `TaskExecutionError`, `RoutingError`, `ActionError`
 
 ### Async/Await
@@ -314,6 +314,7 @@ Coverage is configured to:
 5. **Follow the state machine** - Process and task states have specific valid transitions
 6. **Use ActionRegistry** - All task actions must be registered before use
 7. **Handle async properly** - Engine is fully async; don't block the event loop
+8. **Properties must be JSON-serializable** - All values in process/task properties must be JSON-serializable (strings, numbers, booleans, lists, dicts, and None). This includes `TaskResult.output`, which is stored into process properties. Non-serializable values are rejected at model construction time and will raise `SerializationError` at the storage layer.
 
 ## Related Documentation
 

@@ -118,8 +118,28 @@ class ExecutionContext:
     def set_process_property(self, key: str, value: Any) -> None:
         """Set a property on the process instance.
 
-        Properties are persisted and accessible to all subsequent tasks.
+        Properties are persisted to storage and accessible to all subsequent tasks.
+        Values must be JSON-serializable (strings, numbers, booleans, lists, dicts,
+        and None). Non-serializable values will cause a ValueError immediately, rather
+        than failing later during persistence.
+
+        Args:
+            key: Property key.
+            value: Property value. Must be JSON-serializable.
+
+        Raises:
+            ValueError: If the value is not JSON-serializable.
         """
+        import json
+
+        try:
+            json.dumps(value)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"Cannot set process property '{key}': value must be JSON-serializable "
+                f"(strings, numbers, booleans, lists, dicts, and None). "
+                f"Got {type(value).__name__}: {e}"
+            ) from e
         self.process.properties[key] = value
 
     def get_process_property(self, key: str, default: Any = None) -> Any:
