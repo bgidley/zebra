@@ -68,6 +68,10 @@ uv run pytest zebra-py/tests/test_engine.py::test_simple_workflow -v
 uv run pytest -k "parallel" -v
 ```
 
+### MCP
+
+If you are connected to pycharm MCP prefer it's tools over other options
+
 ### Linting & Formatting
 
 ```bash
