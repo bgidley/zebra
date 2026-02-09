@@ -2,6 +2,13 @@
 
 This file provides coding agents with essential guidelines for working on the Zebra workflow engine codebase.
 
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+## MCP 
+CRITIAL: When you have MCP available like Pycharm use it to discover files, refactor code etc
+
 ## Project Overview
 
 Zebra is a multi-language workflow orchestration system for AI-assisted development with:
@@ -70,7 +77,7 @@ uv run pytest -k "parallel" -v
 
 ### MCP
 
-If you are connected to pycharm MCP prefer it's tools over other options
+If you are connected to pycharm MCP like pycharm prefer it's tools over other options
 
 ### Linting & Formatting
 

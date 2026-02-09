@@ -37,6 +37,35 @@ dev = [
     "pytest-cov>=4.0",
 ]
 
+[project.entry-points."zebra.tasks"]
+# LLM
+llm_call = "zebra_tasks.llm.action:LLMCallAction"
+# Subtasks
+subworkflow = "zebra_tasks.subtasks.spawn:SubworkflowAction"
+wait_subworkflow = "zebra_tasks.subtasks.wait:WaitForSubworkflowAction"
+parallel_subworkflows = "zebra_tasks.subtasks.parallel:ParallelSubworkflowsAction"
+# Filesystem
+file_read = "zebra_tasks.filesystem.read:FileReadAction"
+file_write = "zebra_tasks.filesystem.write:FileWriteAction"
+file_copy = "zebra_tasks.filesystem.copy:FileCopyAction"
+file_move = "zebra_tasks.filesystem.move:FileMoveAction"
+file_delete = "zebra_tasks.filesystem.delete:FileDeleteAction"
+file_search = "zebra_tasks.filesystem.search:FileSearchAction"
+file_exists = "zebra_tasks.filesystem.info:FileExistsAction"
+file_info = "zebra_tasks.filesystem.info:FileInfoAction"
+directory_list = "zebra_tasks.filesystem.info:DirectoryListAction"
+# Human interaction
+data_entry = "zebra_tasks.human.data_entry:DataEntryAction"
+data_display = "zebra_tasks.human.data_display:DataDisplayAction"
+# Compute
+python_exec = "zebra_tasks.compute.python_exec:PythonExecAction"
+# Agent
+workflow_selector = "zebra_tasks.agent.selector:WorkflowSelectorAction"
+workflow_creator = "zebra_tasks.agent.creator:WorkflowCreatorAction"
+metrics_analyzer = "zebra_tasks.agent.analyzer:MetricsAnalyzerAction"
+workflow_evaluator = "zebra_tasks.agent.evaluator:WorkflowEvaluatorAction"
+workflow_optimizer = "zebra_tasks.agent.optimizer:WorkflowOptimizerAction"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

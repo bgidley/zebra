@@ -309,6 +309,28 @@ DJANGO_SETTINGS_MODULE=zebra_agent_web.settings uv run pytest -v
 
 ## Key Components
 
+### Engine Initialization (`api/engine.py`)
+
+The engine uses `IoCActionRegistry` from `zebra-agent` for automatic task action
+discovery via entry points, replacing the previous ~40 lines of manual
+`register_action()` calls:
+
+```python
+from zebra_agent.ioc import ZebraContainer, IoCActionRegistry
+
+container = ZebraContainer()
+# Register services into container as needed...
+
+registry = IoCActionRegistry(container)
+registry.discover_and_register()  # auto-discovers all zebra-tasks entry points
+
+engine = WorkflowEngine(store, registry)
+```
+
+This means adding new task actions to `zebra-tasks` (with entry points in its
+`pyproject.toml`) automatically makes them available in the web UI without any
+code changes in `zebra-agent-web`.
+
 ### Workflow Diagram (`diagram.py`)
 
 Generates SVG workflow visualizations showing:

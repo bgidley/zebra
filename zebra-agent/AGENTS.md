@@ -26,6 +26,10 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/storage/interfaces.py` | Abstract storage interfaces (MemoryStore, MetricsStore) |
 | `zebra_agent/storage/memory.py` | InMemoryMemoryStore implementation |
 | `zebra_agent/storage/metrics.py` | InMemoryMetricsStore implementation |
+| `zebra_agent/ioc/` | IoC (Inversion of Control) module |
+| `zebra_agent/ioc/container.py` | `ZebraContainer` - dependency injection container |
+| `zebra_agent/ioc/registry.py` | `IoCActionRegistry` - action registry with constructor injection |
+| `zebra_agent/ioc/discovery.py` | Entry point discovery for task actions and conditions |
 | `workflows/` | Built-in workflow definitions |
 | `tests/` | Test suite |
 
@@ -95,6 +99,47 @@ The main agent loop follows this flow:
 - Orchestrates the goal → workflow → result flow
 - Handles LLM interactions for selection/creation
 - Manages user interaction and feedback
+
+### IoC (Inversion of Control) Module
+
+The `ioc/` module provides dependency injection and automatic task discovery, sitting on
+top of `zebra-py`'s `ActionRegistry` without modifying the core engine.
+
+**ZebraContainer** (`ioc/container.py`):
+- Wraps `dependency-injector`'s `DeclarativeContainer`
+- Registers services by name: `container.register_service("llm_provider", my_provider)`
+- Provides typed retrieval: `container.get_service("llm_provider")`
+- Includes built-in `config` and `store` providers
+
+**IoCActionRegistry** (`ioc/registry.py`):
+- Extends `ActionRegistry` with constructor injection
+- Overrides `get_action()` to inspect `__init__` signatures and resolve dependencies from the container
+- `discover_and_register()` loads built-in defaults + entry point discoveries
+- Priority order: pre-existing registrations > built-in defaults > entry points
+
+**Discovery** (`ioc/discovery.py`):
+- `discover_actions()` scans the `zebra.tasks` entry point group
+- `discover_conditions()` scans the `zebra.conditions` entry point group
+- Handles Python 3.11 vs 3.12+ `importlib.metadata` API differences
+
+**Usage:**
+
+```python
+from zebra_agent.ioc import ZebraContainer, IoCActionRegistry
+
+container = ZebraContainer()
+container.register_service("llm_provider", my_llm_provider)
+
+registry = IoCActionRegistry(container)
+registry.discover_and_register()  # loads defaults + entry points
+
+engine = WorkflowEngine(store, registry)
+```
+
+**Entry Points** (defined in `zebra-tasks/pyproject.toml`):
+
+All 21 task actions in `zebra-tasks` are registered as `zebra.tasks` entry points,
+enabling automatic discovery without manual `register_action()` calls.
 
 ## Common Tasks
 

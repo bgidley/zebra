@@ -4,6 +4,7 @@ This package provides:
 - AgentLoop: Main agent loop for processing goals
 - WorkflowLibrary: Workflow management and discovery
 - Storage interfaces and implementations for memory and metrics
+- IoC: Inversion of Control framework for task dependency injection
 
 Storage backends:
 - In-memory (default): Pure Python, no external dependencies
@@ -11,6 +12,7 @@ Storage backends:
 
 Example usage:
     from zebra_agent import AgentLoop, WorkflowLibrary
+    from zebra_agent.ioc import ZebraContainer, IoCActionRegistry
     from zebra_agent.storage import InMemoryMemoryStore, InMemoryMetricsStore
 
     # Create in-memory storage
@@ -18,6 +20,11 @@ Example usage:
     metrics = InMemoryMetricsStore()
     await memory.initialize()
     await metrics.initialize()
+
+    # Create IoC registry with auto-discovery
+    container = ZebraContainer()
+    registry = IoCActionRegistry(container)
+    registry.discover_and_register()
 
     # Create library and agent
     library = WorkflowLibrary(Path("~/.zebra/workflows"), metrics)
@@ -40,6 +47,9 @@ from zebra_agent.memory import (
 )
 from zebra_agent.metrics import MetricsStore, TaskExecution, WorkflowRun, WorkflowStats
 
+# IoC framework
+from zebra_agent.ioc import IoCActionRegistry, ZebraContainer
+
 # Storage interfaces and implementations
 from zebra_agent.storage import (
     InMemoryMemoryStore,
@@ -55,6 +65,9 @@ __all__ = [
     "AgentLoop",
     "WorkflowLibrary",
     "WorkflowInfo",
+    # IoC framework
+    "ZebraContainer",
+    "IoCActionRegistry",
     # Memory data classes
     "MemoryEntry",
     "ShortTermSummary",
