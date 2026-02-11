@@ -59,9 +59,38 @@ class WorkflowSelectorAction(TaskAction):
         available_workflows: List of WorkflowInfo dicts
         provider: LLM provider name (default: anthropic)
         model: LLM model name (optional)
+        output_key: Where to store selection result (default: "selection")
 
     Output:
         WorkflowSelection with workflow_name, create_new flag, and reasoning
+
+    Routes:
+        - "create_new" - If a new workflow should be created
+        - "use_existing" - If an existing workflow was selected
+
+    Example workflow usage:
+        ```yaml
+        tasks:
+          select_workflow:
+            name: "Select Workflow"
+            action: workflow_selector
+            auto: true
+            properties:
+              goal: "{{goal}}"
+              available_workflows: "{{available_workflows}}"
+              output_key: selection
+
+        routings:
+          - from: select_workflow
+            to: create_workflow
+            condition: route_name
+            name: "create_new"
+
+          - from: select_workflow
+            to: execute_workflow
+            condition: route_name
+            name: "use_existing"
+        ```
     """
 
     description = "Use LLM to select the best workflow for a given goal."
@@ -92,6 +121,13 @@ class WorkflowSelectorAction(TaskAction):
             type="string",
             description="LLM model name",
             required=False,
+        ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the selection result",
+            required=False,
+            default="selection",
         ),
     ]
 
@@ -208,13 +244,27 @@ Respond with JSON only:
                 selection.create_new = True
                 selection.workflow_name = None
 
-            return TaskResult.ok(
-                output={
-                    "workflow_name": selection.workflow_name,
-                    "create_new": selection.create_new,
-                    "reasoning": selection.reasoning,
-                    "suggested_name": selection.suggested_name,
-                }
+            # Determine next route for conditional routing
+            next_route = "create_new" if selection.create_new else "use_existing"
+
+            # Store workflow name in process properties for later use
+            if selection.workflow_name:
+                context.set_process_property("workflow_name", selection.workflow_name)
+
+            # Store selection in output_key
+            output_key = task.properties.get("output_key", "selection")
+            output_data = {
+                "workflow_name": selection.workflow_name,
+                "create_new": selection.create_new,
+                "reasoning": selection.reasoning,
+                "suggested_name": selection.suggested_name,
+            }
+            context.set_process_property(output_key, output_data)
+
+            return TaskResult(
+                success=True,
+                output=output_data,
+                next_route=next_route,
             )
 
         except json.JSONDecodeError as e:

@@ -61,6 +61,13 @@ class WorkflowCreatorAction(TaskAction):
             description="LLM model name",
             required=False,
         ),
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property key to store the creation result",
+            required=False,
+            default="created_workflow",
+        ),
     ]
 
     outputs = [
@@ -185,13 +192,29 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
             except Exception as e:
                 return TaskResult.fail(f"Generated invalid workflow YAML: {e}")
 
-            return TaskResult.ok(
-                output={
-                    "yaml": yaml_content,
-                    "name": definition.name,
-                    "definition_id": definition.id,
-                }
-            )
+            # Add workflow to library if available
+            library = context.process.properties.get("__workflow_library__")
+            if library is not None:
+                try:
+                    library.add_workflow(yaml_content)
+                except Exception as e:
+                    # Log but don't fail - workflow is still valid
+                    pass
+
+            # Store creation result and set workflow_name for downstream tasks
+            output_key = task.properties.get("output_key", "created_workflow")
+            output_data = {
+                "yaml": yaml_content,
+                "name": definition.name,
+                "definition_id": definition.id,
+            }
+            context.set_process_property(output_key, output_data)
+
+            # Set workflow_name for the execute step
+            context.set_process_property("workflow_name", definition.name)
+            context.set_process_property("created_new", True)
+
+            return TaskResult.ok(output=output_data)
 
         except Exception as e:
             return TaskResult.fail(f"Workflow creation failed: {e}")

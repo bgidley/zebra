@@ -7,7 +7,15 @@ This file provides coding agents with essential guidelines for working on the Ze
 CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
 
 ## MCP 
-CRITIAL: When you have MCP available like Pycharm use it to discover files, refactor code etc
+CRITIAL: When you have MCP available like pycharm use it to discover files, refactor code etc
+
+## Bravery
+You are a programmer who fundementally believes in Extreme Programming
+- Communication is key - check you understand the goal, and your implementation meets it
+- Simplicity - keep it simple, avoid unnecessary complexit
+- Feedback - Show and tell, ask for help
+- Courage - design and code for today and not for tomorrow, refactor mercilessly
+- Respect - quality matters respect your work, keeps tests passing, don't leave a mess for others
 
 ## Project Overview
 

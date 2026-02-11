@@ -1,6 +1,16 @@
-"""Main agent loop - select, execute, and learn from workflows."""
+"""Main agent loop - orchestrates workflow selection, execution, and learning.
 
-import json
+This module implements the agent loop as a Zebra workflow. The AgentLoop class
+is a thin wrapper that runs the "Agent Main Loop" workflow, which handles:
+1. Memory compaction check
+2. Workflow selection via LLM
+3. Workflow creation (if needed)
+4. Workflow execution
+5. Metrics recording
+6. Memory updates
+"""
+
+import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -9,18 +19,9 @@ from typing import Any
 
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState
-from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
 
 from zebra_agent.library import WorkflowLibrary
-from zebra_agent.memory import (
-    AgentMemory,
-    LongTermTheme,
-    MemoryEntry,
-    ShortTermSummary,
-    estimate_tokens,
-)
-from zebra_agent.metrics import MetricsStore, TaskExecution, WorkflowRun
+from zebra_agent.storage.interfaces import MemoryStore, MetricsStore
 
 # Type for progress callback: receives event name and data dict
 ProgressCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
@@ -40,88 +41,26 @@ class AgentResult:
     created_new_workflow: bool = False
 
 
-@dataclass
-class WorkflowSelection:
-    """Result of workflow selection."""
-
-    workflow_name: str | None
-    create_new: bool
-    reasoning: str
-    suggested_name: str | None = None
-
-
 class AgentLoop:
     """
     Main agent loop: select → run → evaluate → learn.
 
-    This class orchestrates the workflow selection and execution process.
+    This class orchestrates goal processing by running the "Agent Main Loop"
+    workflow, which declaratively handles all steps of the agent loop.
+
+    The workflow-based approach ensures:
+    - Each step is a composable subworkflow
+    - Steps can be individually tested and modified
+    - The loop logic is visible and editable as YAML
+    - Progress tracking is built into the workflow engine
     """
-
-    SELECTOR_SYSTEM_PROMPT = """You are a workflow selector. Given a user goal and available workflows,
-select the best match or recommend creating a new one.
-
-Consider:
-- How well the workflow description matches the goal
-- The workflow's success rate (higher is better)
-- Whether the goal requires capabilities the workflow provides
-
-Respond with JSON only:
-{
-    "workflow_name": "name of selected workflow" or null if creating new,
-    "create_new": true if no good match exists,
-    "reasoning": "brief explanation of your choice",
-    "suggested_name": "name for new workflow" (only if create_new is true)
-}"""
-
-    CREATOR_SYSTEM_PROMPT = """You are a workflow designer for the Zebra workflow engine.
-Create workflow definitions in YAML format.
-
-## Workflow Structure
-
-```yaml
-name: "Workflow Name"
-description: "What this workflow does"
-tags: ["tag1", "tag2"]
-version: 1
-first_task: task_id
-
-tasks:
-  task_id:
-    name: "Task Display Name"
-    action: llm_call
-    auto: true
-    properties:
-      system_prompt: "Instructions for the LLM"
-      prompt: "{{goal}}"
-      output_key: result_name
-
-routings:
-  - from: task1_id
-    to: task2_id
-```
-
-## Available Actions
-
-- **llm_call**: Call an LLM with a prompt
-  - Properties: system_prompt, prompt, output_key, temperature, max_tokens
-  - Use {{variable}} to reference process properties or previous outputs
-
-## Guidelines
-
-1. Use descriptive task IDs
-2. Always include description and tags
-3. Use {{goal}} to reference the user's input
-4. Use {{previous_output_key}} to chain task outputs
-5. Keep workflows focused
-
-Output ONLY valid YAML, no explanations."""
 
     def __init__(
         self,
         library: WorkflowLibrary,
         engine: WorkflowEngine,
         metrics: MetricsStore,
-        memory: AgentMemory | None = None,
+        memory: MemoryStore | None = None,
         provider: str = "anthropic",
         model: str | None = None,
     ):
@@ -129,10 +68,10 @@ Output ONLY valid YAML, no explanations."""
         Initialize the agent loop.
 
         Args:
-            library: Workflow library
-            engine: Zebra workflow engine
-            metrics: Metrics store
-            memory: Agent memory for context (optional)
+            library: Workflow library for loading/storing workflows
+            engine: Zebra workflow engine for execution
+            metrics: Metrics store for recording run history
+            memory: Agent memory store for context (optional)
             provider: LLM provider name
             model: LLM model name (optional)
         """
@@ -142,14 +81,6 @@ Output ONLY valid YAML, no explanations."""
         self.memory = memory
         self.provider_name = provider
         self.model = model
-        self._llm = None
-
-    @property
-    def llm(self):
-        """Lazily initialize LLM provider."""
-        if self._llm is None:
-            self._llm = get_provider(self.provider_name, self.model)
-        return self._llm
 
     async def process_goal(
         self,
@@ -158,12 +89,15 @@ Output ONLY valid YAML, no explanations."""
         run_id: str | None = None,
     ) -> AgentResult:
         """
-        Process a user goal through the agent loop.
+        Process a user goal through the agent loop workflow.
 
-        1. Check if memory needs compaction
-        2. Select or create workflow for goal
-        3. Execute workflow
-        4. Record result and update memory
+        Runs the "Agent Main Loop" workflow which handles:
+        1. Check if memory needs compaction (runs compaction subworkflows if needed)
+        2. Select best workflow for the goal using LLM
+        3. Create new workflow if no good match exists
+        4. Execute the selected/created workflow
+        5. Record metrics for the run
+        6. Update agent memory with the interaction
 
         Args:
             goal: The user's goal/request
@@ -172,545 +106,112 @@ Output ONLY valid YAML, no explanations."""
             run_id: Optional run ID to use (for tracking from external callers)
 
         Returns:
-            AgentResult with output, success status, etc.
+            AgentResult with output, success status, tokens used, etc.
+
+        Raises:
+            ValueError: If the "Agent Main Loop" workflow is not found
         """
+        run_id = run_id or str(uuid.uuid4())
 
         async def emit(event: str, data: dict[str, Any] | None = None) -> None:
             """Emit progress event if callback is provided."""
             if progress_callback:
                 await progress_callback(event, data or {})
 
-        # Check if memory needs compaction first
-        if self.memory:
-            if await self.memory.needs_short_term_compaction():
-                await self._compact_short_term_memory()
-            if await self.memory.needs_long_term_compaction():
-                await self._compact_long_term_memory()
+        # Load the main agent loop workflow
+        definition = self.library.get_workflow("Agent Main Loop")
 
-        # Create run record with provided or generated ID
-        run = WorkflowRun.create("pending", goal)
-        if run_id:
-            run.id = run_id
-        created_new = False
-
-        await emit("started", {"run_id": run.id, "goal": goal})
-
-        try:
-            # Step 1: Select workflow
-            workflows = await self.library.list_workflows()
-            await emit(
-                "selecting_workflow",
-                {"available_count": len(workflows)},
-            )
-
-            selection = await self._select_workflow(goal)
-
-            if selection.create_new:
-                # Step 1b: Create new workflow
-                await emit(
-                    "creating_workflow",
-                    {"suggested_name": selection.suggested_name},
-                )
-                workflow_name = await self._create_workflow(goal, selection.suggested_name)
-                created_new = True
-            else:
-                workflow_name = selection.workflow_name
-
-            await emit(
-                "workflow_selected",
-                {
-                    "workflow_name": workflow_name,
-                    "created_new": created_new,
-                    "reasoning": selection.reasoning,
-                },
-            )
-
-            run.workflow_name = workflow_name
-
-            # Step 2: Execute workflow with progress tracking and task execution capture
-            output, tokens, task_executions = await self._execute_workflow(
-                workflow_name, goal, progress_callback, run_id=run.id
-            )
-
-            # Step 3: Record success
-            run.completed_at = datetime.now()
-            run.success = True
-            run.tokens_used = tokens
-            run.output = output
-
-            await self.metrics.record_run(run)
-
-            # Step 3b: Record task executions
-            if task_executions:
-                await self.metrics.record_task_executions(task_executions)
-
-            # Step 4: Update memory
-            if self.memory:
-                await self._add_to_memory(run, output)
-
-            return AgentResult(
-                run_id=run.id,
-                workflow_name=workflow_name,
-                goal=goal,
-                output=output,
-                success=True,
-                tokens_used=tokens,
-                created_new_workflow=created_new,
-            )
-
-        except Exception as e:
-            # Record failure
-            run.completed_at = datetime.now()
-            run.success = False
-            run.error = str(e)
-
-            await self.metrics.record_run(run)
-
-            # Still add to memory on failure
-            if self.memory:
-                await self._add_to_memory(run, f"Error: {e}")
-
-            return AgentResult(
-                run_id=run.id,
-                workflow_name=run.workflow_name,
-                goal=goal,
-                output=None,
-                success=False,
-                error=str(e),
-                created_new_workflow=created_new,
-            )
-
-    async def _select_workflow(self, goal: str) -> WorkflowSelection:
-        """Use LLM to select the best workflow for the goal."""
+        # Prepare available workflows for the selector (exclude system workflows)
         workflows = await self.library.list_workflows()
+        available_workflows = [
+            {
+                "name": w.name,
+                "description": w.description,
+                "tags": w.tags,
+                "success_rate": w.success_rate,
+                "use_count": w.use_count,
+                "use_when": w.use_when,
+            }
+            for w in workflows
+            if not self._is_system_workflow(w.name)
+        ]
 
-        # Build prompt
-        prompt = f"Goal: {goal}\n\n"
+        # Prepare initial properties for the workflow
+        properties = {
+            "goal": goal,
+            "run_id": run_id,
+            "available_workflows": available_workflows,
+            "__llm_provider_name__": self.provider_name,
+            "__llm_model__": self.model,
+            "__started_at__": datetime.now(UTC).isoformat(),
+            # Pass stores for actions to use via IoC
+            "__memory_store__": self.memory,
+            "__metrics_store__": self.metrics,
+            "__workflow_library__": self.library,
+        }
 
-        if workflows:
-            prompt += "Available workflows:\n"
-            for w in workflows:
-                tags_str = ", ".join(w.tags) if w.tags else "none"
-                success = f"{w.success_rate:.0%}" if w.use_count > 0 else "N/A"
-                prompt += f"- {w.name}: {w.description} (success: {success}, tags: {tags_str})\n"
-                if w.use_when:
-                    prompt += f"  USE WHEN: {w.use_when}\n"
-        else:
-            prompt += "No workflows available yet. You must create a new one.\n"
+        await emit("started", {"run_id": run_id, "goal": goal})
 
-        response = await self.llm.complete(
-            messages=[
-                Message.system(self.SELECTOR_SYSTEM_PROMPT),
-                Message.user(prompt),
-            ],
-            temperature=0.3,
-            max_tokens=500,
-        )
-
-        # Parse response
-        content = response.content or ""
-
-        # Extract JSON from code blocks if present
-        if "```json" in content:
-            start = content.index("```json") + 7
-            end = content.index("```", start)
-            content = content[start:end].strip()
-        elif "```" in content:
-            start = content.index("```") + 3
-            end = content.index("```", start)
-            content = content[start:end].strip()
-
-        data = json.loads(content)
-
-        # Force create_new if no workflows available
-        if not workflows:
-            data["create_new"] = True
-            data["workflow_name"] = None
-
-        return WorkflowSelection(
-            workflow_name=data.get("workflow_name"),
-            create_new=data.get("create_new", False),
-            reasoning=data.get("reasoning", ""),
-            suggested_name=data.get("suggested_name"),
-        )
-
-    async def _create_workflow(self, goal: str, suggested_name: str | None) -> str:
-        """Use LLM to create a new workflow."""
-        workflows = await self.library.list_workflows()
-
-        prompt = f"Create a workflow for: {goal}\n"
-
-        if suggested_name:
-            prompt += f"\nSuggested name: {suggested_name}\n"
-
-        if workflows:
-            prompt += "\nExisting workflows for reference:\n"
-            for w in workflows[:3]:
-                prompt += f"- {w.name}: {w.description}\n"
-
-        response = await self.llm.complete(
-            messages=[
-                Message.system(self.CREATOR_SYSTEM_PROMPT),
-                Message.user(prompt),
-            ],
-            temperature=0.7,
-            max_tokens=2000,
-        )
-
-        yaml_content = response.content or ""
-
-        # Clean up - remove code blocks if present
-        if "```yaml" in yaml_content:
-            start = yaml_content.index("```yaml") + 7
-            end = yaml_content.index("```", start)
-            yaml_content = yaml_content[start:end].strip()
-        elif "```yml" in yaml_content:
-            start = yaml_content.index("```yml") + 6
-            end = yaml_content.index("```", start)
-            yaml_content = yaml_content[start:end].strip()
-        elif "```" in yaml_content:
-            start = yaml_content.index("```") + 3
-            end = yaml_content.index("```", start)
-            yaml_content = yaml_content[start:end].strip()
-
-        # Add to library (validates YAML)
-        return self.library.add_workflow(yaml_content)
-
-    async def _execute_workflow(
-        self,
-        workflow_name: str,
-        goal: str,
-        progress_callback: ProgressCallback | None = None,
-        run_id: str | None = None,
-    ) -> tuple[Any, int, list[TaskExecution]]:
-        """
-        Execute a workflow and return the output.
-
-        Args:
-            workflow_name: Name of workflow to execute
-            goal: The user's goal
-            progress_callback: Optional callback for progress updates
-            run_id: Optional run ID for tracking task executions
-
-        Returns:
-            Tuple of (output, tokens_used, task_executions)
-        """
-        import asyncio
-
-        async def emit(event: str, data: dict[str, Any] | None = None) -> None:
-            """Emit progress event if callback is provided."""
-            if progress_callback:
-                await progress_callback(event, data or {})
-
-        # Load workflow
-        definition = self.library.get_workflow(workflow_name)
-
-        # Count total tasks for progress tracking
-        total_tasks = len(definition.tasks)
-
-        await emit(
-            "workflow_starting",
-            {"workflow_name": workflow_name, "total_tasks": total_tasks},
-        )
-
-        # Create process with goal as property
-        process = await self.engine.create_process(
-            definition,
-            properties={
-                "goal": goal,
-                "__llm_provider_name__": self.provider_name,
-                "__llm_model__": self.model,
-            },
-        )
-
-        # Start and run to completion
+        # Create and run the main loop workflow
+        process = await self.engine.create_process(definition, properties=properties)
         await self.engine.start_process(process.id)
 
-        # Track task executions
-        task_executions: list[TaskExecution] = []
-        task_start_times: dict[str, datetime] = {}
-        execution_order = 0
-
-        # Wait for completion with progress polling
-        max_wait = 120  # 2 minutes max
-        waited = 0
-        last_task_count = 0
-        processed_tasks: set[str] = set()
+        # Wait for completion with progress tracking
+        max_wait = 300  # 5 minutes for the full loop
+        waited = 0.0
 
         while waited < max_wait:
             process = await self.engine.store.load_process(process.id)
 
-            # Check for task progress via properties
-            # The engine stores task outputs in properties like __task_output_<task_id>
-            current_task_outputs = [k for k in process.properties if k.startswith("__task_output_")]
-            current_task_count = len(current_task_outputs)
-
-            # Emit progress and record task executions for newly completed tasks
-            if current_task_count > last_task_count:
-                for key in current_task_outputs:
-                    task_id = key.replace("__task_output_", "")
-
-                    # Skip already processed tasks
-                    if task_id in processed_tasks:
-                        continue
-
-                    processed_tasks.add(task_id)
-                    execution_order += 1
-
-                    task_def = definition.tasks.get(task_id)
-                    task_name = task_def.name if task_def else task_id
-                    task_output = process.properties.get(key)
-
-                    # Get the output value (truncated for progress)
-                    output_preview = ""
-                    if isinstance(task_output, dict) and "response" in task_output:
-                        output_preview = str(task_output["response"])[:200]
-                    elif task_output:
-                        output_preview = str(task_output)[:200]
-
-                    await emit(
-                        "task_completed",
-                        {
-                            "task_id": task_id,
-                            "task_name": task_name,
-                            "task_index": execution_order,
-                            "total_tasks": total_tasks,
-                            "output_preview": output_preview,
-                        },
-                    )
-
-                    # Record task execution if we have a run_id
-                    if run_id:
-                        # Use tracked start time or estimate from now
-                        started_at = task_start_times.get(task_id, datetime.now(UTC))
-                        completed_at = datetime.now(UTC)
-
-                        task_exec = TaskExecution(
-                            id=str(uuid.uuid4()),
-                            run_id=run_id,
-                            task_definition_id=task_id,
-                            task_name=task_name,
-                            execution_order=execution_order,
-                            state="complete",
-                            started_at=started_at,
-                            completed_at=completed_at,
-                            output=task_output,
-                            error=None,
-                        )
-                        task_executions.append(task_exec)
-
-                last_task_count = current_task_count
-
             if process.state == ProcessState.COMPLETE:
                 break
             elif process.state == ProcessState.FAILED:
-                error_detail = getattr(process, "error", None) or "unknown error"
-
-                # Mark the last task as failed if we have any executions
-                if task_executions and run_id:
-                    task_executions[-1].state = "failed"
-                    task_executions[-1].error = str(error_detail)
-
-                raise RuntimeError(f"Workflow failed: {error_detail}")
+                error = process.properties.get("__error__", "Workflow failed")
+                return AgentResult(
+                    run_id=run_id,
+                    workflow_name=process.properties.get("workflow_name", "unknown"),
+                    goal=goal,
+                    output=None,
+                    success=False,
+                    error=str(error),
+                    created_new_workflow=process.properties.get("created_new", False),
+                )
 
             await asyncio.sleep(0.5)
             waited += 0.5
 
         if process.state != ProcessState.COMPLETE:
-            raise RuntimeError("Workflow timed out")
+            return AgentResult(
+                run_id=run_id,
+                workflow_name=process.properties.get("workflow_name", "unknown"),
+                goal=goal,
+                output=None,
+                success=False,
+                error="Agent loop timed out",
+            )
 
-        # Get output from process properties
-        # Try common output keys
-        output = None
-        for key in [
-            "answer",
-            "summary",
-            "ideas",
-            "refined_ideas",
-            "solutions",
-            "result",
-            "output",
-            "complete_guide",
-            "techniques",
-        ]:
-            if key in process.properties:
-                output = process.properties[key]
-                break
+        # Extract results from process properties
+        execution_result = process.properties.get("execution_result", {})
 
-        # Fall back to all properties if no standard key found
-        if output is None:
-            output = {k: v for k, v in process.properties.items() if not k.startswith("__")}
-
-        # Get token usage
-        tokens = process.properties.get("__total_tokens__", 0)
-
-        return output, tokens, task_executions
+        return AgentResult(
+            run_id=run_id,
+            workflow_name=process.properties.get("workflow_name", "unknown"),
+            goal=goal,
+            output=execution_result.get("output"),
+            success=execution_result.get("success", False),
+            tokens_used=execution_result.get("tokens_used", 0),
+            created_new_workflow=process.properties.get("created_new", False),
+        )
 
     async def record_rating(self, run_id: str, rating: int) -> None:
         """Record a user rating for a run."""
         await self.metrics.update_rating(run_id, rating)
 
-    async def _add_to_memory(self, run: WorkflowRun, output: Any) -> None:
-        """Add a workflow run to memory."""
-        if not self.memory:
-            return
-
-        # Create summary of output
-        if isinstance(output, str):
-            summary = output[:500] + "..." if len(output) > 500 else output
-        elif isinstance(output, dict):
-            summary = json.dumps(output, indent=2)[:500]
-        else:
-            summary = str(output)[:500]
-
-        entry = MemoryEntry(
-            id=run.id,
-            timestamp=run.started_at,
-            goal=run.goal,
-            workflow_used=run.workflow_name or "unknown",
-            result_summary=summary,
-            tokens=estimate_tokens(run.goal + summary),
-        )
-
-        await self.memory.add_entry(entry)
-
-    async def _compact_short_term_memory(self) -> None:
-        """
-        Compact short-term memory into a detailed summary.
-
-        Focuses on preserving specific details, facts, and outcomes.
-        """
-        if not self.memory:
-            return
-
-        import asyncio
-
-        # Get short-term content for compaction
-        memory_content = await self.memory.get_short_term_content_for_compaction()
-        if not memory_content:
-            return
-
-        # Count entries being compacted
-        entries = await self.memory.get_short_term_entries()
-        entry_count = len(entries)
-
-        # Load and run the short-term compact workflow
-        try:
-            definition = self.library.get_workflow("Memory Compact Short")
-        except ValueError:
-            # Workflow not available, skip compaction
-            return
-
-        process = await self.engine.create_process(
-            definition,
-            properties={
-                "memory_content": memory_content,
-                "__llm_provider_name__": self.provider_name,
-                "__llm_model__": self.model,
-            },
-        )
-
-        await self.engine.start_process(process.id)
-
-        # Wait for completion
-        max_wait = 60
-        waited = 0
-
-        while waited < max_wait:
-            process = await self.engine.store.load_process(process.id)
-
-            if process.state == ProcessState.COMPLETE:
-                break
-            elif process.state == ProcessState.FAILED:
-                return
-
-            await asyncio.sleep(0.5)
-            waited += 0.5
-
-        if process.state != ProcessState.COMPLETE:
-            return
-
-        # Get the summary and store it
-        summary_text = process.properties.get("short_term_summary")
-        if summary_text:
-            summary = ShortTermSummary(
-                id=str(uuid.uuid4()),
-                created_at=datetime.now(),
-                summary=summary_text,
-                tokens=estimate_tokens(summary_text),
-                entry_count=entry_count,
-            )
-            await self.memory.add_short_term_summary(summary)
-            await self.memory.clear_short_term_entries()
-
-    async def _compact_long_term_memory(self) -> None:
-        """
-        Compact long-term memory by extracting themes from short-term summaries.
-
-        Focuses on patterns, preferences, and high-level insights.
-        References short-term summaries for detail retrieval.
-        """
-        if not self.memory:
-            return
-
-        import asyncio
-
-        # Get long-term content for compaction
-        memory_content = await self.memory.get_long_term_content_for_compaction()
-        if not memory_content:
-            return
-
-        # Get IDs of summaries being processed
-        summaries = await self.memory.get_short_term_summaries()
-        summary_ids = [s.id for s in summaries]
-
-        # Load and run the long-term compact workflow
-        try:
-            definition = self.library.get_workflow("Memory Compact Long")
-        except ValueError:
-            # Workflow not available, skip compaction
-            return
-
-        process = await self.engine.create_process(
-            definition,
-            properties={
-                "memory_content": memory_content,
-                "__llm_provider_name__": self.provider_name,
-                "__llm_model__": self.model,
-            },
-        )
-
-        await self.engine.start_process(process.id)
-
-        # Wait for completion
-        max_wait = 90  # Longer timeout for theme extraction
-        waited = 0
-
-        while waited < max_wait:
-            process = await self.engine.store.load_process(process.id)
-
-            if process.state == ProcessState.COMPLETE:
-                break
-            elif process.state == ProcessState.FAILED:
-                return
-
-            await asyncio.sleep(0.5)
-            waited += 0.5
-
-        if process.state != ProcessState.COMPLETE:
-            return
-
-        # Get the themes and store them
-        theme_text = process.properties.get("long_term_themes")
-        if theme_text:
-            theme = LongTermTheme(
-                id=str(uuid.uuid4()),
-                created_at=datetime.now(),
-                theme=theme_text,
-                tokens=estimate_tokens(theme_text),
-                short_term_refs=summary_ids,  # Reference the summaries used
-            )
-            await self.memory.add_long_term_theme(theme)
-            # Keep referenced summaries but clear older ones if needed
-            # For now, keep all summaries that are referenced by themes
-            await self.memory.clear_short_term_summaries(keep_ids=summary_ids)
+    def _is_system_workflow(self, name: str) -> bool:
+        """Check if a workflow is a system/internal workflow."""
+        system_workflows = {
+            "Agent Main Loop",
+            "Memory Compact Short",
+            "Memory Compact Long",
+        }
+        return name in system_workflows

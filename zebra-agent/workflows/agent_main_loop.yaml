@@ -1,0 +1,139 @@
+name: "Agent Main Loop"
+description: "Main agent orchestration loop - select, execute, and learn from workflows"
+tags: ["agent", "internal", "system", "orchestration"]
+use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
+version: 1
+first_task: check_memory
+
+tasks:
+  # Step 1: Check if memory needs compaction
+  check_memory:
+    name: "Check Memory Status"
+    action: memory_check
+    auto: true
+    properties:
+      output_key: memory_status
+
+  # Step 2a: Compact short-term memory (if needed)
+  compact_short_term:
+    name: "Compact Short-Term Memory"
+    action: subworkflow
+    auto: true
+    properties:
+      workflow_file: "memory_compact_short.yaml"
+      wait: true
+      output_key: short_term_compact_result
+
+  # Step 2b: Compact long-term memory (if needed)
+  compact_long_term:
+    name: "Compact Long-Term Memory"
+    action: subworkflow
+    auto: true
+    properties:
+      workflow_file: "memory_compact_long.yaml"
+      wait: true
+      output_key: long_term_compact_result
+
+  # Step 3: Select best workflow for the goal
+  select_workflow:
+    name: "Select Workflow for Goal"
+    action: workflow_selector
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      available_workflows: "{{available_workflows}}"
+      output_key: selection
+
+  # Step 4: Create new workflow (if no match found)
+  create_workflow:
+    name: "Create New Workflow"
+    action: workflow_creator
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      suggested_name: "{{selection.suggested_name}}"
+      existing_workflows: "{{available_workflows}}"
+      output_key: created_workflow
+
+  # Step 5: Execute the selected/created workflow
+  execute_workflow:
+    name: "Execute Goal Workflow"
+    action: execute_goal_workflow
+    synchronized: true
+    auto: true
+    properties:
+      workflow_name: "{{workflow_name}}"
+      goal: "{{goal}}"
+      timeout: 120
+      output_key: execution_result
+
+  # Step 6: Record metrics for the run
+  record_metrics:
+    name: "Record Run Metrics"
+    action: record_metrics
+    auto: true
+    properties:
+      run_id: "{{run_id}}"
+      workflow_name: "{{workflow_name}}"
+      goal: "{{goal}}"
+      success: "{{execution_result.success}}"
+      output: "{{execution_result.output}}"
+      tokens_used: "{{execution_result.tokens_used}}"
+
+  # Step 7: Update agent memory
+  update_memory:
+    name: "Update Agent Memory"
+    action: update_memory
+    auto: true
+    properties:
+      run_id: "{{run_id}}"
+      goal: "{{goal}}"
+      workflow_name: "{{workflow_name}}"
+      result_summary: "{{execution_result.output}}"
+
+routings:
+  # Memory compaction routing based on check_memory next_route
+  - from: check_memory
+    to: compact_short_term
+    condition: route_name
+    name: "compact_short"
+
+  - from: check_memory
+    to: compact_long_term
+    condition: route_name
+    name: "compact_long"
+
+  - from: check_memory
+    to: select_workflow
+    condition: route_name
+    name: "continue"
+
+  # After short-term compaction, check if long-term also needed
+  - from: compact_short_term
+    to: select_workflow
+
+  # After long-term compaction, proceed to selection
+  - from: compact_long_term
+    to: select_workflow
+
+  # Workflow selection routing based on selector next_route
+  - from: select_workflow
+    to: create_workflow
+    condition: route_name
+    name: "create_new"
+
+  - from: select_workflow
+    to: execute_workflow
+    condition: route_name
+    name: "use_existing"
+
+  # After creation, execute the new workflow
+  - from: create_workflow
+    to: execute_workflow
+
+  # Post-execution flow
+  - from: execute_workflow
+    to: record_metrics
+
+  - from: record_metrics
+    to: update_memory

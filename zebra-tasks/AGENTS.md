@@ -27,6 +27,15 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/subtasks/subworkflow.py` | SubworkflowAction, ParallelSubworkflowsAction |
 | `zebra_tasks/compute/` | Computational utilities |
 | `zebra_tasks/agent/` | Agent-specific actions |
+| `zebra_tasks/agent/selector.py` | WorkflowSelectorAction - LLM workflow selection |
+| `zebra_tasks/agent/creator.py` | WorkflowCreatorAction - LLM workflow creation |
+| `zebra_tasks/agent/memory_check.py` | MemoryCheckAction - memory compaction check |
+| `zebra_tasks/agent/execute_workflow.py` | ExecuteGoalWorkflowAction - run workflow by name |
+| `zebra_tasks/agent/record_metrics.py` | RecordMetricsAction - record run to metrics |
+| `zebra_tasks/agent/update_memory.py` | UpdateMemoryAction - add memory entry |
+| `zebra_tasks/agent/analyzer.py` | MetricsAnalyzerAction - analyze workflow metrics |
+| `zebra_tasks/agent/evaluator.py` | WorkflowEvaluatorAction - LLM workflow evaluation |
+| `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization |
 | `tests/` | Test suite |
 
 ## Module-Specific Commands
@@ -173,6 +182,145 @@ Spawn multiple sub-workflows in parallel.
 | `timeout` | int | null | Timeout for all workflows |
 | `fail_fast` | bool | false | Stop all on first failure |
 | `output_key` | string | "parallel_results" | Where to store results dict |
+
+## Agent Actions Reference
+
+These actions power the `zebra-agent` workflow-based agent loop. They're in `zebra_tasks/agent/`.
+
+### MemoryCheckAction
+
+Check if agent memory needs compaction. Sets `next_route` for conditional workflow routing.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `output_key` | string | "memory_status" | Where to store check result |
+
+**Output:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `needs_short_term` | bool | True if short-term compaction needed |
+| `needs_long_term` | bool | True if long-term compaction needed |
+
+**Routes:** `"compact_short"`, `"compact_long"`, or `"continue"`
+
+**Store Access:** Reads `__memory_store__` from process properties.
+
+### WorkflowSelectorAction
+
+LLM-powered workflow selection from available workflows.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `goal` | string | - | User's goal to match |
+| `available_workflows` | list | - | List of workflow metadata dicts |
+| `output_key` | string | "selection" | Where to store selection result |
+
+**Output:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `workflow_name` | string | Selected workflow name (or null) |
+| `suggested_name` | string | Suggested name if creating new |
+| `confidence` | float | Selection confidence (0-1) |
+
+**Routes:** `"use_existing"` or `"create_new"`
+
+### WorkflowCreatorAction
+
+LLM-powered workflow creation when no match exists.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `goal` | string | - | User's goal |
+| `suggested_name` | string | null | Suggested workflow name |
+| `existing_workflows` | list | [] | Existing workflows for context |
+| `output_key` | string | "created_workflow" | Where to store result |
+
+**Output:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `workflow_name` | string | Created workflow name |
+| `created_new` | bool | Always true |
+
+**Side Effects:** Adds workflow to library via `__workflow_library__`.
+
+### ExecuteGoalWorkflowAction
+
+Execute a workflow by name and capture its output.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `workflow_name` | string | - | Name of workflow to execute |
+| `goal` | string | - | Goal to pass to workflow |
+| `timeout` | float | 120 | Max execution time in seconds |
+| `output_key` | string | "execution_result" | Where to store result |
+
+**Output:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | bool | Whether workflow completed successfully |
+| `output` | any | Workflow's output |
+| `tokens_used` | int | Total tokens used |
+| `error` | string | Error message if failed |
+
+**Store Access:** Reads `__workflow_library__` from process properties.
+
+### RecordMetricsAction
+
+Record workflow run to metrics store.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `run_id` | string | - | Unique run identifier |
+| `workflow_name` | string | - | Workflow that was executed |
+| `goal` | string | - | User's original goal |
+| `success` | bool | - | Whether run succeeded |
+| `output` | any | null | Workflow output |
+| `tokens_used` | int | 0 | Tokens used |
+| `error` | string | null | Error message if failed |
+| `started_at` | string | null | ISO timestamp when run started |
+
+**Output:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `recorded` | bool | Whether metrics were recorded |
+
+**Store Access:** Reads `__metrics_store__` from process properties. Gracefully degrades if not available.
+
+### UpdateMemoryAction
+
+Add memory entry for completed workflow run.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `run_id` | string | - | Unique run identifier |
+| `goal` | string | - | User's original goal |
+| `workflow_name` | string | - | Workflow that was used |
+| `result_summary` | any | null | Summary of result (truncated to 500 chars) |
+
+**Output:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `added` | bool | Whether memory entry was added |
+
+**Store Access:** Reads `__memory_store__` from process properties. Gracefully degrades if not available.
 
 ## Testing Task Actions
 
