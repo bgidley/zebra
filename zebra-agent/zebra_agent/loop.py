@@ -82,6 +82,12 @@ class AgentLoop:
         self.provider_name = provider
         self.model = model
 
+        # Inject stores into engine extras for task actions to use
+        # These are non-serializable objects that can't go in process properties
+        self.engine.extras["__memory_store__"] = memory
+        self.engine.extras["__metrics_store__"] = metrics
+        self.engine.extras["__workflow_library__"] = library
+
     async def process_goal(
         self,
         goal: str,
@@ -137,6 +143,8 @@ class AgentLoop:
         ]
 
         # Prepare initial properties for the workflow
+        # Note: Stores are passed via engine.extras (set in __init__) since they're
+        # not JSON-serializable and can't be stored in process properties.
         properties = {
             "goal": goal,
             "run_id": run_id,
@@ -144,10 +152,6 @@ class AgentLoop:
             "__llm_provider_name__": self.provider_name,
             "__llm_model__": self.model,
             "__started_at__": datetime.now(UTC).isoformat(),
-            # Pass stores for actions to use via IoC
-            "__memory_store__": self.memory,
-            "__metrics_store__": self.metrics,
-            "__workflow_library__": self.library,
         }
 
         await emit("started", {"run_id": run_id, "goal": goal})

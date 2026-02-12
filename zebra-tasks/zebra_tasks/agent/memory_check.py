@@ -98,10 +98,10 @@ class MemoryCheckAction(TaskAction):
         """Check memory compaction status."""
         output_key = task.properties.get("output_key", "memory_status")
 
-        # Get memory store - try IoC container if not injected
+        # Get memory store - try IoC container, then context.extras (engine-level injection)
         memory_store = self.memory_store
         if memory_store is None:
-            memory_store = context.process.properties.get("__memory_store__")
+            memory_store = context.extras.get("__memory_store__")
 
         if memory_store is None:
             # No memory store available - no compaction needed

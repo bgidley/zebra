@@ -131,27 +131,28 @@ These actions (in `zebra-tasks/zebra_tasks/agent/`) power the agent loop:
 
 ### IoC (Inversion of Control) for Stores
 
-Stores are passed to task actions via process properties (not constructor injection):
+Stores are passed to task actions via `engine.extras` (engine-level dependency injection), not process properties:
 
 ```python
-properties = {
-    "goal": goal,
-    "run_id": run_id,
-    "__memory_store__": self.memory,      # MemoryStore interface
-    "__metrics_store__": self.metrics,     # MetricsStore interface
-    "__workflow_library__": self.library,  # WorkflowLibrary instance
-}
+# In AgentLoop.__init__(), stores are injected into engine.extras
+self.engine.extras["__memory_store__"] = memory
+self.engine.extras["__metrics_store__"] = metrics
+self.engine.extras["__workflow_library__"] = library
 ```
 
-Actions retrieve stores from `context.process.properties`:
+This approach keeps non-serializable objects out of process properties (which must be JSON-serializable for persistence).
+
+Actions retrieve stores from `context.extras`:
 
 ```python
 async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-    memory_store = context.process.properties.get("__memory_store__")
+    memory_store = context.extras.get("__memory_store__")
     if memory_store is None:
         return TaskResult.ok(output={"added": False})  # Graceful degradation
     # Use store...
 ```
+
+**Note:** Previous versions used `context.process.properties` for store injection, but this violated the JSON-serialization requirement for process properties.
 
 ### Key Components
 
@@ -355,10 +356,10 @@ class MyAgentAction(TaskAction):
     """Custom agent loop action."""
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        # Get stores from process properties (IoC pattern)
-        memory_store = context.process.properties.get("__memory_store__")
-        metrics_store = context.process.properties.get("__metrics_store__")
-        library = context.process.properties.get("__workflow_library__")
+        # Get stores from context.extras (engine-level IoC pattern)
+        memory_store = context.extras.get("__memory_store__")
+        metrics_store = context.extras.get("__metrics_store__")
+        library = context.extras.get("__workflow_library__")
         
         # Graceful degradation if store not available
         if memory_store is None:

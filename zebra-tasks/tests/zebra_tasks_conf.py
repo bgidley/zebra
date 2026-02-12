@@ -27,11 +27,19 @@ class MockStore:
     async def get_process(self, process_id: str) -> ProcessInstance | None:
         return self.processes.get(process_id)
 
+    # Alias for StateStore interface compatibility
+    async def load_process(self, process_id: str) -> ProcessInstance | None:
+        return await self.get_process(process_id)
+
     async def save_process(self, process: ProcessInstance) -> None:
         self.processes[process.id] = process
 
     async def get_definition(self, definition_id: str) -> ProcessDefinition | None:
         return self.definitions.get(definition_id)
+
+    # Alias for StateStore interface compatibility
+    async def load_definition(self, definition_id: str) -> ProcessDefinition | None:
+        return await self.get_definition(definition_id)
 
     async def save_definition(self, definition: ProcessDefinition) -> None:
         self.definitions[definition.id] = definition
@@ -151,4 +159,5 @@ def mock_context(mock_engine, mock_store, mock_process, mock_task_definition):
             routings=[],
         ),
         task_definition=mock_task_definition,
+        extras={},  # For engine-level dependency injection
     )

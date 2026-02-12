@@ -188,7 +188,7 @@ class SubworkflowAction(TaskAction):
                     return load_definition_from_yaml(workflow)
                 else:
                     # Assume it's a definition ID, load from store
-                    return await context.store.get_definition(workflow)
+                    return await context.store.load_definition(workflow)
             elif isinstance(workflow, ProcessDefinition):
                 return workflow
 
@@ -196,6 +196,19 @@ class SubworkflowAction(TaskAction):
         workflow_file = task.properties.get("workflow_file")
         if workflow_file:
             resolved_path = context.resolve_template(workflow_file)
+
+            # Try to resolve via workflow library first (handles relative paths)
+            library = context.extras.get("__workflow_library__")
+            if library is not None:
+                # Check if the library has this workflow by filename
+                from pathlib import Path
+
+                workflow_path = library.library_path / resolved_path
+                if workflow_path.exists():
+                    with open(workflow_path) as f:
+                        return load_definition_from_yaml(f.read())
+
+            # Fall back to direct file path (absolute or cwd-relative)
             with open(resolved_path) as f:
                 return load_definition_from_yaml(f.read())
 
@@ -224,7 +237,7 @@ class SubworkflowAction(TaskAction):
                     }
 
             # Get process status
-            process = await context.store.get_process(process_id)
+            process = await context.store.load_process(process_id)
             if process is None:
                 return {
                     "success": False,

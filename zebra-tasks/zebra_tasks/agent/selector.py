@@ -182,6 +182,21 @@ Respond with JSON only:
 
         workflows = task.properties.get("available_workflows", [])
 
+        # Handle case where workflows is a string (from template resolution)
+        if isinstance(workflows, str):
+            import json
+
+            try:
+                workflows = json.loads(workflows)
+            except json.JSONDecodeError:
+                # Try ast.literal_eval for Python repr strings
+                import ast
+
+                try:
+                    workflows = ast.literal_eval(workflows)
+                except (ValueError, SyntaxError):
+                    workflows = []
+
         # Get LLM provider
         provider_name = task.properties.get("provider", "anthropic")
         model = task.properties.get("model")

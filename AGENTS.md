@@ -83,6 +83,21 @@ uv run pytest zebra-py/tests/test_engine.py::test_simple_workflow -v
 uv run pytest -k "parallel" -v
 ```
 
+### Test Environment Configuration
+
+The project uses `pytest-dotenv` to automatically load environment variables from `.env` files before tests run. This is configured in `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+env_files = [".env"]
+```
+
+This ensures Oracle credentials and API keys are available for integration tests. Do not add manual dotenv loading in conftest files - the plugin handles this automatically.
+
+**Required Environment Variables for Integration Tests:**
+- `ORACLE_DSN`, `ORACLE_USERNAME`, `ORACLE_PASSWORD` - Oracle database credentials
+- `ANTHROPIC_API_KEY` - For LLM integration tests
+
 ### MCP
 
 If you are connected to pycharm MCP like pycharm prefer it's tools over other options
@@ -334,6 +349,19 @@ Coverage is configured to:
 6. **Use ActionRegistry** - All task actions must be registered before use
 7. **Handle async properly** - Engine is fully async; don't block the event loop
 8. **Properties must be JSON-serializable** - All values in process/task properties must be JSON-serializable (strings, numbers, booleans, lists, dicts, and None). This includes `TaskResult.output`, which is stored into process properties. Non-serializable values are rejected at model construction time and will raise `SerializationError` at the storage layer.
+
+9. **Use `ExecutionContext.extras` for non-serializable dependencies** - Pass services like stores and libraries via `context.extras` (engine-level injection) rather than process properties. This is configured when creating the `WorkflowEngine`:
+
+```python
+engine = WorkflowEngine(store, registry, extras={
+    "__memory_store__": memory_store,
+    "__metrics_store__": metrics_store,
+    "__workflow_library__": library,
+})
+
+# In task actions, retrieve from context.extras:
+memory_store = context.extras.get("__memory_store__")
+```
 
 ## Related Documentation
 

@@ -90,10 +90,10 @@ class UpdateMemoryAction(TaskAction):
         # Import here to avoid circular imports
         from zebra_agent.memory import MemoryEntry
 
-        # Get memory store - try IoC container if not injected
+        # Get memory store - try IoC container, then context.extras (engine-level injection)
         memory_store = self.memory_store
         if memory_store is None:
-            memory_store = context.process.properties.get("__memory_store__")
+            memory_store = context.extras.get("__memory_store__")
 
         if memory_store is None:
             # No memory store available - skip but don't fail

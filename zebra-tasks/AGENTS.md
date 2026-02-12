@@ -206,7 +206,7 @@ Check if agent memory needs compaction. Sets `next_route` for conditional workfl
 
 **Routes:** `"compact_short"`, `"compact_long"`, or `"continue"`
 
-**Store Access:** Reads `__memory_store__` from process properties.
+**Store Access:** Reads `__memory_store__` from `context.extras` (engine-level dependency injection).
 
 ### WorkflowSelectorAction
 
@@ -250,7 +250,7 @@ LLM-powered workflow creation when no match exists.
 | `workflow_name` | string | Created workflow name |
 | `created_new` | bool | Always true |
 
-**Side Effects:** Adds workflow to library via `__workflow_library__`.
+**Side Effects:** Adds workflow to library via `__workflow_library__` from `context.extras`.
 
 ### ExecuteGoalWorkflowAction
 
@@ -274,7 +274,7 @@ Execute a workflow by name and capture its output.
 | `tokens_used` | int | Total tokens used |
 | `error` | string | Error message if failed |
 
-**Store Access:** Reads `__workflow_library__` from process properties.
+**Store Access:** Reads `__workflow_library__` from `context.extras` (engine-level dependency injection).
 
 ### RecordMetricsAction
 
@@ -299,7 +299,7 @@ Record workflow run to metrics store.
 |-------|------|-------------|
 | `recorded` | bool | Whether metrics were recorded |
 
-**Store Access:** Reads `__metrics_store__` from process properties. Gracefully degrades if not available.
+**Store Access:** Reads `__metrics_store__` from `context.extras` (engine-level dependency injection). Gracefully degrades if not available.
 
 ### UpdateMemoryAction
 
@@ -320,7 +320,7 @@ Add memory entry for completed workflow run.
 |-------|------|-------------|
 | `added` | bool | Whether memory entry was added |
 
-**Store Access:** Reads `__memory_store__` from process properties. Gracefully degrades if not available.
+**Store Access:** Reads `__memory_store__` from `context.extras` (engine-level dependency injection). Gracefully degrades if not available.
 
 ## Testing Task Actions
 

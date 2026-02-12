@@ -147,10 +147,10 @@ class ExecuteGoalWorkflowAction(TaskAction):
         if not goal:
             return TaskResult.fail("No goal provided")
 
-        # Get workflow library - try IoC container if not injected
+        # Get workflow library - try IoC container, then context.extras (engine-level injection)
         library = self.workflow_library
         if library is None:
-            library = context.process.properties.get("__workflow_library__")
+            library = context.extras.get("__workflow_library__")
 
         if library is None:
             return TaskResult.fail("No workflow library available")

@@ -115,6 +115,7 @@ def mock_engine():
     """Create a mock workflow engine."""
     engine = MagicMock()
     engine.store = MagicMock()
+    engine.extras = {}  # For engine-level dependency injection
     return engine
 
 
@@ -459,12 +460,12 @@ class TestProcessGoalWithRunId:
 
 
 class TestProcessGoalPassesStores:
-    """Tests that process_goal passes stores to workflow."""
+    """Tests that process_goal passes stores to workflow via engine.extras."""
 
-    async def test_process_goal_passes_stores_in_properties(
+    async def test_process_goal_passes_stores_in_engine_extras(
         self, library, mock_engine, metrics, memory, agent_main_loop_yaml
     ):
-        """Test that stores are passed in process properties."""
+        """Test that stores are passed in engine.extras (not process properties)."""
         (library.library_path / "agent_main_loop.yaml").write_text(agent_main_loop_yaml)
 
         captured_properties = {}
@@ -501,10 +502,17 @@ class TestProcessGoalPassesStores:
 
         await loop.process_goal("Test goal")
 
-        # Verify stores were passed
-        assert captured_properties.get("__memory_store__") is memory
-        assert captured_properties.get("__metrics_store__") is metrics
-        assert captured_properties.get("__workflow_library__") is library
+        # Verify stores are NOT in process properties (they're not JSON-serializable)
+        assert "__memory_store__" not in captured_properties
+        assert "__metrics_store__" not in captured_properties
+        assert "__workflow_library__" not in captured_properties
+
+        # Verify stores ARE in engine.extras
+        assert mock_engine.extras.get("__memory_store__") is memory
+        assert mock_engine.extras.get("__metrics_store__") is metrics
+        assert mock_engine.extras.get("__workflow_library__") is library
+
+        # Verify regular properties are still passed
         assert captured_properties.get("goal") == "Test goal"
         assert "__llm_provider_name__" in captured_properties
 

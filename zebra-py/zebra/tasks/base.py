@@ -6,7 +6,7 @@ IConditionAction interfaces.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel, Field
@@ -99,6 +99,16 @@ class ExecutionContext:
 
     Provides access to the workflow engine, storage, and related objects
     needed for task execution.
+
+    Attributes:
+        engine: The workflow engine instance.
+        store: The state store for persistence.
+        process: The current process instance.
+        process_definition: The process definition.
+        task_definition: The current task definition.
+        extras: Optional dict for passing arbitrary objects (like memory stores)
+            that don't need to be JSON-serializable. Use this for dependency
+            injection of services that tasks need but shouldn't be persisted.
     """
 
     engine: "WorkflowEngine"
@@ -106,6 +116,7 @@ class ExecutionContext:
     process: ProcessInstance
     process_definition: ProcessDefinition
     task_definition: TaskDefinition
+    extras: dict[str, Any] = field(default_factory=dict)
 
     def get_task_output(self, task_id: str) -> Any | None:
         """Get the output from a previously completed task.

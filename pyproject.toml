@@ -21,6 +21,7 @@ dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "pytest-cov>=4.0",
+    "pytest-dotenv>=0.5.2",
     "ruff>=0.1",
 ]
 
@@ -29,6 +30,7 @@ asyncio_mode = "auto"
 testpaths = ["zebra-py/tests", "zebra-tasks/tests", "zebra-agent/tests", "zebra-agent-web/tests"]
 pythonpath = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-agent-web"]
 addopts = "--import-mode=importlib"
+env_files = [".env"]
 
 [tool.coverage.run]
 source = ["zebra", "zebra_tasks", "zebra_agent", "zebra_agent_web"]

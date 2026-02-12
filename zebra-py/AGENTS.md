@@ -101,6 +101,46 @@ class MyAction(TaskAction):
         return TaskResult.ok(output={"result": result})
 ```
 
+### ExecutionContext and Dependency Injection
+
+The `ExecutionContext` passed to task actions provides access to the workflow engine, storage, and process state. It also includes an `extras` dict for passing non-serializable dependencies (like service instances) that shouldn't be persisted in process properties:
+
+```python
+async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+    # Access engine and store
+    engine = context.engine
+    store = context.store
+    
+    # Access process properties (JSON-serializable only)
+    value = context.get_process_property("my_key")
+    
+    # Access extras (non-serializable dependencies)
+    # These are set when creating the WorkflowEngine:
+    # engine = WorkflowEngine(store, registry, extras={"service": my_service})
+    service = context.extras.get("service")
+    
+    # Resolve template variables
+    resolved = context.resolve_template("{{task_id.output}}")
+```
+
+**Configuring Engine Extras:**
+
+```python
+from zebra.core.engine import WorkflowEngine
+
+# Create engine with extras for dependency injection
+engine = WorkflowEngine(
+    store=store,
+    action_registry=registry,
+    extras={
+        "llm_provider": provider,
+        "custom_service": service,
+    }
+)
+
+# All task actions will receive these extras in their ExecutionContext
+```
+
 ### Add a New Test
 
 1. Create test file in `tests/` directory

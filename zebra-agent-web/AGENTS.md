@@ -278,6 +278,21 @@ async def my_web_view(request):
 
 ## Testing
 
+### Test Environment Setup
+
+Integration tests require a real Oracle database connection. Environment variables are automatically loaded from `.env` via `pytest-dotenv` (configured in root `pyproject.toml`):
+
+```toml
+[tool.pytest.ini_options]
+env_files = [".env"]
+```
+
+**Required `.env` variables:**
+- `ORACLE_DSN` - Oracle connection string (using TLS/TCPS protocol)
+- `ORACLE_USERNAME` - Database username
+- `ORACLE_PASSWORD` - Database password
+- `ANTHROPIC_API_KEY` - For LLM integration tests
+
 ### Test Structure
 
 ```python
@@ -300,12 +315,29 @@ def api_client():
 ### Running Tests
 
 ```bash
-# Run all tests
+# Run all tests (excludes Oracle integration tests by default)
 uv run pytest zebra-agent-web/ -v
+
+# Run specific test file
+uv run pytest zebra-agent-web/tests/test_diagram.py -v
+
+# Run Oracle integration tests (requires real database)
+uv run pytest zebra-agent-web/tests/test_agent_loop_integration.py -v
 
 # Run with Django settings
 DJANGO_SETTINGS_MODULE=zebra_agent_web.settings uv run pytest -v
 ```
+
+### Integration Tests
+
+The `test_agent_loop_integration.py` tests run the complete agent workflow against a real Oracle database and make actual LLM API calls. These tests:
+
+- Verify end-to-end workflow from goal to completion
+- Test real metrics persistence in Oracle
+- Test real memory storage in Oracle
+- Make actual Anthropic API calls
+
+**Note:** These tests do NOT clean up after themselves - records persist in Oracle for inspection.
 
 ## Key Components
 

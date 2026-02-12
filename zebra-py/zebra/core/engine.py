@@ -66,6 +66,7 @@ class WorkflowEngine:
         store: StateStore,
         action_registry: ActionRegistry,
         engine_id: str | None = None,
+        extras: dict | None = None,
     ) -> None:
         """Initialize the workflow engine.
 
@@ -73,10 +74,15 @@ class WorkflowEngine:
             store: Storage backend for persistence
             action_registry: Registry of task actions and conditions
             engine_id: Optional unique ID for this engine instance (for locking)
+            extras: Optional dict of extra objects to pass to ExecutionContext.
+                Use this for dependency injection of services (like memory stores)
+                that task actions need but that shouldn't be persisted in process
+                properties.
         """
         self.store = store
         self.actions = action_registry
         self.engine_id = engine_id or str(uuid.uuid4())
+        self.extras = extras or {}
         self._task_sync = TaskSync()
 
     # =========================================================================
@@ -421,6 +427,7 @@ class WorkflowEngine:
             process=process,
             process_definition=definition,
             task_definition=task_def,
+            extras=self.extras,
         )
 
         result: TaskResult
@@ -484,6 +491,7 @@ class WorkflowEngine:
             process=process,
             process_definition=definition,
             task_definition=task_def,
+            extras=self.extras,
         )
 
         done_serial_routing = False
@@ -642,6 +650,7 @@ class WorkflowEngine:
                 task_definition=TaskDefinition(
                     id="__process_construct__", name="Process Construct"
                 ),
+                extras=self.extras,
             )
             await action.run(task, context)
         except Exception as e:
@@ -672,6 +681,7 @@ class WorkflowEngine:
                 process=process,
                 process_definition=definition,
                 task_definition=TaskDefinition(id="__process_destruct__", name="Process Destruct"),
+                extras=self.extras,
             )
             await action.run(task, context)
         except Exception as e:
@@ -804,6 +814,7 @@ class WorkflowEngine:
                         process=process,
                         process_definition=definition,
                         task_definition=task_def,
+                        extras=self.extras,
                     )
                     action = action_class()
                     return await action.is_idempotent(task, context)

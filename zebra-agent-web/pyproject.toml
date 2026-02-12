@@ -41,6 +41,11 @@ packages = ["zebra_agent_web"]
 DJANGO_SETTINGS_MODULE = "zebra_agent_web.settings"
 python_files = ["test_*.py"]
 
+[dependency-groups]
+dev = [
+    "pytest-django>=4.11.1",
+]
+
 [project.scripts]
 zebra-web-agent = "zebra_agent_web.cli:serve"
 zebra-web-agent-public = "zebra_agent_web.cli:serve_public"

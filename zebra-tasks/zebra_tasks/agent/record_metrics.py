@@ -122,10 +122,10 @@ class RecordMetricsAction(TaskAction):
         # Import here to avoid circular imports
         from zebra_agent.metrics import WorkflowRun
 
-        # Get metrics store - try IoC container if not injected
+        # Get metrics store - try IoC container, then context.extras (engine-level injection)
         metrics_store = self.metrics_store
         if metrics_store is None:
-            metrics_store = context.process.properties.get("__metrics_store__")
+            metrics_store = context.extras.get("__metrics_store__")
 
         if metrics_store is None:
             # No metrics store available - skip recording but don't fail

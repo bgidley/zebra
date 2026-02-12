@@ -192,8 +192,8 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
             except Exception as e:
                 return TaskResult.fail(f"Generated invalid workflow YAML: {e}")
 
-            # Add workflow to library if available
-            library = context.process.properties.get("__workflow_library__")
+            # Add workflow to library if available (via context.extras - engine-level injection)
+            library = context.extras.get("__workflow_library__")
             if library is not None:
                 try:
                     library.add_workflow(yaml_content)
