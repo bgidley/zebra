@@ -394,6 +394,36 @@ diagram.stop();   // Stop auto-refresh
 diagram.refresh(); // Manual refresh
 ```
 
+### Human Task Completion API
+
+The `POST /api/tasks/<task_id>/complete/` endpoint allows external callers to complete human (manual) tasks. This supports the convention-based `auto: false` pattern where task definition properties serve as the form schema.
+
+**Request:**
+
+```json
+POST /api/tasks/<task_id>/complete/
+{
+    "output": "user response",
+    "route": "yes"
+}
+```
+
+- `output` - The user's response (string, dict, or any JSON-serializable value)
+- `route` (optional) - Route name for conditional routing after completion
+
+**Response:**
+
+```json
+{
+    "completed": true,
+    "task_id": "<task_id>",
+    "result": {"output": "user response"},
+    "new_tasks": [{"id": "...", "task_definition_id": "...", "state": "..."}]
+}
+```
+
+**Workflow:** External callers first use `GET /api/processes/<id>/tasks/` to find pending tasks, read task definition properties for the form schema, render UI accordingly, then POST to this endpoint with the user's response.
+
 ### URL Routes
 
 | URL | View | Purpose |
@@ -406,6 +436,7 @@ diagram.refresh(); // Manual refresh
 | `/runs/<id>/` | `run_detail` | Run details with diagram |
 | `/workflows/` | `workflow_library` | Workflow library |
 | `/api/runs/<id>/diagram/` | `run_diagram` | Get workflow diagram SVG (API) |
+| `/api/tasks/<id>/complete/` | `task_complete` | Complete a human/manual task (API) |
 
 ### WebSocket Routes
 

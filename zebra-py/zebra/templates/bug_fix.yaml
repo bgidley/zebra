@@ -1,5 +1,11 @@
 # Bug Fix Workflow
-# A workflow template for fixing bugs systematically
+# A workflow template for fixing bugs systematically.
+#
+# Human tasks use the convention-based auto:false pattern:
+# - Task stays in READY state until complete_task() is called externally
+# - Task properties define the form schema (type, prompt, fields, etc.)
+# - External callers read task.properties to render the UI, then call
+#   engine.complete_task(task_id, result) to resume the workflow.
 
 name: "Bug Fix"
 version: 1
@@ -8,9 +14,9 @@ first_task: describe_bug
 tasks:
   describe_bug:
     name: "Describe Bug"
-    action: prompt
     auto: false
     properties:
+      type: "text_input"
       prompt: |
         Please describe the bug:
         - What is the expected behavior?
@@ -19,9 +25,9 @@ tasks:
 
   investigate:
     name: "Investigate Root Cause"
-    action: prompt
     auto: false
     properties:
+      type: "text_input"
       prompt: |
         Bug description: {{describe_bug.output}}
 
@@ -29,9 +35,9 @@ tasks:
 
   create_test:
     name: "Create Failing Test"
-    action: prompt
     auto: false
     properties:
+      type: "text_input"
       prompt: |
         Based on the investigation: {{investigate.output}}
 
@@ -39,9 +45,9 @@ tasks:
 
   implement_fix:
     name: "Implement Fix"
-    action: prompt
     auto: false
     properties:
+      type: "text_input"
       prompt: |
         Test case: {{create_test.output}}
 
@@ -55,9 +61,9 @@ tasks:
 
   verify_fix:
     name: "Verify Fix"
-    action: prompt
     auto: false
     properties:
+      type: "text_input"
       prompt: |
         Test results: {{run_tests.output}}
 

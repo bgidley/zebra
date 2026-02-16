@@ -3,7 +3,6 @@
 This package provides commonly needed task actions including:
 - Subtask execution (spawning sub-workflows)
 - LLM calling (provider-agnostic LLM integration)
-- Human interaction (data entry and display)
 - Filesystem operations (read, write, copy, move, delete, search)
 """
 
@@ -18,7 +17,6 @@ from zebra_tasks.filesystem import (
     FileSearchAction,
     FileWriteAction,
 )
-from zebra_tasks.human import DataDisplayAction, DataEntryAction
 from zebra_tasks.llm import LLMCallAction, LLMProvider
 from zebra_tasks.subtasks import (
     ParallelSubworkflowsAction,
@@ -36,9 +34,6 @@ __all__ = [
     # LLM actions
     "LLMCallAction",
     "LLMProvider",
-    # Human interaction actions
-    "DataEntryAction",
-    "DataDisplayAction",
     # Filesystem actions
     "FileReadAction",
     "FileWriteAction",

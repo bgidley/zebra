@@ -363,6 +363,31 @@ engine = WorkflowEngine(store, registry, extras={
 memory_store = context.extras.get("__memory_store__")
 ```
 
+## Human Tasks (Convention-Based Pattern)
+
+Human/manual tasks use a convention-based `auto: false` pattern. No special action class is needed - the task definition properties serve as the form schema for external callers:
+
+```yaml
+my_task:
+  name: "Get User Input"
+  auto: false
+  properties:
+    type: "text_input"        # UI hint for rendering
+    prompt: "Enter your name"
+    required: true
+```
+
+**Lifecycle:**
+
+1. Engine creates task in READY state (no action runs)
+2. `engine.get_pending_tasks(process_id)` returns tasks in READY state
+3. External caller reads task definition properties to render UI
+4. `engine.complete_task(task_id, TaskResult.ok(output=user_data))` resumes the workflow
+5. Output stored as `__task_output_{task_definition_id}` in process properties
+6. Downstream tasks reference via template: `{{task_def_id.output}}`
+
+See `zebra-py/zebra/templates/feature_implementation.yaml` and `bug_fix.yaml` for examples.
+
 ## Related Documentation
 
 - **[DESIGN.md](DESIGN.md)** - Original Java architecture and design patterns

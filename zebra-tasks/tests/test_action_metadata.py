@@ -9,8 +9,6 @@ from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.subtasks.spawn import SubworkflowAction
 from zebra_tasks.subtasks.wait import WaitForSubworkflowAction
 from zebra_tasks.subtasks.parallel import ParallelSubworkflowsAction
-from zebra_tasks.human.data_entry import DataEntryAction
-from zebra_tasks.human.data_display import DataDisplayAction
 from zebra_tasks.filesystem.read import FileReadAction
 from zebra_tasks.filesystem.write import FileWriteAction
 from zebra_tasks.filesystem.copy import FileCopyAction
@@ -34,9 +32,6 @@ ALL_ACTIONS = [
     SubworkflowAction,
     WaitForSubworkflowAction,
     ParallelSubworkflowsAction,
-    # Human
-    DataEntryAction,
-    DataDisplayAction,
     # Filesystem
     FileReadAction,
     FileWriteAction,
@@ -207,21 +202,6 @@ class TestSpecificActionMetadata:
         # Check key outputs
         output_names = [p.name for p in meta.outputs]
         assert "process_id" in output_names
-
-    def test_data_entry_action_metadata(self):
-        """Test DataEntryAction has expected metadata."""
-        meta = DataEntryAction.get_metadata()
-
-        # Check description
-        assert "human" in meta.description.lower() or "data entry" in meta.description.lower()
-
-        # Check key inputs
-        input_names = [p.name for p in meta.inputs]
-        assert "fields" in input_names
-
-        # Fields should be required
-        fields_param = next(p for p in meta.inputs if p.name == "fields")
-        assert fields_param.required is True
 
     def test_python_exec_action_metadata(self):
         """Test PythonExecAction has expected metadata."""

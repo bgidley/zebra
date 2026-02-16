@@ -161,7 +161,13 @@ class WorkflowSelectorAction(TaskAction):
     SYSTEM_PROMPT = """You are a workflow selector. Given a user goal and available workflows,
 select the best match or recommend creating a new one.
 
+CRITICAL RULES:
+1. ALWAYS prefer selecting an existing workflow if it can handle the goal
+2. Only create a new workflow if NO existing workflow fits the goal
+3. Pay close attention to the "use_when" field - it describes when to use each workflow
+
 Consider:
+- The "use_when" field - this is the primary indicator of when to use a workflow
 - How well the workflow description matches the goal
 - The workflow's success rate (higher is better)
 - Whether the goal requires capabilities the workflow provides
@@ -169,7 +175,7 @@ Consider:
 Respond with JSON only:
 {
     "workflow_name": "name of selected workflow" or null if creating new,
-    "create_new": true if no good match exists,
+    "create_new": true ONLY if no existing workflow can handle the goal,
     "reasoning": "brief explanation of your choice",
     "suggested_name": "name for new workflow" (only if create_new is true)
 }"""
@@ -184,8 +190,6 @@ Respond with JSON only:
 
         # Handle case where workflows is a string (from template resolution)
         if isinstance(workflows, str):
-            import json
-
             try:
                 workflows = json.loads(workflows)
             except json.JSONDecodeError:
@@ -217,14 +221,19 @@ Respond with JSON only:
                     desc = w.get("description", "No description")
                     rate = w.get("success_rate", 0.0)
                     tags = w.get("tags", [])
+                    use_when = w.get("use_when", "")
                 else:
                     name = w.name
                     desc = w.description
                     rate = w.success_rate
                     tags = w.tags
+                    use_when = getattr(w, "use_when", "")
 
                 tags_str = ", ".join(tags) if tags else "none"
-                prompt += f"- {name}: {desc} (success: {rate:.0%}, tags: {tags_str})\n"
+                prompt += f"- {name}: {desc}\n"
+                if use_when:
+                    prompt += f"  USE WHEN: {use_when}\n"
+                prompt += f"  (success: {rate:.0%}, tags: {tags_str})\n"
         else:
             prompt += "No workflows available yet. You must create a new one.\n"
 

@@ -124,9 +124,8 @@ class TestActionRegistry:
         registry = ActionRegistry()
         registry.register_defaults()
 
-        # Should have shell and prompt actions
+        # Should have shell action (prompt was removed in human task cleanup)
         assert registry.has_action("shell")
-        assert registry.has_action("prompt")
 
         # Should have route_name condition
         assert registry.has_condition("route_name")

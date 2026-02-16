@@ -54,9 +54,6 @@ file_search = "zebra_tasks.filesystem.search:FileSearchAction"
 file_exists = "zebra_tasks.filesystem.info:FileExistsAction"
 file_info = "zebra_tasks.filesystem.info:FileInfoAction"
 directory_list = "zebra_tasks.filesystem.info:DirectoryListAction"
-# Human interaction
-data_entry = "zebra_tasks.human.data_entry:DataEntryAction"
-data_display = "zebra_tasks.human.data_display:DataDisplayAction"
 # Compute
 python_exec = "zebra_tasks.compute.python_exec:PythonExecAction"
 # Agent - Core loop actions

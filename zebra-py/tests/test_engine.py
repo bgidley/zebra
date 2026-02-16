@@ -80,9 +80,7 @@ def parallel_definition():
             "start": TaskDefinition(id="start", name="Start"),
             "branch_a": TaskDefinition(id="branch_a", name="Branch A", action="counting"),
             "branch_b": TaskDefinition(id="branch_b", name="Branch B", action="counting"),
-            "join": TaskDefinition(
-                id="join", name="Join", synchronized=True, action="counting"
-            ),
+            "join": TaskDefinition(id="join", name="Join", synchronized=True, action="counting"),
         },
         routings=[
             RoutingDefinition(
@@ -122,9 +120,7 @@ class TestWorkflowEngine:
 
     @pytest.mark.asyncio
     async def test_process_with_properties(self, engine, simple_definition):
-        process = await engine.create_process(
-            simple_definition, properties={"key": "value"}
-        )
+        process = await engine.create_process(simple_definition, properties={"key": "value"})
 
         assert process.properties["key"] == "value"
 
@@ -136,15 +132,11 @@ class TestWorkflowEngine:
             name="Manual Workflow",
             first_task_id="manual_task",
             tasks={
-                "manual_task": TaskDefinition(
-                    id="manual_task", name="Manual Task", auto=False
-                ),
+                "manual_task": TaskDefinition(id="manual_task", name="Manual Task", auto=False),
                 "end": TaskDefinition(id="end", name="End"),
             },
             routings=[
-                RoutingDefinition(
-                    id="r1", source_task_id="manual_task", dest_task_id="end"
-                ),
+                RoutingDefinition(id="r1", source_task_id="manual_task", dest_task_id="end"),
             ],
         )
 
@@ -231,6 +223,126 @@ class TestWorkflowEngine:
         assert len(status["tasks"]) == 1
 
 
+class TestConventionBasedHumanTask:
+    """Test the convention-based auto:false pattern for human tasks.
+
+    Human tasks use auto:false with form schema in task properties.
+    External callers read task properties to render UI, then call
+    engine.complete_task() with user data to resume the workflow.
+    """
+
+    @pytest.mark.asyncio
+    async def test_human_task_with_form_schema(self, engine, store):
+        """Test full lifecycle: task properties as form schema, external completion,
+        and result accessible to downstream tasks."""
+        definition = ProcessDefinition(
+            id="human_task_test",
+            name="Human Task Test",
+            first_task_id="get_input",
+            tasks={
+                "get_input": TaskDefinition(
+                    id="get_input",
+                    name="Get User Input",
+                    auto=False,
+                    properties={
+                        "type": "text_input",
+                        "prompt": "Enter your name",
+                        "required": True,
+                    },
+                ),
+                "process_input": TaskDefinition(
+                    id="process_input",
+                    name="Process Input",
+                    action="counting",
+                ),
+            },
+            routings=[
+                RoutingDefinition(
+                    id="r1", source_task_id="get_input", dest_task_id="process_input"
+                ),
+            ],
+        )
+
+        CountingAction.execution_count = 0
+
+        # Create and start process
+        process = await engine.create_process(definition)
+        await engine.start_process(process.id)
+
+        # Process should be running, waiting for the manual task
+        process = await store.load_process(process.id)
+        assert process.state == ProcessState.RUNNING
+
+        # Get pending tasks - should find our human task
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        task = pending[0]
+        assert task.task_definition_id == "get_input"
+        assert task.state == TaskState.READY
+
+        # External caller reads task definition properties (form schema)
+        task_def = definition.tasks["get_input"]
+        assert task_def.properties["type"] == "text_input"
+        assert task_def.properties["prompt"] == "Enter your name"
+        assert task_def.properties["required"] is True
+
+        # External caller completes task with user data
+        user_response = "Alice"
+        await engine.complete_task(task.id, TaskResult.ok(output=user_response))
+
+        # Result should be stored in process properties
+        process = await store.load_process(process.id)
+        assert process.properties["__task_output_get_input"] == "Alice"
+
+        # Downstream task should have executed
+        assert CountingAction.execution_count == 1
+
+        # Process should be complete
+        assert process.state == ProcessState.COMPLETE
+
+    @pytest.mark.asyncio
+    async def test_human_task_with_structured_output(self, engine, store):
+        """Test human task with structured (dict) output from the user."""
+        definition = ProcessDefinition(
+            id="structured_test",
+            name="Structured Human Task",
+            first_task_id="form_task",
+            tasks={
+                "form_task": TaskDefinition(
+                    id="form_task",
+                    name="Fill Form",
+                    auto=False,
+                    properties={
+                        "type": "form",
+                        "fields": [
+                            {"name": "first_name", "label": "First Name", "required": True},
+                            {"name": "email", "label": "Email", "required": True},
+                        ],
+                    },
+                ),
+                "done": TaskDefinition(id="done", name="Done"),
+            },
+            routings=[
+                RoutingDefinition(id="r1", source_task_id="form_task", dest_task_id="done"),
+            ],
+        )
+
+        process = await engine.create_process(definition)
+        await engine.start_process(process.id)
+
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+
+        # Complete with structured data
+        form_data = {"first_name": "Bob", "email": "bob@example.com"}
+        await engine.complete_task(pending[0].id, TaskResult.ok(output=form_data))
+
+        # Verify structured data stored in process properties
+        process = await store.load_process(process.id)
+        assert process.properties["__task_output_form_task"] == form_data
+        assert process.state == ProcessState.COMPLETE
+
+
 class TestTaskSync:
     @pytest.mark.asyncio
     async def test_sync_task_waits_for_all_branches(self, engine, store, registry):
@@ -241,12 +353,8 @@ class TestTaskSync:
             first_task_id="start",
             tasks={
                 "start": TaskDefinition(id="start", name="Start"),
-                "branch_a": TaskDefinition(
-                    id="branch_a", name="Branch A", auto=False
-                ),
-                "branch_b": TaskDefinition(
-                    id="branch_b", name="Branch B", auto=False
-                ),
+                "branch_a": TaskDefinition(id="branch_a", name="Branch A", auto=False),
+                "branch_b": TaskDefinition(id="branch_b", name="Branch B", auto=False),
                 "join": TaskDefinition(id="join", name="Join", synchronized=True),
             },
             routings=[

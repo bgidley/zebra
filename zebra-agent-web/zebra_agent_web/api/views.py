@@ -7,7 +7,7 @@ Provides async JSON API endpoints for:
 
 import logging
 
-from asgiref.sync import sync_to_async
+from asgiref.sync import async_to_sync, sync_to_async
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -565,15 +565,29 @@ async def task_detail(request, task_id):
 
 
 @api_view(["POST"])
-async def task_complete(request, task_id):
-    """Complete a pending task (for manual intervention in agent workflows)."""
-    await engine.ensure_initialized()
-    store = engine.get_store()
-    wf_engine = engine.get_engine()
+def task_complete(request, task_id):
+    """Complete a pending task (for manual/human tasks in workflows).
 
-    task = await store.load_task(task_id)
-    if not task:
-        return Response({"error": f"Task '{task_id}' not found"}, status=status.HTTP_404_NOT_FOUND)
+    Human tasks use the auto:false convention - the task waits in READY state
+    until this endpoint is called with the result data. The task definition
+    properties contain the form schema (type, fields, etc.) that the UI reads
+    to render the appropriate form.
+    """
+
+    async def _impl():
+        await engine.ensure_initialized()
+        store = engine.get_store()
+        wf_engine = engine.get_engine()
+
+        task = await store.load_task(task_id)
+        if not task:
+            return None, f"Task '{task_id}' not found"
+
+        return task, None
+
+    task, error = async_to_sync(_impl)()
+    if error:
+        return Response({"error": error}, status=status.HTTP_404_NOT_FOUND)
 
     req_serializer = CompleteTaskRequestSerializer(data=request.data)
     if not req_serializer.is_valid():
@@ -583,13 +597,27 @@ async def task_complete(request, task_id):
         result_data = req_serializer.validated_data.get("result", {})
         next_route = req_serializer.validated_data.get("next_route")
 
-        result = TaskResult(success=True, output=result_data, next_route=next_route)
-        await wf_engine.complete_task(task_id, result)
+        async def _complete():
+            wf_engine = engine.get_engine()
+            result = TaskResult(success=True, output=result_data, next_route=next_route)
+            new_tasks = await wf_engine.complete_task(task_id, result)
+            return [
+                {"id": t.id, "task_definition_id": t.task_definition_id, "state": t.state.value}
+                for t in new_tasks
+            ]
 
-        # Reload task to get updated state
-        task = await store.load_task(task_id)
-        serializer = TaskInstanceSerializer(pydantic_to_dict(task))
-        return Response(serializer.data)
+        new_tasks = async_to_sync(_complete)()
+
+        # The completed task is deleted by the engine after routing,
+        # so we return the completion result and any new tasks created.
+        return Response(
+            {
+                "completed": True,
+                "task_id": task_id,
+                "result": result_data,
+                "new_tasks": new_tasks,
+            }
+        )
     except Exception as e:
         logger.exception("Failed to complete task")
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

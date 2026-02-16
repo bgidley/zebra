@@ -321,9 +321,8 @@ class TestIoCActionRegistryDiscovery:
         registry = IoCActionRegistry()
         registry.discover_and_register()
 
-        # Built-in defaults should be registered
+        # Built-in defaults should be registered (prompt was removed in human task cleanup)
         assert registry.has_action("shell")
-        assert registry.has_action("prompt")
 
     def test_discover_and_register_loads_entry_points(self):
         """Test that entry point actions are discovered."""
@@ -361,8 +360,8 @@ class TestIoCActionRegistryDiscovery:
         registry.discover_and_register()
 
         # Should have both defaults and entry point actions
+        # (prompt was removed in human task cleanup)
         assert registry.has_action("shell")
-        assert registry.has_action("prompt")
 
         # All actions should be instantiable
         for name in registry.list_actions():

@@ -1,5 +1,11 @@
 # Feature Implementation Workflow
-# A workflow template for implementing new features with Claude
+# A workflow template for implementing new features with human review steps.
+#
+# Human tasks use the convention-based auto:false pattern:
+# - Task stays in READY state until complete_task() is called externally
+# - Task properties define the form schema (type, prompt, fields, etc.)
+# - External callers read task.properties to render the UI, then call
+#   engine.complete_task(task_id, result) to resume the workflow.
 
 name: "Feature Implementation"
 version: 1
@@ -8,9 +14,9 @@ first_task: gather_requirements
 tasks:
   gather_requirements:
     name: "Gather Requirements"
-    action: prompt
     auto: false
     properties:
+      type: "text_input"
       prompt: "What feature should we implement? Please describe the requirements."
 
   analyze_codebase:
@@ -21,9 +27,9 @@ tasks:
 
   create_plan:
     name: "Create Implementation Plan"
-    action: prompt
     auto: false
     properties:
+      type: "text_input"
       prompt: |
         Based on the requirements: {{gather_requirements.output}}
 
@@ -34,9 +40,9 @@ tasks:
 
   review_plan:
     name: "Review Plan"
-    action: prompt
     auto: false
     properties:
+      type: "text_input"
       prompt: |
         Please review this implementation plan:
         {{create_plan.output}}
@@ -45,9 +51,9 @@ tasks:
 
   implement:
     name: "Implement Feature"
-    action: prompt
     auto: false
     properties:
+      type: "text_input"
       prompt: |
         Please implement the feature according to this plan:
         {{create_plan.output}}
@@ -61,10 +67,10 @@ tasks:
 
   code_review:
     name: "Code Review"
-    action: prompt
     auto: false
     synchronized: true
     properties:
+      type: "text_input"
       prompt: |
         Implementation is complete.
         Test results: {{run_tests.output}}

@@ -52,7 +52,7 @@ Abstracts persistence layer. Implementations:
 | `zebra/tasks/` | TaskAction base classes and registry |
 | `zebra/tasks/base.py` | TaskAction, ExecutionContext |
 | `zebra/tasks/registry.py` | ActionRegistry |
-| `zebra/tasks/actions/` | Built-in actions (shell, prompt) |
+| `zebra/tasks/actions/` | Built-in actions (shell) |
 | `zebra/templates/` | Example workflow definitions |
 | `tests/` | Test suite |
 
@@ -173,6 +173,31 @@ class CustomAction(TaskAction):
 # Register
 registry.register_action("custom_action", CustomAction)
 ```
+
+### Human Tasks (Convention-Based auto:false Pattern)
+
+Human/manual tasks use a convention-based approach with `auto: false`. No special action class is needed. The task definition properties serve as the form schema for external callers:
+
+```yaml
+get_user_input:
+  name: "Get User Input"
+  auto: false
+  properties:
+    type: "text_input"        # UI hint for what to render
+    prompt: "Enter your name"
+    required: true
+```
+
+**How it works:**
+
+1. Engine creates the task in READY state (does not call any action)
+2. External caller uses `engine.get_pending_tasks(process_id)` to find tasks in READY state
+3. External caller reads the task definition's `properties` to determine what UI to render
+4. External caller submits user data via `engine.complete_task(task_id, TaskResult.ok(output=user_data))`
+5. Engine stores the result in process properties as `__task_output_{task_definition_id}`
+6. Downstream tasks can reference the output via template: `{{task_def_id.output}}`
+
+**Supported output types:** Any JSON-serializable value (string, dict, list, etc.)
 
 ### Custom ConditionActions
 
