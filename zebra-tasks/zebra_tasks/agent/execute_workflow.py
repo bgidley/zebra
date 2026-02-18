@@ -2,7 +2,7 @@
 
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from zebra.core.models import ProcessState, TaskInstance, TaskResult
@@ -191,9 +191,18 @@ class ExecuteGoalWorkflowAction(TaskAction):
             # Start sub-process
             await context.engine.start_process(sub_process.id)
 
+            import logging
+
+            logger = logging.getLogger(__name__)
+
             # Wait for completion with task tracking
             result, task_executions = await self._wait_for_completion(
                 context, sub_process.id, definition, timeout
+            )
+
+            logger.info(
+                f"ExecuteGoalWorkflowAction completed: success={result.get('success')}, "
+                f"output={str(result.get('output'))[:100] if result.get('output') else None}"
             )
 
             # Store task executions for metrics recording
@@ -208,6 +217,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
             if result["success"]:
                 return TaskResult.ok(output=result)
             else:
+                logger.warning(f"ExecuteGoalWorkflowAction returning fail: {result.get('error')}")
                 return TaskResult.fail(result.get("error", "Workflow execution failed"))
 
         except Exception as e:
@@ -280,8 +290,8 @@ class ExecuteGoalWorkflowAction(TaskAction):
                         task_name=task_name,
                         execution_order=execution_order,
                         state="complete",
-                        started_at=datetime.now(timezone.utc),
-                        completed_at=datetime.now(timezone.utc),
+                        started_at=datetime.now(UTC),
+                        completed_at=datetime.now(UTC),
                         output=process.properties.get(key),
                     )
                     task_executions.append(task_exec)

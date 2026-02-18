@@ -93,6 +93,16 @@ class WorkflowSelectorAction(TaskAction):
         ```
     """
 
+    _logger = None
+
+    @classmethod
+    def _get_logger(cls):
+        if cls._logger is None:
+            import logging
+
+            cls._logger = logging.getLogger(__name__)
+        return cls._logger
+
     description = "Use LLM to select the best workflow for a given goal."
 
     inputs = [
@@ -186,7 +196,15 @@ Respond with JSON only:
         if not goal:
             return TaskResult.fail("No goal provided")
 
+        # Resolve template variables in goal
+        if isinstance(goal, str) and "{{" in goal:
+            goal = context.resolve_template(goal)
+
         workflows = task.properties.get("available_workflows", [])
+
+        # Resolve template variables in workflows
+        if isinstance(workflows, str) and "{{" in workflows:
+            workflows = context.resolve_template(workflows)
 
         # Handle case where workflows is a string (from template resolution)
         if isinstance(workflows, str):
@@ -204,6 +222,14 @@ Respond with JSON only:
         # Get LLM provider
         provider_name = task.properties.get("provider", "anthropic")
         model = task.properties.get("model")
+
+        logger = self._get_logger()
+        logger.info(f"Selecting workflow for goal: {goal[:100]}...")
+        logger.info(f"Available workflows: {len(workflows)}")
+        for w in workflows:
+            name = w.get("name", "Unknown") if isinstance(w, dict) else w.name
+            use_when = w.get("use_when", "") if isinstance(w, dict) else getattr(w, "use_when", "")
+            logger.debug(f"  - {name}: {use_when[:80] if use_when else 'No use_when'}...")
 
         try:
             provider = get_provider(provider_name, model)
@@ -262,6 +288,12 @@ Respond with JSON only:
 
             selection_data = json.loads(content)
             selection = WorkflowSelection.from_dict(selection_data)
+
+            logger.info(
+                f"LLM selection: workflow={selection.workflow_name}, "
+                f"create_new={selection.create_new}"
+            )
+            logger.info(f"LLM reasoning: {selection.reasoning[:150]}...")
 
             # If no workflows available, force create_new
             if not workflows and not selection.create_new:

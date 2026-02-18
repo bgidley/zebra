@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from zebra.core.models import ProcessDefinition
 from zebra.definitions.loader import load_definition
 
@@ -91,6 +90,10 @@ class WorkflowLibrary:
 
     async def _load_workflow_info(self, yaml_file: Path) -> WorkflowInfo | None:
         """Load workflow info from a YAML file."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         try:
             with open(yaml_file) as f:
                 data = yaml.safe_load(f)
@@ -105,10 +108,13 @@ class WorkflowLibrary:
             use_when = data.get("use_when")  # LLM selection hint
 
             # Get stats from metrics store (if available)
+            stats = WorkflowStats(workflow_name=name)  # Default stats
             if self.metrics is not None:
-                stats = await self.metrics.get_stats(name)
-            else:
-                stats = WorkflowStats(workflow_name=name)
+                try:
+                    stats = await self.metrics.get_stats(name)
+                except Exception as e:
+                    # Log but don't fail - use default stats if metrics unavailable
+                    logger.warning(f"Failed to get stats for workflow {name}: {e}")
 
             return WorkflowInfo(
                 name=name,
@@ -120,7 +126,8 @@ class WorkflowLibrary:
                 success_rate=stats.success_rate,
                 use_count=stats.total_runs,
             )
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to load workflow info from {yaml_file}: {e}")
             return None
 
     def get_workflow(self, name: str) -> ProcessDefinition:

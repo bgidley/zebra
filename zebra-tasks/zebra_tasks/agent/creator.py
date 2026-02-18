@@ -1,8 +1,6 @@
 """Workflow creator action - uses LLM to create new workflow definitions."""
 
-import json
 import re
-from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml
@@ -143,8 +141,30 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
         if not goal:
             return TaskResult.fail("No goal provided")
 
+        # Resolve template variables
+        if isinstance(goal, str) and "{{" in goal:
+            goal = context.resolve_template(goal)
+
         suggested_name = task.properties.get("suggested_name")
+        if isinstance(suggested_name, str) and "{{" in suggested_name:
+            suggested_name = context.resolve_template(suggested_name)
+            # Handle empty string after resolution
+            if not suggested_name:
+                suggested_name = None
+
         existing_workflows = task.properties.get("existing_workflows", [])
+        if isinstance(existing_workflows, str) and "{{" in existing_workflows:
+            import ast
+            import json
+
+            resolved = context.resolve_template(existing_workflows)
+            try:
+                existing_workflows = json.loads(resolved)
+            except json.JSONDecodeError:
+                try:
+                    existing_workflows = ast.literal_eval(resolved)
+                except (ValueError, SyntaxError):
+                    existing_workflows = []
 
         # Get LLM provider
         provider_name = task.properties.get("provider", "anthropic")
@@ -197,7 +217,7 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
             if library is not None:
                 try:
                     library.add_workflow(yaml_content)
-                except Exception as e:
+                except Exception:
                     # Log but don't fail - workflow is still valid
                     pass
 

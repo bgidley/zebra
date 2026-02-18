@@ -455,11 +455,16 @@ class WorkflowEngine:
             result = TaskResult.ok()
 
         # Update task with result
+        # Store full result as dict to preserve next_route for routing conditions
         new_state = TaskState.COMPLETE if result.success else TaskState.FAILED
+        result_dict = {
+            "output": result.output,
+            "next_route": result.next_route,
+        }
         task = task.model_copy(
             update={
                 "state": new_state,
-                "result": result.output,
+                "result": result_dict,
                 "error": result.error,
                 "updated_at": datetime.now(UTC),
                 "completed_at": datetime.now(UTC),
