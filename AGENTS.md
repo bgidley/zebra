@@ -365,26 +365,63 @@ memory_store = context.extras.get("__memory_store__")
 
 ## Human Tasks (Convention-Based Pattern)
 
-Human/manual tasks use a convention-based `auto: false` pattern. No special action class is needed - the task definition properties serve as the form schema for external callers:
+Human/manual tasks use a convention-based `auto: false` pattern. No special action class is needed. The task definition's `properties.schema` contains a standard JSON Schema that defines the form fields:
 
 ```yaml
 my_task:
   name: "Get User Input"
   auto: false
   properties:
-    type: "text_input"        # UI hint for rendering
-    prompt: "Enter your name"
-    required: true
+    schema:
+      type: object
+      title: "User Information"
+      description: "Please provide your details"
+      required: [name, email]
+      properties:
+        name:
+          type: string
+          title: "Full Name"
+          minLength: 2
+        email:
+          type: string
+          title: "Email Address"
+          format: email
+        notes:
+          type: string
+          title: "Additional Notes"
+          format: multiline
 ```
+
+**JSON Schema Widget Mapping:**
+
+| Schema Type | Format/Constraint | Widget |
+|-------------|-------------------|--------|
+| `string` | (default) | text input |
+| `string` | `format: multiline` | textarea |
+| `string` | `format: email` | email input |
+| `string` | `format: url` | url input |
+| `string` | `format: date` | date input |
+| `string` | `enum: [...]` | select dropdown |
+| `boolean` | | checkbox |
+| `integer` / `number` | | number input |
+| `array` | `items.enum: [...]` | multiselect |
+
+**Form Utilities** (`zebra.forms` module):
+- `schema_to_form(schema)` - Converts JSON Schema dict to `FormSchema` (renderable field list)
+- `validate_form_data(schema, data)` - Validates submission, returns list of `ValidationError`
+- `coerce_form_data(schema, raw_data)` - Converts HTML form strings to proper Python types
+- `get_routes_from_definition(task_def_id, routings)` - Extracts route names for conditional routing UI
 
 **Lifecycle:**
 
 1. Engine creates task in READY state (no action runs)
 2. `engine.get_pending_tasks(process_id)` returns tasks in READY state
-3. External caller reads task definition properties to render UI
-4. `engine.complete_task(task_id, TaskResult.ok(output=user_data))` resumes the workflow
-5. Output stored as `__task_output_{task_definition_id}` in process properties
-6. Downstream tasks reference via template: `{{task_def_id.output}}`
+3. External caller reads `task_def.properties["schema"]` to get JSON Schema
+4. `schema_to_form(schema)` converts it to renderable form fields
+5. User fills form; `coerce_form_data()` + `validate_form_data()` process submission
+6. `engine.complete_task(task_id, TaskResult.ok(output=coerced_data))` resumes the workflow
+7. Output stored as `__task_output_{task_definition_id}` in process properties
+8. Downstream tasks reference via template: `{{task_def_id.output}}`
 
 See `zebra-py/zebra/templates/feature_implementation.yaml` and `bug_fix.yaml` for examples.
 

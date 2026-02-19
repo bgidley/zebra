@@ -28,6 +28,11 @@ urlpatterns = [
     path("processes/", views.processes_list, name="api_processes_list"),
     path("processes/<str:process_id>/", views.process_detail, name="api_process_detail"),
     path("processes/<str:process_id>/tasks/", views.process_tasks, name="api_process_tasks"),
+    path(
+        "processes/<str:process_id>/pending-tasks/",
+        views.process_pending_tasks,
+        name="api_process_pending_tasks",
+    ),
     path("tasks/<str:task_id>/", views.task_detail, name="api_task_detail"),
     path("tasks/<str:task_id>/complete/", views.task_complete, name="api_task_complete"),
 ]

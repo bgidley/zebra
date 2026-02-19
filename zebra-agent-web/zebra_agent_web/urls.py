@@ -29,6 +29,10 @@ urlpatterns = [
         web_views.workflow_delete,
         name="workflow_delete",
     ),
+    # Human Tasks
+    path("tasks/", web_views.pending_tasks, name="pending_tasks"),
+    path("tasks/<str:task_id>/", web_views.human_task_form, name="human_task_form"),
+    path("tasks/<str:task_id>/submit/", web_views.human_task_submit, name="human_task_submit"),
     # Runs
     path("runs/", web_views.recent_runs, name="recent_runs"),
     path("runs/in-progress/", web_views.in_progress_runs, name="in_progress_runs"),

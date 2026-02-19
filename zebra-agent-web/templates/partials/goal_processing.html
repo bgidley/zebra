@@ -192,6 +192,27 @@
                     }
                     break;
                     
+                case 'human_task_pending':
+                    addLog(`Waiting for input: ${data.task_name}`, 'text-amber-400 font-medium');
+                    // Show link to the task form
+                    const taskLink = document.createElement('div');
+                    taskLink.className = 'mt-2 p-3 bg-amber-900/20 border border-amber-700 rounded-lg';
+                    taskLink.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-amber-200">This workflow needs your input to continue.</span>
+                            <a href="/tasks/${escapeHtml(data.task_id)}/" 
+                               class="px-3 py-1.5 text-sm rounded-md bg-amber-600 hover:bg-amber-500 text-white font-medium">
+                                Open Form
+                            </a>
+                        </div>
+                    `;
+                    progressContainer.insertBefore(taskLink, progressLog);
+                    // Refresh diagram
+                    if (workflowDiagram) {
+                        workflowDiagram.refresh();
+                    }
+                    break;
+                    
                 case 'completed':
                     addLog('Workflow execution completed!', 'text-green-400 font-bold');
                     if (data.tokens_used) {

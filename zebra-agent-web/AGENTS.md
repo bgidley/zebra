@@ -394,22 +394,43 @@ diagram.stop();   // Stop auto-refresh
 diagram.refresh(); // Manual refresh
 ```
 
+### Human Task Forms (`zebra.forms` + Template Tags)
+
+The web UI renders human task forms from JSON Schema definitions stored in `task_def.properties.schema`. The form system has two layers:
+
+**Server-side form model** (`zebra.forms` in `zebra-py`):
+- `schema_to_form(schema)` converts JSON Schema to `FormSchema` (list of `FormField` dataclasses)
+- `validate_form_data(schema, data)` validates against JSON Schema constraints (required, minLength, enum, etc.)
+- `coerce_form_data(schema, raw_data)` converts HTML form strings to proper Python types
+
+**Django template tag** (`zebra_agent_web/templatetags/form_tags.py`):
+- `{% load form_tags %}` then `{% render_schema_form form field_errors %}` renders the form as Tailwind-styled HTML
+- Supports: text, textarea, number, select, checkbox, multiselect, email, url, date inputs
+- Shows per-field validation errors, required markers, descriptions, placeholders
+
+**Templates:**
+- `partials/human_task_form.html` - HTMX form partial (renders form, route buttons, Submit)
+- `partials/human_task_complete.html` - Success partial after submission (HTMX swap)
+- `pages/human_task.html` - Full page wrapper with breadcrumb
+- `pages/pending_tasks.html` - Lists all pending human tasks across processes
+- `partials/pending_tasks_list.html` - HTMX-swappable task list
+
 ### Human Task Completion API
 
-The `POST /api/tasks/<task_id>/complete/` endpoint allows external callers to complete human (manual) tasks. This supports the convention-based `auto: false` pattern where task definition properties serve as the form schema.
+The `POST /api/tasks/<task_id>/complete/` endpoint allows external callers to complete human (manual) tasks. This supports the convention-based `auto: false` pattern where `properties.schema` contains JSON Schema for form rendering.
 
 **Request:**
 
 ```json
 POST /api/tasks/<task_id>/complete/
 {
-    "output": "user response",
-    "route": "yes"
+    "result": {"field1": "value1", "field2": "value2"},
+    "next_route": "yes"
 }
 ```
 
-- `output` - The user's response (string, dict, or any JSON-serializable value)
-- `route` (optional) - Route name for conditional routing after completion
+- `result` - Dict of form field values (default: `{}`)
+- `next_route` (optional) - Route name for conditional routing after completion
 
 **Response:**
 
@@ -417,12 +438,12 @@ POST /api/tasks/<task_id>/complete/
 {
     "completed": true,
     "task_id": "<task_id>",
-    "result": {"output": "user response"},
+    "result": {"field1": "value1", "field2": "value2"},
     "new_tasks": [{"id": "...", "task_definition_id": "...", "state": "..."}]
 }
 ```
 
-**Workflow:** External callers first use `GET /api/processes/<id>/tasks/` to find pending tasks, read task definition properties for the form schema, render UI accordingly, then POST to this endpoint with the user's response.
+**Workflow:** External callers first use `GET /api/processes/<id>/pending-tasks/` to find pending human tasks (enriched with task definition and form schema), render UI accordingly, then POST to this endpoint with the user's response.
 
 ### URL Routes
 
@@ -435,6 +456,10 @@ POST /api/tasks/<task_id>/complete/
 | `/runs/in-progress/` | `in_progress_runs` | Currently running goals |
 | `/runs/<id>/` | `run_detail` | Run details with diagram |
 | `/workflows/` | `workflow_library` | Workflow library |
+| `/tasks/` | `pending_tasks` | Pending human tasks list |
+| `/tasks/<id>/` | `human_task_form` | Human task form page |
+| `/tasks/<id>/submit/` | `human_task_submit` | Submit human task form (POST) |
+| `/api/processes/<id>/pending-tasks/` | `process_pending_tasks` | Get pending human tasks with schema (API) |
 | `/api/runs/<id>/diagram/` | `run_diagram` | Get workflow diagram SVG (API) |
 | `/api/tasks/<id>/complete/` | `task_complete` | Complete a human/manual task (API) |
 

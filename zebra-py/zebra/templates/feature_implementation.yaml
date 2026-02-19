@@ -1,11 +1,9 @@
 # Feature Implementation Workflow
 # A workflow template for implementing new features with human review steps.
 #
-# Human tasks use the convention-based auto:false pattern:
-# - Task stays in READY state until complete_task() is called externally
-# - Task properties define the form schema (type, prompt, fields, etc.)
-# - External callers read task.properties to render the UI, then call
-#   engine.complete_task(task_id, result) to resume the workflow.
+# Human tasks use auto:false with a JSON Schema form in properties.schema.
+# The engine leaves the task in READY state. External callers read the schema
+# to render a form, then call engine.complete_task(task_id, result) to resume.
 
 name: "Feature Implementation"
 version: 1
@@ -16,8 +14,22 @@ tasks:
     name: "Gather Requirements"
     auto: false
     properties:
-      type: "text_input"
-      prompt: "What feature should we implement? Please describe the requirements."
+      schema:
+        type: object
+        title: "Feature Requirements"
+        required: [description]
+        properties:
+          description:
+            type: string
+            title: "Feature Description"
+            description: "What feature should we implement? Describe the requirements."
+            format: multiline
+            minLength: 20
+          priority:
+            type: string
+            title: "Priority"
+            enum: [high, medium, low]
+            default: medium
 
   analyze_codebase:
     name: "Analyze Codebase"
@@ -29,34 +41,53 @@ tasks:
     name: "Create Implementation Plan"
     auto: false
     properties:
-      type: "text_input"
-      prompt: |
-        Based on the requirements: {{gather_requirements.output}}
-
-        Please create a detailed implementation plan including:
-        1. Files to modify or create
-        2. Key changes needed
-        3. Testing approach
+      schema:
+        type: object
+        title: "Implementation Plan"
+        description: "Based on the requirements: {{gather_requirements.output}}"
+        required: [plan]
+        properties:
+          plan:
+            type: string
+            title: "Plan"
+            description: |
+              Create a detailed implementation plan including:
+              1. Files to modify or create
+              2. Key changes needed
+              3. Testing approach
+            format: multiline
 
   review_plan:
     name: "Review Plan"
     auto: false
     properties:
-      type: "text_input"
-      prompt: |
-        Please review this implementation plan:
-        {{create_plan.output}}
-
-        Do you approve this plan? (yes/no/modify)
+      schema:
+        type: object
+        title: "Review Plan"
+        description: "Please review this implementation plan: {{create_plan.output}}"
+        required: [feedback]
+        properties:
+          feedback:
+            type: string
+            title: "Feedback"
+            description: "Any comments on the plan?"
+            format: multiline
 
   implement:
     name: "Implement Feature"
     auto: false
     properties:
-      type: "text_input"
-      prompt: |
-        Please implement the feature according to this plan:
-        {{create_plan.output}}
+      schema:
+        type: object
+        title: "Implement Feature"
+        description: "Please implement the feature according to: {{create_plan.output}}"
+        required: [summary]
+        properties:
+          summary:
+            type: string
+            title: "Implementation Summary"
+            description: "Describe what was implemented."
+            format: multiline
 
   run_tests:
     name: "Run Tests"
@@ -70,12 +101,21 @@ tasks:
     auto: false
     synchronized: true
     properties:
-      type: "text_input"
-      prompt: |
-        Implementation is complete.
-        Test results: {{run_tests.output}}
-
-        Please review the changes and provide feedback.
+      schema:
+        type: object
+        title: "Code Review"
+        description: "Test results: {{run_tests.output}}"
+        required: [review]
+        properties:
+          review:
+            type: string
+            title: "Review Comments"
+            description: "Please review the changes and provide feedback."
+            format: multiline
+          approved:
+            type: boolean
+            title: "Approved?"
+            default: false
 
   complete:
     name: "Complete"

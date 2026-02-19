@@ -176,26 +176,52 @@ registry.register_action("custom_action", CustomAction)
 
 ### Human Tasks (Convention-Based auto:false Pattern)
 
-Human/manual tasks use a convention-based approach with `auto: false`. No special action class is needed. The task definition properties serve as the form schema for external callers:
+Human/manual tasks use a convention-based approach with `auto: false`. No special action class is needed. The task definition's `properties.schema` contains a standard JSON Schema that defines form fields:
 
 ```yaml
 get_user_input:
   name: "Get User Input"
   auto: false
   properties:
-    type: "text_input"        # UI hint for what to render
-    prompt: "Enter your name"
-    required: true
+    schema:
+      type: object
+      title: "User Information"
+      required: [name, severity]
+      properties:
+        name:
+          type: string
+          title: "Full Name"
+          minLength: 2
+        severity:
+          type: string
+          title: "Severity"
+          enum: [low, medium, high, critical]
+        description:
+          type: string
+          title: "Description"
+          format: multiline
 ```
 
 **How it works:**
 
 1. Engine creates the task in READY state (does not call any action)
 2. External caller uses `engine.get_pending_tasks(process_id)` to find tasks in READY state
-3. External caller reads the task definition's `properties` to determine what UI to render
-4. External caller submits user data via `engine.complete_task(task_id, TaskResult.ok(output=user_data))`
-5. Engine stores the result in process properties as `__task_output_{task_definition_id}`
-6. Downstream tasks can reference the output via template: `{{task_def_id.output}}`
+3. External caller reads `task_def.properties["schema"]` to get JSON Schema
+4. `schema_to_form(schema)` from `zebra.forms` converts it to renderable `FormSchema`
+5. `coerce_form_data(schema, raw_data)` converts HTML form strings to proper types
+6. `validate_form_data(schema, data)` validates against JSON Schema constraints
+7. External caller submits via `engine.complete_task(task_id, TaskResult.ok(output=coerced_data))`
+8. Engine stores the result in process properties as `__task_output_{task_definition_id}`
+9. Downstream tasks can reference the output via template: `{{task_def_id.output}}`
+
+**Form Utilities** (`zebra.forms` module):
+
+| Function | Purpose |
+|----------|---------|
+| `schema_to_form(schema)` | JSON Schema dict -> `FormSchema` with renderable `FormField` list |
+| `validate_form_data(schema, data)` | Returns list of `ValidationError` (field + message) |
+| `coerce_form_data(schema, raw_data)` | Converts HTML form strings to int/float/bool/list |
+| `get_routes_from_definition(task_def_id, routings)` | Extracts route names for conditional routing UI |
 
 **Supported output types:** Any JSON-serializable value (string, dict, list, etc.)
 

@@ -6,6 +6,7 @@ All URLs are simplified since this is an agent-only application:
 - /run/ -> Run Goal
 - /workflows/ -> Workflow Library
 - /runs/ -> Run History
+- /tasks/ -> Pending Human Tasks
 """
 
 import asyncio
@@ -19,7 +20,7 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
-from zebra_agent_web.api import agent_engine
+from zebra_agent_web.api import agent_engine, engine
 
 logger = logging.getLogger(__name__)
 
@@ -486,3 +487,235 @@ async def in_progress_runs(request):
     if request.headers.get("HX-Request"):
         return render(request, "partials/in_progress_runs_list.html", context)
     return render(request, "pages/in_progress_runs.html", context)
+
+
+# =============================================================================
+# Human Tasks
+# =============================================================================
+
+
+async def pending_tasks(request):
+    """List all pending human tasks across active processes."""
+    await engine.ensure_initialized()
+    store = engine.get_store()
+    wf_engine = engine.get_engine()
+
+    # Find all running processes
+    running = await store.get_running_processes()
+
+    tasks_data = []
+    for process in running:
+        pending = await wf_engine.get_pending_tasks(process.id)
+        if not pending:
+            continue
+
+        # Load definition for task names and schema
+        definition = await store.load_definition(process.definition_id)
+        if not definition:
+            continue
+
+        for task in pending:
+            task_def = definition.tasks.get(task.task_definition_id)
+            if not task_def:
+                continue
+
+            # Only show tasks that are truly manual (auto=False)
+            if task_def.auto:
+                continue
+
+            schema = task_def.properties.get("schema", {})
+            tasks_data.append(
+                {
+                    "id": task.id,
+                    "task_definition_id": task.task_definition_id,
+                    "task_name": task_def.name,
+                    "process_id": process.id,
+                    "process_name": definition.name,
+                    "created_at": task.created_at,
+                    "schema_title": schema.get("title", ""),
+                }
+            )
+
+    context = {"tasks": tasks_data}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "partials/pending_tasks_list.html", context)
+    return render(request, "pages/pending_tasks.html", context)
+
+
+async def human_task_form(request, task_id):
+    """Render the JSON Schema form for a human task."""
+    from zebra.forms import get_routes_from_definition, schema_to_form
+
+    await engine.ensure_initialized()
+    store = engine.get_store()
+
+    task = await store.load_task(task_id)
+    if not task:
+        return HttpResponse("Task not found", status=404)
+
+    # Load process and definition
+    process = await store.load_process(task.process_id)
+    if not process:
+        return HttpResponse("Process not found", status=404)
+
+    definition = await store.load_definition(process.definition_id)
+    if not definition:
+        return HttpResponse("Definition not found", status=404)
+
+    task_def = definition.tasks.get(task.task_definition_id)
+    if not task_def:
+        return HttpResponse("Task definition not found", status=404)
+
+    # Extract schema and build form
+    schema = task_def.properties.get("schema", {})
+    if not schema:
+        # Fallback: simple text input for tasks without schema
+        schema = {
+            "type": "object",
+            "title": task_def.name,
+            "properties": {
+                "response": {
+                    "type": "string",
+                    "title": "Response",
+                    "format": "multiline",
+                },
+            },
+        }
+
+    form = schema_to_form(schema)
+
+    # Get available routes for conditional routing
+    routings = [
+        {"from": r.source_task_id, "to": r.dest_task_id, "condition": r.condition, "name": r.name}
+        for r in definition.routings
+    ]
+    routes = get_routes_from_definition(task.task_definition_id, routings)
+
+    context = {
+        "task": {
+            "id": task.id,
+            "task_definition_id": task.task_definition_id,
+            "state": task.state.value,
+            "process_id": task.process_id,
+        },
+        "task_def": {
+            "name": task_def.name,
+            "properties": task_def.properties,
+        },
+        "form": form,
+        "field_errors": {},
+        "routes": routes,
+        "process_name": definition.name,
+        "form_description": schema.get("description", ""),
+    }
+
+    if request.headers.get("HX-Request"):
+        return render(request, "partials/human_task_form.html", context)
+    return render(request, "pages/human_task.html", context)
+
+
+@require_http_methods(["POST"])
+async def human_task_submit(request, task_id):
+    """Handle form submission for a human task."""
+    from zebra.core.models import TaskResult
+    from zebra.forms import coerce_form_data, schema_to_form, validate_form_data
+
+    await engine.ensure_initialized()
+    store = engine.get_store()
+    wf_engine = engine.get_engine()
+
+    task = await store.load_task(task_id)
+    if not task:
+        return HttpResponse("Task not found", status=404)
+
+    process = await store.load_process(task.process_id)
+    definition = await store.load_definition(process.definition_id)
+    task_def = definition.tasks.get(task.task_definition_id)
+
+    schema = task_def.properties.get("schema", {})
+    if not schema:
+        schema = {
+            "type": "object",
+            "properties": {
+                "response": {"type": "string", "format": "multiline"},
+            },
+        }
+
+    # Coerce and validate form data
+    raw_data = dict(request.POST)
+    # Django QueryDict gives lists for all values; flatten single values
+    flat_data = {}
+    for key, value in raw_data.items():
+        if key in ("csrfmiddlewaretoken", "next_route"):
+            continue
+        if isinstance(value, list) and len(value) == 1:
+            flat_data[key] = value[0]
+        else:
+            flat_data[key] = value
+
+    coerced = coerce_form_data(schema, flat_data)
+    errors = validate_form_data(schema, coerced)
+
+    if errors:
+        # Re-render form with errors
+        from zebra.forms import get_routes_from_definition
+
+        form = schema_to_form(schema)
+        routings = [
+            {
+                "from": r.source_task_id,
+                "to": r.dest_task_id,
+                "condition": r.condition,
+                "name": r.name,
+            }
+            for r in definition.routings
+        ]
+        routes = get_routes_from_definition(task.task_definition_id, routings)
+
+        field_errors: dict[str, list[str]] = {}
+        for e in errors:
+            field_errors.setdefault(e.field, []).append(e.message)
+
+        context = {
+            "task": {
+                "id": task.id,
+                "task_definition_id": task.task_definition_id,
+                "state": task.state.value,
+                "process_id": task.process_id,
+            },
+            "task_def": {"name": task_def.name, "properties": task_def.properties},
+            "form": form,
+            "field_errors": field_errors,
+            "routes": routes,
+            "process_name": definition.name,
+            "form_description": schema.get("description", ""),
+        }
+        return render(request, "partials/human_task_form.html", context)
+
+    # Complete the task
+    next_route = request.POST.get("next_route")
+    result = TaskResult(success=True, output=coerced, next_route=next_route)
+
+    try:
+        new_tasks = await wf_engine.complete_task(task_id, result)
+    except Exception as e:
+        logger.exception("Failed to complete task %s", task_id)
+        return HttpResponse(f"Error completing task: {e}", status=500)
+
+    # Return success partial
+    new_tasks_data = [
+        {
+            "id": t.id,
+            "task_definition_id": t.task_definition_id,
+            "state": t.state.value,
+        }
+        for t in new_tasks
+    ]
+
+    context = {
+        "task_id": task_id,
+        "task_name": task_def.name,
+        "new_tasks": new_tasks_data,
+    }
+    return render(request, "partials/human_task_complete.html", context)

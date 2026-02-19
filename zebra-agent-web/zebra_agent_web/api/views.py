@@ -551,6 +551,50 @@ async def process_tasks(request, process_id):
 
 
 @api_view(["GET"])
+async def process_pending_tasks(request, process_id):
+    """Get pending human tasks for a process, enriched with definition and form schema.
+
+    Returns tasks in READY state with auto=False, including their task definition
+    properties and JSON Schema form definition for rendering UI forms.
+    """
+    await engine.ensure_initialized()
+    store = engine.get_store()
+    wf_engine = engine.get_engine()
+
+    process = await store.load_process(process_id)
+    if not process:
+        return Response(
+            {"error": f"Process '{process_id}' not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    definition = await store.load_definition(process.definition_id)
+    if not definition:
+        return Response(
+            {"error": f"Definition '{process.definition_id}' not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    pending = await wf_engine.get_pending_tasks(process_id)
+
+    result = []
+    for task in pending:
+        task_def = definition.tasks.get(task.task_definition_id)
+        if not task_def or task_def.auto:
+            continue
+
+        task_data = pydantic_to_dict(task)
+        task_data["definition"] = {
+            "id": task_def.id,
+            "name": task_def.name,
+            "auto": task_def.auto,
+            "properties": task_def.properties,
+        }
+        result.append(task_data)
+
+    return Response(result)
+
+
+@api_view(["GET"])
 async def task_detail(request, task_id):
     """Get details of a specific task."""
     await engine.ensure_initialized()
