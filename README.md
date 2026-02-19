@@ -20,7 +20,7 @@ zebra/
 | **zebra-py** | Python | Core workflow engine with MCP server integration |
 | **zebra-tasks** | Python | Reusable task actions (subtasks, LLM calling) |
 | **zebra-agent** | Python | Self-improving agent framework built on zebra workflows |
-| **zebra-agent-web** | Python | Web UI for Zebra Agent with Django ORM storage |
+| **zebra-agent-web** | Python | Web UI for Zebra Agent with human task forms and Django ORM storage |
 
 ## Quick Start
 
@@ -106,15 +106,29 @@ tasks:
 
   review:
     name: "Review"
-    action: prompt
     auto: false
     properties:
-      prompt: "Review analysis: {{analysis}}"
+      schema:
+        type: object
+        title: "Review Analysis"
+        description: "Analysis: {{analysis}}"
+        required: [decision]
+        properties:
+          decision:
+            type: string
+            title: "Approve?"
+            enum: ["approve", "reject"]
+          comments:
+            type: string
+            title: "Comments"
+            format: multiline
 
 routings:
   - from: analyze
     to: review
 ```
+
+Human tasks (tasks with `auto: false`) pause the workflow and wait for input. Form fields are defined using JSON Schema in `properties.schema` and rendered automatically by the web UI. See the [zebra-py README](zebra-py/README.md#human-tasks) for full documentation.
 
 ## Documentation
 
