@@ -108,7 +108,7 @@ tasks:
     auto: true
     properties:
       system_prompt: "Instructions for the LLM"
-      prompt: "{{goal}}"  # Use {{goal}} to reference the user's input
+      prompt: "{{goal}}"
       output_key: result_name
 
 routings:
@@ -118,18 +118,89 @@ routings:
 
 ## Available Actions
 
-- **llm_call**: Call an LLM with a prompt
-  - Properties: system_prompt, prompt, output_key, temperature, max_tokens
-  - Use {{variable}} to reference process properties or previous outputs
+### llm_call — Call an LLM with a prompt
+Properties: system_prompt, prompt, output_key, temperature, max_tokens
+Use {{variable}} to reference process properties or previous task outputs.
+
+### Human input task (auto: false) — Pause for user input via a web form
+Set `auto: false` on the task (no action needed). Define form fields in
+`properties.schema` using standard JSON Schema. The engine pauses the workflow
+and the web UI renders a form for the user to fill in.
+
+Supported field types in the schema:
+- `type: string` — text input (default)
+- `type: string` + `format: multiline` — textarea for long text
+- `type: string` + `enum: [...]` — dropdown select
+- `type: boolean` — checkbox
+- `type: integer` or `type: number` — number input
+- `type: string` + `format: email` — email input
+
+Use `required: [field1, field2]` for mandatory fields.
+Use `minLength`, `maxLength`, `minimum`, `maximum` for validation.
+Use `description` for help text shown below the field.
+
+Example human input task:
+```yaml
+  get_input:
+    name: "Get User Input"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Provide Information"
+        required: [description]
+        properties:
+          description:
+            type: string
+            title: "Description"
+            format: multiline
+            minLength: 10
+          priority:
+            type: string
+            title: "Priority"
+            enum: [low, medium, high]
+            default: medium
+```
+
+### Conditional routing with enum fields
+For yes/no decisions or approval steps, use an enum field with named routes:
+```yaml
+  review:
+    name: "Review"
+    auto: false
+    properties:
+      schema:
+        type: object
+        required: [decision]
+        properties:
+          decision:
+            type: string
+            title: "Approve?"
+            enum: ["yes", "no"]
+
+routings:
+  - from: review
+    to: approved_task
+    condition: route_name
+    name: "yes"
+  - from: review
+    to: rejected_task
+    condition: route_name
+    name: "no"
+```
 
 ## Guidelines
 
-1. Use descriptive task IDs (e.g., "analyze", "generate", "refine")
+1. Use descriptive task IDs (e.g., "analyze", "generate", "refine", "review")
 2. Always include description and tags for discoverability
 3. Use {{goal}} to reference the user's input
 4. Use {{previous_output_key}} to chain task outputs
 5. Keep workflows focused - do one thing well
 6. For multi-step workflows, use routings to connect tasks
+7. Use human input tasks (auto: false) when the workflow needs information from
+   the user, a review/approval step, or any decision that should not be automated
+8. Prefer human input tasks over llm_call when the user should provide or verify
+   the data themselves (e.g., describing a bug, reviewing a plan, approving output)
 
 ## Output
 
@@ -174,6 +245,11 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
             provider = get_provider(provider_name, model)
         except Exception as e:
             return TaskResult.fail(f"Failed to get LLM provider: {e}")
+
+        # Emit progress event: creating workflow
+        callback = context.extras.get("__progress_callback__")
+        if callback:
+            await callback("creating_workflow", {"suggested_name": suggested_name})
 
         # Build prompt
         prompt = f"Create a workflow for this goal: {goal}\n"
@@ -220,6 +296,17 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
                 except Exception:
                     # Log but don't fail - workflow is still valid
                     pass
+
+            # Emit progress event: workflow created/selected
+            if callback:
+                await callback(
+                    "workflow_selected",
+                    {
+                        "workflow_name": definition.name,
+                        "reasoning": f"Created new workflow: {definition.name}",
+                        "created_new": True,
+                    },
+                )
 
             # Store creation result and set workflow_name for downstream tasks
             output_key = task.properties.get("output_key", "created_workflow")

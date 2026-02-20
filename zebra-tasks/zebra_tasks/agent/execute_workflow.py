@@ -195,9 +195,20 @@ class ExecuteGoalWorkflowAction(TaskAction):
 
             logger = logging.getLogger(__name__)
 
+            # Emit progress event: workflow starting
+            callback = context.extras.get("__progress_callback__")
+            if callback:
+                await callback(
+                    "workflow_starting",
+                    {
+                        "total_tasks": len(definition.tasks),
+                        "workflow_name": workflow_name,
+                    },
+                )
+
             # Wait for completion with task tracking
             result, task_executions = await self._wait_for_completion(
-                context, sub_process.id, definition, timeout
+                context, sub_process.id, definition, timeout, callback
             )
 
             logger.info(
@@ -236,6 +247,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
         process_id: str,
         definition: Any,
         timeout: float,
+        callback: Any = None,
     ) -> tuple[dict[str, Any], list["TaskExecution"]]:
         """Wait for sub-process to complete and extract results."""
         from zebra_agent.metrics import TaskExecution
@@ -243,11 +255,14 @@ class ExecuteGoalWorkflowAction(TaskAction):
         start_time = asyncio.get_event_loop().time()
         task_executions: list[TaskExecution] = []
         processed_tasks: set[str] = set()
+        notified_human_tasks: set[str] = set()
         execution_order = 0
         total_tasks = len(definition.tasks)
 
         while True:
-            # Check timeout
+            has_pending_human_tasks = False
+
+            # Check timeout (skip when human tasks are pending)
             elapsed = asyncio.get_event_loop().time() - start_time
             if elapsed > timeout:
                 return {
@@ -281,6 +296,22 @@ class ExecuteGoalWorkflowAction(TaskAction):
                     # Get task definition
                     task_def = definition.tasks.get(task_id)
                     task_name = task_def.name if task_def else task_id
+
+                    # Emit progress event: task completed
+                    if callback:
+                        await callback(
+                            "task_completed",
+                            {
+                                "task_name": task_name,
+                                "task_index": execution_order,
+                                "total_tasks": total_tasks,
+                                "output_preview": (
+                                    str(process.properties.get(key))[:200]
+                                    if process.properties.get(key)
+                                    else None
+                                ),
+                            },
+                        )
 
                     # Create task execution record
                     task_exec = TaskExecution(
@@ -322,6 +353,32 @@ class ExecuteGoalWorkflowAction(TaskAction):
                     "tokens_used": process.properties.get("__total_tokens__", 0),
                     "error": str(error),
                 }, task_executions
+
+            # Detect pending human tasks
+            pending = await context.engine.get_pending_tasks(process_id)
+            for pt in pending:
+                task_def = definition.tasks.get(pt.task_definition_id)
+                if task_def and not task_def.auto:
+                    has_pending_human_tasks = True
+                    # Only emit event for newly discovered human tasks
+                    if pt.id not in notified_human_tasks:
+                        notified_human_tasks.add(pt.id)
+                        if callback:
+                            await callback(
+                                "human_task_pending",
+                                {
+                                    "task_id": pt.id,
+                                    "task_name": task_def.name,
+                                    "task_definition_id": pt.task_definition_id,
+                                },
+                            )
+
+            # When human tasks are pending, use longer sleep and skip timeout
+            if has_pending_human_tasks:
+                await asyncio.sleep(0.5)
+                # Reset start_time so human wait doesn't count toward timeout
+                start_time = asyncio.get_event_loop().time()
+                continue
 
             # Wait before checking again
             await asyncio.sleep(0.1)

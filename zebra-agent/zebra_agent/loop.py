@@ -156,6 +156,40 @@ class AgentLoop:
 
         await emit("started", {"run_id": run_id, "goal": goal})
 
+        # Store progress callback in engine extras so task actions can emit events.
+        # This is the same pattern used for __memory_store__, __metrics_store__, etc.
+        if progress_callback:
+            self.engine.extras["__progress_callback__"] = progress_callback
+
+        try:
+            execution_result = await self._run_agent_workflow(definition, properties, goal, run_id)
+        finally:
+            # Clean up callback to avoid stale references between runs
+            self.engine.extras.pop("__progress_callback__", None)
+
+        return AgentResult(
+            run_id=run_id,
+            workflow_name=execution_result.get("workflow_name", "unknown"),
+            goal=goal,
+            output=execution_result.get("output"),
+            success=execution_result.get("success", False),
+            tokens_used=execution_result.get("tokens_used", 0),
+            error=execution_result.get("error"),
+            created_new_workflow=execution_result.get("created_new", False),
+        )
+
+    async def _run_agent_workflow(
+        self,
+        definition: Any,
+        properties: dict[str, Any],
+        goal: str,
+        run_id: str,
+    ) -> dict[str, Any]:
+        """Run the agent main loop workflow and wait for completion.
+
+        Returns:
+            Dict with execution_result and metadata from process properties.
+        """
         # Create and run the main loop workflow
         process = await self.engine.create_process(definition, properties=properties)
         await self.engine.start_process(process.id)
@@ -171,41 +205,37 @@ class AgentLoop:
                 break
             elif process.state == ProcessState.FAILED:
                 error = process.properties.get("__error__", "Workflow failed")
-                return AgentResult(
-                    run_id=run_id,
-                    workflow_name=process.properties.get("workflow_name", "unknown"),
-                    goal=goal,
-                    output=None,
-                    success=False,
-                    error=str(error),
-                    created_new_workflow=process.properties.get("created_new", False),
-                )
+                return {
+                    "workflow_name": process.properties.get("workflow_name", "unknown"),
+                    "output": None,
+                    "success": False,
+                    "tokens_used": 0,
+                    "error": str(error),
+                    "created_new": process.properties.get("created_new", False),
+                }
 
             await asyncio.sleep(0.5)
             waited += 0.5
 
         if process.state != ProcessState.COMPLETE:
-            return AgentResult(
-                run_id=run_id,
-                workflow_name=process.properties.get("workflow_name", "unknown"),
-                goal=goal,
-                output=None,
-                success=False,
-                error="Agent loop timed out",
-            )
+            return {
+                "workflow_name": process.properties.get("workflow_name", "unknown"),
+                "output": None,
+                "success": False,
+                "tokens_used": 0,
+                "error": "Agent loop timed out",
+            }
 
         # Extract results from process properties
         execution_result = process.properties.get("execution_result", {})
 
-        return AgentResult(
-            run_id=run_id,
-            workflow_name=process.properties.get("workflow_name", "unknown"),
-            goal=goal,
-            output=execution_result.get("output"),
-            success=execution_result.get("success", False),
-            tokens_used=execution_result.get("tokens_used", 0),
-            created_new_workflow=process.properties.get("created_new", False),
-        )
+        return {
+            "workflow_name": process.properties.get("workflow_name", "unknown"),
+            "output": execution_result.get("output"),
+            "success": execution_result.get("success", False),
+            "tokens_used": execution_result.get("tokens_used", 0),
+            "created_new": process.properties.get("created_new", False),
+        }
 
     async def record_rating(self, run_id: str, rating: int) -> None:
         """Record a user rating for a run."""

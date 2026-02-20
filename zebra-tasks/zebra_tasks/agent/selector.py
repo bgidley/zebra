@@ -223,6 +223,11 @@ Respond with JSON only:
         provider_name = task.properties.get("provider", "anthropic")
         model = task.properties.get("model")
 
+        # Emit progress event: selecting workflow
+        callback = context.extras.get("__progress_callback__")
+        if callback:
+            await callback("selecting_workflow", {"available_count": len(workflows)})
+
         logger = self._get_logger()
         logger.info(f"Selecting workflow for goal: {goal[:100]}...")
         logger.info(f"Available workflows: {len(workflows)}")
@@ -299,6 +304,17 @@ Respond with JSON only:
             if not workflows and not selection.create_new:
                 selection.create_new = True
                 selection.workflow_name = None
+
+            # Emit progress event: workflow selected
+            if callback:
+                await callback(
+                    "workflow_selected",
+                    {
+                        "workflow_name": selection.workflow_name,
+                        "reasoning": selection.reasoning,
+                        "created_new": False,
+                    },
+                )
 
             # Determine next route for conditional routing
             next_route = "create_new" if selection.create_new else "use_existing"
