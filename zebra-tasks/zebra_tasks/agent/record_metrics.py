@@ -136,10 +136,6 @@ class RecordMetricsAction(TaskAction):
             run_id = task.properties.get("run_id")
             workflow_name = task.properties.get("workflow_name")
             goal = task.properties.get("goal")
-            success = task.properties.get("success", False)
-            output = task.properties.get("output")
-            tokens_used = task.properties.get("tokens_used", 0)
-            error = task.properties.get("error")
             started_at_str = task.properties.get("started_at")
 
             # Resolve templates if needed
@@ -149,6 +145,23 @@ class RecordMetricsAction(TaskAction):
                 workflow_name = context.resolve_template(workflow_name)
             if isinstance(goal, str) and "{{" in goal:
                 goal = context.resolve_template(goal)
+
+            # Extract success/output/tokens_used/error.
+            # First try reading from the execution_result process property (set by
+            # execute_goal_workflow action), since YAML templates like
+            # {{execution_result.success}} don't support nested dict access.
+            # Fall back to task properties for direct (non-template) usage.
+            execution_result = context.get_process_property("execution_result")
+            if isinstance(execution_result, dict) and "success" in execution_result:
+                success = execution_result.get("success", False)
+                output = execution_result.get("output")
+                tokens_used = execution_result.get("tokens_used", 0)
+                error = execution_result.get("error")
+            else:
+                success = task.properties.get("success", False)
+                output = task.properties.get("output")
+                tokens_used = task.properties.get("tokens_used", 0)
+                error = task.properties.get("error")
 
             # Parse started_at if provided
             if started_at_str:

@@ -273,11 +273,13 @@ class WorkflowEngine:
 
                     # Add auto tasks to stack for processing
                     definition = await self._load_definition(process.definition_id)
+                    stack_task_ids = {t.id for t in task_stack}
                     for new_task in created_tasks:
                         task_def = definition.get_task(new_task.task_definition_id)
                         if task_def.auto or task_def.synchronized:
-                            if new_task not in task_stack:
+                            if new_task.id not in stack_task_ids:
                                 task_stack.append(new_task)
+                                stack_task_ids.add(new_task.id)
 
                 except Exception as e:
                     logger.error(f"Error transitioning task {current_task.id}: {e}")
@@ -318,18 +320,21 @@ class WorkflowEngine:
             )
 
         # Update task with result
+        # Store full result as dict to preserve next_route for routing conditions
+        new_state = TaskState.COMPLETE if (result is None or result.success) else TaskState.FAILED
+        result_dict = {
+            "output": result.output if result else None,
+            "next_route": result.next_route if result else None,
+        }
         task = task.model_copy(
             update={
-                "state": TaskState.COMPLETE,
-                "result": result.output if result else None,
+                "state": new_state,
+                "result": result_dict,
                 "error": result.error if result and not result.success else None,
                 "updated_at": datetime.now(UTC),
                 "completed_at": datetime.now(UTC),
             }
         )
-
-        if result and not result.success:
-            task = task.model_copy(update={"state": TaskState.FAILED})
 
         await self.store.save_task(task)
 
@@ -391,10 +396,11 @@ class WorkflowEngine:
         active_tasks = await self.store.load_tasks_for_process(process.id)
         sync_task_ids = self._task_sync.get_potential_task_locks(task_def, definition)
 
+        created_task_ids = {t.id for t in created_tasks}
         for active_task in active_tasks:
             if active_task.task_definition_id in sync_task_ids:
                 if active_task.state == TaskState.AWAITING_SYNC:
-                    if active_task not in created_tasks:
+                    if active_task.id not in created_task_ids:
                         created_tasks.append(active_task)
 
         # Delete completed task

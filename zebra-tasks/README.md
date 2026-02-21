@@ -81,6 +81,59 @@ Supported providers:
 - Anthropic (Claude)
 - OpenAI (GPT-4, etc.)
 
+### Agent Actions
+
+Task actions that power the [zebra-agent](../zebra-agent) workflow-based agent loop.
+These actions handle workflow selection, execution, metrics recording, and memory management.
+
+| Action | Class | Purpose |
+|--------|-------|---------|
+| `memory_check` | `MemoryCheckAction` | Check if agent memory needs compaction, sets routing |
+| `workflow_selector` | `WorkflowSelectorAction` | LLM-powered workflow selection from available workflows |
+| `workflow_creator` | `WorkflowCreatorAction` | LLM-powered workflow creation when no match exists |
+| `execute_goal_workflow` | `ExecuteGoalWorkflowAction` | Execute a workflow by name and capture output |
+| `record_metrics` | `RecordMetricsAction` | Record run metrics to metrics store |
+| `update_memory` | `UpdateMemoryAction` | Add entry to agent memory store |
+
+Agent actions access non-serializable stores (memory, metrics, workflow library) through
+`context.extras` rather than process properties. See [zebra-agent README](../zebra-agent/README.md#ioc-inversion-of-control) for details.
+
+For complete property tables and API reference, see [AGENTS.md](AGENTS.md#agent-actions-reference).
+
+### Filesystem Actions
+
+File and directory operations with path traversal protection:
+
+```yaml
+tasks:
+  read_config:
+    name: "Read Config"
+    action: file_read
+    properties:
+      path: "config.yaml"
+      output_key: config_content
+```
+
+Available actions:
+
+| Action | Class | Purpose |
+|--------|-------|---------|
+| `file_read` | `FileReadAction` | Read file contents |
+| `file_write` | `FileWriteAction` | Write content to file |
+| `file_copy` | `FileCopyAction` | Copy files or directories |
+| `file_move` | `FileMoveAction` | Move or rename files |
+| `file_delete` | `FileDeleteAction` | Delete files or directories |
+| `file_search` | `FileSearchAction` | Search files by pattern and content |
+| `file_exists` | `FileExistsAction` | Check if file or directory exists |
+| `file_info` | `FileInfoAction` | Get file metadata (size, timestamps) |
+| `directory_list` | `DirectoryListAction` | List directory contents |
+
+### Compute Actions
+
+| Action | Class | Purpose |
+|--------|-------|---------|
+| `python_exec` | `PythonExecAction` | Execute Python code in a sandboxed environment |
+
 ## Usage
 
 ### Registering Actions

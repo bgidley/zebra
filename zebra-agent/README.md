@@ -115,10 +115,20 @@ The agent loop uses these task actions (from `zebra-tasks`):
 
 ### IoC (Inversion of Control)
 
-Stores are passed to task actions via process properties:
-- `__memory_store__`: Agent memory store
-- `__metrics_store__`: Metrics tracking store  
-- `__workflow_library__`: Workflow library for loading definitions
+Non-serializable stores are injected into the engine via `extras` (engine-level dependency injection),
+**not** process properties (which must be JSON-serializable). Actions access them through `context.extras`:
+
+```python
+# Engine setup (in AgentLoop or web integration)
+engine = WorkflowEngine(store, registry, extras={
+    "__memory_store__": memory_store,
+    "__metrics_store__": metrics_store,
+    "__workflow_library__": workflow_library,
+})
+
+# In task actions
+memory_store = context.extras.get("__memory_store__")
+```
 
 This allows actions to be stateless and testable with mock stores.
 

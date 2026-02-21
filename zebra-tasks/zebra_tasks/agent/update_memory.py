@@ -111,6 +111,12 @@ class UpdateMemoryAction(TaskAction):
             if isinstance(workflow_name, str) and "{{" in workflow_name:
                 workflow_name = context.resolve_template(workflow_name)
 
+            # Resolve result_summary from execution_result if template-based
+            if isinstance(result_summary, str) and "{{execution_result" in result_summary:
+                execution_result = context.get_process_property("execution_result", {})
+                if isinstance(execution_result, dict):
+                    result_summary = execution_result.get("output")
+
             # Format result summary
             summary_str = self._format_summary(result_summary)
 

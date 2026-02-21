@@ -146,7 +146,7 @@ class WaitForSubworkflowAction(TaskAction):
                     }
 
             # Get process status
-            process = await context.store.get_process(process_id)
+            process = await context.store.load_process(process_id)
             if process is None:
                 return {
                     "success": False,

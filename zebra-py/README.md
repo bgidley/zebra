@@ -327,6 +327,8 @@ routings:
     to: join
 ```
 
+When multiple branches route to a `synchronized: true` task, the engine creates only one task instance and waits for all incoming branches to complete before executing it. The engine deduplicates by `task_definition_id` so the same synchronized task is never created twice, even when routes arrive at different times.
+
 ## Workflow Definition Reference
 
 Workflows are defined in YAML format with the following structure:

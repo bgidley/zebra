@@ -1,6 +1,7 @@
 """ExecuteGoalWorkflowAction - Execute a goal workflow by name."""
 
 import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -11,6 +12,8 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
     from zebra_agent.metrics import TaskExecution
+
+logger = logging.getLogger(__name__)
 
 
 class ExecuteGoalWorkflowAction(TaskAction):
@@ -191,10 +194,6 @@ class ExecuteGoalWorkflowAction(TaskAction):
             # Start sub-process
             await context.engine.start_process(sub_process.id)
 
-            import logging
-
-            logger = logging.getLogger(__name__)
-
             # Emit progress event: workflow starting
             callback = context.extras.get("__progress_callback__")
             if callback:
@@ -217,9 +216,26 @@ class ExecuteGoalWorkflowAction(TaskAction):
             )
 
             # Store task executions for metrics recording
+            # Convert TaskExecution dataclasses to JSON-serializable dicts
             if task_executions:
                 current_execs = context.process.properties.get("__task_executions__", [])
-                current_execs.extend(task_executions)
+                for te in task_executions:
+                    current_execs.append(
+                        {
+                            "id": te.id,
+                            "run_id": te.run_id,
+                            "task_definition_id": te.task_definition_id,
+                            "task_name": te.task_name,
+                            "execution_order": te.execution_order,
+                            "state": te.state,
+                            "started_at": te.started_at.isoformat() if te.started_at else None,
+                            "completed_at": te.completed_at.isoformat()
+                            if te.completed_at
+                            else None,
+                            "output": str(te.output)[:500] if te.output else None,
+                            "error": te.error,
+                        }
+                    )
                 context.set_process_property("__task_executions__", current_execs)
 
             # Store result
@@ -273,7 +289,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
                 }, task_executions
 
             # Get process status
-            process = await context.store.get_process(process_id)
+            process = await context.store.load_process(process_id)
             if process is None:
                 return {
                     "success": False,

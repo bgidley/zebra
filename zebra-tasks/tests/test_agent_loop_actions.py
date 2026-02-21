@@ -575,7 +575,7 @@ class TestExecuteGoalWorkflowAction:
     def mock_store(self):
         """Create a mock state store."""
         store = MagicMock()
-        store.get_process = AsyncMock()
+        store.load_process = AsyncMock()
         store.save_process = AsyncMock()
         return store
 
@@ -661,7 +661,7 @@ class TestExecuteGoalWorkflowAction:
         mock_sub_process.state = ProcessState.COMPLETE
         mock_sub_process.properties = {"answer": "The answer is 42", "__total_tokens__": 50}
         mock_engine.create_process.return_value = mock_sub_process
-        mock_store.get_process.return_value = mock_sub_process
+        mock_store.load_process.return_value = mock_sub_process
 
         mock_task.properties = {
             "workflow_name": "Test Workflow",
@@ -703,7 +703,7 @@ class TestExecuteGoalWorkflowAction:
         mock_sub_process.state = ProcessState.FAILED
         mock_sub_process.properties = {"__error__": "Task failed", "__total_tokens__": 25}
         mock_engine.create_process.return_value = mock_sub_process
-        mock_store.get_process.return_value = mock_sub_process
+        mock_store.load_process.return_value = mock_sub_process
 
         mock_task.properties = {
             "workflow_name": "Test Workflow",
@@ -742,7 +742,7 @@ class TestExecuteGoalWorkflowAction:
         mock_sub_process.state = ProcessState.COMPLETE
         mock_sub_process.properties = {"result": "done"}
         mock_engine.create_process.return_value = mock_sub_process
-        mock_store.get_process.return_value = mock_sub_process
+        mock_store.load_process.return_value = mock_sub_process
 
         mock_task.properties = {
             "workflow_name": "Test Workflow",
@@ -787,7 +787,7 @@ class TestExecuteGoalWorkflowAction:
         mock_sub_process.state = ProcessState.COMPLETE
         mock_sub_process.properties = {"result": "done"}
         mock_engine.create_process.return_value = mock_sub_process
-        mock_store.get_process.return_value = mock_sub_process
+        mock_store.load_process.return_value = mock_sub_process
 
         mock_task.properties = {
             "workflow_name": "Test Workflow",
@@ -828,7 +828,7 @@ class TestExecuteGoalWorkflowAction:
         mock_sub_process.state = ProcessState.COMPLETE
         mock_sub_process.properties = {"result": "done"}
         mock_engine.create_process.return_value = mock_sub_process
-        mock_store.get_process.return_value = mock_sub_process
+        mock_store.load_process.return_value = mock_sub_process
 
         mock_task.properties = {
             "workflow_name": "Test Workflow",
