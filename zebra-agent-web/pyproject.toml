@@ -39,6 +39,7 @@ packages = ["zebra_agent_web"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "zebra_agent_web.settings"
+asyncio_mode = "auto"
 python_files = ["test_*.py"]
 
 [dependency-groups]

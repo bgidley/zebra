@@ -494,6 +494,26 @@ async def in_progress_runs(request):
 # =============================================================================
 
 
+def _fallback_schema(task_name: str) -> dict:
+    """Build a fallback schema for tasks without a JSON Schema definition.
+
+    Used by both human_task_form and human_task_submit so the same schema
+    is rendered and validated consistently.
+    """
+    return {
+        "type": "object",
+        "title": task_name,
+        "required": ["response"],
+        "properties": {
+            "response": {
+                "type": "string",
+                "title": "Response",
+                "format": "multiline",
+            },
+        },
+    }
+
+
 async def pending_tasks(request):
     """List all pending human tasks across active processes."""
     await engine.ensure_initialized()
@@ -570,18 +590,7 @@ async def human_task_form(request, task_id):
     # Extract schema and build form
     schema = task_def.properties.get("schema", {})
     if not schema:
-        # Fallback: simple text input for tasks without schema
-        schema = {
-            "type": "object",
-            "title": task_def.name,
-            "properties": {
-                "response": {
-                    "type": "string",
-                    "title": "Response",
-                    "format": "multiline",
-                },
-            },
-        }
+        schema = _fallback_schema(task_def.name)
 
     form = schema_to_form(schema)
 
@@ -635,12 +644,7 @@ async def human_task_submit(request, task_id):
 
     schema = task_def.properties.get("schema", {})
     if not schema:
-        schema = {
-            "type": "object",
-            "properties": {
-                "response": {"type": "string", "format": "multiline"},
-            },
-        }
+        schema = _fallback_schema(task_def.name)
 
     # Coerce and validate form data
     raw_data = dict(request.POST)
@@ -658,7 +662,7 @@ async def human_task_submit(request, task_id):
     errors = validate_form_data(schema, coerced)
 
     if errors:
-        # Re-render form with errors
+        # Re-render form with errors and previously submitted values
         from zebra.forms import get_routes_from_definition
 
         form = schema_to_form(schema)
@@ -687,6 +691,7 @@ async def human_task_submit(request, task_id):
             "task_def": {"name": task_def.name, "properties": task_def.properties},
             "form": form,
             "field_errors": field_errors,
+            "submitted_values": coerced,
             "routes": routes,
             "process_name": definition.name,
             "form_description": schema.get("description", ""),

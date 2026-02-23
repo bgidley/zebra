@@ -4,7 +4,10 @@ Context: tasks - list of dicts with: id, task_definition_id, task_name, process_
          process_name, created_at, schema_title
 {% endcomment %}
 
-<div id="pending-tasks-list">
+<div id="pending-tasks-list"
+     hx-get="{% url 'pending_tasks' %}"
+     hx-trigger="every 5s"
+     hx-swap="outerHTML">
     {% if tasks %}
     <div class="space-y-3">
         {% for task in tasks %}

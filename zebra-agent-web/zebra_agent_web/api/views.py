@@ -616,20 +616,34 @@ def task_complete(request, task_id):
     until this endpoint is called with the result data. The task definition
     properties contain the form schema (type, fields, etc.) that the UI reads
     to render the appropriate form.
+
+    If the task definition has a JSON Schema in properties.schema, the result
+    data is validated and coerced against it. Invalid data returns 400.
     """
 
-    async def _impl():
+    async def _load():
         await engine.ensure_initialized()
         store = engine.get_store()
-        wf_engine = engine.get_engine()
 
         task = await store.load_task(task_id)
         if not task:
-            return None, f"Task '{task_id}' not found"
+            return None, None, f"Task '{task_id}' not found"
 
-        return task, None
+        # Load process and definition for schema validation
+        process = await store.load_process(task.process_id)
+        if not process:
+            return task, None, None  # No schema validation possible
 
-    task, error = async_to_sync(_impl)()
+        definition = await store.load_definition(process.definition_id)
+        schema = None
+        if definition:
+            task_def = definition.tasks.get(task.task_definition_id)
+            if task_def:
+                schema = task_def.properties.get("schema")
+
+        return task, schema, None
+
+    task, schema, error = async_to_sync(_load)()
     if error:
         return Response({"error": error}, status=status.HTTP_404_NOT_FOUND)
 
@@ -640,6 +654,21 @@ def task_complete(request, task_id):
     try:
         result_data = req_serializer.validated_data.get("result", {})
         next_route = req_serializer.validated_data.get("next_route")
+
+        # Validate against JSON Schema if present
+        if schema and result_data:
+            from zebra.forms import coerce_form_data, validate_form_data
+
+            result_data = coerce_form_data(schema, result_data)
+            validation_errors = validate_form_data(schema, result_data)
+            if validation_errors:
+                errors_by_field = {}
+                for ve in validation_errors:
+                    errors_by_field.setdefault(ve.field, []).append(ve.message)
+                return Response(
+                    {"error": "Validation failed", "field_errors": errors_by_field},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         async def _complete():
             wf_engine = engine.get_engine()

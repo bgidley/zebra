@@ -35,8 +35,8 @@ Parameters passed via context:
           hx-swap="outerHTML">
         {% csrf_token %}
 
-        {% comment %} Render schema fields {% endcomment %}
-        {% render_schema_form form field_errors %}
+        {% comment %} Render schema fields (submitted_values repopulates on validation error) {% endcomment %}
+        {% render_schema_form form field_errors submitted_values %}
 
         {% comment %} Route selection or submit button {% endcomment %}
         <div class="mt-6 flex items-center gap-3">
