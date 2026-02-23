@@ -403,8 +403,8 @@ The web UI renders human task forms from JSON Schema definitions stored in `task
 - `validate_form_data(schema, data)` validates against JSON Schema constraints (required, minLength, enum, etc.)
 - `coerce_form_data(schema, raw_data)` converts HTML form strings to proper Python types
 
-**Django template tag** (`zebra_agent_web/templatetags/form_tags.py`):
-- `{% load form_tags %}` then `{% render_schema_form form field_errors %}` renders the form as Tailwind-styled HTML
+**Django template tag** (`zebra_agent_web/api/templatetags/form_tags.py`):
+- `{% load form_tags %}` then `{% render_schema_form form field_errors submitted_values %}` renders the form as Tailwind-styled HTML
 - Supports: text, textarea, number, select, checkbox, multiselect, email, url, date inputs
 - Shows per-field validation errors, required markers, descriptions, placeholders
 
