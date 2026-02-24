@@ -181,6 +181,7 @@ Consider:
 - How well the workflow description matches the goal
 - The workflow's success rate (higher is better)
 - Whether the goal requires capabilities the workflow provides
+- When creating workflows using human tasks to delegate tasks to humans and check progress
 
 Respond with JSON only:
 {

@@ -221,9 +221,7 @@ class TestBasicPatterns:
             name="Exclusive Choice Pattern",
             first_task_id="decision",
             tasks={
-                "decision": TaskDefinition(
-                    id="decision", name="Decision", action="route_small"
-                ),
+                "decision": TaskDefinition(id="decision", name="Decision", action="route_small"),
                 "small_task": TaskDefinition(
                     id="small_task", name="Small Task", action="recording"
                 ),
@@ -271,9 +269,7 @@ class TestBasicPatterns:
             name="Simple Merge Pattern",
             first_task_id="decision",
             tasks={
-                "decision": TaskDefinition(
-                    id="decision", name="Decision", action="route_small"
-                ),
+                "decision": TaskDefinition(id="decision", name="Decision", action="route_small"),
                 "branch_a": TaskDefinition(id="branch_a", name="Branch A", action="recording"),
                 "branch_b": TaskDefinition(id="branch_b", name="Branch B", action="recording"),
                 "merge": TaskDefinition(id="merge", name="Merge", action="recording"),
@@ -452,15 +448,16 @@ class TestIterationPatterns:
     """Test iteration patterns WCP-10 and WCP-21."""
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Needs investigation: loop with manual tasks doesn't create next iteration")
     async def test_wcp10_arbitrary_cycles(self, engine, store):
         """Test WCP-10: Arbitrary Cycles.
 
-        Loops with multiple entry/exit points.
+        Loops with multiple entry/exit points. A review/revise loop where
+        the reviewer can send the document back for revision multiple times
+        before approving.
 
-        TODO: This test reveals that when a manual task completes and triggers
-        an auto task that loops back to another manual task, the second manual
-        task is not becoming pending. Needs investigation into task lifecycle.
+        The review task is manual (auto=false) - the user provides the
+        routing decision. The revise and approve tasks are auto actions.
+        When revise completes, it loops back to create a new review task.
         """
         definition = ProcessDefinition(
             id="wcp10",
@@ -471,8 +468,7 @@ class TestIterationPatterns:
                 "review": TaskDefinition(
                     id="review",
                     name="Review",
-                    action="conditional",
-                    auto=False,  # Manual task for testing
+                    auto=False,  # Manual task - user decides approved/needs_revision
                 ),
                 "revise": TaskDefinition(id="revise", name="Revise", action="recording"),
                 "approve": TaskDefinition(id="approve", name="Approve", action="recording"),
@@ -502,41 +498,47 @@ class TestIterationPatterns:
         process = await engine.create_process(definition)
         await engine.start_process(process.id)
 
-        # First iteration - needs revision
+        # After start (auto), review should be pending
         pending = await engine.get_pending_tasks(process.id)
         assert len(pending) == 1
         assert pending[0].task_definition_id == "review"
 
+        # First iteration - needs revision
         await engine.complete_task(
-            pending[0].id, TaskResult(success=True, output="needs work", next_route="needs_revision")
+            pending[0].id,
+            TaskResult(success=True, output="needs work", next_route="needs_revision"),
         )
+
+        # Revise (auto) runs, then loops back to create a new review task
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        assert pending[0].task_definition_id == "review"
 
         # Second iteration - approve
-        pending = await engine.get_pending_tasks(process.id)
-        assert len(pending) == 1
-        assert pending[0].task_definition_id == "review"
-
         await engine.complete_task(
-            pending[0].id, TaskResult(success=True, output="looks good", next_route="approved")
+            pending[0].id,
+            TaskResult(success=True, output="looks good", next_route="approved"),
         )
 
+        # Approve (auto) runs, process completes
         status = await engine.get_process_status(process.id)
         assert status["process"]["state"] == ProcessState.COMPLETE.value
 
-        # Should have: start, review, revise, review, approve
-        assert RecordingAction.executions.count("review") == 2
-        assert "revise" in RecordingAction.executions
-        assert "approve" in RecordingAction.executions
+        # Auto tasks should have recorded their executions:
+        # start runs once, revise runs once, approve runs once
+        assert RecordingAction.executions.count("start") == 1
+        assert RecordingAction.executions.count("revise") == 1
+        assert RecordingAction.executions.count("approve") == 1
+        # review is manual (auto=false), so it does NOT appear in executions
+        assert "review" not in RecordingAction.executions
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Needs investigation: loop with manual tasks doesn't create next iteration")
     async def test_wcp21_structured_loop(self, engine):
         """Test WCP-21: Structured Loop.
 
-        While/repeat loops with single entry/exit point.
-
-        TODO: Same issue as test_wcp10_arbitrary_cycles - manual task completion
-        in a loop doesn't properly trigger the next iteration.
+        While/repeat loops with single entry/exit point. A manual "check"
+        task decides whether to continue or exit. The loop body is an auto
+        task that runs and loops back to the check.
         """
         definition = ProcessDefinition(
             id="wcp21",
@@ -546,12 +548,9 @@ class TestIterationPatterns:
                 "check_condition": TaskDefinition(
                     id="check_condition",
                     name="Check Condition",
-                    action="conditional",
-                    auto=False,
+                    auto=False,  # Manual - user decides continue/exit
                 ),
-                "loop_body": TaskDefinition(
-                    id="loop_body", name="Loop Body", action="recording"
-                ),
+                "loop_body": TaskDefinition(id="loop_body", name="Loop Body", action="recording"),
                 "exit": TaskDefinition(id="exit", name="Exit", action="recording"),
             },
             routings=[
@@ -578,20 +577,27 @@ class TestIterationPatterns:
         process = await engine.create_process(definition)
         await engine.start_process(process.id)
 
-        # Iteration 1
+        # Iteration 1: check_condition is pending (manual task)
         pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        assert pending[0].task_definition_id == "check_condition"
         await engine.complete_task(
-            pending[0].id, TaskResult(success=True, output="continue", next_route="continue")
+            pending[0].id, TaskResult(success=True, output="ok", next_route="continue")
         )
 
-        # Iteration 2
+        # loop_body (auto) runs, loops back to check_condition
+        # Iteration 2: check_condition is pending again
         pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        assert pending[0].task_definition_id == "check_condition"
         await engine.complete_task(
-            pending[0].id, TaskResult(success=True, output="continue", next_route="continue")
+            pending[0].id, TaskResult(success=True, output="ok", next_route="continue")
         )
 
-        # Exit
+        # Iteration 3: check_condition is pending, now exit
         pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        assert pending[0].task_definition_id == "check_condition"
         await engine.complete_task(
             pending[0].id, TaskResult(success=True, output="done", next_route="exit")
         )
@@ -599,10 +605,443 @@ class TestIterationPatterns:
         status = await engine.get_process_status(process.id)
         assert status["process"]["state"] == ProcessState.COMPLETE.value
 
-        # Should have executed loop body twice
+        # Auto tasks: loop_body ran twice (two "continue" iterations), exit ran once
         assert RecordingAction.executions.count("loop_body") == 2
-        assert RecordingAction.executions.count("check_condition") == 3
-        assert "exit" in RecordingAction.executions
+        assert RecordingAction.executions.count("exit") == 1
+        # check_condition is manual so does NOT appear in recorded auto executions
+        assert "check_condition" not in RecordingAction.executions
+
+
+# =============================================================================
+# State-Based Patterns
+# =============================================================================
+
+
+class TestStateBasedPatterns:
+    """Test state-based patterns WCP-16 and WCP-17."""
+
+    @pytest.mark.asyncio
+    async def test_wcp16_deferred_choice(self, engine):
+        """Test WCP-16: Deferred Choice.
+
+        Multiple branches are offered; the environment (user) determines which
+        one executes by completing the first task in one branch. The other
+        branches are not selected.
+
+        Example: A complaint is received. Either a customer service rep starts
+        "Initial Contact" or, if too much time passes, a manager starts
+        "Escalate". Whichever happens first wins.
+
+        In Zebra, this is modeled with parallel manual tasks. Both sit in
+        READY state. The first one completed triggers its downstream branch.
+        The unselected task remains in READY (partial support - no auto-withdrawal).
+        """
+        definition = ProcessDefinition(
+            id="wcp16",
+            name="Deferred Choice Pattern",
+            first_task_id="receive_complaint",
+            tasks={
+                "receive_complaint": TaskDefinition(
+                    id="receive_complaint", name="Receive Complaint", action="recording"
+                ),
+                "initial_contact": TaskDefinition(
+                    id="initial_contact",
+                    name="Initial Customer Contact",
+                    auto=False,  # Manual - offered to customer service
+                ),
+                "escalate": TaskDefinition(
+                    id="escalate",
+                    name="Escalate to Manager",
+                    auto=False,  # Manual - offered to manager
+                ),
+                "resolve_via_contact": TaskDefinition(
+                    id="resolve_via_contact",
+                    name="Resolve via Contact",
+                    action="recording",
+                ),
+                "resolve_via_manager": TaskDefinition(
+                    id="resolve_via_manager",
+                    name="Resolve via Manager",
+                    action="recording",
+                ),
+            },
+            routings=[
+                RoutingDefinition(
+                    id="r1",
+                    source_task_id="receive_complaint",
+                    dest_task_id="initial_contact",
+                    parallel=True,
+                ),
+                RoutingDefinition(
+                    id="r2",
+                    source_task_id="receive_complaint",
+                    dest_task_id="escalate",
+                    parallel=True,
+                ),
+                RoutingDefinition(
+                    id="r3",
+                    source_task_id="initial_contact",
+                    dest_task_id="resolve_via_contact",
+                ),
+                RoutingDefinition(
+                    id="r4",
+                    source_task_id="escalate",
+                    dest_task_id="resolve_via_manager",
+                ),
+            ],
+        )
+
+        process = await engine.create_process(definition)
+        await engine.start_process(process.id)
+
+        # Both manual tasks should be pending (the "deferred choice" state)
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 2
+        task_ids = {t.task_definition_id for t in pending}
+        assert task_ids == {"initial_contact", "escalate"}
+
+        # User picks "initial_contact" (customer service rep responds first)
+        contact_task = next(t for t in pending if t.task_definition_id == "initial_contact")
+        await engine.complete_task(
+            contact_task.id,
+            TaskResult(success=True, output="Contacted customer"),
+        )
+
+        # resolve_via_contact should have executed
+        assert "resolve_via_contact" in RecordingAction.executions
+
+        # The escalate task is still pending (partial support: no auto-withdrawal)
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        assert pending[0].task_definition_id == "escalate"
+
+        # Process is still running because escalate branch is incomplete
+        status = await engine.get_process_status(process.id)
+        assert status["process"]["state"] == ProcessState.RUNNING.value
+
+        # Complete the escalate task to allow process to finish
+        # (In a full implementation, this would be auto-withdrawn)
+        await engine.complete_task(
+            pending[0].id,
+            TaskResult(success=True, output="Manager also resolved"),
+        )
+
+        status = await engine.get_process_status(process.id)
+        assert status["process"]["state"] == ProcessState.COMPLETE.value
+
+    @pytest.mark.asyncio
+    async def test_wcp16_deferred_choice_other_branch(self, engine):
+        """Test WCP-16: Verify the other branch works too.
+
+        Same setup as above but the manager escalates first.
+        """
+        definition = ProcessDefinition(
+            id="wcp16b",
+            name="Deferred Choice Pattern (B)",
+            first_task_id="receive_complaint",
+            tasks={
+                "receive_complaint": TaskDefinition(
+                    id="receive_complaint", name="Receive Complaint", action="recording"
+                ),
+                "initial_contact": TaskDefinition(
+                    id="initial_contact",
+                    name="Initial Contact",
+                    auto=False,
+                ),
+                "escalate": TaskDefinition(
+                    id="escalate",
+                    name="Escalate",
+                    auto=False,
+                ),
+                "resolve_via_contact": TaskDefinition(
+                    id="resolve_via_contact",
+                    name="Resolve via Contact",
+                    action="recording",
+                ),
+                "resolve_via_manager": TaskDefinition(
+                    id="resolve_via_manager",
+                    name="Resolve via Manager",
+                    action="recording",
+                ),
+            },
+            routings=[
+                RoutingDefinition(
+                    id="r1",
+                    source_task_id="receive_complaint",
+                    dest_task_id="initial_contact",
+                    parallel=True,
+                ),
+                RoutingDefinition(
+                    id="r2",
+                    source_task_id="receive_complaint",
+                    dest_task_id="escalate",
+                    parallel=True,
+                ),
+                RoutingDefinition(
+                    id="r3",
+                    source_task_id="initial_contact",
+                    dest_task_id="resolve_via_contact",
+                ),
+                RoutingDefinition(
+                    id="r4",
+                    source_task_id="escalate",
+                    dest_task_id="resolve_via_manager",
+                ),
+            ],
+        )
+
+        process = await engine.create_process(definition)
+        await engine.start_process(process.id)
+
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 2
+
+        # This time, manager escalates first
+        escalate_task = next(t for t in pending if t.task_definition_id == "escalate")
+        await engine.complete_task(
+            escalate_task.id,
+            TaskResult(success=True, output="Escalated to manager"),
+        )
+
+        # resolve_via_manager should have executed
+        assert "resolve_via_manager" in RecordingAction.executions
+        assert "resolve_via_contact" not in RecordingAction.executions
+
+    @pytest.mark.asyncio
+    async def test_wcp17_interleaved_parallel_routing(self, engine):
+        """Test WCP-17: Interleaved Parallel Routing.
+
+        A set of tasks must all be completed, but they can be done in any
+        order. Only one task is active at a time (mutual exclusion).
+
+        Example: When despatching an order, pick goods, pack goods, and
+        prepare invoice must all be done. Pick must happen before pack,
+        but prepare invoice can happen at any time. Only one task at a time.
+
+        In Zebra, this is modeled with manual tasks. The UI naturally
+        enforces one-at-a-time by the user picking tasks from the pending
+        list. The engine doesn't enforce mutual exclusion but the pattern
+        is achievable through the human interaction model.
+
+        This test demonstrates the simpler case: all tasks independent,
+        can be done in any order.
+        """
+        definition = ProcessDefinition(
+            id="wcp17",
+            name="Interleaved Parallel Routing Pattern",
+            first_task_id="start_despatch",
+            tasks={
+                "start_despatch": TaskDefinition(
+                    id="start_despatch", name="Start Despatch", action="recording"
+                ),
+                "pick_goods": TaskDefinition(
+                    id="pick_goods",
+                    name="Pick Goods",
+                    auto=False,
+                ),
+                "prepare_invoice": TaskDefinition(
+                    id="prepare_invoice",
+                    name="Prepare Invoice",
+                    auto=False,
+                ),
+                "pack_goods": TaskDefinition(
+                    id="pack_goods",
+                    name="Pack Goods",
+                    auto=False,
+                    synchronized=True,  # Waits for pick_goods to complete
+                ),
+                "ship": TaskDefinition(
+                    id="ship",
+                    name="Ship Order",
+                    action="recording",
+                    synchronized=True,  # Waits for pack + invoice
+                ),
+            },
+            routings=[
+                # Parallel split: pick_goods and prepare_invoice can start
+                RoutingDefinition(
+                    id="r1",
+                    source_task_id="start_despatch",
+                    dest_task_id="pick_goods",
+                    parallel=True,
+                ),
+                RoutingDefinition(
+                    id="r2",
+                    source_task_id="start_despatch",
+                    dest_task_id="prepare_invoice",
+                    parallel=True,
+                ),
+                # pick_goods must complete before pack_goods
+                RoutingDefinition(
+                    id="r3",
+                    source_task_id="pick_goods",
+                    dest_task_id="pack_goods",
+                ),
+                # Both pack_goods and prepare_invoice converge on ship
+                RoutingDefinition(
+                    id="r4",
+                    source_task_id="pack_goods",
+                    dest_task_id="ship",
+                ),
+                RoutingDefinition(
+                    id="r5",
+                    source_task_id="prepare_invoice",
+                    dest_task_id="ship",
+                ),
+            ],
+        )
+
+        process = await engine.create_process(definition)
+        await engine.start_process(process.id)
+
+        # After start, pick_goods and prepare_invoice are both pending
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 2
+        task_ids = {t.task_definition_id for t in pending}
+        assert task_ids == {"pick_goods", "prepare_invoice"}
+
+        # User does prepare_invoice first (any order is valid)
+        invoice_task = next(t for t in pending if t.task_definition_id == "prepare_invoice")
+        await engine.complete_task(
+            invoice_task.id,
+            TaskResult(success=True, output="Invoice prepared"),
+        )
+
+        # Only pick_goods is pending now (pack_goods needs pick_goods first)
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        assert pending[0].task_definition_id == "pick_goods"
+
+        # User does pick_goods
+        await engine.complete_task(
+            pending[0].id,
+            TaskResult(success=True, output="Goods picked"),
+        )
+
+        # pack_goods should now be pending (pick_goods done, synchronized)
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        assert pending[0].task_definition_id == "pack_goods"
+
+        # User does pack_goods
+        await engine.complete_task(
+            pending[0].id,
+            TaskResult(success=True, output="Goods packed"),
+        )
+
+        # ship (auto, synchronized) waits for both pack_goods and prepare_invoice
+        # Both are done, so ship should auto-execute and process completes
+        status = await engine.get_process_status(process.id)
+        assert status["process"]["state"] == ProcessState.COMPLETE.value
+        assert "ship" in RecordingAction.executions
+
+    @pytest.mark.asyncio
+    async def test_wcp17_alternative_order(self, engine):
+        """Test WCP-17: Same tasks, different completion order.
+
+        Verify that picking goods before preparing invoice also works.
+        """
+        definition = ProcessDefinition(
+            id="wcp17b",
+            name="Interleaved Parallel Routing (B)",
+            first_task_id="start",
+            tasks={
+                "start": TaskDefinition(id="start", name="Start", action="recording"),
+                "pick_goods": TaskDefinition(
+                    id="pick_goods",
+                    name="Pick",
+                    auto=False,
+                ),
+                "prepare_invoice": TaskDefinition(
+                    id="prepare_invoice",
+                    name="Invoice",
+                    auto=False,
+                ),
+                "pack_goods": TaskDefinition(
+                    id="pack_goods",
+                    name="Pack",
+                    auto=False,
+                    synchronized=True,
+                ),
+                "ship": TaskDefinition(
+                    id="ship",
+                    name="Ship",
+                    action="recording",
+                    synchronized=True,
+                ),
+            },
+            routings=[
+                RoutingDefinition(
+                    id="r1",
+                    source_task_id="start",
+                    dest_task_id="pick_goods",
+                    parallel=True,
+                ),
+                RoutingDefinition(
+                    id="r2",
+                    source_task_id="start",
+                    dest_task_id="prepare_invoice",
+                    parallel=True,
+                ),
+                RoutingDefinition(
+                    id="r3",
+                    source_task_id="pick_goods",
+                    dest_task_id="pack_goods",
+                ),
+                RoutingDefinition(
+                    id="r4",
+                    source_task_id="pack_goods",
+                    dest_task_id="ship",
+                ),
+                RoutingDefinition(
+                    id="r5",
+                    source_task_id="prepare_invoice",
+                    dest_task_id="ship",
+                ),
+            ],
+        )
+
+        process = await engine.create_process(definition)
+        await engine.start_process(process.id)
+
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 2
+
+        # This time, do pick_goods first
+        pick_task = next(t for t in pending if t.task_definition_id == "pick_goods")
+        await engine.complete_task(
+            pick_task.id,
+            TaskResult(success=True, output="Picked"),
+        )
+
+        # pack_goods and prepare_invoice should both be pending
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 2
+        task_ids = {t.task_definition_id for t in pending}
+        assert task_ids == {"pack_goods", "prepare_invoice"}
+
+        # Do pack_goods
+        pack_task = next(t for t in pending if t.task_definition_id == "pack_goods")
+        await engine.complete_task(
+            pack_task.id,
+            TaskResult(success=True, output="Packed"),
+        )
+
+        # prepare_invoice still pending, ship waiting for it
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        assert pending[0].task_definition_id == "prepare_invoice"
+
+        # Complete invoice
+        await engine.complete_task(
+            pending[0].id,
+            TaskResult(success=True, output="Invoiced"),
+        )
+
+        # Ship auto-runs, process completes
+        status = await engine.get_process_status(process.id)
+        assert status["process"]["state"] == ProcessState.COMPLETE.value
+        assert "ship" in RecordingAction.executions
 
 
 # =============================================================================

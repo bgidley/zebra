@@ -145,20 +145,30 @@ version: 1
 tasks:
   assess_volume:
     name: "Assess Volume"
-    action: prompt
     auto: false
     properties:
-      prompt: "Assess earth volume (small/large)"
+      schema:
+        type: object
+        required: [volume]
+        properties:
+          volume:
+            type: string
+            title: "Earth Volume"
+            enum: ["small", "large"]
 
   dispatch_bobcat:
     name: "Dispatch Bobcat"
-    action: prompt
-    auto: false
+    action: shell
+    auto: true
+    properties:
+      command: "echo 'Dispatching bobcat'"
 
   dispatch_excavator:
     name: "Dispatch D9 Excavator"
-    action: prompt
-    auto: false
+    action: shell
+    auto: true
+    properties:
+      command: "echo 'Dispatching excavator'"
 
 routings:
   - from: assess_volume
@@ -173,8 +183,10 @@ routings:
 ```
 
 **Notes**:
-- Task `assess_volume` returns a result with `next_route` set to "small" or "large"
-- Use `TaskResult.ok(output="result", next_route="small")` when completing the task
+- Task `assess_volume` is a human task (`auto: false`) with an enum field for the decision
+- The web UI renders the enum as a select dropdown with route buttons
+- `complete_task()` is called with `next_route` matching the enum value
+- Only the selected branch executes
 
 ---
 
@@ -391,19 +403,163 @@ routings:
 
 ## State-Based Patterns
 
-### ❌ WCP-16: Deferred Choice
+### ⚠️ WCP-16: Deferred Choice
 
-**Description**: The environment (not process logic) determines which branch executes.
+**Description**: A point in a process where one of several branches is chosen based on interaction with the operating environment. All branches represent possible future courses; the decision is made by initiating the first task in one of the branches.
 
-**Status**: Not directly supported. All routing decisions in Zebra are made by task completion logic.
+**Zebra Implementation**:
+
+```yaml
+name: "Deferred Choice Example"
+version: 1
+
+tasks:
+  receive_complaint:
+    name: "Receive Complaint"
+
+  initial_contact:
+    name: "Initial Customer Contact"
+    auto: false
+    properties:
+      schema:
+        type: object
+        required: [resolution]
+        properties:
+          resolution:
+            type: string
+            title: "Resolution Notes"
+            format: multiline
+
+  escalate:
+    name: "Escalate to Manager"
+    auto: false
+    properties:
+      schema:
+        type: object
+        required: [reason]
+        properties:
+          reason:
+            type: string
+            title: "Escalation Reason"
+            format: multiline
+
+  resolve_via_contact:
+    name: "Resolve via Contact"
+    action: llm_call
+    properties:
+      prompt: "Summarize resolution: {{initial_contact.output}}"
+      output_key: summary
+
+  resolve_via_manager:
+    name: "Resolve via Manager"
+    action: llm_call
+    properties:
+      prompt: "Summarize escalation: {{escalate.output}}"
+      output_key: summary
+
+routings:
+  - from: receive_complaint
+    to: initial_contact
+    parallel: true
+
+  - from: receive_complaint
+    to: escalate
+    parallel: true
+
+  - from: initial_contact
+    to: resolve_via_contact
+
+  - from: escalate
+    to: resolve_via_manager
+```
+
+**Notes**:
+- Both `initial_contact` and `escalate` are offered simultaneously as pending human tasks
+- The user (or environment) decides which to complete first — whichever is done first triggers its downstream branch
+- **Limitation**: The unselected task is not auto-withdrawn; it remains in READY state. Full support would require a `cancel_task()` API to withdraw the other branch
 
 ---
 
-### ❌ WCP-17: Interleaved Parallel Routing
+### ⚠️ WCP-17: Interleaved Parallel Routing
 
-**Description**: Activities execute sequentially in any order (non-deterministic sequence).
+**Description**: A set of tasks has a partial ordering. Each task must be executed once, in any order consistent with the ordering, but no two tasks execute at the same time.
 
-**Status**: Not directly supported.
+**Zebra Implementation**:
+
+```yaml
+name: "Interleaved Parallel Routing Example"
+version: 1
+
+tasks:
+  start_despatch:
+    name: "Start Despatch"
+
+  pick_goods:
+    name: "Pick Goods"
+    auto: false
+    properties:
+      schema:
+        type: object
+        required: [picked]
+        properties:
+          picked:
+            type: boolean
+            title: "Goods Picked"
+
+  prepare_invoice:
+    name: "Prepare Invoice"
+    auto: false
+    properties:
+      schema:
+        type: object
+        required: [invoice_number]
+        properties:
+          invoice_number:
+            type: string
+            title: "Invoice Number"
+
+  pack_goods:
+    name: "Pack Goods"
+    auto: false
+    synchronized: true
+    properties:
+      schema:
+        type: object
+        required: [packed]
+        properties:
+          packed:
+            type: boolean
+            title: "Goods Packed"
+
+  ship:
+    name: "Ship Order"
+    synchronized: true
+
+routings:
+  - from: start_despatch
+    to: pick_goods
+    parallel: true
+
+  - from: start_despatch
+    to: prepare_invoice
+    parallel: true
+
+  - from: pick_goods
+    to: pack_goods
+
+  - from: pack_goods
+    to: ship
+
+  - from: prepare_invoice
+    to: ship
+```
+
+**Notes**:
+- `pick_goods` and `prepare_invoice` are offered in parallel; the user picks which to do first
+- `pack_goods` has `synchronized: true` so it waits for `pick_goods` to complete (partial ordering)
+- `ship` has `synchronized: true` so it waits for both `pack_goods` and `prepare_invoice`
+- The web UI naturally enforces one-at-a-time (user selects one task from the pending list)
+- **Limitation**: The engine does not enforce mutual exclusion; concurrent API calls could complete tasks simultaneously. Interleaving is enforced through the user interaction model, not the engine
 
 ---
 
@@ -475,18 +631,32 @@ tasks:
 
   review:
     name: "Review Document"
-    action: prompt
     auto: false
+    properties:
+      schema:
+        type: object
+        required: [decision]
+        properties:
+          decision:
+            type: string
+            title: "Review Decision"
+            enum: ["approved", "needs_revision"]
+          comments:
+            type: string
+            title: "Comments"
+            format: multiline
 
   revise:
     name: "Revise Document"
-    action: prompt
-    auto: false
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: "Revise the document based on feedback"
+      prompt: "{{review.output}}"
+      output_key: revised_document
 
   approve:
     name: "Approve Document"
-    action: prompt
-    auto: false
 
 routings:
   - from: start
@@ -506,9 +676,14 @@ routings:
     to: review  # Loop back
 ```
 
+**Notes**:
+- The review task is manual (`auto: false`) with an enum for the decision
+- When "needs_revision" is selected, the revise task runs (auto) and loops back to create a new review task
+- The engine handles loop-back by creating fresh task instances for revisited tasks
+
 ---
 
-### ⚠️ WCP-21: Structured Loop
+### ✅ WCP-21: Structured Loop
 
 **Description**: While/repeat loops with single entry/exit point.
 
@@ -521,18 +696,26 @@ version: 1
 tasks:
   check_fuel:
     name: "Check Fuel Level"
-    action: prompt
     auto: false
+    properties:
+      schema:
+        type: object
+        required: [status]
+        properties:
+          status:
+            type: string
+            title: "Fuel Status"
+            enum: ["has_fuel", "no_fuel"]
 
   production:
     name: "Run Production"
-    action: prompt
-    auto: false
+    action: shell
+    auto: true
+    properties:
+      command: "echo 'Running production cycle'"
 
   complete:
     name: "Complete"
-    action: prompt
-    auto: false
 
 routings:
   - from: check_fuel
@@ -549,7 +732,11 @@ routings:
     to: check_fuel  # Loop back
 ```
 
-**Notes**: While and repeat loops can be modeled using conditional routing back to earlier tasks.
+**Notes**:
+- The check task is a human task with an enum for the loop condition
+- When "has_fuel" is selected, the production task runs and loops back
+- When "no_fuel" is selected, the workflow exits to the complete task
+- The engine creates fresh task instances for each loop iteration
 
 ---
 
@@ -724,16 +911,18 @@ Default behavior - a process completes when all tasks are complete and no tasks 
 - WCP-7: Structured Synchronizing Merge
 - WCP-10: Arbitrary Cycles
 - WCP-11: Implicit Termination
-- WCP-21: Structured Loop (via cycles)
+- WCP-21: Structured Loop
 
-**Partial Support**: 6 patterns (⚠️)
+**Partial Support**: 8 patterns (⚠️)
 - WCP-6: Multi-Choice (requires custom conditions)
 - WCP-8: Multi-Merge (needs verification)
 - WCP-12: Multiple Instances (via parallel branches)
+- WCP-16: Deferred Choice (via parallel human tasks; no auto-withdrawal of unselected branches)
+- WCP-17: Interleaved Parallel Routing (via human tasks with partial ordering; mutual exclusion is UI-enforced)
 - WCP-19: Cancel Activity
 - WCP-20: Cancel Case
 
-**Not Supported**: 26 patterns (❌)
+**Not Supported**: 24 patterns (❌)
 
 ---
 
@@ -741,14 +930,14 @@ Default behavior - a process completes when all tasks are complete and no tasks 
 
 Zebra could be extended to support additional patterns through:
 
-1. **Multiple Instance Support**: Add dedicated multiple-instance task constructs with configurable synchronization
-2. **Discriminator Patterns**: Implement first-wins semantics with various reset strategies
-3. **Partial Join Patterns**: Add N-out-of-M synchronization constructs
-4. **OR-Join**: Implement true OR-join with local or non-local semantics
-5. **Deferred Choice**: Add environment-driven branching (e.g., timers, external events)
-6. **Cancellation**: Expand cancellation support with region and activity-level control
-7. **Critical Sections**: Add mutex/semaphore constructs for activity execution
-8. **Explicit Termination**: Add explicit termination actions
+1. **Task Cancellation (`cancel_task()`)**: Would upgrade WCP-16 (Deferred Choice) to full support by auto-withdrawing unselected branches. Would also improve WCP-19 (Cancel Activity) and WCP-20 (Cancel Case).
+2. **Multiple Instance Support**: Add dedicated multiple-instance task constructs with configurable synchronization (WCP-13, WCP-14, WCP-15).
+3. **Discriminator Patterns**: Implement first-wins semantics with various reset strategies (WCP-9, WCP-28, WCP-29).
+4. **Partial Join Patterns**: Add N-out-of-M synchronization constructs (WCP-30, WCP-31, WCP-32).
+5. **OR-Join**: Implement true OR-join with local or non-local semantics (WCP-37, WCP-38).
+6. **Mutex/Semaphore**: Engine-level mutual exclusion would upgrade WCP-17 (Interleaved Parallel Routing) to full support.
+7. **Explicit Termination**: Add explicit termination actions (WCP-43).
+8. **Triggers**: Add timer-based and external event triggers (WCP-23, WCP-24).
 
 ---
 

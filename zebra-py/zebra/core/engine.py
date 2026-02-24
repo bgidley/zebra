@@ -379,8 +379,11 @@ class WorkflowEngine:
             )
             await self.store.save_task(task)
 
-        # Run task if in READY state
+        # Run task if in READY state and auto-executable
         if task.state == TaskState.READY:
+            if not task_def.auto:
+                # Manual task - leave in READY for external completion via complete_task()
+                return []
             await self._run_task(task, task_def, process, definition)
             task = await self._load_task(task.id)  # Reload after run
 
