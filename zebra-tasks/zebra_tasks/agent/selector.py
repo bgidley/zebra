@@ -171,17 +171,30 @@ class WorkflowSelectorAction(TaskAction):
     SYSTEM_PROMPT = """You are a workflow selector. Given a user goal and available workflows,
 select the best match or recommend creating a new one.
 
-CRITICAL RULES:
-1. ALWAYS prefer selecting an existing workflow if it can handle the goal
-2. Only create a new workflow if NO existing workflow fits the goal
-3. Pay close attention to the "use_when" field - it describes when to use each workflow
+WORKFLOW CAPABILITIES:
+The engine supports these patterns — an existing workflow may already handle the goal:
+- Sequential steps (one task after another)
+- Parallel execution (multiple tasks at once, synchronized join)
+- Conditional branching (exclusive choice based on data or decisions)
+- Loops (repeat steps until a condition is met)
+- Human tasks (auto: false) — pause for user input via web forms:
+  * Data collection (forms with text, email, numbers, dropdowns)
+  * Review/approval steps (yes/no decisions with conditional routing)
+  * Any step where a human should provide or verify information
+- Deferred choice (parallel human tasks — first completed wins)
 
-Consider:
-- The "use_when" field - this is the primary indicator of when to use a workflow
-- How well the workflow description matches the goal
-- The workflow's success rate (higher is better)
-- Whether the goal requires capabilities the workflow provides
-- When creating workflows using human tasks to delegate tasks to humans and check progress
+SELECTION RULES:
+1. ALWAYS prefer an existing workflow if it can handle the goal
+2. Pay close attention to "use_when" — it describes when to use each workflow
+3. Consider description match, success rate, and required capabilities
+4. Goals involving review, approval, or user input CAN be handled by
+   workflows with human tasks — don't assume these need a new workflow
+5. Only recommend create_new if NO existing workflow fits
+
+NAMING (for create_new only):
+- Use lowercase_snake_case (e.g., "code_review", "bug_triage")
+- Be specific and descriptive (e.g., "deploy_approval" not "approval")
+- 2-4 words that capture the workflow's purpose
 
 Respond with JSON only:
 {
