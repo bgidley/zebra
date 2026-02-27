@@ -302,6 +302,18 @@ class DjangoStore(StateStore):
 
         return await _delete()
 
+    async def get_ready_tasks(self) -> list[TaskInstance]:
+        """Get all tasks in READY state across all processes."""
+
+        @sync_to_async
+        def _get():
+            queryset = TaskInstanceModel.objects.filter(state=TaskState.READY.value).order_by(
+                "created_at"
+            )
+            return [self._model_to_task(m) for m in queryset]
+
+        return await _get()
+
     async def get_running_tasks(self, process_id: str | None = None) -> list[TaskInstance]:
         """Get all tasks in RUNNING state."""
 

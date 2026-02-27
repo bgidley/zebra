@@ -181,6 +181,18 @@ class DjangoMetricsStore(MetricsStore):
 
         return await _get()
 
+    async def get_completed_runs(self, limit: int = 20) -> list[WorkflowRun]:
+        """Get completed workflow runs, ordered by most recently completed."""
+
+        @sync_to_async
+        def _get():
+            models = WorkflowRunModel.objects.filter(completed_at__isnull=False).order_by(
+                "-completed_at"
+            )[:limit]
+            return [self._model_to_run(m) for m in models]
+
+        return await _get()
+
     async def get_runs_for_workflow(self, workflow_name: str, limit: int = 10) -> list[WorkflowRun]:
         """Get recent runs for a specific workflow."""
 

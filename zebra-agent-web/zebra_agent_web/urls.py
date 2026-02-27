@@ -3,8 +3,8 @@
 This is an agent-only web application with simplified URL structure:
 - / -> Dashboard
 - /run/ -> Run Goal
+- /activity/ -> Activity (goals, tasks, history)
 - /workflows/ -> Workflow Library
-- /runs/ -> Run History
 - /api/ -> REST API
 """
 
@@ -20,6 +20,8 @@ urlpatterns = [
     # Run Goal
     path("run/", web_views.run_goal_form, name="run_goal_form"),
     path("run/execute/", web_views.run_goal_execute, name="run_goal_execute"),
+    # Activity (unified view: in-progress, pending tasks, history)
+    path("activity/", web_views.activity, name="activity"),
     # Workflows
     path("workflows/", web_views.workflow_library, name="workflow_library"),
     path("workflows/create/", web_views.workflow_create, name="workflow_create"),
@@ -29,13 +31,14 @@ urlpatterns = [
         web_views.workflow_delete,
         name="workflow_delete",
     ),
-    # Human Tasks
-    path("tasks/", web_views.pending_tasks, name="pending_tasks"),
+    # Human Tasks (form pages still accessible directly)
     path("tasks/<str:task_id>/", web_views.human_task_form, name="human_task_form"),
     path("tasks/<str:task_id>/submit/", web_views.human_task_submit, name="human_task_submit"),
-    # Runs
-    path("runs/", web_views.recent_runs, name="recent_runs"),
-    path("runs/in-progress/", web_views.in_progress_runs, name="in_progress_runs"),
+    # Run detail pages
     path("runs/<str:run_id>/", web_views.run_detail, name="run_detail"),
     path("runs/<str:run_id>/rate/", web_views.run_rate, name="run_rate"),
+    # Legacy redirects (old URLs redirect to activity page)
+    path("tasks/", web_views.pending_tasks, name="pending_tasks"),
+    path("runs/in-progress/", web_views.in_progress_runs, name="in_progress_runs"),
+    path("runs/", web_views.recent_runs, name="recent_runs"),
 ]

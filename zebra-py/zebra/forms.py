@@ -28,10 +28,11 @@ class FormField:
     """A renderable form field derived from JSON Schema."""
 
     name: str
-    widget: str  # "text", "textarea", "number", "select", "checkbox", "date", "email", "url"
+    widget: str  # "text", "textarea", "number", "select", "checkbox", "date", "email", "url", "markdown"
     title: str
     description: str | None = None
     required: bool = False
+    read_only: bool = False
     default: Any = None
     enum: list[str] | None = None
     enum_labels: list[str] | None = None  # Human-readable labels for enum values
@@ -64,6 +65,7 @@ class ValidationError:
 _WIDGET_MAP: dict[tuple[str, str | None], str] = {
     ("string", None): "text",
     ("string", "multiline"): "textarea",
+    ("string", "markdown"): "markdown",  # explicit format: markdown also works
     ("string", "date"): "date",
     ("string", "date-time"): "datetime",
     ("string", "email"): "email",
@@ -115,9 +117,12 @@ def _property_to_field(name: str, prop: dict[str, Any], required: bool) -> FormF
     prop_type = prop.get("type", "string")
     prop_format = prop.get("format")
     enum = prop.get("enum")
+    read_only = bool(prop.get("readOnly", False))
 
-    # Determine widget
-    if enum and prop_type == "string":
+    # Determine widget — readOnly string fields render as a markdown display panel
+    if read_only and prop_type == "string":
+        widget = "markdown"
+    elif enum and prop_type == "string":
         widget = "select"
     elif enum and prop_type == "array":
         widget = "multiselect"
@@ -138,6 +143,7 @@ def _property_to_field(name: str, prop: dict[str, Any], required: bool) -> FormF
         title=title,
         description=prop.get("description"),
         required=required,
+        read_only=read_only,
         default=prop.get("default"),
         enum=enum,
         enum_labels=enum_labels,

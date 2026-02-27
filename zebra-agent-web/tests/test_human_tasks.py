@@ -115,6 +115,41 @@ def _routed_human_task_definition():
     )
 
 
+def _template_default_definition():
+    """A workflow whose human task schema has a {{template}} default value."""
+    return ProcessDefinition(
+        id="template-default-wf",
+        name="Template Default Test",
+        version=1,
+        first_task_id="show_questions",
+        tasks={
+            "show_questions": TaskDefinition(
+                id="show_questions",
+                name="Show Questions",
+                auto=False,
+                properties={
+                    "schema": {
+                        "type": "object",
+                        "title": "Quiz",
+                        "properties": {
+                            "questions": {
+                                "type": "string",
+                                "title": "Questions",
+                                "default": "{{questions}}",
+                            },
+                            "answer": {
+                                "type": "string",
+                                "title": "Your Answer",
+                            },
+                        },
+                    },
+                },
+            ),
+        },
+        routings=[],
+    )
+
+
 def _no_schema_human_task_definition():
     """A workflow with a human task that has NO schema (tests fallback)."""
     return ProcessDefinition(
@@ -154,7 +189,8 @@ def wf_engine(store):
 
 @pytest.fixture(autouse=True)
 def patch_engine(store, wf_engine):
-    """Monkey-patch the engine singleton so views use our test engine/store."""
+    """Monkey-patch the engine and agent_engine singletons so views use test fixtures."""
+    import zebra_agent_web.api.agent_engine as agent_engine_module
     import zebra_agent_web.api.engine as engine_module
 
     old_store = engine_module._store
@@ -163,10 +199,44 @@ def patch_engine(store, wf_engine):
     engine_module._store = store
     engine_module._engine = wf_engine
 
+    # Patch agent_engine with a stub metrics store so /activity/ view works
+    old_metrics = agent_engine_module._metrics
+    old_library = agent_engine_module._library
+    agent_engine_module._metrics = _StubMetricsStore()
+    agent_engine_module._library = _StubLibrary()
+
     yield
 
     engine_module._store = old_store
     engine_module._engine = old_engine
+    agent_engine_module._metrics = old_metrics
+    agent_engine_module._library = old_library
+
+
+class _StubMetricsStore:
+    """Minimal stub that returns empty results for activity view tests."""
+
+    async def get_in_progress_runs(self):
+        return []
+
+    async def get_completed_runs(self, limit=20):
+        return []
+
+    async def get_recent_runs(self, limit=10):
+        return []
+
+    async def get_run(self, run_id):
+        return None
+
+    async def get_task_executions(self, run_id):
+        return []
+
+
+class _StubLibrary:
+    """Minimal stub for workflow library."""
+
+    async def list_workflows(self):
+        return []
 
 
 @pytest.fixture
@@ -191,20 +261,50 @@ async def _start_workflow(wf_engine, definition):
 
 
 class TestPendingTasksList:
-    """Tests for the /tasks/ view."""
+    """Tests for the /activity/ view (formerly /tasks/)."""
+
+    async def test_old_tasks_url_redirects(self, client):
+        """The old /tasks/ URL redirects to /activity/."""
+        response = await client.get("/tasks/")
+        assert response.status_code == 302
+        assert "/activity/" in response.url
 
     async def test_empty_when_no_processes(self, client):
-        """No running processes -> empty task list."""
-        response = await client.get("/tasks/")
+        """No running processes -> empty activity list."""
+        response = await client.get("/activity/")
         assert response.status_code == 200
-        assert b"No pending tasks" in response.content
+        assert b"No activity" in response.content
 
     async def test_shows_pending_human_task(self, client, wf_engine):
-        """A running workflow with auto:false task shows in the list."""
+        """A running workflow with auto:false task shows in the activity list."""
         defn = _simple_human_task_definition()
         await _start_workflow(wf_engine, defn)
 
-        response = await client.get("/tasks/")
+        response = await client.get("/activity/")
+        assert response.status_code == 200
+        assert b"Ask User" in response.content
+        assert b"Awaiting Input" in response.content
+
+    async def test_shows_human_task_when_run_id_not_in_metrics(self, client, wf_engine):
+        """Pending task is visible even when the run_id is absent from the metrics store.
+
+        Regression test: previously the activity view only iterated over runs returned
+        by metrics.get_in_progress_runs(). If that list was empty (e.g. the metrics
+        record was lost or the process was started outside the agent loop), running
+        processes with pending human tasks were silently dropped from the page.
+        """
+        defn = _simple_human_task_definition()
+        process, _ = await _start_workflow(wf_engine, defn)
+
+        # Simulate a process that has a run_id in its properties but NO matching
+        # WorkflowRunModel entry (metrics store returns empty list).
+        # Reload after start_process so we have the RUNNING-state version.
+        run_id = "test-run-id-not-in-metrics"
+        running_process = await wf_engine.store.load_process(process.id)
+        updated = running_process.model_copy(update={"properties": {"run_id": run_id}})
+        await wf_engine.store.save_process(updated)
+
+        response = await client.get("/activity/")
         assert response.status_code == 200
         assert b"Ask User" in response.content
         assert b"Awaiting Input" in response.content
@@ -214,7 +314,7 @@ class TestPendingTasksList:
         defn = _simple_human_task_definition()
         await _start_workflow(wf_engine, defn)
 
-        response = await client.get("/tasks/", headers={"HX-Request": "true"})
+        response = await client.get("/activity/", headers={"HX-Request": "true"})
         assert response.status_code == 200
         assert b"Ask User" in response.content
         # Partial should have the polling attributes
@@ -265,10 +365,42 @@ class TestHumanTaskForm:
         assert "Response" in content
         assert "Provide Response" in content  # fallback title uses task name
 
+    async def test_resolves_template_defaults_from_process_properties(self, client, wf_engine):
+        """{{template}} variables in schema defaults are resolved from process properties.
+
+        Regression test: previously schema defaults containing {{var}} were rendered
+        literally, so users saw '{{questions}}' instead of the actual quiz content.
+        """
+        defn = _template_default_definition()
+        process, pending = await _start_workflow(wf_engine, defn)
+        task = pending[0]
+
+        # Set the process property that the template default references
+        running = await wf_engine.store.load_process(process.id)
+        updated = running.model_copy(update={"properties": {"questions": "Q1: What is 1+1?"}})
+        await wf_engine.store.save_process(updated)
+
+        response = await client.get(f"/tasks/{task.id}/")
+        assert response.status_code == 200
+        content = response.content.decode()
+        # The resolved value should appear, not the raw template
+        assert "Q1: What is 1+1?" in content
+        assert "{{questions}}" not in content
+
     async def test_404_for_unknown_task(self, client):
-        """Unknown task_id returns 404."""
+        """Unknown task_id returns 404 with a styled error page.
+
+        Regression test: previously this returned a plain "Task not found" text
+        response. Now it renders a proper HTML page explaining the task has
+        already been completed (since the engine deletes tasks after completion).
+        """
         response = await client.get("/tasks/nonexistent-id/")
         assert response.status_code == 404
+        content = response.content.decode()
+        # Should be an HTML page, not bare text
+        assert "<html" in content.lower() or "<!doctype" in content.lower()
+        # Should explain what happened in user-friendly language
+        assert "already been completed" in content.lower() or "task not found" in content.lower()
 
 
 # ===========================================================================
@@ -458,3 +590,166 @@ class TestAPITaskComplete:
         assert response.status_code == 200
         data = response.json()
         assert data["completed"] is True
+
+
+# ===========================================================================
+# REST API Tests: Run Diagram (diagram fallback to running processes)
+# ===========================================================================
+
+
+class _StubMetricsStoreEmpty:
+    """Metrics store stub that returns None for all runs (simulates missing record)."""
+
+    async def get_run(self, run_id):
+        return None
+
+    async def get_task_executions(self, run_id):
+        return []
+
+    async def get_in_progress_runs(self):
+        return []
+
+
+class _StubLibraryWithWorkflow:
+    """Library stub that returns a known workflow."""
+
+    def __init__(self, definition):
+        self._definition = definition
+
+    def get_workflow(self, name):
+        if name == self._definition.name:
+            return self._definition
+        raise ValueError(f"Workflow '{name}' not found")
+
+
+class TestRunDiagramFallback:
+    """Tests for /api/runs/<id>/diagram/ with missing metrics record.
+
+    Regression test: when no WorkflowRunModel entry exists yet (during
+    execution before RecordMetricsAction fires), the diagram endpoint would
+    return 404. Now it falls back to running engine processes.
+    """
+
+    @pytest.fixture(autouse=True)
+    def patch_diagram_deps(self, store, wf_engine):
+        """Patch engine and agent_engine for diagram tests."""
+        import zebra_agent_web.api.agent_engine as agent_engine_module
+        import zebra_agent_web.api.engine as engine_module
+
+        defn = _simple_human_task_definition()
+        defn_with_name = defn.model_copy(update={"name": "Human Task Test"})
+
+        old_store = engine_module._store
+        old_engine = engine_module._engine
+        old_metrics = agent_engine_module._metrics
+        old_library = agent_engine_module._library
+
+        engine_module._store = store
+        engine_module._engine = wf_engine
+        agent_engine_module._metrics = _StubMetricsStoreEmpty()
+        agent_engine_module._library = _StubLibraryWithWorkflow(defn_with_name)
+
+        yield defn_with_name
+
+        engine_module._store = old_store
+        engine_module._engine = old_engine
+        agent_engine_module._metrics = old_metrics
+        agent_engine_module._library = old_library
+
+    async def test_diagram_fallback_when_no_metrics_record(self, client, wf_engine, store):
+        """Diagram returns SVG when metrics record is absent but process exists.
+
+        Regression: previously returned 404 when WorkflowRunModel entry was missing.
+        Now falls back to engine processes to find the workflow_name.
+        """
+        # Create a process with run_id and workflow_name in properties
+        defn = _simple_human_task_definition()
+        run_id = "test-run-123"
+        process = await wf_engine.create_process(
+            defn,
+            properties={"run_id": run_id, "workflow_name": "Human Task Test"},
+        )
+        await wf_engine.start_process(process.id)
+
+        response = await client.get(f"/api/runs/{run_id}/diagram/")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["run_id"] == run_id
+        assert data["workflow_name"] == "Human Task Test"
+        assert "<svg" in data["svg"]
+
+    async def test_diagram_404_when_run_id_not_found(self, client):
+        """Diagram returns 404 when run_id matches no metrics record or process."""
+        response = await client.get("/api/runs/totally-nonexistent-run/diagram/")
+        assert response.status_code == 404
+
+
+# ===========================================================================
+# REST API Tests: Run Status (sync @api_view fix)
+# ===========================================================================
+
+
+class _StubMetricsStoreWithRun:
+    """Metrics store stub that returns a run record."""
+
+    def __init__(self, run):
+        self._run = run
+
+    async def get_run(self, run_id):
+        if run_id == self._run.id:
+            return self._run
+        return None
+
+    async def get_in_progress_runs(self):
+        return []
+
+
+class TestRunStatus:
+    """Tests for GET /api/runs/<id>/status/.
+
+    Regression test: the view was async def + @api_view (DRF incompatibility
+    that returns a coroutine instead of a Response). Now converted to sync
+    with async_to_sync.
+    """
+
+    @pytest.fixture(autouse=True)
+    def patch_deps(self, store, wf_engine):
+        """Patch engine + agent_engine for run_status tests."""
+        import zebra_agent_web.api.agent_engine as agent_engine_module
+        import zebra_agent_web.api.engine as engine_module
+
+        old_store = engine_module._store
+        old_engine = engine_module._engine
+        old_metrics = agent_engine_module._metrics
+        old_library = agent_engine_module._library
+
+        engine_module._store = store
+        engine_module._engine = wf_engine
+        agent_engine_module._metrics = _StubMetricsStore()
+        agent_engine_module._library = _StubLibrary()
+
+        yield
+
+        engine_module._store = old_store
+        engine_module._engine = old_engine
+        agent_engine_module._metrics = old_metrics
+        agent_engine_module._library = old_library
+
+    async def test_run_status_not_found(self, client):
+        """Returns 404 for unknown run_id with JSON body."""
+        response = await client.get("/api/runs/nonexistent-run/status/")
+        assert response.status_code == 404
+        data = response.json()
+        assert data["status"] == "not_found"
+
+    async def test_run_status_returns_json(self, client):
+        """Response is proper JSON, not a coroutine error.
+
+        Previously this endpoint was async def + @api_view, which caused DRF to
+        return a 500 instead of a Response (the coroutine was never awaited).
+        """
+        response = await client.get("/api/runs/any-id/status/")
+        # Should be a valid JSON response (200 or 404), NOT a 500 coroutine error
+        assert response.status_code in (200, 404)
+        data = response.json()
+        assert "status" in data

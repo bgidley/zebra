@@ -29,6 +29,18 @@ Parameters passed via context:
         {% endif %}
     </div>
 
+    {% comment %} Prior task outputs - show generated content for user reference {% endcomment %}
+    {% if prior_outputs %}
+    <div class="mb-6 space-y-3">
+        {% for label, value in prior_outputs.items %}
+        <div class="bg-gray-900 rounded-md border border-gray-600 p-4">
+            <div class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">{{ label }}</div>
+            <div class="text-sm text-gray-200 whitespace-pre-wrap">{% if value is not None %}{{ value }}{% endif %}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {% comment %} Form {% endcomment %}
     <form hx-post="{% url 'human_task_submit' task_id=task.id %}"
           hx-target="#task-form-{{ task.id }}"

@@ -343,21 +343,29 @@ async def run_rate(request, run_id):
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+def _run_status_impl(run_id):
+    """Sync implementation for run_status using async_to_sync."""
+
+    async def _get_data():
+        await agent_engine.ensure_initialized()
+        metrics = agent_engine.get_metrics()
+        return await metrics.get_run(run_id)
+
+    return async_to_sync(_get_data)()
+
+
 @api_view(["GET"])
-async def run_status(request, run_id):
+def run_status(request, run_id):
     """Get current status of a run (for recovery if WebSocket disconnects).
 
     Returns:
     - status: "processing" | "completed" | "failed" | "not_found"
     - Additional fields depending on status
     """
-    await agent_engine.ensure_initialized()
-    metrics = agent_engine.get_metrics()
-
     # Import here to avoid circular import
     from zebra_agent_web.api.web_views import is_task_active
 
-    run = await metrics.get_run(run_id)
+    run = _run_status_impl(run_id)
 
     if run is None:
         # Check if it's still being processed
@@ -401,7 +409,11 @@ async def run_status(request, run_id):
 
 
 def _run_diagram_impl(run_id):
-    """Implementation for run_diagram that handles async operations."""
+    """Implementation for run_diagram that handles async operations.
+
+    Falls back to running engine processes when no metrics record exists yet
+    (which is common during execution, since metrics are recorded at completion).
+    """
     from asgiref.sync import async_to_sync
 
     from zebra_agent_web.diagram import generate_workflow_svg
@@ -409,25 +421,45 @@ def _run_diagram_impl(run_id):
     # Initialize and get data using async_to_sync
     async def _get_data():
         await agent_engine.ensure_initialized()
+        await engine.ensure_initialized()
         metrics = agent_engine.get_metrics()
         library = agent_engine.get_library()
+        store = engine.get_store()
 
         run = await metrics.get_run(run_id)
-        if run is None:
-            return None, None, None, "not_found"
+        task_executions = []
+        workflow_name = None
+        completed = False
 
-        if not run.workflow_name:
-            return None, None, None, "no_workflow"
+        if run is not None:
+            workflow_name = run.workflow_name
+            task_executions = await metrics.get_task_executions(run_id)
+            completed = run.completed_at is not None
+        else:
+            # No metrics record yet - look up workflow_name from running processes.
+            # This happens during execution before RecordMetricsAction fires.
+            running_processes = await store.get_running_processes()
+            for process in running_processes:
+                props = process.properties or {}
+                if props.get("run_id") == run_id:
+                    workflow_name = props.get("workflow_name")
+                    break
+            if workflow_name is None:
+                return None, None, None, None, "not_found"
+
+        if not workflow_name:
+            return None, None, None, None, "no_workflow"
 
         try:
-            workflow_definition = library.get_workflow(run.workflow_name)
+            workflow_definition = library.get_workflow(workflow_name)
         except ValueError:
-            return None, None, None, "workflow_not_found"
+            return None, None, None, None, "workflow_not_found"
 
-        task_executions = await metrics.get_task_executions(run_id)
-        return run, workflow_definition, task_executions, None
+        return workflow_name, workflow_definition, task_executions, completed, None
 
-    run, workflow_definition, task_executions, error = async_to_sync(_get_data)()
+    workflow_name, workflow_definition, task_executions, completed, error = async_to_sync(
+        _get_data
+    )()
 
     if error:
         return None, error
@@ -435,10 +467,10 @@ def _run_diagram_impl(run_id):
     workflow_svg = generate_workflow_svg(workflow_definition, task_executions)
     return {
         "run_id": run_id,
-        "workflow_name": run.workflow_name,
+        "workflow_name": workflow_name,
         "svg": workflow_svg,
         "task_count": len(task_executions),
-        "completed": run.completed_at is not None,
+        "completed": completed,
     }, None
 
 
