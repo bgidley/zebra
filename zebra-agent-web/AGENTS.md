@@ -276,6 +276,66 @@ async def my_web_view(request):
     return render(request, "pages/my_page.html", {"data": data})
 ```
 
+## Querying the Database Directly
+
+You can query the Oracle database directly from a script for debugging and investigation. Use the environment variables from `.env` and Django's ORM via a standalone script:
+
+```bash
+cd /home/opc/projects/zebra/zebra-agent-web && \
+  ORACLE_USERNAME=ZEBRA \
+  ORACLE_PASSWORD=<from .env> \
+  ORACLE_DSN='<from .env>' \
+  DJANGO_SETTINGS_MODULE=zebra_agent_web.settings \
+  uv run python -c "
+import django
+django.setup()
+from zebra_agent_web.api.models import (
+    ProcessInstanceModel,
+    TaskInstanceModel,
+    FlowOfExecutionModel,
+    WorkflowRunModel,
+    TaskExecutionModel,
+)
+import json
+
+# Example: find all READY tasks
+for t in TaskInstanceModel.objects.filter(state='READY').order_by('-updated_at')[:10]:
+    print(t.id, t.task_definition_id, t.process_id, t.state)
+"
+```
+
+**Key model names** (all in `zebra_agent_web/api/models.py`):
+
+| Model | Table purpose | Useful fields |
+|-------|--------------|---------------|
+| `ProcessInstanceModel` | Workflow process instances | `id`, `definition_id`, `state`, `properties` (JSON string), `updated_at` |
+| `TaskInstanceModel` | Task instances within a process | `id`, `task_definition_id`, `process_id`, `state`, `result` (JSON), `error`, `updated_at` |
+| `FlowOfExecutionModel` | Flow-of-execution tokens | `id`, `process_id` |
+| `WorkflowRunModel` | Agent-level run records (metrics) | `id`, `goal`, `workflow_name`, `success`, `started_at`, `completed_at`, `output`, `error` |
+| `TaskExecutionModel` | Per-task execution records within a run | `id`, `run` (FK), `task_definition_id`, `task_name`, `state`, `output`, `error` |
+
+**Notes:**
+- `properties` and `result` fields are JSON strings — use `json.loads()` to parse them
+- Process states: `running`, `complete`, `failed`
+- Task states: `READY`, `running`, `failed` (note READY is uppercase in the DB)
+- The `.env` file is at the project root (`/home/opc/projects/zebra/.env`) — read it to get credentials
+
+## Debugging
+
+Prefer the Python debugger (`pdb`) over adding debug logging statements. Insert a breakpoint directly in the code under investigation:
+
+```python
+import pdb; pdb.set_trace()
+```
+
+Or use the built-in shorthand (Python 3.7+):
+
+```python
+breakpoint()
+```
+
+Then run the server or test in the foreground so the debugger attaches to your terminal. Remove the breakpoint once done — don't leave debug statements in committed code.
+
 ## Testing
 
 ### Test Environment Setup
