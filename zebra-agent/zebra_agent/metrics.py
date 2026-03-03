@@ -10,11 +10,11 @@ zebra_agent.storage.interfaces.
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from zebra_agent.storage.metrics import InMemoryMetricsStore
+    pass
 
 
 @dataclass
@@ -47,7 +47,7 @@ class WorkflowRun:
             id=str(uuid.uuid4()),
             workflow_name=workflow_name,
             goal=goal,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
 
 
@@ -92,7 +92,7 @@ class TaskExecution:
             task_name=task_name,
             execution_order=execution_order,
             state="running",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
 
 
@@ -127,5 +127,5 @@ __all__ = [
     "WorkflowRun",
     "TaskExecution",
     "WorkflowStats",
-    "MetricsStore",
+    "MetricsStore",  # noqa: F822 - resolved via __getattr__ (backward-compat alias for InMemoryMetricsStore)
 ]

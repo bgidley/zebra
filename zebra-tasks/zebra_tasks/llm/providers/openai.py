@@ -1,8 +1,8 @@
 """OpenAI LLM provider."""
 
-import os
 import json
-from typing import AsyncIterator
+import os
+from collections.abc import AsyncIterator
 
 from zebra_tasks.llm.base import (
     LLMProvider,

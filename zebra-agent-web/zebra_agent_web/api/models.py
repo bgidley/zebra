@@ -191,72 +191,60 @@ class TaskExecutionModel(models.Model):
 
 
 # =============================================================================
-# MemoryStore Models (Agent Memory)
+# MemoryStore Models (Agent Memory - Workflow-focused two-tier system)
 # =============================================================================
 
 
-class MemoryEntryModel(models.Model):
-    """A single memory entry representing an agent interaction."""
+class WorkflowMemoryModel(models.Model):
+    """Detailed record of a single workflow run's behaviour and effectiveness."""
 
     id = models.CharField(max_length=255, primary_key=True)
     timestamp = models.DateTimeField(db_index=True)
-    goal = models.TextField(help_text="User's goal or request")
-    workflow_used = models.CharField(max_length=255)
-    result_summary = models.TextField(help_text="Summary of the result")
-    tokens = models.IntegerField(default=0)
+    workflow_name = models.CharField(max_length=255, db_index=True)
+    goal = models.TextField(help_text="User's goal/request")
+    success = models.BooleanField(default=False)
+    input_summary = models.TextField(help_text="What went into the workflow")
+    output_summary = models.TextField(help_text="What came out of the workflow")
+    effectiveness_notes = models.TextField(
+        blank=True, default="", help_text="LLM assessment of what worked / didn't"
+    )
+    tokens_used = models.IntegerField(default=0)
+    rating = models.IntegerField(blank=True, null=True, help_text="User rating 1-5")
 
     class Meta:
-        db_table = "zebra_memory_entries"
-        verbose_name = "Memory Entry"
-        verbose_name_plural = "Memory Entries"
+        db_table = "zebra_workflow_memories"
+        verbose_name = "Workflow Memory"
+        verbose_name_plural = "Workflow Memories"
         indexes = [
             models.Index(fields=["-timestamp"]),
+            models.Index(fields=["workflow_name", "-timestamp"]),
         ]
 
     def __str__(self):
-        return f"Entry {self.id} ({self.timestamp})"
+        status = "success" if self.success else "failed"
+        return f"{self.workflow_name} ({status}) - {self.timestamp}"
 
 
-class ShortTermSummaryModel(models.Model):
-    """A compacted short-term memory summary."""
-
-    id = models.CharField(max_length=255, primary_key=True)
-    created_at = models.DateTimeField(db_index=True)
-    summary = models.TextField(help_text="Compacted summary text")
-    tokens = models.IntegerField(default=0)
-    entry_count = models.IntegerField(default=0, help_text="Number of entries summarized")
-
-    class Meta:
-        db_table = "zebra_memory_summaries"
-        verbose_name = "Short-Term Summary"
-        verbose_name_plural = "Short-Term Summaries"
-        indexes = [
-            models.Index(fields=["-created_at"]),
-        ]
-
-    def __str__(self):
-        return f"Summary {self.id} ({self.entry_count} entries)"
-
-
-class LongTermThemeModel(models.Model):
-    """A long-term memory theme extracted from short-term summaries."""
+class ConceptualMemoryModel(models.Model):
+    """Compact index entry mapping a goal pattern to recommended workflows."""
 
     id = models.CharField(max_length=255, primary_key=True)
-    created_at = models.DateTimeField(db_index=True)
-    theme = models.TextField(help_text="Theme text")
-    tokens = models.IntegerField(default=0)
-    short_term_refs = models.JSONField(
+    concept = models.CharField(max_length=500, db_index=True, help_text="Goal pattern / category")
+    recommended_workflows = models.JSONField(
         default=list,
-        help_text="List of short-term summary IDs this theme references",
+        help_text="List of {name, fit_notes, avg_rating, use_count} dicts",
     )
+    anti_patterns = models.TextField(blank=True, default="", help_text="What doesn't work here")
+    last_updated = models.DateTimeField(db_index=True)
+    tokens = models.IntegerField(default=0)
 
     class Meta:
-        db_table = "zebra_memory_themes"
-        verbose_name = "Long-Term Theme"
-        verbose_name_plural = "Long-Term Themes"
+        db_table = "zebra_conceptual_memories"
+        verbose_name = "Conceptual Memory"
+        verbose_name_plural = "Conceptual Memories"
         indexes = [
-            models.Index(fields=["-created_at"]),
+            models.Index(fields=["-last_updated"]),
         ]
 
     def __str__(self):
-        return f"Theme {self.id}"
+        return f"Concept: {self.concept[:60]}"

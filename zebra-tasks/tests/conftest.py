@@ -1,10 +1,9 @@
 """Pytest fixtures for zebra-tasks tests."""
 
-import pytest
 from dataclasses import dataclass, field
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from zebra.core.models import (
     ProcessDefinition,
     ProcessInstance,
@@ -12,7 +11,6 @@ from zebra.core.models import (
     TaskDefinition,
     TaskInstance,
     TaskState,
-    RoutingDefinition,
 )
 from zebra.tasks.base import ExecutionContext
 

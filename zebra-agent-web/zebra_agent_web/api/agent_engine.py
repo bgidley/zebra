@@ -96,9 +96,27 @@ async def _async_init() -> None:
         builtin_path = Path(zebra_agent.__file__).parent.parent / "workflows"
 
     if builtin_path.exists():
-        copied = _library.copy_builtin_workflows(builtin_path)
+        copied, upgraded_names = _library.copy_builtin_workflows(builtin_path)
         if copied > 0:
-            logger.info(f"Copied {copied} built-in workflows to library")
+            logger.info(f"Copied/upgraded {copied} built-in workflows to library")
+        # Evict stale DB-cached definitions for any upgraded workflows so the
+        # engine will reload them from the updated YAML files on next use.
+        if upgraded_names:
+            from zebra_agent_web.api.models import ProcessDefinitionModel
+
+            from asgiref.sync import sync_to_async
+
+            @sync_to_async
+            def _evict_stale(names: list[str]) -> int:
+                deleted, _ = ProcessDefinitionModel.objects.filter(name__in=names).delete()
+                return deleted
+
+            evicted = await _evict_stale(upgraded_names)
+            if evicted:
+                logger.info(
+                    f"Evicted {evicted} stale DB definition(s) for upgraded workflows: "
+                    f"{upgraded_names}"
+                )
 
     # Ensure workflow engine is initialized
     await ensure_workflow_engine()

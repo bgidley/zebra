@@ -1,21 +1,21 @@
 """Tests for PostgreSQL storage backend."""
 
-import pytest
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from zebra.storage.postgres import PostgreSQLStore
+import pytest
+
 from zebra.core.models import (
+    FlowOfExecution,
     ProcessDefinition,
     ProcessInstance,
     ProcessState,
+    RoutingDefinition,
     TaskDefinition,
     TaskInstance,
     TaskState,
-    FlowOfExecution,
-    RoutingDefinition,
 )
-
+from zebra.storage.postgres import PostgreSQLStore
 
 # Skip all tests if PostgreSQL is not available
 pytestmark = pytest.mark.skipif(
@@ -79,8 +79,8 @@ def sample_process():
         definition_id="test-def-1",
         state=ProcessState.RUNNING,
         properties={"key": "value"},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -191,8 +191,8 @@ class TestPostgreSQLProcesses:
             id="test-proc-2",
             definition_id="test-def-1",
             state=ProcessState.COMPLETE,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await postgres_store.save_process(completed)
 
@@ -229,8 +229,8 @@ class TestPostgreSQLProcesses:
             id="test-proc-other",
             definition_id="test-def-other",
             state=ProcessState.RUNNING,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await postgres_store.save_process(other)
 
@@ -264,8 +264,8 @@ class TestPostgreSQLProcesses:
             task_definition_id="task1",
             state=TaskState.READY,
             foe_id="test-foe-1",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await postgres_store.save_task(task)
 
@@ -273,7 +273,7 @@ class TestPostgreSQLProcesses:
         foe = FlowOfExecution(
             id="test-foe-1",
             process_id=sample_process.id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await postgres_store.save_foe(foe)
 
@@ -302,8 +302,8 @@ class TestPostgreSQLTasks:
             state=TaskState.READY,
             foe_id="test-foe-1",
             properties={"task_key": "task_value"},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await postgres_store.save_task(task)
 
@@ -326,8 +326,8 @@ class TestPostgreSQLTasks:
                 task_definition_id=f"task{i}",
                 state=TaskState.READY,
                 foe_id="test-foe-1",
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await postgres_store.save_task(task)
 
@@ -346,7 +346,7 @@ class TestPostgreSQLFOEs:
         foe = FlowOfExecution(
             id="test-foe-1",
             process_id=sample_process.id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await postgres_store.save_foe(foe)
 
@@ -364,7 +364,7 @@ class TestPostgreSQLFOEs:
         parent_foe = FlowOfExecution(
             id="test-foe-parent",
             process_id=sample_process.id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await postgres_store.save_foe(parent_foe)
 
@@ -372,7 +372,7 @@ class TestPostgreSQLFOEs:
             id="test-foe-child",
             process_id=sample_process.id,
             parent_foe_id=parent_foe.id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await postgres_store.save_foe(child_foe)
 

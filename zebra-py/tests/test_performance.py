@@ -12,7 +12,6 @@ import asyncio
 import os
 import time
 from dataclasses import dataclass
-from typing import Any
 
 import pytest
 
@@ -238,7 +237,7 @@ class TestPerformance:
 
         elapsed = time.perf_counter() - start
 
-        print(f"\n=== Performance Test: 100 Parallel Workflows (Sequential Tasks) ===")
+        print("\n=== Performance Test: 100 Parallel Workflows (Sequential Tasks) ===")
         print(f"Workflows completed: {completed}")
         print(f"Tasks per workflow: {TASKS_PER_WORKFLOW}")
         print(f"Total tasks executed: {completed * TASKS_PER_WORKFLOW}")
@@ -288,7 +287,7 @@ class TestPerformance:
         # Tasks: start + branches + join + end = 1 + branches + 1 + 1 = branches + 3
         tasks_per_workflow = BRANCHES_PER_WORKFLOW + 3
 
-        print(f"\n=== Performance Test: 100 Parallel Workflows (With Branching) ===")
+        print("\n=== Performance Test: 100 Parallel Workflows (With Branching) ===")
         print(f"Workflows completed: {completed}")
         print(f"Branches per workflow: {BRANCHES_PER_WORKFLOW}")
         print(f"Tasks per workflow: {tasks_per_workflow}")
@@ -332,7 +331,7 @@ class TestPerformance:
 
         elapsed = time.perf_counter() - start
 
-        print(f"\n=== Performance Test: 1000 Workflows (Quick) ===")
+        print("\n=== Performance Test: 1000 Workflows (Quick) ===")
         print(f"Workflows completed: {completed}")
         print(f"Tasks per workflow: {TASKS_PER_WORKFLOW}")
         print(f"Total tasks executed: {completed * TASKS_PER_WORKFLOW}")

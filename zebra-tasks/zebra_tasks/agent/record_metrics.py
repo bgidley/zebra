@@ -1,6 +1,6 @@
 """RecordMetricsAction - Record workflow run and task executions to metrics store."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from zebra.core.models import TaskInstance, TaskResult
@@ -169,7 +169,7 @@ class RecordMetricsAction(TaskAction):
             else:
                 # Use process property if available, otherwise now
                 started_at = context.process.properties.get(
-                    "__started_at__", datetime.now(timezone.utc)
+                    "__started_at__", datetime.now(UTC)
                 )
                 if isinstance(started_at, str):
                     started_at = datetime.fromisoformat(started_at)
@@ -180,7 +180,7 @@ class RecordMetricsAction(TaskAction):
                 workflow_name=workflow_name,
                 goal=goal,
                 started_at=started_at,
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
                 success=bool(success),
                 tokens_used=tokens_used or 0,
                 error=error,

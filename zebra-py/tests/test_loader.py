@@ -5,7 +5,6 @@ import pytest
 from zebra.core.exceptions import ValidationError
 from zebra.definitions.loader import (
     load_definition_from_yaml,
-    load_definition_from_dict,
     validate_definition,
 )
 

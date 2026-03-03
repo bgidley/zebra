@@ -5,12 +5,10 @@ monkey-patching the engine singleton so views use test fixtures.
 """
 
 import pytest
-
 from zebra.core.engine import WorkflowEngine
-from zebra.core.models import ProcessDefinition, RoutingDefinition, TaskDefinition, TaskResult
+from zebra.core.models import ProcessDefinition, RoutingDefinition, TaskDefinition
 from zebra.storage.memory import InMemoryStore
 from zebra.tasks.registry import ActionRegistry
-
 
 # ---------------------------------------------------------------------------
 # Workflow definitions for testing
@@ -570,7 +568,7 @@ class TestAPITaskComplete:
     async def test_complete_404_unknown_task(self, client):
         """Unknown task ID returns 404."""
         response = await client.post(
-            f"/api/tasks/nonexistent/complete/",
+            "/api/tasks/nonexistent/complete/",
             data={"result": {}},
             content_type="application/json",
         )

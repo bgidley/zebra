@@ -34,21 +34,19 @@ Example usage:
 __version__ = "0.1.0"
 
 # Core classes
+# IoC framework
+from zebra_agent.ioc import IoCActionRegistry, ZebraContainer
 from zebra_agent.library import WorkflowInfo, WorkflowLibrary
 from zebra_agent.loop import AgentLoop
 
 # Data classes
 from zebra_agent.memory import (
     AgentMemory,
-    LongTermTheme,
-    MemoryEntry,
-    ShortTermSummary,
+    ConceptualMemoryEntry,
+    WorkflowMemoryEntry,
     estimate_tokens,
 )
 from zebra_agent.metrics import MetricsStore, TaskExecution, WorkflowRun, WorkflowStats
-
-# IoC framework
-from zebra_agent.ioc import IoCActionRegistry, ZebraContainer
 
 # Storage interfaces and implementations
 from zebra_agent.storage import (
@@ -69,9 +67,8 @@ __all__ = [
     "ZebraContainer",
     "IoCActionRegistry",
     # Memory data classes
-    "MemoryEntry",
-    "ShortTermSummary",
-    "LongTermTheme",
+    "WorkflowMemoryEntry",
+    "ConceptualMemoryEntry",
     "estimate_tokens",
     # Metrics data classes
     "WorkflowRun",

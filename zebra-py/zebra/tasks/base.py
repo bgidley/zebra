@@ -160,23 +160,50 @@ class ExecutionContext:
     def resolve_template(self, template: str) -> str:
         """Resolve template variables in a string.
 
-        Supports {{task_id.output}} syntax to reference task outputs
-        and {{property_name}} for process properties.
+        Supports:
+        - ``{{property_name}}`` — top-level process property
+        - ``{{task_id.output}}`` — legacy task output shorthand
+        - ``{{property_name.key}}`` — dict key access on a process property
+        - ``{{property_name.key.subkey}}`` — nested dict key access
         """
         import re
+
+        def _dig(obj: object, parts: list[str]) -> object:
+            """Walk into obj using successive key lookups."""
+            for part in parts:
+                if isinstance(obj, dict):
+                    obj = obj.get(part)
+                else:
+                    return None
+            return obj
 
         def replace_var(match: re.Match) -> str:
             var = match.group(1)
             if "." in var:
-                # Task output reference: {{task_id.output}}
-                task_id, attr = var.split(".", 1)
-                if attr == "output":
-                    output = self.get_task_output(task_id)
-                    return str(output) if output is not None else ""
-            # Process property
+                parts = var.split(".")
+                root, rest = parts[0], parts[1:]
+
+                # Legacy: {{task_id.output}} — kept for backward compatibility
+                if len(rest) == 1 and rest[0] == "output":
+                    output = self.get_task_output(root)
+                    if output is not None:
+                        return str(output)
+
+                # Try process property dict navigation: {{prop.key.subkey}}
+                prop_value = self.get_process_property(root)
+                if prop_value is not None:
+                    result = _dig(prop_value, rest)
+                    if result is not None:
+                        return str(result)
+
+                # Fall back to full var as a flat process property key
+                return str(self.get_process_property(var, ""))
+
+            # Simple process property
             return str(self.get_process_property(var, ""))
 
-        return re.sub(r"\{\{(\w+(?:\.\w+)?)\}\}", replace_var, template)
+        # Allow dots and multiple segments in the variable name
+        return re.sub(r"\{\{(\w+(?:\.\w+)*)\}\}", replace_var, template)
 
 
 class TaskAction(ABC):

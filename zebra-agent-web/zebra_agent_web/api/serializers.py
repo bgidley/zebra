@@ -57,6 +57,15 @@ class AgentResultSerializer(serializers.Serializer):
     created_new_workflow = serializers.BooleanField()
 
 
+class GoalAcceptedSerializer(serializers.Serializer):
+    """Response serializer for accepted (async) goal execution."""
+
+    run_id = serializers.CharField()
+    status = serializers.CharField()
+    message = serializers.CharField()
+    status_url = serializers.CharField()
+
+
 class WorkflowStatsSerializer(serializers.Serializer):
     """Serializer for workflow statistics."""
 

@@ -10,11 +10,9 @@ This document tracks unimplemented features and improvements based on the DESIGN
 ## High Priority
 
 ### .1 Tidying Up
+- [recreate db]
 
 ### .5 Learning loops
-- [ ] Need a page to show all in progress runs
-- [ ] on run goals page should load the workflow vizualization from history and show it progressing
-- [ ] LLM can define new workflows and saves them to disk so can survive db wipe
 - [ ] Long term memory signposts to detail memory as needed
 - [ ] Dream workflows run daily to optimize memory
 - [ ] Add memory into the agent loop

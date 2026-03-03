@@ -1,172 +1,159 @@
-"""Memory dataclasses and in-memory storage for agent conversations.
+"""Memory dataclasses for workflow-focused agent memory.
 
-This module provides:
-- Data classes for memory entries, summaries, and themes
-- In-memory storage implementation (via re-export)
-- Token estimation utility
+Two-tier memory system:
+- WorkflowMemoryEntry: Detailed per-run record of workflow behaviour, I/O, effectiveness
+- ConceptualMemoryEntry: Compact index mapping goal patterns to recommended workflows
 
 For custom storage backends, implement the MemoryStore interface from
 zebra_agent.storage.interfaces.
 """
 
+from __future__ import annotations
+
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from zebra_agent.storage.memory import InMemoryMemoryStore
+    pass
 
 
 @dataclass
-class MemoryEntry:
-    """A single memory entry representing an agent interaction."""
+class WorkflowMemoryEntry:
+    """A detailed record of a single workflow run's behaviour and effectiveness."""
 
     id: str
     timestamp: datetime
+    workflow_name: str
     goal: str
-    workflow_used: str
-    result_summary: str
-    tokens: int
+    success: bool
+    input_summary: str  # What went into the workflow
+    output_summary: str  # What came out
+    effectiveness_notes: str  # LLM assessment of what worked / didn't
+    tokens_used: int
+    rating: int | None = None  # User rating 1-5 if provided
 
     @classmethod
     def create(
         cls,
+        workflow_name: str,
         goal: str,
-        workflow_used: str,
-        result_summary: str,
-        tokens: int | None = None,
-    ) -> "MemoryEntry":
-        """Create a new memory entry with auto-generated ID and timestamp.
-
-        Args:
-            goal: The user's goal or request
-            workflow_used: Name of the workflow that was used
-            result_summary: Summary of the result
-            tokens: Token count (if None, will be estimated from result_summary)
-
-        Returns:
-            A new MemoryEntry instance
-        """
-        if tokens is None:
-            tokens = estimate_tokens(result_summary)
-
+        success: bool,
+        input_summary: str,
+        output_summary: str,
+        effectiveness_notes: str,
+        tokens_used: int = 0,
+        rating: int | None = None,
+    ) -> WorkflowMemoryEntry:
+        """Create a new entry with auto-generated ID and timestamp."""
         return cls(
             id=str(uuid.uuid4()),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
+            workflow_name=workflow_name,
             goal=goal,
-            workflow_used=workflow_used,
-            result_summary=result_summary,
-            tokens=tokens,
+            success=success,
+            input_summary=input_summary,
+            output_summary=output_summary,
+            effectiveness_notes=effectiveness_notes,
+            tokens_used=tokens_used,
+            rating=rating,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert entry to dictionary for serialization."""
+        """Convert to dictionary for serialization."""
         return {
             "id": self.id,
             "timestamp": self.timestamp.isoformat(),
+            "workflow_name": self.workflow_name,
             "goal": self.goal,
-            "workflow_used": self.workflow_used,
-            "result_summary": self.result_summary,
+            "success": self.success,
+            "input_summary": self.input_summary,
+            "output_summary": self.output_summary,
+            "effectiveness_notes": self.effectiveness_notes,
+            "tokens_used": self.tokens_used,
+            "rating": self.rating,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> WorkflowMemoryEntry:
+        """Create from dictionary."""
+        return cls(
+            id=data["id"],
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+            workflow_name=data["workflow_name"],
+            goal=data["goal"],
+            success=data["success"],
+            input_summary=data["input_summary"],
+            output_summary=data["output_summary"],
+            effectiveness_notes=data["effectiveness_notes"],
+            tokens_used=data.get("tokens_used", 0),
+            rating=data.get("rating"),
+        )
+
+
+@dataclass
+class ConceptualMemoryEntry:
+    """A compact index entry mapping a goal pattern to recommended workflows.
+
+    Built by compacting WorkflowMemoryEntry records. The conceptual memory
+    is what the agent consults first to produce a shortlist of candidates.
+    """
+
+    id: str
+    concept: str  # Goal pattern / category description
+    recommended_workflows: list[dict]  # [{name, fit_notes, avg_rating, use_count}]
+    anti_patterns: str  # What doesn't work for this concept
+    last_updated: datetime
+    tokens: int = 0
+
+    @classmethod
+    def create(
+        cls,
+        concept: str,
+        recommended_workflows: list[dict] | None = None,
+        anti_patterns: str = "",
+        tokens: int | None = None,
+    ) -> ConceptualMemoryEntry:
+        """Create a new entry with auto-generated ID and timestamp."""
+        text = concept + anti_patterns
+        if recommended_workflows:
+            text += str(recommended_workflows)
+        return cls(
+            id=str(uuid.uuid4()),
+            concept=concept,
+            recommended_workflows=recommended_workflows or [],
+            anti_patterns=anti_patterns,
+            last_updated=datetime.now(UTC),
+            tokens=tokens if tokens is not None else estimate_tokens(text),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "id": self.id,
+            "concept": self.concept,
+            "recommended_workflows": self.recommended_workflows,
+            "anti_patterns": self.anti_patterns,
+            "last_updated": self.last_updated.isoformat(),
             "tokens": self.tokens,
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "MemoryEntry":
-        """Create entry from dictionary."""
+    def from_dict(cls, data: dict[str, Any]) -> ConceptualMemoryEntry:
+        """Create from dictionary."""
         return cls(
             id=data["id"],
-            timestamp=datetime.fromisoformat(data["timestamp"]),
-            goal=data["goal"],
-            workflow_used=data["workflow_used"],
-            result_summary=data["result_summary"],
-            tokens=data["tokens"],
-        )
-
-
-@dataclass
-class ShortTermSummary:
-    """A compacted short-term memory summary."""
-
-    id: str
-    created_at: datetime
-    summary: str
-    tokens: int
-    entry_count: int  # How many entries were summarized
-
-    @classmethod
-    def create(
-        cls,
-        summary: str,
-        entry_count: int,
-        tokens: int | None = None,
-    ) -> "ShortTermSummary":
-        """Create a new short-term summary with auto-generated ID and timestamp.
-
-        Args:
-            summary: The compacted summary text
-            entry_count: Number of entries that were summarized
-            tokens: Token count (if None, will be estimated from summary)
-
-        Returns:
-            A new ShortTermSummary instance
-        """
-        if tokens is None:
-            tokens = estimate_tokens(summary)
-
-        return cls(
-            id=str(uuid.uuid4()),
-            created_at=datetime.now(timezone.utc),
-            summary=summary,
-            tokens=tokens,
-            entry_count=entry_count,
-        )
-
-
-@dataclass
-class LongTermTheme:
-    """A long-term memory theme extracted from short-term summaries."""
-
-    id: str
-    created_at: datetime
-    theme: str
-    tokens: int
-    short_term_refs: list[str]  # IDs of short-term summaries this references
-
-    @classmethod
-    def create(
-        cls,
-        theme: str,
-        short_term_refs: list[str] | None = None,
-        tokens: int | None = None,
-    ) -> "LongTermTheme":
-        """Create a new long-term theme with auto-generated ID and timestamp.
-
-        Args:
-            theme: The theme text
-            short_term_refs: List of short-term summary IDs this theme references
-            tokens: Token count (if None, will be estimated from theme)
-
-        Returns:
-            A new LongTermTheme instance
-        """
-        if tokens is None:
-            tokens = estimate_tokens(theme)
-
-        return cls(
-            id=str(uuid.uuid4()),
-            created_at=datetime.now(timezone.utc),
-            theme=theme,
-            tokens=tokens,
-            short_term_refs=short_term_refs or [],
+            concept=data["concept"],
+            recommended_workflows=data.get("recommended_workflows", []),
+            anti_patterns=data.get("anti_patterns", ""),
+            last_updated=datetime.fromisoformat(data["last_updated"]),
+            tokens=data.get("tokens", 0),
         )
 
 
 def estimate_tokens(text: str) -> int:
     """Rough estimate of tokens in text (chars / 4).
-
-    This is a simple heuristic that works reasonably well for English text.
-    For more accurate token counting, use a proper tokenizer.
 
     Args:
         text: The text to estimate tokens for
@@ -187,9 +174,8 @@ def __getattr__(name: str):
 
 
 __all__ = [
-    "MemoryEntry",
-    "ShortTermSummary",
-    "LongTermTheme",
-    "AgentMemory",
+    "WorkflowMemoryEntry",
+    "ConceptualMemoryEntry",
+    "AgentMemory",  # noqa: F822 - resolved via __getattr__ (backward-compat alias for InMemoryMemoryStore)
     "estimate_tokens",
 ]

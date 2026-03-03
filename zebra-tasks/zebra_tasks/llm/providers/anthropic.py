@@ -1,7 +1,7 @@
 """Anthropic Claude LLM provider."""
 
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from zebra_tasks.llm.base import (
     LLMProvider,

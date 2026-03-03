@@ -90,7 +90,7 @@ def workflow_library(tmp_path, django_stores):
     # Copy built-in workflows from zebra-agent
     builtin_path = Path(__file__).parent.parent.parent / "zebra-agent" / "workflows"
     if builtin_path.exists():
-        copied = library.copy_builtin_workflows(builtin_path)
+        copied, _ = library.copy_builtin_workflows(builtin_path)
         print(f"Copied {copied} built-in workflows to test library at {library_path}")
     else:
         pytest.fail(f"Built-in workflows not found at {builtin_path}")
@@ -106,7 +106,6 @@ def workflow_engine(django_stores):
     including the agent-specific actions (memory_check, workflow_selector, etc.).
     """
     from dependency_injector import providers
-
     from zebra.core.engine import WorkflowEngine
     from zebra_agent.ioc import IoCActionRegistry, ZebraContainer
 

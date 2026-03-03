@@ -5,7 +5,7 @@ including both definition models (workflow blueprints) and runtime state models.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -39,7 +39,7 @@ def _validate_json_serializable(properties: dict[str, Any], context: str) -> Non
 
 def _utc_now() -> datetime:
     """Return current UTC time as timezone-aware datetime."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # =============================================================================

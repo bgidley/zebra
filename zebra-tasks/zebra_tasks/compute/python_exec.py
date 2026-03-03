@@ -2,9 +2,8 @@
 
 import ast
 import io
-import sys
 import traceback
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult

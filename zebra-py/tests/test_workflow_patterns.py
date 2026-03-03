@@ -17,7 +17,6 @@ from zebra.core.models import (
     TaskDefinition,
     TaskInstance,
     TaskResult,
-    TaskState,
 )
 from zebra.storage.memory import InMemoryStore
 from zebra.tasks.base import ExecutionContext, TaskAction

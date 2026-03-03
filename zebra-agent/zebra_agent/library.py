@@ -258,26 +258,57 @@ class WorkflowLibrary:
 
         return "\n".join(lines)
 
-    def copy_builtin_workflows(self, builtin_path: Path) -> int:
+    def copy_builtin_workflows(self, builtin_path: Path) -> tuple[int, list[str]]:
         """
-        Copy built-in workflows to the library if they don't exist.
+        Copy built-in workflows to the library, overwriting if the built-in version is newer.
+
+        A workflow is overwritten when:
+        - The destination file doesn't exist yet, OR
+        - The built-in YAML has a higher ``version`` number than the installed copy.
 
         Args:
             builtin_path: Path to directory containing built-in workflows
 
         Returns:
-            Number of workflows copied
+            Tuple of (count_copied_or_updated, list_of_upgraded_workflow_names).
+            Upgraded names are workflows that already existed but were replaced with a newer version —
+            callers should evict any stale cached definitions for those names.
         """
         self.ensure_initialized()
 
         if not builtin_path.exists():
-            return 0
+            return 0, []
 
         copied = 0
+        upgraded_names: list[str] = []
         for yaml_file in builtin_path.glob("*.yaml"):
             dest = self.library_path / yaml_file.name
             if not dest.exists():
                 shutil.copy(yaml_file, dest)
+                try:
+                    data = yaml.safe_load(yaml_file.read_text())
+                    name = data.get("name") if data else None
+                    if name and name in self._cache:
+                        del self._cache[name]
+                except Exception:
+                    pass
                 copied += 1
+            else:
+                # Overwrite if built-in has a higher version number
+                try:
+                    builtin_data = yaml.safe_load(yaml_file.read_text())
+                    dest_data = yaml.safe_load(dest.read_text())
+                    builtin_version = (builtin_data or {}).get("version", 1)
+                    dest_version = (dest_data or {}).get("version", 1)
+                    if builtin_version > dest_version:
+                        shutil.copy(yaml_file, dest)
+                        name = (builtin_data or {}).get("name")
+                        if name:
+                            if name in self._cache:
+                                del self._cache[name]
+                            upgraded_names.append(name)
+                        copied += 1
+                except Exception:
+                    pass
 
-        return copied
+        return copied, upgraded_names

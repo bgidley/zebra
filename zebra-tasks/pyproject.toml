@@ -57,12 +57,14 @@ directory_list = "zebra_tasks.filesystem.info:DirectoryListAction"
 # Compute
 python_exec = "zebra_tasks.compute.python_exec:PythonExecAction"
 # Agent - Core loop actions
-memory_check = "zebra_tasks.agent.memory_check:MemoryCheckAction"
+consult_memory = "zebra_tasks.agent.consult_memory:ConsultMemoryAction"
 workflow_selector = "zebra_tasks.agent.selector:WorkflowSelectorAction"
 workflow_creator = "zebra_tasks.agent.creator:WorkflowCreatorAction"
+workflow_variant_creator = "zebra_tasks.agent.variant_creator:WorkflowVariantCreatorAction"
 execute_goal_workflow = "zebra_tasks.agent.execute_workflow:ExecuteGoalWorkflowAction"
+assess_and_record = "zebra_tasks.agent.assess_and_record:AssessAndRecordAction"
+update_conceptual_memory = "zebra_tasks.agent.update_conceptual_memory:UpdateConceptualMemoryAction"
 record_metrics = "zebra_tasks.agent.record_metrics:RecordMetricsAction"
-update_memory = "zebra_tasks.agent.update_memory:UpdateMemoryAction"
 # Agent - Analysis and optimization
 metrics_analyzer = "zebra_tasks.agent.analyzer:MetricsAnalyzerAction"
 workflow_evaluator = "zebra_tasks.agent.evaluator:WorkflowEvaluatorAction"

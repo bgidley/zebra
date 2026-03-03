@@ -10,16 +10,20 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from zebra_agent.memory import LongTermTheme, MemoryEntry, ShortTermSummary
+    from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
     from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
 
 
 class MemoryStore(ABC):
-    """Abstract interface for agent memory storage.
+    """Abstract interface for workflow-focused agent memory storage.
 
-    Memory is organized in two tiers:
-    - Short-term: Recent interaction entries that get compacted into summaries
-    - Long-term: Thematic summaries extracted from short-term summaries
+    Two-tier memory system:
+    - Workflow Memory: Detailed per-run records of behaviour, I/O, effectiveness
+    - Conceptual Memory: Compact index mapping goal patterns to workflow names
+
+    The agent consults conceptual memory first to get a shortlist of candidates,
+    then loads full details for deep selection. After each run, workflow memory
+    is written and conceptual memory is incrementally updated.
     """
 
     @abstractmethod
@@ -33,96 +37,43 @@ class MemoryStore(ABC):
         ...
 
     # =========================================================================
-    # Short-Term Memory Operations
+    # Workflow Memory (Detailed per-run records)
     # =========================================================================
 
     @abstractmethod
-    async def add_entry(self, entry: "MemoryEntry") -> None:
-        """Add a memory entry to short-term storage."""
+    async def add_workflow_memory(self, entry: WorkflowMemoryEntry) -> None:
+        """Add a detailed workflow run record to memory."""
         ...
 
     @abstractmethod
-    async def get_short_term_entries(self, limit: int | None = None) -> list["MemoryEntry"]:
-        """Get recent entries, ordered by timestamp descending (newest first)."""
+    async def get_workflow_memories(
+        self, workflow_name: str, limit: int = 10
+    ) -> list[WorkflowMemoryEntry]:
+        """Get recent memory entries for a specific workflow, newest first."""
         ...
 
     @abstractmethod
-    async def get_short_term_tokens(self) -> int:
-        """Get total token count of all short-term entries."""
-        ...
-
-    @abstractmethod
-    async def get_short_term_summary_tokens(self) -> int:
-        """Get total token count of all short-term summaries."""
-        ...
-
-    @abstractmethod
-    async def needs_short_term_compaction(self) -> bool:
-        """Check if short-term memory needs compaction (above threshold)."""
-        ...
-
-    @abstractmethod
-    async def get_short_term_summaries(self, limit: int | None = None) -> list["ShortTermSummary"]:
-        """Get short-term summaries, ordered by creation time descending."""
-        ...
-
-    @abstractmethod
-    async def get_short_term_summary_by_id(self, summary_id: str) -> "ShortTermSummary | None":
-        """Get a specific short-term summary by ID."""
-        ...
-
-    @abstractmethod
-    async def add_short_term_summary(self, summary: "ShortTermSummary") -> None:
-        """Add a compacted summary to short-term storage."""
-        ...
-
-    @abstractmethod
-    async def clear_short_term_entries(self) -> None:
-        """Clear all short-term entries (after compaction)."""
-        ...
-
-    @abstractmethod
-    async def get_short_term_content_for_compaction(self) -> str:
-        """Format entries as text for LLM compaction."""
+    async def get_recent_workflow_memories(self, limit: int = 20) -> list[WorkflowMemoryEntry]:
+        """Get the most recent workflow memory entries across all workflows."""
         ...
 
     # =========================================================================
-    # Long-Term Memory Operations
+    # Conceptual Memory (Compact goal-pattern index)
     # =========================================================================
 
     @abstractmethod
-    async def get_long_term_tokens(self) -> int:
-        """Get total token count of all long-term themes."""
+    async def get_conceptual_memories(self, limit: int = 50) -> list[ConceptualMemoryEntry]:
+        """Get all conceptual memory entries, most recently updated first."""
         ...
 
     @abstractmethod
-    async def needs_long_term_compaction(self) -> bool:
-        """Check if long-term memory needs compaction (above threshold)."""
+    async def save_conceptual_memory(self, entry: ConceptualMemoryEntry) -> None:
+        """Save (insert or update) a conceptual memory entry."""
         ...
 
     @abstractmethod
-    async def get_long_term_themes(self, limit: int | None = None) -> list["LongTermTheme"]:
-        """Get long-term themes, ordered by creation time descending."""
-        ...
-
-    @abstractmethod
-    async def add_long_term_theme(self, theme: "LongTermTheme") -> None:
-        """Add a theme to long-term storage."""
-        ...
-
-    @abstractmethod
-    async def clear_short_term_summaries(self, keep_ids: list[str] | None = None) -> None:
-        """Clear short-term summaries, optionally keeping specified IDs."""
-        ...
-
-    @abstractmethod
-    async def get_long_term_content_for_compaction(self) -> str:
-        """Format themes and summaries as text for LLM compaction."""
-        ...
-
-    @abstractmethod
-    async def get_details_for_theme(self, theme: "LongTermTheme") -> str:
-        """Get detailed summary content referenced by a theme."""
+    async def clear_conceptual_memories(self) -> None:
+        """Remove all conceptual memory entries (used during full rebuild)."""
         ...
 
     # =========================================================================
@@ -130,8 +81,21 @@ class MemoryStore(ABC):
     # =========================================================================
 
     @abstractmethod
-    async def get_context_for_llm(self) -> str:
-        """Build context string for LLM (themes + summaries + entries)."""
+    async def get_conceptual_context_for_llm(self) -> str:
+        """Format conceptual memory as a context string for the LLM.
+
+        Returns a compact summary of goal patterns and recommended workflows,
+        suitable for injecting into the workflow selection prompt.
+        """
+        ...
+
+    @abstractmethod
+    async def get_workflow_context_for_llm(self, workflow_name: str) -> str:
+        """Format recent workflow memory for a specific workflow as LLM context.
+
+        Returns a summary of past runs: what goals were served, what worked,
+        what didn't, effectiveness notes.
+        """
         ...
 
     @abstractmethod
@@ -161,7 +125,7 @@ class MetricsStore(ABC):
     # =========================================================================
 
     @abstractmethod
-    async def record_run(self, run: "WorkflowRun") -> None:
+    async def record_run(self, run: WorkflowRun) -> None:
         """Record a workflow run (insert or update)."""
         ...
 
@@ -171,29 +135,27 @@ class MetricsStore(ABC):
         ...
 
     @abstractmethod
-    async def get_run(self, run_id: str) -> "WorkflowRun | None":
+    async def get_run(self, run_id: str) -> WorkflowRun | None:
         """Get a specific run by ID."""
         ...
 
     @abstractmethod
-    async def get_stats(self, workflow_name: str) -> "WorkflowStats":
+    async def get_stats(self, workflow_name: str) -> WorkflowStats:
         """Get aggregated stats for a workflow."""
         ...
 
     @abstractmethod
-    async def get_all_stats(self) -> list["WorkflowStats"]:
+    async def get_all_stats(self) -> list[WorkflowStats]:
         """Get stats for all workflows, ordered by total runs descending."""
         ...
 
     @abstractmethod
-    async def get_recent_runs(self, limit: int = 10) -> list["WorkflowRun"]:
+    async def get_recent_runs(self, limit: int = 10) -> list[WorkflowRun]:
         """Get the most recent workflow runs."""
         ...
 
     @abstractmethod
-    async def get_runs_for_workflow(
-        self, workflow_name: str, limit: int = 10
-    ) -> list["WorkflowRun"]:
+    async def get_runs_for_workflow(self, workflow_name: str, limit: int = 10) -> list[WorkflowRun]:
         """Get recent runs for a specific workflow."""
         ...
 
@@ -202,16 +164,16 @@ class MetricsStore(ABC):
     # =========================================================================
 
     @abstractmethod
-    async def record_task_execution(self, execution: "TaskExecution") -> None:
+    async def record_task_execution(self, execution: TaskExecution) -> None:
         """Record a task execution."""
         ...
 
     @abstractmethod
-    async def record_task_executions(self, executions: list["TaskExecution"]) -> None:
+    async def record_task_executions(self, executions: list[TaskExecution]) -> None:
         """Record multiple task executions in batch."""
         ...
 
     @abstractmethod
-    async def get_task_executions(self, run_id: str) -> list["TaskExecution"]:
+    async def get_task_executions(self, run_id: str) -> list[TaskExecution]:
         """Get all task executions for a workflow run, ordered by execution_order."""
         ...

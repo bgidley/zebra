@@ -1,14 +1,14 @@
 """Tests for agent loop task actions.
 
-These actions were created to support the workflow-based agent loop:
-- MemoryCheckAction - Check if memory needs compaction
+These actions support the workflow-based agent loop:
+- ConsultMemoryAction - Consult conceptual memory for workflow shortlist
 - RecordMetricsAction - Record workflow run to metrics store
-- UpdateMemoryAction - Add memory entry for completed run
+- AssessAndRecordAction - LLM assessment + memory write after a run
 - ExecuteGoalWorkflowAction - Execute a goal workflow by name
 """
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -42,11 +42,14 @@ def mock_context():
 
 @pytest.fixture
 def mock_memory_store():
-    """Create a mock memory store."""
+    """Create a mock memory store (new workflow-focused interface)."""
     store = MagicMock()
-    store.needs_short_term_compaction = AsyncMock(return_value=False)
-    store.needs_long_term_compaction = AsyncMock(return_value=False)
-    store.add_entry = AsyncMock()
+    store.add_workflow_memory = AsyncMock()
+    store.get_workflow_memories = AsyncMock(return_value=[])
+    store.get_recent_workflow_memories = AsyncMock(return_value=[])
+    store.get_conceptual_memories = AsyncMock(return_value=[])
+    store.get_conceptual_context_for_llm = AsyncMock(return_value="")
+    store.save_conceptual_memory = AsyncMock()
     return store
 
 
@@ -60,136 +63,95 @@ def mock_metrics_store():
 
 
 # =============================================================================
-# MemoryCheckAction Tests
+# ConsultMemoryAction Tests
 # =============================================================================
 
 
-class TestMemoryCheckAction:
-    """Tests for MemoryCheckAction."""
+class TestConsultMemoryAction:
+    """Tests for ConsultMemoryAction."""
 
-    async def test_no_memory_store_returns_continue(self, mock_task, mock_context):
-        """Test that no memory store returns 'continue' route."""
-        from zebra_tasks.agent.memory_check import MemoryCheckAction
+    async def test_no_memory_store_returns_empty_shortlist(self, mock_task, mock_context):
+        """Test that no memory store returns empty shortlist gracefully."""
+        from zebra_tasks.agent.consult_memory import ConsultMemoryAction
 
-        action = MemoryCheckAction()
-
+        mock_task.properties = {"goal": "Test goal"}
+        action = ConsultMemoryAction()
         result = await action.run(mock_task, mock_context)
 
         assert result.success is True
-        assert result.next_route == "continue"
-        assert result.output["needs_short_term"] is False
-        assert result.output["needs_long_term"] is False
+        assert result.output["shortlist"] == []
+        assert result.output["memory_context"] == ""
+        assert result.output["has_memory"] is False
 
-    async def test_no_compaction_needed(self, mock_task, mock_context, mock_memory_store):
-        """Test when no compaction is needed."""
-        from zebra_tasks.agent.memory_check import MemoryCheckAction
+    async def test_with_empty_memory_store(self, mock_task, mock_context, mock_memory_store):
+        """Test with memory store that has no entries."""
+        from zebra_tasks.agent.consult_memory import ConsultMemoryAction
 
-        mock_memory_store.needs_short_term_compaction.return_value = False
-        mock_memory_store.needs_long_term_compaction.return_value = False
         mock_context.extras["__memory_store__"] = mock_memory_store
+        mock_task.properties = {"goal": "Test goal"}
 
-        action = MemoryCheckAction()
+        action = ConsultMemoryAction()
         result = await action.run(mock_task, mock_context)
 
         assert result.success is True
-        assert result.next_route == "continue"
-        assert result.output["needs_short_term"] is False
-        assert result.output["needs_long_term"] is False
+        assert result.output["shortlist"] == []
+        assert result.output["has_memory"] is False
 
-    async def test_short_term_compaction_needed(self, mock_task, mock_context, mock_memory_store):
-        """Test when short-term compaction is needed."""
-        from zebra_tasks.agent.memory_check import MemoryCheckAction
+    async def test_with_conceptual_memory(self, mock_task, mock_context, mock_memory_store):
+        """Test that conceptual memory produces a shortlist."""
+        from zebra_tasks.agent.consult_memory import ConsultMemoryAction
 
-        mock_memory_store.needs_short_term_compaction.return_value = True
-        mock_memory_store.needs_long_term_compaction.return_value = False
+        # Setup mock conceptual entries
+        mock_entry = MagicMock()
+        mock_entry.recommended_workflows = [
+            {"name": "analyze_code", "fit_notes": "great", "avg_rating": 4.5, "use_count": 3},
+            {"name": "brainstorm", "fit_notes": "ok", "avg_rating": None, "use_count": 1},
+        ]
+        mock_memory_store.get_conceptual_memories.return_value = [mock_entry]
+        mock_memory_store.get_conceptual_context_for_llm.return_value = "## Memory context"
+
         mock_context.extras["__memory_store__"] = mock_memory_store
+        mock_task.properties = {"goal": "analyze my code"}
 
-        action = MemoryCheckAction()
+        action = ConsultMemoryAction()
         result = await action.run(mock_task, mock_context)
 
         assert result.success is True
-        assert result.next_route == "compact_short"
-        assert result.output["needs_short_term"] is True
-        assert result.output["needs_long_term"] is False
-
-    async def test_long_term_compaction_needed(self, mock_task, mock_context, mock_memory_store):
-        """Test when only long-term compaction is needed."""
-        from zebra_tasks.agent.memory_check import MemoryCheckAction
-
-        mock_memory_store.needs_short_term_compaction.return_value = False
-        mock_memory_store.needs_long_term_compaction.return_value = True
-        mock_context.extras["__memory_store__"] = mock_memory_store
-
-        action = MemoryCheckAction()
-        result = await action.run(mock_task, mock_context)
-
-        assert result.success is True
-        assert result.next_route == "compact_long"
-        assert result.output["needs_short_term"] is False
-        assert result.output["needs_long_term"] is True
-
-    async def test_both_compaction_needed_prioritizes_short(
-        self, mock_task, mock_context, mock_memory_store
-    ):
-        """Test when both compactions are needed, short-term is prioritized."""
-        from zebra_tasks.agent.memory_check import MemoryCheckAction
-
-        mock_memory_store.needs_short_term_compaction.return_value = True
-        mock_memory_store.needs_long_term_compaction.return_value = True
-        mock_context.extras["__memory_store__"] = mock_memory_store
-
-        action = MemoryCheckAction()
-        result = await action.run(mock_task, mock_context)
-
-        assert result.success is True
-        assert result.next_route == "compact_short"
-        assert result.output["needs_short_term"] is True
-        assert result.output["needs_long_term"] is True
+        assert "analyze_code" in result.output["shortlist"]
+        assert "brainstorm" in result.output["shortlist"]
+        assert result.output["has_memory"] is True
+        assert "Memory context" in result.output["memory_context"]
 
     async def test_custom_output_key(self, mock_task, mock_context, mock_memory_store):
         """Test using a custom output key."""
-        from zebra_tasks.agent.memory_check import MemoryCheckAction
+        from zebra_tasks.agent.consult_memory import ConsultMemoryAction
 
-        mock_memory_store.needs_short_term_compaction.return_value = False
-        mock_memory_store.needs_long_term_compaction.return_value = False
         mock_context.extras["__memory_store__"] = mock_memory_store
-        mock_task.properties["output_key"] = "custom_status"
+        mock_task.properties = {"goal": "Test goal", "output_key": "my_shortlist"}
 
-        action = MemoryCheckAction()
+        action = ConsultMemoryAction()
         result = await action.run(mock_task, mock_context)
 
         assert result.success is True
-        # Verify the custom key was set
         mock_context.set_process_property.assert_called()
         call_args = mock_context.set_process_property.call_args
-        assert call_args[0][0] == "custom_status"
+        assert call_args[0][0] == "my_shortlist"
 
-    async def test_injected_memory_store(self, mock_task, mock_context, mock_memory_store):
-        """Test using an injected memory store."""
-        from zebra_tasks.agent.memory_check import MemoryCheckAction
+    async def test_graceful_degradation_on_error(self, mock_task, mock_context, mock_memory_store):
+        """Test graceful degradation when memory store raises an error."""
+        from zebra_tasks.agent.consult_memory import ConsultMemoryAction
 
-        mock_memory_store.needs_short_term_compaction.return_value = True
-        mock_memory_store.needs_long_term_compaction.return_value = False
-
-        # Inject via constructor
-        action = MemoryCheckAction(memory_store=mock_memory_store)
-        result = await action.run(mock_task, mock_context)
-
-        assert result.success is True
-        assert result.next_route == "compact_short"
-
-    async def test_memory_check_error_handling(self, mock_task, mock_context, mock_memory_store):
-        """Test error handling when memory check fails."""
-        from zebra_tasks.agent.memory_check import MemoryCheckAction
-
-        mock_memory_store.needs_short_term_compaction.side_effect = Exception("Store error")
+        mock_memory_store.get_conceptual_context_for_llm.side_effect = Exception("Store error")
         mock_context.extras["__memory_store__"] = mock_memory_store
+        mock_task.properties = {"goal": "Test goal"}
 
-        action = MemoryCheckAction()
+        action = ConsultMemoryAction()
         result = await action.run(mock_task, mock_context)
 
-        assert result.success is False
-        assert "Memory check failed" in result.error
+        # Should degrade gracefully
+        assert result.success is True
+        assert result.output["shortlist"] == []
+        assert result.output["has_memory"] is False
 
 
 # =============================================================================
@@ -296,7 +258,7 @@ class TestRecordMetricsAction:
         from zebra_tasks.agent.record_metrics import RecordMetricsAction
 
         mock_context.extras["__metrics_store__"] = mock_metrics_store
-        started_at = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        started_at = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
         mock_task.properties = {
             "run_id": "run-1",
             "workflow_name": "Test Workflow",
@@ -373,172 +335,134 @@ class TestRecordMetricsAction:
 
 
 # =============================================================================
-# UpdateMemoryAction Tests
+# AssessAndRecordAction Tests
 # =============================================================================
 
 
-class TestUpdateMemoryAction:
-    """Tests for UpdateMemoryAction."""
+class TestAssessAndRecordAction:
+    """Tests for AssessAndRecordAction."""
 
-    async def test_no_memory_store_succeeds_silently(self, mock_task, mock_context):
-        """Test that no memory store still succeeds but marks as not added."""
-        from zebra_tasks.agent.update_memory import UpdateMemoryAction
+    async def test_no_stores_succeeds_silently(self, mock_task, mock_context):
+        """Test that missing stores degrade gracefully."""
+        from unittest.mock import patch as mock_patch
+
+        from zebra_tasks.agent.assess_and_record import AssessAndRecordAction
 
         mock_task.properties = {
             "run_id": "run-1",
-            "goal": "Test goal",
             "workflow_name": "Test Workflow",
-            "result_summary": "Test result",
+            "goal": "Test goal",
+            "success": True,
         }
 
-        action = UpdateMemoryAction()
-        result = await action.run(mock_task, mock_context)
+        # Mock LLM provider to avoid real API calls
+        mock_provider = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = '{"effectiveness_notes": "Worked well"}'
+        mock_provider.complete = AsyncMock(return_value=mock_response)
+
+        with mock_patch(
+            "zebra_tasks.agent.assess_and_record.get_provider", return_value=mock_provider
+        ):
+            action = AssessAndRecordAction()
+            result = await action.run(mock_task, mock_context)
 
         assert result.success is True
-        assert result.output["added"] is False
+        assert result.output["recorded"] is False  # No metrics store
+        assert result.output["assessed"] is True  # LLM ran
 
-    async def test_add_memory_entry(self, mock_task, mock_context, mock_memory_store):
-        """Test adding a memory entry."""
-        from zebra_tasks.agent.update_memory import UpdateMemoryAction
+    async def test_records_to_metrics_store(self, mock_task, mock_context, mock_metrics_store):
+        """Test that metrics are recorded when store is available."""
+        from unittest.mock import patch as mock_patch
+
+        from zebra_tasks.agent.assess_and_record import AssessAndRecordAction
+
+        mock_context.extras["__metrics_store__"] = mock_metrics_store
+        mock_task.properties = {
+            "run_id": "run-1",
+            "workflow_name": "Test Workflow",
+            "goal": "Test goal",
+            "success": True,
+            "tokens_used": 100,
+        }
+
+        mock_provider = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = '{"effectiveness_notes": "Good result"}'
+        mock_provider.complete = AsyncMock(return_value=mock_response)
+
+        with mock_patch(
+            "zebra_tasks.agent.assess_and_record.get_provider", return_value=mock_provider
+        ):
+            action = AssessAndRecordAction()
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.output["recorded"] is True
+        mock_metrics_store.record_run.assert_called_once()
+
+        recorded_run = mock_metrics_store.record_run.call_args[0][0]
+        assert recorded_run.id == "run-1"
+        assert recorded_run.workflow_name == "Test Workflow"
+        assert recorded_run.success is True
+
+    async def test_writes_to_memory_store(self, mock_task, mock_context, mock_memory_store):
+        """Test that a WorkflowMemoryEntry is written when store is available."""
+        from unittest.mock import patch as mock_patch
+
+        from zebra_tasks.agent.assess_and_record import AssessAndRecordAction
 
         mock_context.extras["__memory_store__"] = mock_memory_store
         mock_task.properties = {
             "run_id": "run-1",
-            "goal": "Test goal",
             "workflow_name": "Test Workflow",
-            "result_summary": "Test result",
+            "goal": "Test goal",
+            "success": True,
         }
 
-        action = UpdateMemoryAction()
-        result = await action.run(mock_task, mock_context)
+        mock_provider = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = '{"effectiveness_notes": "Worked well"}'
+        mock_provider.complete = AsyncMock(return_value=mock_response)
+
+        with mock_patch(
+            "zebra_tasks.agent.assess_and_record.get_provider", return_value=mock_provider
+        ):
+            action = AssessAndRecordAction()
+            result = await action.run(mock_task, mock_context)
 
         assert result.success is True
-        assert result.output["added"] is True
-        mock_memory_store.add_entry.assert_called_once()
+        mock_memory_store.add_workflow_memory.assert_called_once()
 
-        # Verify the entry
-        entry = mock_memory_store.add_entry.call_args[0][0]
+        entry = mock_memory_store.add_workflow_memory.call_args[0][0]
+        assert entry.workflow_name == "Test Workflow"
         assert entry.goal == "Test goal"
-        assert entry.workflow_used == "Test Workflow"
-        assert entry.result_summary == "Test result"
+        assert entry.success is True
+        assert entry.effectiveness_notes == "Worked well"
 
-    async def test_add_memory_with_dict_result(self, mock_task, mock_context, mock_memory_store):
-        """Test adding memory with dict result_summary."""
-        from zebra_tasks.agent.update_memory import UpdateMemoryAction
+    async def test_llm_assessment_failure_degrades_gracefully(self, mock_task, mock_context):
+        """Test that LLM failure still records metrics and writes partial memory."""
+        from unittest.mock import patch as mock_patch
 
-        mock_context.extras["__memory_store__"] = mock_memory_store
-        mock_task.properties = {
-            "run_id": "run-1",
-            "goal": "Test goal",
-            "workflow_name": "Test Workflow",
-            "result_summary": {"response": "This is the response"},
-        }
-
-        action = UpdateMemoryAction()
-        result = await action.run(mock_task, mock_context)
-
-        assert result.success is True
-        entry = mock_memory_store.add_entry.call_args[0][0]
-        assert entry.result_summary == "This is the response"
-
-    async def test_add_memory_with_output_key_result(
-        self, mock_task, mock_context, mock_memory_store
-    ):
-        """Test adding memory with 'output' key in result."""
-        from zebra_tasks.agent.update_memory import UpdateMemoryAction
-
-        mock_context.extras["__memory_store__"] = mock_memory_store
-        mock_task.properties = {
-            "run_id": "run-1",
-            "goal": "Test goal",
-            "workflow_name": "Test Workflow",
-            "result_summary": {"output": "Output value"},
-        }
-
-        action = UpdateMemoryAction()
-        result = await action.run(mock_task, mock_context)
-
-        assert result.success is True
-        entry = mock_memory_store.add_entry.call_args[0][0]
-        assert entry.result_summary == "Output value"
-
-    async def test_truncate_long_summary(self, mock_task, mock_context, mock_memory_store):
-        """Test that long summaries are truncated."""
-        from zebra_tasks.agent.update_memory import UpdateMemoryAction
-
-        mock_context.extras["__memory_store__"] = mock_memory_store
-        long_text = "x" * 1000
-        mock_task.properties = {
-            "run_id": "run-1",
-            "goal": "Test goal",
-            "workflow_name": "Test Workflow",
-            "result_summary": long_text,
-        }
-
-        action = UpdateMemoryAction()
-        result = await action.run(mock_task, mock_context)
-
-        assert result.success is True
-        entry = mock_memory_store.add_entry.call_args[0][0]
-        assert len(entry.result_summary) <= 500
-        assert entry.result_summary.endswith("...")
-
-    async def test_injected_memory_store(self, mock_task, mock_context, mock_memory_store):
-        """Test using an injected memory store."""
-        from zebra_tasks.agent.update_memory import UpdateMemoryAction
+        from zebra_tasks.agent.assess_and_record import AssessAndRecordAction
 
         mock_task.properties = {
             "run_id": "run-1",
-            "goal": "Test goal",
             "workflow_name": "Test Workflow",
-            "result_summary": "Test result",
+            "goal": "Test goal",
+            "success": True,
         }
 
-        action = UpdateMemoryAction(memory_store=mock_memory_store)
-        result = await action.run(mock_task, mock_context)
+        with mock_patch(
+            "zebra_tasks.agent.assess_and_record.get_provider",
+            side_effect=Exception("No provider"),
+        ):
+            action = AssessAndRecordAction()
+            result = await action.run(mock_task, mock_context)
 
         assert result.success is True
-        assert result.output["added"] is True
-
-    async def test_update_error_handling(self, mock_task, mock_context, mock_memory_store):
-        """Test error handling when update fails."""
-        from zebra_tasks.agent.update_memory import UpdateMemoryAction
-
-        mock_memory_store.add_entry.side_effect = Exception("Memory error")
-        mock_context.extras["__memory_store__"] = mock_memory_store
-        mock_task.properties = {
-            "run_id": "run-1",
-            "goal": "Test goal",
-            "workflow_name": "Test Workflow",
-            "result_summary": "Test result",
-        }
-
-        action = UpdateMemoryAction()
-        result = await action.run(mock_task, mock_context)
-
-        # Should succeed but mark as not added
-        assert result.success is True
-        assert result.output["added"] is False
-        assert "Memory error" in result.output.get("error", "")
-
-    async def test_none_result_summary(self, mock_task, mock_context, mock_memory_store):
-        """Test handling None result_summary."""
-        from zebra_tasks.agent.update_memory import UpdateMemoryAction
-
-        mock_context.extras["__memory_store__"] = mock_memory_store
-        mock_task.properties = {
-            "run_id": "run-1",
-            "goal": "Test goal",
-            "workflow_name": "Test Workflow",
-            "result_summary": None,
-        }
-
-        action = UpdateMemoryAction()
-        result = await action.run(mock_task, mock_context)
-
-        assert result.success is True
-        entry = mock_memory_store.add_entry.call_args[0][0]
-        assert entry.result_summary == ""
+        assert result.output["assessed"] is False
+        assert "effectiveness_notes" in result.output
 
 
 # =============================================================================

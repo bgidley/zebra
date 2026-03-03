@@ -1,6 +1,7 @@
 """Provider registry for LLM providers."""
 
-from typing import Callable
+from collections.abc import Callable
+
 from zebra_tasks.llm.base import LLMProvider
 
 # Registry of provider factories

@@ -1,22 +1,22 @@
 """Tests for SQLite storage backend."""
 
-import pytest
-import tempfile
 import os
-from datetime import datetime, timezone
-from pathlib import Path
+import tempfile
+from datetime import UTC, datetime
 
-from zebra.storage.sqlite import SQLiteStore
+import pytest
+
 from zebra.core.models import (
+    FlowOfExecution,
     ProcessDefinition,
     ProcessInstance,
     ProcessState,
+    RoutingDefinition,
     TaskDefinition,
     TaskInstance,
     TaskState,
-    FlowOfExecution,
-    RoutingDefinition,
 )
+from zebra.storage.sqlite import SQLiteStore
 
 
 @pytest.fixture
@@ -58,8 +58,8 @@ def sample_process():
         definition_id="def-1",
         state=ProcessState.RUNNING,
         properties={"key": "value"},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -169,8 +169,8 @@ class TestSQLiteProcesses:
             definition_id="def-1",
             state=ProcessState.COMPLETE,
             properties={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await sqlite_store.save_process(completed)
 
@@ -193,8 +193,8 @@ class TestSQLiteProcesses:
             definition_id="def-2",
             state=ProcessState.RUNNING,
             properties={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await sqlite_store.save_process(other)
 
@@ -207,7 +207,7 @@ class TestSQLiteProcesses:
         await sqlite_store.save_process(sample_process)
 
         sample_process.state = ProcessState.COMPLETE
-        sample_process.completed_at = datetime.now(timezone.utc)
+        sample_process.completed_at = datetime.now(UTC)
         await sqlite_store.save_process(sample_process)
 
         loaded = await sqlite_store.load_process(sample_process.id)
@@ -226,8 +226,8 @@ class TestSQLiteProcesses:
             state=TaskState.PENDING,
             foe_id="foe-1",
             properties={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await sqlite_store.save_task(task)
 
@@ -235,7 +235,7 @@ class TestSQLiteProcesses:
         foe = FlowOfExecution(
             id="foe-1",
             process_id=sample_process.id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await sqlite_store.save_foe(foe)
 
@@ -257,8 +257,8 @@ class TestSQLiteProcesses:
             properties={},
             parent_process_id="parent-proc",
             parent_task_id="parent-task",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await sqlite_store.save_process(process)
 
@@ -281,8 +281,8 @@ class TestSQLiteTasks:
             state=TaskState.RUNNING,
             foe_id="foe-1",
             properties={"input": "test"},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await sqlite_store.save_task(task)
 
@@ -310,8 +310,8 @@ class TestSQLiteTasks:
                 state=TaskState.PENDING,
                 foe_id="foe-1",
                 properties={},
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await sqlite_store.save_task(task)
 
@@ -329,15 +329,15 @@ class TestSQLiteTasks:
             state=TaskState.RUNNING,
             foe_id="foe-1",
             properties={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await sqlite_store.save_task(task)
 
         # Update with result
         task.state = TaskState.COMPLETE
         task.result = {"output": "success"}
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = datetime.now(UTC)
         await sqlite_store.save_task(task)
 
         loaded = await sqlite_store.load_task(task.id)
@@ -356,8 +356,8 @@ class TestSQLiteTasks:
             state=TaskState.RUNNING,
             foe_id="foe-1",
             properties={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await sqlite_store.save_task(task)
 
@@ -380,8 +380,8 @@ class TestSQLiteTasks:
             state=TaskState.PENDING,
             foe_id="foe-1",
             properties={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await sqlite_store.save_task(task)
 
@@ -401,7 +401,7 @@ class TestSQLiteFOEs:
         foe = FlowOfExecution(
             id="foe-1",
             process_id=sample_process.id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await sqlite_store.save_foe(foe)
 
@@ -423,7 +423,7 @@ class TestSQLiteFOEs:
         parent_foe = FlowOfExecution(
             id="foe-parent",
             process_id=sample_process.id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await sqlite_store.save_foe(parent_foe)
 
@@ -431,7 +431,7 @@ class TestSQLiteFOEs:
             id="foe-child",
             process_id=sample_process.id,
             parent_foe_id="foe-parent",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await sqlite_store.save_foe(child_foe)
 
@@ -446,7 +446,7 @@ class TestSQLiteFOEs:
             foe = FlowOfExecution(
                 id=f"foe-{i}",
                 process_id=sample_process.id,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await sqlite_store.save_foe(foe)
 

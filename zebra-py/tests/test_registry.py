@@ -1,10 +1,11 @@
 """Tests for ActionRegistry."""
 
 import pytest
-from zebra.tasks.registry import ActionRegistry
-from zebra.tasks.base import TaskAction, ConditionAction, ExecutionContext, AlwaysTrueCondition
-from zebra.core.models import TaskInstance, TaskResult
+
 from zebra.core.exceptions import ActionNotFoundError
+from zebra.core.models import TaskInstance, TaskResult
+from zebra.tasks.base import AlwaysTrueCondition, ConditionAction, ExecutionContext, TaskAction
+from zebra.tasks.registry import ActionRegistry
 
 
 class DummyAction(TaskAction):

@@ -1,36 +1,32 @@
 """Tests to achieve 100% code coverage."""
 
-import pytest
 import asyncio
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+import pytest
 
 from zebra.core.engine import WorkflowEngine
+from zebra.core.exceptions import (
+    DefinitionNotFoundError,
+    ExecutionError,
+    LockError,
+    RoutingError,
+)
 from zebra.core.models import (
     ProcessDefinition,
     ProcessInstance,
     ProcessState,
+    RoutingDefinition,
     TaskDefinition,
     TaskInstance,
-    TaskState,
     TaskResult,
-    RoutingDefinition,
-    FlowOfExecution,
-)
-from zebra.core.exceptions import (
-    InvalidStateTransitionError,
-    ProcessNotFoundError,
-    DefinitionNotFoundError,
-    TaskNotFoundError,
-    LockError,
-    RoutingError,
-    ExecutionError,
+    TaskState,
 )
 from zebra.core.sync import TaskSync
 from zebra.storage.memory import InMemoryStore
+from zebra.tasks.base import RouteNameCondition, TaskAction
 from zebra.tasks.registry import ActionRegistry
-from zebra.tasks.base import TaskAction, ExecutionContext, RouteNameCondition
 
 
 @pytest.fixture

@@ -1,18 +1,17 @@
 """Additional tests for definition loader coverage."""
 
-import pytest
-import tempfile
 import os
-from pathlib import Path
+import tempfile
 
+import pytest
+
+from zebra.core.exceptions import ValidationError
+from zebra.core.models import ProcessDefinition, RoutingDefinition, TaskDefinition
 from zebra.definitions.loader import (
     load_definition,
-    load_definition_from_yaml,
     load_definition_from_dict,
     validate_definition,
 )
-from zebra.core.exceptions import ValidationError
-from zebra.core.models import ProcessDefinition, TaskDefinition, RoutingDefinition
 
 
 class TestLoadDefinitionFromFile:

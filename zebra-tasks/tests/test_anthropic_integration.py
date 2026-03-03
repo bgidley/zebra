@@ -1,6 +1,7 @@
 """Integration tests for Anthropic provider using real API."""
 
 import os
+
 import pytest
 from dotenv import load_dotenv
 
@@ -20,8 +21,8 @@ class TestAnthropicIntegration:
     @pytest.mark.asyncio
     async def test_simple_completion(self):
         """Test a simple completion request."""
-        from zebra_tasks.llm.providers import get_provider
         from zebra_tasks.llm.base import Message
+        from zebra_tasks.llm.providers import get_provider
 
         provider = get_provider("anthropic")
         response = await provider.complete([
@@ -36,8 +37,8 @@ class TestAnthropicIntegration:
     @pytest.mark.asyncio
     async def test_completion_with_system_prompt(self):
         """Test completion with system prompt."""
-        from zebra_tasks.llm.providers import get_provider
         from zebra_tasks.llm.base import Message
+        from zebra_tasks.llm.providers import get_provider
 
         provider = get_provider("anthropic")
         response = await provider.complete([
@@ -52,8 +53,8 @@ class TestAnthropicIntegration:
     @pytest.mark.asyncio
     async def test_streaming(self):
         """Test streaming completion."""
-        from zebra_tasks.llm.providers import get_provider
         from zebra_tasks.llm.base import Message
+        from zebra_tasks.llm.providers import get_provider
 
         provider = get_provider("anthropic")
         chunks = []

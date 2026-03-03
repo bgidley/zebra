@@ -1,99 +1,158 @@
-"""Tests for the memory module."""
+"""Tests for the memory module.
 
-from datetime import datetime, timezone
+Tests the new workflow-focused two-tier memory system:
+- WorkflowMemoryEntry: Detailed per-run records
+- ConceptualMemoryEntry: Compact goal-pattern index
+"""
 
-import pytest
+from datetime import UTC, datetime
 
 from zebra_agent.memory import (
-    LongTermTheme,
-    MemoryEntry,
-    ShortTermSummary,
+    ConceptualMemoryEntry,
+    WorkflowMemoryEntry,
     estimate_tokens,
 )
 
 
-class TestMemoryEntry:
-    """Tests for MemoryEntry dataclass."""
+class TestWorkflowMemoryEntry:
+    """Tests for WorkflowMemoryEntry dataclass."""
 
     def test_create_entry(self):
-        """Test creating a memory entry."""
-        entry = MemoryEntry(
+        """Test creating a workflow memory entry."""
+        entry = WorkflowMemoryEntry(
             id="test-id",
-            timestamp=datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 1, 15, 10, 30, tzinfo=UTC),
+            workflow_name="TestWorkflow",
             goal="Test goal",
-            workflow_used="TestWorkflow",
-            result_summary="Test result",
-            tokens=100,
+            success=True,
+            input_summary="Input",
+            output_summary="Output",
+            effectiveness_notes="Worked well",
+            tokens_used=100,
         )
         assert entry.id == "test-id"
+        assert entry.workflow_name == "TestWorkflow"
         assert entry.goal == "Test goal"
-        assert entry.tokens == 100
+        assert entry.success is True
+        assert entry.tokens_used == 100
+        assert entry.rating is None
+
+    def test_create_via_factory(self):
+        """Test creating entry via factory method."""
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="MyWorkflow",
+            goal="My goal",
+            success=False,
+            input_summary="Some input",
+            output_summary="Some output",
+            effectiveness_notes="Failed halfway",
+            tokens_used=50,
+            rating=2,
+        )
+        assert entry.id  # Auto-generated
+        assert entry.timestamp  # Auto-set
+        assert entry.workflow_name == "MyWorkflow"
+        assert entry.success is False
+        assert entry.rating == 2
 
     def test_to_dict(self):
         """Test converting entry to dictionary."""
-        entry = MemoryEntry(
+        entry = WorkflowMemoryEntry(
             id="test-id",
-            timestamp=datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc),
+            timestamp=datetime(2024, 1, 15, 10, 30, tzinfo=UTC),
+            workflow_name="TestWorkflow",
             goal="Test goal",
-            workflow_used="TestWorkflow",
-            result_summary="Test result",
-            tokens=100,
+            success=True,
+            input_summary="Input",
+            output_summary="Output",
+            effectiveness_notes="Notes",
+            tokens_used=100,
         )
         data = entry.to_dict()
         assert data["id"] == "test-id"
-        assert data["goal"] == "Test goal"
+        assert data["workflow_name"] == "TestWorkflow"
         assert data["timestamp"] == "2024-01-15T10:30:00+00:00"
+        assert data["success"] is True
 
     def test_from_dict(self):
         """Test creating entry from dictionary."""
         data = {
             "id": "test-id",
             "timestamp": "2024-01-15T10:30:00+00:00",
+            "workflow_name": "TestWorkflow",
             "goal": "Test goal",
-            "workflow_used": "TestWorkflow",
-            "result_summary": "Test result",
-            "tokens": 100,
+            "success": True,
+            "input_summary": "Input",
+            "output_summary": "Output",
+            "effectiveness_notes": "Notes",
+            "tokens_used": 100,
         }
-        entry = MemoryEntry.from_dict(data)
+        entry = WorkflowMemoryEntry.from_dict(data)
         assert entry.id == "test-id"
-        assert entry.timestamp == datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc)
-        assert entry.tokens == 100
+        assert entry.timestamp == datetime(2024, 1, 15, 10, 30, tzinfo=UTC)
+        assert entry.workflow_name == "TestWorkflow"
+        assert entry.tokens_used == 100
 
 
-class TestShortTermSummary:
-    """Tests for ShortTermSummary dataclass."""
+class TestConceptualMemoryEntry:
+    """Tests for ConceptualMemoryEntry dataclass."""
 
-    def test_create_summary(self):
-        """Test creating a summary."""
-        summary = ShortTermSummary(
-            id="summary-id",
-            created_at=datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc),
-            summary="Summary text",
+    def test_create_entry(self):
+        """Test creating a conceptual memory entry."""
+        entry = ConceptualMemoryEntry.create(
+            concept="code analysis tasks",
+            recommended_workflows=[
+                {
+                    "name": "analyze_code",
+                    "fit_notes": "Good for analysis",
+                    "avg_rating": 4.0,
+                    "use_count": 5,
+                }
+            ],
+            anti_patterns="Don't use for simple questions",
+        )
+        assert entry.id
+        assert entry.concept == "code analysis tasks"
+        assert len(entry.recommended_workflows) == 1
+        assert entry.anti_patterns == "Don't use for simple questions"
+
+    def test_to_dict(self):
+        """Test converting to dictionary."""
+        entry = ConceptualMemoryEntry(
+            id="cme-1",
+            concept="writing assistance",
+            recommended_workflows=[
+                {"name": "write_docs", "fit_notes": "Great", "avg_rating": None, "use_count": 3}
+            ],
+            anti_patterns="Not for code",
+            last_updated=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
             tokens=50,
-            entry_count=3,
         )
-        assert summary.id == "summary-id"
-        assert summary.entry_count == 3
+        data = entry.to_dict()
+        assert data["id"] == "cme-1"
+        assert data["concept"] == "writing assistance"
+        assert data["last_updated"] == "2024-01-15T10:00:00+00:00"
+
+    def test_from_dict(self):
+        """Test creating from dictionary."""
+        data = {
+            "id": "cme-1",
+            "concept": "writing assistance",
+            "recommended_workflows": [
+                {"name": "write_docs", "fit_notes": "Great", "avg_rating": None, "use_count": 3}
+            ],
+            "anti_patterns": "Not for code",
+            "last_updated": "2024-01-15T10:00:00+00:00",
+            "tokens": 50,
+        }
+        entry = ConceptualMemoryEntry.from_dict(data)
+        assert entry.id == "cme-1"
+        assert entry.concept == "writing assistance"
+        assert len(entry.recommended_workflows) == 1
 
 
-class TestLongTermTheme:
-    """Tests for LongTermTheme dataclass."""
-
-    def test_create_theme(self):
-        """Test creating a theme."""
-        theme = LongTermTheme(
-            id="theme-id",
-            created_at=datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc),
-            theme="Theme text",
-            tokens=20,
-            short_term_refs=["summary-1", "summary-2"],
-        )
-        assert theme.id == "theme-id"
-        assert len(theme.short_term_refs) == 2
-
-
-class TestAgentMemoryInitialization:
-    """Tests for AgentMemory initialization."""
+class TestInMemoryMemoryStore:
+    """Tests for InMemoryMemoryStore (new interface)."""
 
     async def test_initialization(self, memory):
         """Test that memory initializes correctly."""
@@ -106,333 +165,206 @@ class TestAgentMemoryInitialization:
         await memory._ensure_initialized()
         assert memory._initialized is True
 
+    # ── Workflow Memory ────────────────────────────────────────────────────────
 
-class TestShortTermMemory:
-    """Tests for short-term memory operations."""
-
-    async def test_add_entry(self, memory):
-        """Test adding an entry."""
-        entry = MemoryEntry(
-            id="entry-1",
-            timestamp=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-            goal="Goal 1",
-            workflow_used="Workflow 1",
-            result_summary="Result 1",
-            tokens=100,
+    async def test_add_workflow_memory(self, memory):
+        """Test adding a workflow memory entry."""
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="MyWorkflow",
+            goal="My goal",
+            success=True,
+            input_summary="input",
+            output_summary="output",
+            effectiveness_notes="Good",
+            tokens_used=100,
         )
-        await memory.add_entry(entry)
+        await memory.add_workflow_memory(entry)
 
-        entries = await memory.get_short_term_entries()
+        entries = await memory.get_recent_workflow_memories(limit=10)
         assert len(entries) == 1
-        assert entries[0].id == "entry-1"
+        assert entries[0].id == entry.id
 
-    async def test_get_short_term_entries_order(self, memory):
-        """Test that entries are returned most recent first."""
-        entry1 = MemoryEntry(
-            id="entry-1",
-            timestamp=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-            goal="Goal 1",
-            workflow_used="Workflow 1",
-            result_summary="Result 1",
-            tokens=100,
+    async def test_get_workflow_memories_filtered(self, memory):
+        """Test getting workflow memories for a specific workflow."""
+        e1 = WorkflowMemoryEntry.create(
+            workflow_name="WorkflowA",
+            goal="g1",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
         )
-        entry2 = MemoryEntry(
-            id="entry-2",
-            timestamp=datetime(2024, 1, 15, 11, 0, tzinfo=timezone.utc),
-            goal="Goal 2",
-            workflow_used="Workflow 2",
-            result_summary="Result 2",
-            tokens=100,
+        e2 = WorkflowMemoryEntry.create(
+            workflow_name="WorkflowB",
+            goal="g2",
+            success=False,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
         )
-        await memory.add_entry(entry1)
-        await memory.add_entry(entry2)
+        await memory.add_workflow_memory(e1)
+        await memory.add_workflow_memory(e2)
 
-        entries = await memory.get_short_term_entries()
-        assert len(entries) == 2
-        assert entries[0].id == "entry-2"  # More recent
-        assert entries[1].id == "entry-1"
+        a_entries = await memory.get_workflow_memories("WorkflowA")
+        assert len(a_entries) == 1
+        assert a_entries[0].workflow_name == "WorkflowA"
 
-    async def test_get_short_term_tokens(self, memory):
-        """Test calculating total tokens."""
-        entry1 = MemoryEntry(
-            id="entry-1",
-            timestamp=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-            goal="Goal 1",
-            workflow_used="Workflow 1",
-            result_summary="Result 1",
-            tokens=100,
-        )
-        entry2 = MemoryEntry(
-            id="entry-2",
-            timestamp=datetime(2024, 1, 15, 11, 0, tzinfo=timezone.utc),
-            goal="Goal 2",
-            workflow_used="Workflow 2",
-            result_summary="Result 2",
-            tokens=200,
-        )
-        await memory.add_entry(entry1)
-        await memory.add_entry(entry2)
+        b_entries = await memory.get_workflow_memories("WorkflowB")
+        assert len(b_entries) == 1
+        assert b_entries[0].workflow_name == "WorkflowB"
 
-        total = await memory.get_short_term_tokens()
-        assert total == 300
+    async def test_get_recent_workflow_memories_newest_first(self, memory):
+        """Test that recent entries are returned newest first."""
+        from datetime import timedelta
 
-    async def test_needs_short_term_compaction(self, memory):
-        """Test compaction check."""
-        # Max is 1000, threshold 0.9 -> 900
-        assert await memory.needs_short_term_compaction() is False
-
-        # Add 800 tokens (below threshold)
-        entry = MemoryEntry(
-            id="entry-1",
-            timestamp=datetime.now(timezone.utc),
-            goal="Goal",
-            workflow_used="Workflow",
-            result_summary="Result",
-            tokens=800,
-        )
-        await memory.add_entry(entry)
-        assert await memory.needs_short_term_compaction() is False
-
-        # Add 150 more (total 950 > 900)
-        entry2 = MemoryEntry(
-            id="entry-2",
-            timestamp=datetime.now(timezone.utc),
-            goal="Goal",
-            workflow_used="Workflow",
-            result_summary="Result",
-            tokens=150,
-        )
-        await memory.add_entry(entry2)
-        assert await memory.needs_short_term_compaction() is True
-
-    async def test_add_short_term_summary(self, memory):
-        """Test adding a summary."""
-        summary = ShortTermSummary(
-            id="summary-1",
-            created_at=datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc),
-            summary="Summary text",
-            tokens=50,
-            entry_count=5,
-        )
-        await memory.add_short_term_summary(summary)
-
-        summaries = await memory.get_short_term_summaries()
-        assert len(summaries) == 1
-        assert summaries[0].id == "summary-1"
-
-    async def test_clear_short_term_entries(self, memory):
-        """Test clearing entries."""
-        entry = MemoryEntry(
-            id="entry-1",
-            timestamp=datetime.now(timezone.utc),
-            goal="Goal",
-            workflow_used="Workflow",
-            result_summary="Result",
-            tokens=100,
-        )
-        await memory.add_entry(entry)
-        assert len(await memory.get_short_term_entries()) == 1
-
-        await memory.clear_short_term_entries()
-        assert len(await memory.get_short_term_entries()) == 0
-
-    async def test_get_short_term_content_for_compaction(self, memory):
-        """Test formatting content for compaction."""
-        entry = MemoryEntry(
-            id="entry-1",
-            timestamp=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-            goal="My Goal",
-            workflow_used="My Workflow",
-            result_summary="Success",
-            tokens=100,
-        )
-        await memory.add_entry(entry)
-
-        content = await memory.get_short_term_content_for_compaction()
-        assert "My Goal" in content
-        assert "My Workflow" in content
-        assert "Success" in content
-        assert "2024-01-15" in content
-
-
-class TestLongTermMemory:
-    """Tests for long-term memory operations."""
-
-    async def test_add_long_term_theme(self, memory):
-        """Test adding a theme."""
-        theme = LongTermTheme(
-            id="theme-1",
-            created_at=datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc),
-            theme="Theme text",
-            tokens=20,
-            short_term_refs=["summary-1"],
-        )
-        await memory.add_long_term_theme(theme)
-
-        themes = await memory.get_long_term_themes()
-        assert len(themes) == 1
-        assert themes[0].id == "theme-1"
-        assert themes[0].short_term_refs == ["summary-1"]
-
-    async def test_get_long_term_tokens(self, memory):
-        """Test calculating total theme tokens."""
-        theme1 = LongTermTheme(
-            id="theme-1",
-            created_at=datetime.now(timezone.utc),
-            theme="Theme 1",
-            tokens=100,
-            short_term_refs=[],
-        )
-        theme2 = LongTermTheme(
-            id="theme-2",
-            created_at=datetime.now(timezone.utc),
-            theme="Theme 2",
-            tokens=200,
-            short_term_refs=[],
-        )
-        await memory.add_long_term_theme(theme1)
-        await memory.add_long_term_theme(theme2)
-
-        total = await memory.get_long_term_tokens()
-        assert total == 300
-
-    async def test_needs_long_term_compaction(self, memory):
-        """Test long-term compaction check."""
-        # Max 2000, threshold 0.9 -> 1800
-        # Check involves sum of summaries + themes tokens
-
-        # Add summaries: 1000 tokens
-        summary = ShortTermSummary(
-            id="summary-1",
-            created_at=datetime.now(timezone.utc),
-            summary="Summary",
-            tokens=1000,
-            entry_count=10,
-        )
-        await memory.add_short_term_summary(summary)
-
-        # Add themes: 500 tokens
-        theme = LongTermTheme(
-            id="theme-1",
-            created_at=datetime.now(timezone.utc),
-            theme="Theme",
-            tokens=500,
-            short_term_refs=[],
-        )
-        await memory.add_long_term_theme(theme)
-
-        # Total 1500 < 1800
-        assert await memory.needs_long_term_compaction() is False
-
-        # Add more themes: 400 tokens -> Total 1900 > 1800
-        theme2 = LongTermTheme(
-            id="theme-2",
-            created_at=datetime.now(timezone.utc),
-            theme="Theme 2",
-            tokens=400,
-            short_term_refs=[],
-        )
-        await memory.add_long_term_theme(theme2)
-
-        assert await memory.needs_long_term_compaction() is True
-
-    async def test_clear_short_term_summaries(self, memory):
-        """Test clearing summaries."""
-        summary1 = ShortTermSummary(
-            id="s1",
-            created_at=datetime.now(timezone.utc),
-            summary="S1",
-            tokens=10,
-            entry_count=1,
-        )
-        summary2 = ShortTermSummary(
-            id="s2",
-            created_at=datetime.now(timezone.utc),
-            summary="S2",
-            tokens=10,
-            entry_count=1,
-        )
-        await memory.add_short_term_summary(summary1)
-        await memory.add_short_term_summary(summary2)
-
-        # Clear all
-        await memory.clear_short_term_summaries()
-        assert len(await memory.get_short_term_summaries()) == 0
-
-        # Add back
-        await memory.add_short_term_summary(summary1)
-        await memory.add_short_term_summary(summary2)
-
-        # Clear keeping s1
-        await memory.clear_short_term_summaries(keep_ids=["s1"])
-        remaining = await memory.get_short_term_summaries()
-        assert len(remaining) == 1
-        assert remaining[0].id == "s1"
-
-
-class TestCombinedContext:
-    """Tests for context generation."""
-
-    async def test_get_context_for_llm(self, memory):
-        """Test generating context string."""
-        # Add entry
-        entry = MemoryEntry(
+        base_time = datetime(2024, 1, 15, 10, 0, tzinfo=UTC)
+        e1 = WorkflowMemoryEntry(
             id="e1",
-            timestamp=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-            goal="Test Goal",
-            workflow_used="Test Workflow",
-            result_summary="Result",
+            timestamp=base_time,
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
+        )
+        e2 = WorkflowMemoryEntry(
+            id="e2",
+            timestamp=base_time + timedelta(hours=1),
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
+        )
+        await memory.add_workflow_memory(e1)
+        await memory.add_workflow_memory(e2)
+
+        entries = await memory.get_recent_workflow_memories(limit=10)
+        assert entries[0].id == "e2"  # Newest first
+        assert entries[1].id == "e1"
+
+    # ── Conceptual Memory ─────────────────────────────────────────────────────
+
+    async def test_save_and_get_conceptual_memory(self, memory):
+        """Test saving and retrieving conceptual memory."""
+        entry = ConceptualMemoryEntry.create(
+            concept="code tasks",
+            recommended_workflows=[
+                {"name": "analyze_code", "fit_notes": "good", "avg_rating": None, "use_count": 1}
+            ],
+            anti_patterns="",
+        )
+        await memory.save_conceptual_memory(entry)
+
+        entries = await memory.get_conceptual_memories()
+        assert len(entries) == 1
+        assert entries[0].concept == "code tasks"
+
+    async def test_save_conceptual_memory_updates_existing(self, memory):
+        """Test that saving an entry with the same ID updates it."""
+        entry = ConceptualMemoryEntry.create(concept="writing")
+        await memory.save_conceptual_memory(entry)
+
+        updated = ConceptualMemoryEntry(
+            id=entry.id,
+            concept="writing (updated)",
+            recommended_workflows=[],
+            anti_patterns="nothing",
+            last_updated=datetime.now(UTC),
             tokens=10,
         )
-        await memory.add_entry(entry)
+        await memory.save_conceptual_memory(updated)
 
-        # Add summary
-        summary = ShortTermSummary(
-            id="s1",
-            created_at=datetime.now(timezone.utc),
-            summary="Previous summary",
-            tokens=50,
-            entry_count=5,
+        entries = await memory.get_conceptual_memories()
+        assert len(entries) == 1  # Not duplicated
+        assert entries[0].concept == "writing (updated)"
+
+    async def test_clear_conceptual_memories(self, memory):
+        """Test clearing all conceptual memories."""
+        await memory.save_conceptual_memory(ConceptualMemoryEntry.create(concept="a"))
+        await memory.save_conceptual_memory(ConceptualMemoryEntry.create(concept="b"))
+        assert len(await memory.get_conceptual_memories()) == 2
+
+        await memory.clear_conceptual_memories()
+        assert len(await memory.get_conceptual_memories()) == 0
+
+    async def test_get_conceptual_context_for_llm_empty(self, memory):
+        """Test context generation when memory is empty."""
+        context = await memory.get_conceptual_context_for_llm()
+        assert context == ""
+
+    async def test_get_conceptual_context_for_llm_with_entries(self, memory):
+        """Test context generation with entries."""
+        entry = ConceptualMemoryEntry.create(
+            concept="code analysis",
+            recommended_workflows=[
+                {
+                    "name": "analyze_code",
+                    "fit_notes": "Best for analysis",
+                    "avg_rating": 4.5,
+                    "use_count": 3,
+                }
+            ],
+            anti_patterns="Don't use for writing",
         )
-        await memory.add_short_term_summary(summary)
+        await memory.save_conceptual_memory(entry)
 
-        # Add theme
-        theme = LongTermTheme(
-            id="t1",
-            created_at=datetime.now(timezone.utc),
-            theme="Recurring pattern",
-            tokens=20,
-            short_term_refs=["s1"],
+        context = await memory.get_conceptual_context_for_llm()
+        assert "code analysis" in context
+        assert "analyze_code" in context
+        assert "Best for analysis" in context
+        assert "Don't use for writing" in context
+
+    async def test_get_workflow_context_for_llm_empty(self, memory):
+        """Test workflow context generation when no entries exist."""
+        context = await memory.get_workflow_context_for_llm("NonExistent")
+        assert context == ""
+
+    async def test_get_workflow_context_for_llm_with_entries(self, memory):
+        """Test workflow context generation with entries."""
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="analyze_code",
+            goal="Analyze my Python module",
+            success=True,
+            input_summary="Python module",
+            output_summary="Found 3 issues",
+            effectiveness_notes="Clear and precise",
+            tokens_used=500,
         )
-        await memory.add_long_term_theme(theme)
+        await memory.add_workflow_memory(entry)
 
-        context = await memory.get_context_for_llm()
+        context = await memory.get_workflow_context_for_llm("analyze_code")
+        assert "analyze_code" in context
+        assert "Analyze my Python module" in context
 
-        assert "Test Goal" in context
-        assert "Previous summary" in context
-        assert "Recurring pattern" in context
+    async def test_get_stats(self, memory):
+        """Test getting memory statistics."""
+        stats = await memory.get_stats()
+        assert stats["workflow_memory_entries"] == 0
+        assert stats["conceptual_memory_entries"] == 0
 
-    async def test_get_details_for_theme(self, memory):
-        """Test getting details for a theme."""
-        summary = ShortTermSummary(
-            id="s1",
-            created_at=datetime.now(timezone.utc),
-            summary="Detailed summary text",
-            tokens=50,
-            entry_count=5,
+        await memory.add_workflow_memory(
+            WorkflowMemoryEntry.create(
+                workflow_name="W",
+                goal="g",
+                success=True,
+                input_summary="i",
+                output_summary="o",
+                effectiveness_notes="",
+                tokens_used=0,
+            )
         )
-        await memory.add_short_term_summary(summary)
+        await memory.save_conceptual_memory(ConceptualMemoryEntry.create(concept="c"))
 
-        theme = LongTermTheme(
-            id="t1",
-            created_at=datetime.now(timezone.utc),
-            theme="Theme",
-            tokens=20,
-            short_term_refs=["s1", "non-existent"],
-        )
-
-        details = await memory.get_details_for_theme(theme)
-        assert "Detailed summary text" in details
+        stats = await memory.get_stats()
+        assert stats["workflow_memory_entries"] == 1
+        assert stats["conceptual_memory_entries"] == 1
 
 
 class TestEstimateTokens:

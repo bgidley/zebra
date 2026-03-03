@@ -1,6 +1,6 @@
 """Tests for the metrics module."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -16,7 +16,7 @@ class TestWorkflowRun:
             id="test-id",
             workflow_name="TestWorkflow",
             goal="Test goal",
-            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
         )
         assert run.id == "test-id"
         assert run.workflow_name == "TestWorkflow"
@@ -40,8 +40,8 @@ class TestWorkflowRun:
             id="test-id",
             workflow_name="TestWorkflow",
             goal="Test goal",
-            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-            completed_at=datetime(2024, 1, 15, 10, 5, tzinfo=timezone.utc),
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+            completed_at=datetime(2024, 1, 15, 10, 5, tzinfo=UTC),
             success=True,
             user_rating=5,
             tokens_used=100,
@@ -64,7 +64,7 @@ class TestWorkflowStats:
             total_runs=10,
             successful_runs=8,
             avg_rating=4.5,
-            last_used=datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc),
+            last_used=datetime(2024, 1, 15, 12, 0, tzinfo=UTC),
         )
         assert stats.workflow_name == "TestWorkflow"
         assert stats.total_runs == 10
@@ -132,7 +132,7 @@ class TestRecordRun:
     async def test_record_run(self, metrics):
         """Test recording a workflow run."""
         run = WorkflowRun.create("TestWorkflow", "Test goal")
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         run.success = True
         run.tokens_used = 100
 
@@ -148,7 +148,7 @@ class TestRecordRun:
     async def test_record_run_with_error(self, metrics):
         """Test recording a failed run with error."""
         run = WorkflowRun.create("TestWorkflow", "Test goal")
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         run.success = False
         run.error = "Something went wrong"
 
@@ -162,7 +162,7 @@ class TestRecordRun:
     async def test_record_run_with_output(self, metrics):
         """Test recording a run with output."""
         run = WorkflowRun.create("TestWorkflow", "Test goal")
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         run.success = True
         run.output = {"result": "test"}
 
@@ -179,14 +179,14 @@ class TestRecordRun:
             id="fixed-id",
             workflow_name="TestWorkflow",
             goal="Original goal",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
         await metrics.record_run(run)
 
         # Update and record again
         run.goal = "Updated goal"
         run.success = True
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
         await metrics.record_run(run)
 
         retrieved = await metrics.get_run("fixed-id")
@@ -217,8 +217,8 @@ class TestGetRun:
             id="test-id",
             workflow_name="TestWorkflow",
             goal="Test goal",
-            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-            completed_at=datetime(2024, 1, 15, 10, 5, tzinfo=timezone.utc),
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+            completed_at=datetime(2024, 1, 15, 10, 5, tzinfo=UTC),
             success=True,
             user_rating=4,
             tokens_used=150,
@@ -230,8 +230,8 @@ class TestGetRun:
         retrieved = await metrics.get_run(run.id)
         assert retrieved.workflow_name == "TestWorkflow"
         assert retrieved.goal == "Test goal"
-        assert retrieved.started_at == datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)
-        assert retrieved.completed_at == datetime(2024, 1, 15, 10, 5, tzinfo=timezone.utc)
+        assert retrieved.started_at == datetime(2024, 1, 15, 10, 0, tzinfo=UTC)
+        assert retrieved.completed_at == datetime(2024, 1, 15, 10, 5, tzinfo=UTC)
         assert retrieved.success is True
         assert retrieved.user_rating == 4
         assert retrieved.tokens_used == 150
@@ -302,7 +302,7 @@ class TestGetStats:
         # Create some runs
         for i in range(5):
             run = WorkflowRun.create("TestWorkflow", f"Goal {i}")
-            run.completed_at = datetime.now(timezone.utc)
+            run.completed_at = datetime.now(UTC)
             run.success = i < 3  # 3 successful, 2 failed
             if run.success:
                 run.user_rating = 4
@@ -318,7 +318,7 @@ class TestGetStats:
         ratings = [3, 4, 5]
         for i, rating in enumerate(ratings):
             run = WorkflowRun.create("TestWorkflow", f"Goal {i}")
-            run.completed_at = datetime.now(timezone.utc)
+            run.completed_at = datetime.now(UTC)
             run.success = True
             run.user_rating = rating
             await metrics.record_run(run)
@@ -432,12 +432,12 @@ class TestRowToRun:
     async def test_row_to_run_with_completed_at(self, metrics):
         """Test conversion with completed_at set."""
         run = WorkflowRun.create("TestWorkflow", "Test goal")
-        run.completed_at = datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc)
+        run.completed_at = datetime(2024, 1, 15, 12, 0, tzinfo=UTC)
         run.success = True
         await metrics.record_run(run)
 
         retrieved = await metrics.get_run(run.id)
-        assert retrieved.completed_at == datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc)
+        assert retrieved.completed_at == datetime(2024, 1, 15, 12, 0, tzinfo=UTC)
 
     async def test_row_to_run_without_completed_at(self, metrics):
         """Test conversion without completed_at set."""
@@ -486,7 +486,7 @@ class TestTaskExecution:
             task_name="Analyze Input",
             execution_order=1,
             state="complete",
-            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
         )
         assert exec.id == "test-id"
         assert exec.run_id == "run-123"
@@ -521,8 +521,8 @@ class TestTaskExecution:
             task_name="Summarize Results",
             execution_order=3,
             state="complete",
-            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-            completed_at=datetime(2024, 1, 15, 10, 1, tzinfo=timezone.utc),
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+            completed_at=datetime(2024, 1, 15, 10, 1, tzinfo=UTC),
             output={"summary": "Test summary"},
             error=None,
         )
@@ -539,8 +539,8 @@ class TestTaskExecution:
             task_name="Failing Task",
             execution_order=1,
             state="failed",
-            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc),
-            completed_at=datetime(2024, 1, 15, 10, 0, 30, tzinfo=timezone.utc),
+            started_at=datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+            completed_at=datetime(2024, 1, 15, 10, 0, 30, tzinfo=UTC),
             error="Something went wrong",
         )
         assert exec.state == "failed"
@@ -564,7 +564,7 @@ class TestRecordTaskExecution:
             execution_order=1,
         )
         exec.state = "complete"
-        exec.completed_at = datetime.now(timezone.utc)
+        exec.completed_at = datetime.now(UTC)
         exec.output = {"result": "success"}
 
         await metrics.record_task_execution(exec)
@@ -629,7 +629,7 @@ class TestRecordTaskExecution:
                 execution_order=i,
             )
             exec.state = "complete"
-            exec.completed_at = datetime.now(timezone.utc)
+            exec.completed_at = datetime.now(UTC)
             await metrics.record_task_execution(exec)
 
         executions = await metrics.get_task_executions(run.id)
@@ -672,7 +672,7 @@ class TestRecordTaskExecution:
             execution_order=1,
         )
         exec.state = "failed"
-        exec.completed_at = datetime.now(timezone.utc)
+        exec.completed_at = datetime.now(UTC)
         exec.error = "Task failed with error"
 
         await metrics.record_task_execution(exec)
@@ -708,7 +708,7 @@ class TestGetTaskExecutions:
                 task_name=f"Task {order}",
                 execution_order=order,
                 state="complete",
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
             )
             await metrics.record_task_execution(exec)
 

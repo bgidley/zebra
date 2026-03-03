@@ -1,32 +1,20 @@
 """Additional tests to achieve 100% coverage in zebra-tasks."""
 
-import pytest
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from zebra.core.models import (
-    ProcessDefinition,
-    ProcessInstance,
     ProcessState,
-    TaskDefinition,
     TaskInstance,
     TaskState,
 )
 
+from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.llm.base import (
-    LLMProvider,
-    LLMResponse,
     Message,
-    MessageRole,
-    TokenUsage,
-    ToolCall,
     ToolDefinition,
 )
-from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.llm.providers.registry import (
-    register_provider,
-    get_provider,
-    list_providers,
     _providers,
     _try_auto_register,
 )
@@ -193,6 +181,7 @@ class TestAnthropicProviderStreaming:
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"anthropic": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
                 importlib.reload(anthropic_provider)
 
@@ -245,6 +234,7 @@ class TestOpenAIProviderStreaming:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"openai": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.openai as openai_provider
                 importlib.reload(openai_provider)
 
@@ -302,6 +292,7 @@ class TestOpenAIProviderToolCalls:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"openai": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.openai as openai_provider
                 importlib.reload(openai_provider)
 
@@ -320,9 +311,10 @@ class TestSubtaskWorkflowFileLoading:
     @pytest.mark.asyncio
     async def test_spawn_with_workflow_file(self, mock_context, mock_task):
         """Test loading workflow from file."""
-        from zebra_tasks.subtasks.spawn import SubworkflowAction
-        import tempfile
         import os
+        import tempfile
+
+        from zebra_tasks.subtasks.spawn import SubworkflowAction
 
         # Create a temporary workflow file
         yaml_content = """
@@ -356,9 +348,10 @@ class TestParallelWorkflowEdgeCases:
     @pytest.mark.asyncio
     async def test_parallel_with_workflow_file(self, mock_context, mock_task, mock_store):
         """Test parallel with workflow files."""
-        from zebra_tasks.subtasks.parallel import ParallelSubworkflowsAction
-        import tempfile
         import os
+        import tempfile
+
+        from zebra_tasks.subtasks.parallel import ParallelSubworkflowsAction
 
         yaml_content = """
 name: Parallel File Workflow
@@ -503,6 +496,7 @@ class TestAnthropicStreamingWithTools:
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"anthropic": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
                 importlib.reload(anthropic_provider)
 
@@ -568,6 +562,7 @@ class TestOpenAIStreamingEmpty:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"openai": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.openai as openai_provider
                 importlib.reload(openai_provider)
 

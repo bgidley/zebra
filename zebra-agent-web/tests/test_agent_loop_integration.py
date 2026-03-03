@@ -66,13 +66,13 @@ class TestAgentLoopIntegration:
         assert "capital" in our_run.goal.lower()
 
         # Verify memory entry in Django
-        entries = await django_stores.memory.get_short_term_entries(limit=5)
+        entries = await django_stores.memory.get_recent_workflow_memories(limit=5)
         assert len(entries) >= 1, "Expected at least one memory entry"
 
         # Find our entry (most recent should be ours)
         our_entry = next((e for e in entries if "capital" in e.goal.lower()), None)
         assert our_entry is not None, "Memory entry for our goal not found"
-        assert our_entry.workflow_used == "Answer Question"
+        assert our_entry.workflow_name == "Answer Question"
 
     async def test_process_goal_uses_brainstorm_for_ideas(self, agent_loop, django_stores):
         """Test that brainstorming requests use the Brainstorm Ideas workflow."""
@@ -125,7 +125,7 @@ class TestAgentLoopIntegration:
     async def test_multiple_goals_accumulate_memory(self, agent_loop, django_stores):
         """Test that multiple goals build up memory entries."""
         # Get initial entry count
-        initial_entries = await django_stores.memory.get_short_term_entries()
+        initial_entries = await django_stores.memory.get_recent_workflow_memories()
         initial_count = len(initial_entries)
 
         goals = [
@@ -139,7 +139,7 @@ class TestAgentLoopIntegration:
             assert result.success, f"Failed on goal '{goal}': {result.error}"
 
         # Verify memory has accumulated
-        final_entries = await django_stores.memory.get_short_term_entries()
+        final_entries = await django_stores.memory.get_recent_workflow_memories()
         final_count = len(final_entries)
 
         assert final_count >= initial_count + 3, (
@@ -177,8 +177,8 @@ class TestAgentLoopDatabasePersistence:
         assert run_model.output is not None
 
     async def test_memory_entry_persists_all_fields(self, agent_loop, django_stores):
-        """Verify all MemoryEntry fields are persisted to Oracle."""
-        from zebra_agent_web.api.models import MemoryEntryModel
+        """Verify all WorkflowMemory fields are persisted to Oracle."""
+        from zebra_agent_web.api.models import WorkflowMemoryModel
 
         goal = "What is the largest planet in our solar system?"
 
@@ -189,7 +189,7 @@ class TestAgentLoopDatabasePersistence:
         @sync_to_async
         def get_memory_entries(goal_fragment):
             return list(
-                MemoryEntryModel.objects.filter(goal__icontains=goal_fragment).order_by(
+                WorkflowMemoryModel.objects.filter(goal__icontains=goal_fragment).order_by(
                     "-timestamp"
                 )[:5]
             )
@@ -198,10 +198,10 @@ class TestAgentLoopDatabasePersistence:
 
         assert len(entries) >= 1, "Memory entry not found in database"
         entry = entries[0]
-        assert entry.workflow_used == result.workflow_name
-        assert entry.tokens > 0
-        assert entry.result_summary is not None
-        assert len(entry.result_summary) > 0
+        assert entry.workflow_name == result.workflow_name
+        assert entry.tokens_used >= 0
+        assert entry.output_summary is not None
+        assert len(entry.output_summary) > 0
 
 
 @pytest.mark.asyncio
@@ -252,7 +252,7 @@ class TestAgentLoopEdgeCases:
         """
         goal = ""
 
-        result = await agent_loop.process_goal(goal)
+        await agent_loop.process_goal(goal)
 
         # May succeed or fail depending on LLM behavior
         # Either way, a run should be recorded

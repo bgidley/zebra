@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
 from django.db.models import Avg, Count, Max, Sum
-
 from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
 from zebra_agent.storage.interfaces import MetricsStore
 

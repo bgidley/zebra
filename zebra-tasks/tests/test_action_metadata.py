@@ -1,28 +1,27 @@
 """Tests for task action metadata across all zebra-tasks actions."""
 
 import pytest
-
 from zebra.tasks import ActionMetadata, ParameterDef
+
+from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
+from zebra_tasks.agent.creator import WorkflowCreatorAction
+from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
+from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+from zebra_tasks.agent.selector import WorkflowSelectorAction
+from zebra_tasks.compute.python_exec import PythonExecAction
+from zebra_tasks.filesystem.copy import FileCopyAction
+from zebra_tasks.filesystem.delete import FileDeleteAction
+from zebra_tasks.filesystem.info import DirectoryListAction, FileExistsAction, FileInfoAction
+from zebra_tasks.filesystem.move import FileMoveAction
+from zebra_tasks.filesystem.read import FileReadAction
+from zebra_tasks.filesystem.search import FileSearchAction
+from zebra_tasks.filesystem.write import FileWriteAction
 
 # Import all actions from zebra-tasks
 from zebra_tasks.llm.action import LLMCallAction
+from zebra_tasks.subtasks.parallel import ParallelSubworkflowsAction
 from zebra_tasks.subtasks.spawn import SubworkflowAction
 from zebra_tasks.subtasks.wait import WaitForSubworkflowAction
-from zebra_tasks.subtasks.parallel import ParallelSubworkflowsAction
-from zebra_tasks.filesystem.read import FileReadAction
-from zebra_tasks.filesystem.write import FileWriteAction
-from zebra_tasks.filesystem.copy import FileCopyAction
-from zebra_tasks.filesystem.move import FileMoveAction
-from zebra_tasks.filesystem.delete import FileDeleteAction
-from zebra_tasks.filesystem.search import FileSearchAction
-from zebra_tasks.filesystem.info import FileExistsAction, FileInfoAction, DirectoryListAction
-from zebra_tasks.compute.python_exec import PythonExecAction
-from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
-from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
-from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
-from zebra_tasks.agent.creator import WorkflowCreatorAction
-from zebra_tasks.agent.selector import WorkflowSelectorAction
-
 
 # All actions to test
 ALL_ACTIONS = [

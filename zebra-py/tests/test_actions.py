@@ -1,16 +1,16 @@
 """Tests for task actions (shell)."""
 
+from datetime import UTC, datetime
+from unittest.mock import MagicMock
+
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from zebra.core.models import (
-    TaskInstance,
-    TaskState,
-    TaskDefinition,
-    TaskResult,
     ProcessInstance,
     ProcessState,
+    TaskDefinition,
+    TaskInstance,
+    TaskState,
 )
 from zebra.tasks.actions.shell import ShellTaskAction
 from zebra.tasks.base import ExecutionContext
@@ -25,8 +25,8 @@ def mock_context():
         definition_id="def-1",
         state=ProcessState.RUNNING,
         properties={"var": "value"},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     context.task_definition = TaskDefinition(
         id="task-1",
@@ -47,8 +47,8 @@ def sample_task():
         state=TaskState.RUNNING,
         foe_id="foe-1",
         properties={},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 

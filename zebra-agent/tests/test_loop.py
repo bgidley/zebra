@@ -4,17 +4,14 @@ These tests verify the workflow-based agent loop implementation.
 """
 
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from zebra.core.models import ProcessState
 
 from zebra_agent.library import WorkflowLibrary
 from zebra_agent.loop import AgentLoop, AgentResult
-from zebra_agent.memory import MemoryEntry
 from zebra_agent.metrics import WorkflowRun
 
 
@@ -215,16 +212,20 @@ class TestIsSystemWorkflow:
         )
         assert loop._is_system_workflow("Agent Main Loop") is True
 
-    def test_memory_compact_is_system(self, library, mock_engine, metrics):
-        """Test that memory compact workflows are system workflows."""
+    def test_memory_compact_not_system(self, library, mock_engine, metrics):
+        """Test that old memory compact workflows are no longer system workflows.
+
+        The compaction step was removed in the new loop design; compaction
+        is now replaced by the incremental conceptual memory update.
+        """
         loop = AgentLoop(
             library=library,
             engine=mock_engine,
             metrics=metrics,
             provider="anthropic",
         )
-        assert loop._is_system_workflow("Memory Compact Short") is True
-        assert loop._is_system_workflow("Memory Compact Long") is True
+        assert loop._is_system_workflow("Memory Compact Short") is False
+        assert loop._is_system_workflow("Memory Compact Long") is False
 
     def test_regular_workflow_not_system(self, library, mock_engine, metrics):
         """Test that regular workflows are not system workflows."""
@@ -585,4 +586,6 @@ routings: []
 
         assert "Test Workflow" in names
         assert "Agent Main Loop" not in names
-        assert "Memory Compact Short" not in names
+        # Memory Compact Short/Long are no longer system workflows in the new design
+        # (the compaction step is replaced by incremental conceptual memory updates)
+        assert "Memory Compact Short" in names

@@ -16,15 +16,8 @@ async def metrics():
 
 @pytest.fixture
 async def memory():
-    """Create an in-memory memory store for testing.
-
-    Uses small token limits for easier testing of compaction.
-    """
-    store = InMemoryMemoryStore(
-        short_term_max_tokens=1000,  # Small limits for testing
-        long_term_max_tokens=2000,
-        compact_threshold=0.9,
-    )
+    """Create an in-memory memory store for testing."""
+    store = InMemoryMemoryStore()
     await store.initialize()
     yield store
     await store.close()

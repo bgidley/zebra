@@ -1,11 +1,9 @@
 """Tests for LLM call action."""
 
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-import json
 
-from zebra.core.models import TaskInstance, TaskState
-
+from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.llm.base import (
     LLMProvider,
     LLMResponse,
@@ -13,7 +11,6 @@ from zebra_tasks.llm.base import (
     MessageRole,
     TokenUsage,
 )
-from zebra_tasks.llm.action import LLMCallAction
 
 
 class MockLLMProvider(LLMProvider):

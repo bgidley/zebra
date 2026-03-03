@@ -100,6 +100,7 @@ description: "What this workflow does"
 tags: ["tag1", "tag2"]
 version: 1
 first_task: task_id
+result_key: final_output   # the output_key of the task whose value is the main result
 
 tasks:
   task_id:
@@ -109,7 +110,7 @@ tasks:
     properties:
       system_prompt: "Instructions for the LLM"
       prompt: "{{goal}}"
-      output_key: result_name
+      output_key: final_output
 
 routings:
   - from: task1_id
@@ -201,6 +202,10 @@ routings:
    the user, a review/approval step, or any decision that should not be automated
 8. Prefer human input tasks over llm_call when the user should provide or verify
    the data themselves (e.g., describing a bug, reviewing a plan, approving output)
+9. Always set `result_key` to the output_key of the final task that produces the
+   main human-readable result (the answer, recommendation, plan, etc.). This is
+   what the UI displays as the workflow output — it should be a clear, readable
+   string (markdown is fine), not a raw dict or intermediate value.
 
 ## Output
 

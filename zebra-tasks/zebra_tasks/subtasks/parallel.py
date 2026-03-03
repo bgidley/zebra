@@ -3,8 +3,8 @@
 from typing import Any
 
 from zebra.core.models import ProcessDefinition, TaskInstance, TaskResult
-from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra.definitions.loader import load_definition_from_yaml
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 
 class ParallelSubworkflowsAction(TaskAction):

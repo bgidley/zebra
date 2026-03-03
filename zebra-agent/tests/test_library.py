@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from zebra_agent.library import WorkflowInfo, WorkflowLibrary
-from zebra_agent.metrics import MetricsStore, WorkflowRun
+from zebra_agent.metrics import WorkflowRun
 
 
 @pytest.fixture
@@ -467,32 +467,75 @@ class TestCopyBuiltinWorkflows:
         builtin_path.mkdir()
         (builtin_path / "builtin.yaml").write_text(sample_workflow_yaml)
 
-        copied = library.copy_builtin_workflows(builtin_path)
+        copied, upgraded = library.copy_builtin_workflows(builtin_path)
         assert copied == 1
+        assert upgraded == []
         assert (library.library_path / "builtin.yaml").exists()
 
     def test_copy_builtin_workflows_no_overwrite(self, library, temp_dir, sample_workflow_yaml):
-        """Test that existing workflows are not overwritten."""
+        """Test that existing workflows with same/higher version are not overwritten."""
         builtin_path = temp_dir / "builtin"
         builtin_path.mkdir()
         (builtin_path / "test.yaml").write_text(sample_workflow_yaml)
 
-        # Create existing file in library
-        (library.library_path / "test.yaml").write_text("existing content")
+        # Create existing file in library with same content (same version)
+        (library.library_path / "test.yaml").write_text(sample_workflow_yaml)
 
-        copied = library.copy_builtin_workflows(builtin_path)
+        copied, upgraded = library.copy_builtin_workflows(builtin_path)
         assert copied == 0
+        assert upgraded == []
 
-        # Content should not be overwritten
-        content = (library.library_path / "test.yaml").read_text()
-        assert content == "existing content"
+    def test_copy_builtin_workflows_version_upgrade(self, library, temp_dir):
+        """Test that existing workflows are overwritten when built-in has higher version."""
+        v1_yaml = """name: "My Workflow"
+description: "Test"
+tags: []
+version: 1
+first_task: task1
+tasks:
+  task1:
+    name: "Task"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: "old"
+      output_key: result
+routings: []
+"""
+        v2_yaml = """name: "My Workflow"
+description: "Test"
+tags: []
+version: 2
+first_task: task1
+tasks:
+  task1:
+    name: "Task"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: "new"
+      output_key: result
+routings: []
+"""
+        builtin_path = temp_dir / "builtin"
+        builtin_path.mkdir()
+        (builtin_path / "my_workflow.yaml").write_text(v2_yaml)
+        (library.library_path / "my_workflow.yaml").write_text(v1_yaml)
+
+        copied, upgraded = library.copy_builtin_workflows(builtin_path)
+        assert copied == 1
+        assert "My Workflow" in upgraded
+        # File should now have v2 content
+        content = (library.library_path / "my_workflow.yaml").read_text()
+        assert "version: 2" in content
 
     def test_copy_builtin_workflows_nonexistent_path(self, library, temp_dir):
         """Test copying from non-existent path."""
         nonexistent = temp_dir / "nonexistent"
 
-        copied = library.copy_builtin_workflows(nonexistent)
+        copied, upgraded = library.copy_builtin_workflows(nonexistent)
         assert copied == 0
+        assert upgraded == []
 
     def test_copy_builtin_workflows_multiple(self, library, temp_dir):
         """Test copying multiple workflows."""
@@ -517,14 +560,15 @@ routings: []
 """
             (builtin_path / f"workflow_{i}.yaml").write_text(yaml_content)
 
-        copied = library.copy_builtin_workflows(builtin_path)
+        copied, upgraded = library.copy_builtin_workflows(builtin_path)
         assert copied == 3
+        assert upgraded == []
 
         yaml_files = list(library.library_path.glob("*.yaml"))
         assert len(yaml_files) == 3
 
     def test_copy_builtin_workflows_partial(self, library, temp_dir, sample_workflow_yaml):
-        """Test copying when some files already exist."""
+        """Test copying when some files already exist with same version."""
         builtin_path = temp_dir / "builtin"
         builtin_path.mkdir()
 
@@ -547,11 +591,16 @@ routings: []
 """
             (builtin_path / f"workflow_{i}.yaml").write_text(yaml_content)
 
-        # Create one existing file in library
-        (library.library_path / "workflow_1.yaml").write_text("existing")
+        # Create one existing file in library with same version (should not be overwritten)
+        (library.library_path / "workflow_1.yaml").write_text(
+            'name: "Workflow 1"\ndescription: "Test"\ntags: []\nversion: 1\n'
+            'first_task: task1\ntasks:\n  task1:\n    name: "Task"\n    action: llm_call\n'
+            '    auto: true\n    properties:\n      prompt: "test"\n      output_key: result\nroutings: []\n'
+        )
 
-        copied = library.copy_builtin_workflows(builtin_path)
-        assert copied == 2  # Only 2 copied, 1 skipped
+        copied, upgraded = library.copy_builtin_workflows(builtin_path)
+        assert copied == 2  # Only 2 copied, 1 skipped (same version)
+        assert upgraded == []
 
 
 class TestListWorkflowsExceptionHandling:

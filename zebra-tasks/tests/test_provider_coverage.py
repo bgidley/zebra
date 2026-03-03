@@ -1,8 +1,8 @@
 """Additional tests for LLM provider coverage."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-import json
+
+import pytest
 
 from zebra_tasks.llm.base import (
     LLMProvider,
@@ -14,10 +14,10 @@ from zebra_tasks.llm.base import (
     ToolDefinition,
 )
 from zebra_tasks.llm.providers.registry import (
-    register_provider,
+    _providers,
     get_provider,
     list_providers,
-    _providers,
+    register_provider,
 )
 
 
@@ -59,6 +59,7 @@ class TestAnthropicProviderCoverage:
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"anthropic": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
                 importlib.reload(anthropic_provider)
 
@@ -85,6 +86,7 @@ class TestAnthropicProviderCoverage:
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"anthropic": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
                 importlib.reload(anthropic_provider)
 
@@ -104,6 +106,7 @@ class TestAnthropicProviderCoverage:
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"anthropic": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
                 importlib.reload(anthropic_provider)
 
@@ -133,6 +136,7 @@ class TestAnthropicProviderCoverage:
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"anthropic": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
                 importlib.reload(anthropic_provider)
 
@@ -184,6 +188,7 @@ class TestOpenAIProviderCoverage:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"openai": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.openai as openai_provider
                 importlib.reload(openai_provider)
 
@@ -210,6 +215,7 @@ class TestOpenAIProviderCoverage:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"openai": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.openai as openai_provider
                 importlib.reload(openai_provider)
 
@@ -236,6 +242,7 @@ class TestOpenAIProviderCoverage:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
             with patch.dict("sys.modules", {"openai": mock_module}):
                 import importlib
+
                 import zebra_tasks.llm.providers.openai as openai_provider
                 importlib.reload(openai_provider)
 

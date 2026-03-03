@@ -5,7 +5,10 @@ Provides async JSON API endpoints for:
 - Execution monitoring (processes, tasks)
 """
 
+import asyncio
 import logging
+import threading
+import uuid
 
 from asgiref.sync import async_to_sync, sync_to_async
 from rest_framework import status
@@ -15,10 +18,10 @@ from zebra.core.models import TaskResult
 
 from zebra_agent_web.api import agent_engine, engine
 from zebra_agent_web.api.serializers import (
-    AgentResultSerializer,
     CompleteTaskRequestSerializer,
     CreateWorkflowRequestSerializer,
     ExecuteGoalRequestSerializer,
+    GoalAcceptedSerializer,
     ProcessInstanceDetailSerializer,
     ProcessInstanceListSerializer,
     RateRunRequestSerializer,
@@ -30,6 +33,14 @@ from zebra_agent_web.api.serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+# run_ids for goals started via POST /api/goals/ that are still in flight
+_active_api_runs: set[str] = set()
+
+
+def is_api_run_active(run_id: str) -> bool:
+    """Return True if a background API goal thread is still running."""
+    return run_id in _active_api_runs
 
 
 # =============================================================================
@@ -218,37 +229,71 @@ async def workflow_stats(request, workflow_name):
 # =============================================================================
 
 
-@api_view(["POST"])
-async def execute_goal(request):
-    """Execute a goal using the agent loop."""
-    await agent_engine.ensure_initialized()
-    agent_loop = agent_engine.get_agent_loop()
+def _run_goal_in_background(run_id: str, goal: str) -> None:
+    """Fire process_goal in a daemon thread with its own event loop.
 
+    Returns immediately; the caller polls GET /api/runs/<run_id>/status/.
+    Uses asyncio.run() in a fresh thread to avoid deadlocking the ASGI
+    event loop that is already running inside Daphne.
+    """
+
+    _active_api_runs.add(run_id)
+
+    async def _run():
+        await agent_engine.ensure_initialized()
+        agent_loop = agent_engine.get_agent_loop()
+        await agent_loop.process_goal(goal, run_id=run_id)
+
+    def _thread():
+        try:
+            asyncio.run(_run())
+        except Exception:
+            logger.exception("Background goal execution failed for run %s", run_id)
+        finally:
+            _active_api_runs.discard(run_id)
+
+    t = threading.Thread(target=_thread, daemon=True, name=f"goal-{run_id[:8]}")
+    t.start()
+
+
+@api_view(["POST"])
+def execute_goal(request):
+    """Start goal execution and return immediately with a run_id.
+
+    The agent runs in a background thread.  Poll
+    GET /api/runs/<run_id>/status/ to check for completion.
+
+    Returns 202 Accepted with::
+
+        {
+            "run_id": "<uuid>",
+            "status": "processing",
+            "message": "Goal execution started",
+            "status_url": "/api/runs/<run_id>/status/"
+        }
+    """
     req_serializer = ExecuteGoalRequestSerializer(data=request.data)
     if not req_serializer.is_valid():
         return Response(req_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     goal = req_serializer.validated_data["goal"]
+    run_id = str(uuid.uuid4())
 
     try:
-        result = await agent_loop.process_goal(goal)
-
-        serializer = AgentResultSerializer(
-            {
-                "run_id": result.run_id,
-                "workflow_name": result.workflow_name,
-                "goal": result.goal,
-                "output": result.output,
-                "success": result.success,
-                "tokens_used": result.tokens_used,
-                "error": result.error,
-                "created_new_workflow": result.created_new_workflow,
-            }
-        )
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        _run_goal_in_background(run_id, goal)
     except Exception as e:
-        logger.exception("Failed to execute goal")
+        logger.exception("Failed to start goal execution")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    serializer = GoalAcceptedSerializer(
+        {
+            "run_id": run_id,
+            "status": "processing",
+            "message": "Goal execution started",
+            "status_url": f"/api/runs/{run_id}/status/",
+        }
+    )
+    return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
 
 
 # =============================================================================
@@ -368,8 +413,8 @@ def run_status(request, run_id):
     run = _run_status_impl(run_id)
 
     if run is None:
-        # Check if it's still being processed
-        if is_task_active(run_id):
+        # Check if it's still being processed (web UI task or API background thread)
+        if is_task_active(run_id) or is_api_run_active(run_id):
             return Response(
                 {
                     "status": "processing",

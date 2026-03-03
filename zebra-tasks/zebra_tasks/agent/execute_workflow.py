@@ -345,7 +345,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
 
             # Check completion
             if process.state == ProcessState.COMPLETE:
-                output = self._extract_output(process.properties)
+                output = self._extract_output(process.properties, definition)
                 tokens = process.properties.get("__total_tokens__", 0)
 
                 return {
@@ -399,8 +399,18 @@ class ExecuteGoalWorkflowAction(TaskAction):
             # Wait before checking again
             await asyncio.sleep(0.1)
 
-    def _extract_output(self, properties: dict[str, Any]) -> Any:
-        """Extract output from process properties using standard keys."""
+    def _extract_output(self, properties: dict[str, Any], definition: Any = None) -> Any:
+        """Extract output from process properties.
+
+        Uses `result_key` from definition.properties if set, otherwise falls
+        back to scanning standard output keys, then all non-internal properties.
+        """
+        # Use result_key declared in the workflow definition
+        if definition is not None:
+            result_key = getattr(definition, "properties", {}).get("result_key")
+            if result_key and result_key in properties:
+                return properties[result_key]
+
         # Try standard output keys
         for key in self.OUTPUT_KEYS:
             if key in properties:

@@ -4,12 +4,11 @@ from typing import Any
 
 from zebra.core.models import (
     ProcessDefinition,
-    ProcessInstance,
     TaskInstance,
     TaskResult,
 )
-from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra.definitions.loader import load_definition_from_yaml
+from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 
 class SubworkflowAction(TaskAction):
@@ -201,7 +200,6 @@ class SubworkflowAction(TaskAction):
             library = context.extras.get("__workflow_library__")
             if library is not None:
                 # Check if the library has this workflow by filename
-                from pathlib import Path
 
                 workflow_path = library.library_path / resolved_path
                 if workflow_path.exists():

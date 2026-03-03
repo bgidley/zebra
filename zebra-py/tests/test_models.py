@@ -1,9 +1,10 @@
 """Tests for core data models."""
 
+
 import pytest
-from datetime import datetime
 
 from zebra.core.models import (
+    FlowOfExecution,
     ProcessDefinition,
     ProcessInstance,
     ProcessState,
@@ -12,7 +13,6 @@ from zebra.core.models import (
     TaskInstance,
     TaskResult,
     TaskState,
-    FlowOfExecution,
 )
 
 

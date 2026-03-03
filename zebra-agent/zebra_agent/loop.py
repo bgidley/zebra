@@ -245,7 +245,5 @@ class AgentLoop:
         """Check if a workflow is a system/internal workflow."""
         system_workflows = {
             "Agent Main Loop",
-            "Memory Compact Short",
-            "Memory Compact Long",
         }
         return name in system_workflows

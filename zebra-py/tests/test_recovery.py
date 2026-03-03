@@ -1,6 +1,6 @@
 """Tests for workflow recovery and resilience features."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -280,7 +280,6 @@ async def test_recovery_parallel_split_interrupted(engine):
 @pytest.mark.asyncio
 async def test_recovery_sync_point_interrupted(engine):
     """Test recovery of interrupted synchronization point."""
-    from zebra.core.sync import TaskSync
 
     definition = ProcessDefinition(
         id="sync_workflow",
@@ -366,7 +365,7 @@ async def test_recovery_partial_parallel_completion(engine):
         if task.task_definition_id == "task2a" and task.state == TaskState.RUNNING:
             # Complete this branch
             task = task.model_copy(
-                update={"state": TaskState.COMPLETE, "updated_at": datetime.now(timezone.utc)}
+                update={"state": TaskState.COMPLETE, "updated_at": datetime.now(UTC)}
             )
             await engine.store.save_task(task)
         elif task.task_definition_id == "task2b" and task.state == TaskState.RUNNING:
@@ -425,7 +424,7 @@ async def test_recovery_foe_orphan_cleanup(engine):
         id="orphan_foe_123",
         process_id=process.id,
         parent_foe_id=None,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     await engine.store.save_foe(orphan_foe)
 

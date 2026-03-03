@@ -15,7 +15,6 @@ from typing import Any
 from django import template
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
-
 from zebra.forms import FormField, FormSchema
 
 register = template.Library()

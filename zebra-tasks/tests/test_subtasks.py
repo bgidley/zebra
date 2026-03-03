@@ -1,22 +1,19 @@
 """Tests for subtask actions."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 import asyncio
 
+import pytest
 from zebra.core.models import (
     ProcessDefinition,
     ProcessInstance,
     ProcessState,
     TaskDefinition,
-    TaskInstance,
-    TaskState,
 )
 
 from zebra_tasks.subtasks import (
+    ParallelSubworkflowsAction,
     SubworkflowAction,
     WaitForSubworkflowAction,
-    ParallelSubworkflowsAction,
 )
 
 

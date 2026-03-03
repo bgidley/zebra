@@ -1,13 +1,12 @@
 """Tests for filesystem task actions."""
 
 import base64
-import os
 import tempfile
 from pathlib import Path
 
 import pytest
-
 from zebra.core.models import TaskInstance, TaskState
+
 from zebra_tasks.filesystem import (
     DirectoryListAction,
     FileCopyAction,
@@ -17,12 +16,11 @@ from zebra_tasks.filesystem import (
     FileMoveAction,
     FileReadAction,
     FileSearchAction,
-    FileWriteAction,
     FileSystemConfig,
+    FileWriteAction,
     PathSecurityError,
     validate_path,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -241,7 +239,7 @@ class TestFileWriteAction:
 
         assert result.success
         assert output_file.read_text() == "Hello, Test!"
-        assert result.output["bytes_written"] == len("Hello, Test!".encode())
+        assert result.output["bytes_written"] == len(b"Hello, Test!")
 
     async def test_write_with_append(self, test_file, mock_context):
         """Test appending to a file."""

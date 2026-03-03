@@ -1,12 +1,10 @@
 """Tests for the SVG workflow diagram generator."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 from zebra.core.models import ProcessDefinition, RoutingDefinition, TaskDefinition
 from zebra_agent.metrics import TaskExecution
-
 from zebra_agent_web.diagram import (
     COLORS,
     NODE_HEIGHT,
@@ -66,7 +64,7 @@ def parallel_definition():
 @pytest.fixture
 def sample_executions():
     """Create sample task executions."""
-    base_time = datetime(2024, 1, 15, 10, 0, tzinfo=timezone.utc)
+    base_time = datetime(2024, 1, 15, 10, 0, tzinfo=UTC)
     return [
         TaskExecution(
             id="exec-1",
@@ -76,7 +74,7 @@ def sample_executions():
             execution_order=1,
             state="complete",
             started_at=base_time,
-            completed_at=datetime(2024, 1, 15, 10, 0, 30, tzinfo=timezone.utc),
+            completed_at=datetime(2024, 1, 15, 10, 0, 30, tzinfo=UTC),
             output={"status": "started"},
         ),
         TaskExecution(
@@ -86,8 +84,8 @@ def sample_executions():
             task_name="Process Data",
             execution_order=2,
             state="complete",
-            started_at=datetime(2024, 1, 15, 10, 0, 30, tzinfo=timezone.utc),
-            completed_at=datetime(2024, 1, 15, 10, 1, 0, tzinfo=timezone.utc),
+            started_at=datetime(2024, 1, 15, 10, 0, 30, tzinfo=UTC),
+            completed_at=datetime(2024, 1, 15, 10, 1, 0, tzinfo=UTC),
             output={"processed": True},
         ),
         TaskExecution(
@@ -97,8 +95,8 @@ def sample_executions():
             task_name="Finish Task",
             execution_order=3,
             state="complete",
-            started_at=datetime(2024, 1, 15, 10, 1, 0, tzinfo=timezone.utc),
-            completed_at=datetime(2024, 1, 15, 10, 1, 30, tzinfo=timezone.utc),
+            started_at=datetime(2024, 1, 15, 10, 1, 0, tzinfo=UTC),
+            completed_at=datetime(2024, 1, 15, 10, 1, 30, tzinfo=UTC),
             output={"result": "success"},
         ),
     ]
@@ -233,7 +231,7 @@ class TestWorkflowDiagramGenerator:
                 task_name="Start Task",
                 execution_order=1,
                 state="complete",
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
             ),
             TaskExecution(
                 id="exec-2",
@@ -242,7 +240,7 @@ class TestWorkflowDiagramGenerator:
                 task_name="Process Data",
                 execution_order=2,
                 state="failed",
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
                 error="Task failed",
             ),
         ]

@@ -1,6 +1,5 @@
 """MetricsAnalyzerAction - Analyze workflow performance metrics."""
 
-import json
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -141,7 +140,6 @@ class MetricsAnalyzerAction(TaskAction):
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Analyze metrics from the database."""
-        import aiosqlite
 
         db_path = task.properties.get("metrics_db_path")
         if not db_path:

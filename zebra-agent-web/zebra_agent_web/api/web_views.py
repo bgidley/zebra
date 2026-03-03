@@ -226,15 +226,34 @@ async def run_goal_form(request):
 
 
 def _format_output(output):
-    """Format output for display - handles dicts, lists, and strings."""
+    """Format output for display.
+
+    Workflows with `result_key` set will have their output already as a plain
+    string. For any remaining dict/list values (legacy runs or workflows without
+    result_key) fall back to a JSON dump.
+
+    For string output, tries to parse it as JSON first (runs store JSON),
+    then falls back to the raw string.
+    """
     import json
 
     if output is None:
         return ""
+
+    # Normalise: if we received a string, try to parse it as JSON
     if isinstance(output, str):
-        return output
+        try:
+            parsed = json.loads(output)
+            if isinstance(parsed, (dict, list)):
+                output = parsed
+            else:
+                return output  # plain string after JSON parse → return as-is
+        except (json.JSONDecodeError, ValueError):
+            return output  # plain/repr string → return as-is
+
     if isinstance(output, (dict, list)):
         return json.dumps(output, indent=2, ensure_ascii=False)
+
     return str(output)
 
 
