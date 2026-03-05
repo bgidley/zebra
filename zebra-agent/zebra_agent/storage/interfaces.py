@@ -57,6 +57,19 @@ class MemoryStore(ABC):
         """Get the most recent workflow memory entries across all workflows."""
         ...
 
+    @abstractmethod
+    async def update_user_feedback(self, run_id: str, feedback: str) -> bool:
+        """Update user feedback on the workflow memory entry for a run.
+
+        Args:
+            run_id: The run ID whose memory entry should be updated.
+            feedback: Free-text feedback from the user.
+
+        Returns:
+            True if a matching memory entry was found and updated, False otherwise.
+        """
+        ...
+
     # =========================================================================
     # Conceptual Memory (Compact goal-pattern index)
     # =========================================================================

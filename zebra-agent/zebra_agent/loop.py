@@ -241,6 +241,15 @@ class AgentLoop:
         """Record a user rating for a run."""
         await self.metrics.update_rating(run_id, rating)
 
+    async def record_feedback(self, run_id: str, feedback: str) -> bool:
+        """Record user feedback on the workflow memory entry for a run.
+
+        Returns True if a matching memory entry was found and updated.
+        """
+        if self.memory is None:
+            return False
+        return await self.memory.update_user_feedback(run_id, feedback)
+
     def _is_system_workflow(self, name: str) -> bool:
         """Check if a workflow is a system/internal workflow."""
         system_workflows = {

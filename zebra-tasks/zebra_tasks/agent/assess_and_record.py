@@ -284,6 +284,7 @@ Respond with JSON only:
                     output_summary=output_summary,
                     effectiveness_notes=effectiveness_notes,
                     tokens_used=int(tokens_used),
+                    run_id=run_id,
                 )
                 await memory_store.add_workflow_memory(entry)
                 logger.info(

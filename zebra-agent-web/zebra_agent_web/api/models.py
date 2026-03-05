@@ -210,6 +210,16 @@ class WorkflowMemoryModel(models.Model):
     )
     tokens_used = models.IntegerField(default=0)
     rating = models.IntegerField(blank=True, null=True, help_text="User rating 1-5")
+    user_feedback = models.TextField(
+        blank=True, default="", help_text="Free-text user feedback for next run"
+    )
+    run_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Link to the workflow run for post-hoc updates",
+    )
 
     class Meta:
         db_table = "zebra_workflow_memories"

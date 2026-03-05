@@ -450,6 +450,34 @@ async def run_rate(request, run_id):
         return HttpResponse(f"Error: {e}", status=400)
 
 
+@require_http_methods(["POST"])
+async def run_feedback(request, run_id):
+    """Save free-text feedback for a run into workflow memory."""
+    await agent_engine.ensure_initialized()
+    agent_loop = agent_engine.get_agent_loop()
+
+    feedback = request.POST.get("feedback", "").strip()
+    if not feedback:
+        return HttpResponse("Feedback is required", status=400)
+
+    try:
+        found = await agent_loop.record_feedback(run_id, feedback)
+        if request.headers.get("HX-Request"):
+            if found:
+                return HttpResponse(
+                    '<span class="text-green-400">Feedback saved — it will be '
+                    "used to improve future runs of this workflow.</span>"
+                )
+            return HttpResponse(
+                '<span class="text-amber-300">Feedback saved, but no matching '
+                "memory entry was found (the run may still be processing).</span>"
+            )
+        return redirect("run_detail", run_id=run_id)
+    except Exception as e:
+        logger.exception("Failed to save feedback for run %s", run_id)
+        return HttpResponse(f"Error: {e}", status=400)
+
+
 # =============================================================================
 # Activity (unified view: in-progress runs, pending tasks, completed runs)
 # =============================================================================

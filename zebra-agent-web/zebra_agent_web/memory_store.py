@@ -68,6 +68,8 @@ class DjangoMemoryStore(MemoryStore):
                     "effectiveness_notes": entry.effectiveness_notes,
                     "tokens_used": entry.tokens_used,
                     "rating": entry.rating,
+                    "user_feedback": entry.user_feedback,
+                    "run_id": entry.run_id,
                 },
             )
 
@@ -100,6 +102,8 @@ class DjangoMemoryStore(MemoryStore):
                     effectiveness_notes=m.effectiveness_notes,
                     tokens_used=m.tokens_used,
                     rating=m.rating,
+                    user_feedback=m.user_feedback,
+                    run_id=m.run_id,
                 )
                 for m in qs
             ]
@@ -129,11 +133,28 @@ class DjangoMemoryStore(MemoryStore):
                     effectiveness_notes=m.effectiveness_notes,
                     tokens_used=m.tokens_used,
                     rating=m.rating,
+                    user_feedback=m.user_feedback,
+                    run_id=m.run_id,
                 )
                 for m in qs
             ]
 
         return await _get()
+
+    async def update_user_feedback(self, run_id: str, feedback: str) -> bool:
+        """Update user feedback on the workflow memory entry for a run."""
+        await self._ensure_initialized()
+
+        @sync_to_async
+        def _update():
+            from zebra_agent_web.api.models import WorkflowMemoryModel
+
+            updated = WorkflowMemoryModel.objects.filter(run_id=run_id).update(
+                user_feedback=feedback
+            )
+            return updated > 0
+
+        return await _update()
 
     # =========================================================================
     # Conceptual Memory (Compact goal-pattern index)
@@ -239,6 +260,8 @@ class DjangoMemoryStore(MemoryStore):
             lines.append(f"Output: {entry.output_summary[:200]}")
             if entry.effectiveness_notes:
                 lines.append(f"Notes: {entry.effectiveness_notes[:200]}")
+            if entry.user_feedback:
+                lines.append(f"User feedback: {entry.user_feedback[:300]}")
         return "\n".join(lines)
 
     async def get_stats(self) -> dict:

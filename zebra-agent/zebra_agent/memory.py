@@ -33,6 +33,8 @@ class WorkflowMemoryEntry:
     effectiveness_notes: str  # LLM assessment of what worked / didn't
     tokens_used: int
     rating: int | None = None  # User rating 1-5 if provided
+    user_feedback: str = ""  # Free-text user feedback for next run
+    run_id: str = ""  # Link back to the workflow run for post-hoc updates
 
     @classmethod
     def create(
@@ -45,6 +47,8 @@ class WorkflowMemoryEntry:
         effectiveness_notes: str,
         tokens_used: int = 0,
         rating: int | None = None,
+        user_feedback: str = "",
+        run_id: str = "",
     ) -> WorkflowMemoryEntry:
         """Create a new entry with auto-generated ID and timestamp."""
         return cls(
@@ -58,6 +62,8 @@ class WorkflowMemoryEntry:
             effectiveness_notes=effectiveness_notes,
             tokens_used=tokens_used,
             rating=rating,
+            user_feedback=user_feedback,
+            run_id=run_id,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -73,6 +79,8 @@ class WorkflowMemoryEntry:
             "effectiveness_notes": self.effectiveness_notes,
             "tokens_used": self.tokens_used,
             "rating": self.rating,
+            "user_feedback": self.user_feedback,
+            "run_id": self.run_id,
         }
 
     @classmethod
@@ -89,6 +97,8 @@ class WorkflowMemoryEntry:
             effectiveness_notes=data["effectiveness_notes"],
             tokens_used=data.get("tokens_used", 0),
             rating=data.get("rating"),
+            user_feedback=data.get("user_feedback", ""),
+            run_id=data.get("run_id", ""),
         )
 
 

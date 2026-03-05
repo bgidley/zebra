@@ -299,6 +299,44 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- Feedback -->
+    {% if run.success %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6"
+         x-data="{ feedbackText: '', submitted: false, submitting: false, result: '' }">
+        <h3 class="text-sm font-medium text-gray-300 mb-1">Feedback for next time</h3>
+        <p class="text-xs text-gray-500 mb-3">
+            Tell us what could be improved — this will be remembered and used on the next run of this workflow.
+        </p>
+        <div x-show="!submitted">
+            <textarea x-model="feedbackText"
+                      rows="3"
+                      placeholder="e.g. Include price comparisons, focus on safety features, use metric units..."
+                      class="w-full rounded-lg bg-gray-900 border border-gray-600 text-gray-200 text-sm px-3 py-2
+                             placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500
+                             focus:outline-none resize-y"></textarea>
+            <div class="mt-2 flex items-center gap-3">
+                <button @click="if (!feedbackText.trim()) return;
+                                 submitting = true;
+                                 fetch('/runs/{{ run.id }}/feedback/', {
+                                     method: 'POST',
+                                     headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                                     body: 'feedback=' + encodeURIComponent(feedbackText)
+                                 })
+                                 .then(r => r.text())
+                                 .then(html => { result = html; submitted = true; submitting = false; })
+                                 .catch(() => { result = '<span class=\'text-red-400\'>Failed to save feedback.</span>'; submitted = true; submitting = false; })"
+                        :disabled="!feedbackText.trim() || submitting"
+                        :class="feedbackText.trim() && !submitting ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-700 cursor-not-allowed'"
+                        class="px-4 py-2 text-white text-sm rounded-lg transition-colors">
+                    <span x-show="!submitting">Submit Feedback</span>
+                    <span x-show="submitting">Saving...</span>
+                </button>
+            </div>
+        </div>
+        <div x-show="submitted" x-html="result"></div>
+    </div>
+    {% endif %}
 </div>
 
 {% endblock %}

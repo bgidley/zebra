@@ -64,6 +64,15 @@ class InMemoryMemoryStore(MemoryStore):
         await self._ensure_initialized()
         return self._workflow_memories[:limit]
 
+    async def update_user_feedback(self, run_id: str, feedback: str) -> bool:
+        """Update user feedback on the workflow memory entry for a run."""
+        await self._ensure_initialized()
+        for entry in self._workflow_memories:
+            if entry.run_id == run_id:
+                entry.user_feedback = feedback
+                return True
+        return False
+
     # =========================================================================
     # Conceptual Memory
     # =========================================================================
@@ -133,6 +142,8 @@ class InMemoryMemoryStore(MemoryStore):
             lines.append(f"Output: {entry.output_summary[:200]}")
             if entry.effectiveness_notes:
                 lines.append(f"Notes: {entry.effectiveness_notes[:200]}")
+            if entry.user_feedback:
+                lines.append(f"User feedback: {entry.user_feedback[:300]}")
         return "\n".join(lines)
 
     async def get_stats(self) -> dict:
