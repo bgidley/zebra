@@ -1,4 +1,8 @@
-"""MetricsAnalyzerAction - Analyze workflow performance metrics."""
+"""MetricsAnalyzerAction - Analyze workflow performance metrics.
+
+Uses the MetricsStore interface from engine.extras to query run data,
+ensuring compatibility with all storage backends (InMemory, Django ORM, etc.).
+"""
 
 from datetime import datetime, timedelta
 from typing import Any
@@ -9,13 +13,18 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 class MetricsAnalyzerAction(TaskAction):
     """
-    Analyze workflow performance metrics from the database.
+    Analyze workflow performance metrics via the MetricsStore interface.
 
-    This action reads metrics data and produces analysis that can be used
-    by the agent to identify improvement opportunities.
+    This action reads metrics data through the injected MetricsStore and
+    produces analysis that can be used by the agent to identify improvement
+    opportunities.
+
+    The MetricsStore is obtained from ``context.extras["__metrics_store__"]``,
+    following the standard IoC pattern used by all agent loop actions.  This
+    ensures the action works with any storage backend (InMemory, Django ORM,
+    etc.) without coupling to a specific database driver.
 
     Properties:
-        metrics_db_path: Path to the metrics SQLite database
         days_to_analyze: Number of days to look back (default: 7)
         min_runs_for_analysis: Minimum runs needed to analyze a workflow (default: 3)
         output_key: Where to store analysis (default: "metrics_analysis")
@@ -24,7 +33,7 @@ class MetricsAnalyzerAction(TaskAction):
         - workflow_stats: Per-workflow statistics
         - low_performers: Workflows with success rate < 70%
         - high_performers: Workflows with success rate >= 90%
-        - unrated_runs: Recent runs without user ratings
+        - unrated_runs_count: Number of runs without user ratings
         - failure_patterns: Common failure reasons
         - usage_trends: Workflow usage over time
         - recommendations: Initial recommendations based on metrics
@@ -37,21 +46,14 @@ class MetricsAnalyzerAction(TaskAction):
             action: metrics_analyzer
             auto: true
             properties:
-              metrics_db_path: "{{metrics_db}}"
               days_to_analyze: 7
               output_key: metrics_analysis
         ```
     """
 
-    description = "Analyze workflow performance metrics from a SQLite database."
+    description = "Analyze workflow performance metrics via the MetricsStore interface."
 
     inputs = [
-        ParameterDef(
-            name="metrics_db_path",
-            type="string",
-            description="Path to the metrics SQLite database",
-            required=False,
-        ),
         ParameterDef(
             name="days_to_analyze",
             type="int",
@@ -139,147 +141,130 @@ class MetricsAnalyzerAction(TaskAction):
     ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        """Analyze metrics from the database."""
-
-        db_path = task.properties.get("metrics_db_path")
-        if not db_path:
-            # Try to get from process properties
-            db_path = context.process.properties.get("__metrics_db_path__")
-
-        if not db_path:
-            return TaskResult.fail("No metrics_db_path provided")
+        """Analyze metrics from the MetricsStore."""
+        metrics_store = context.extras.get("__metrics_store__")
+        if metrics_store is None:
+            return TaskResult.fail(
+                "No metrics store available. Ensure __metrics_store__ is set in engine.extras."
+            )
 
         days = task.properties.get("days_to_analyze", 7)
         min_runs = task.properties.get("min_runs_for_analysis", 3)
         output_key = task.properties.get("output_key", "metrics_analysis")
 
         try:
-            analysis = await self._analyze_metrics(db_path, days, min_runs)
-
-            # Store in process properties
+            analysis = await self._analyze_metrics(metrics_store, days, min_runs)
             context.set_process_property(output_key, analysis)
-
             return TaskResult.ok(output=analysis)
-
         except Exception as e:
             return TaskResult.fail(f"Metrics analysis failed: {str(e)}")
 
-    async def _analyze_metrics(self, db_path: str, days: int, min_runs: int) -> dict[str, Any]:
-        """Perform the actual metrics analysis."""
-        import aiosqlite
-
+    async def _analyze_metrics(
+        self, metrics_store: Any, days: int, min_runs: int
+    ) -> dict[str, Any]:
+        """Perform the actual metrics analysis using the MetricsStore interface."""
         cutoff_date = datetime.now() - timedelta(days=days)
-        cutoff_str = cutoff_date.isoformat()
 
-        async with aiosqlite.connect(db_path) as db:
-            db.row_factory = aiosqlite.Row
+        # Fetch data via the abstract MetricsStore interface
+        recent_runs = await metrics_store.get_runs_since(cutoff_date)
+        all_stats = await metrics_store.get_all_stats()
 
-            # Get workflow statistics
-            workflow_stats = await self._get_workflow_stats(db, cutoff_str, min_runs)
+        # Convert runs to dicts for downstream processing
+        run_dicts = self._runs_to_dicts(recent_runs)
 
-            # Get recent runs for pattern analysis
-            recent_runs = await self._get_recent_runs(db, cutoff_str)
+        # Build per-workflow stats from the all_stats response,
+        # filtered to only workflows active in the analysis period
+        active_workflow_names = {r["workflow_name"] for r in run_dicts}
+        workflow_stats = []
+        for stat in all_stats:
+            if stat.workflow_name in active_workflow_names:
+                # Recalculate stats from the recent runs for the analysis period
+                period_runs = [r for r in run_dicts if r["workflow_name"] == stat.workflow_name]
+                total = len(period_runs)
+                successful = sum(1 for r in period_runs if r["success"])
+                ratings = [r["user_rating"] for r in period_runs if r["user_rating"] is not None]
+                avg_rating = sum(ratings) / len(ratings) if ratings else None
+                avg_tokens = sum(r["tokens_used"] for r in period_runs) / total if total > 0 else 0
+                last_used = max(r["started_at"] for r in period_runs) if period_runs else None
 
-            # Categorize workflows
-            low_performers = [
-                w for w in workflow_stats if w["success_rate"] < 0.7 and w["total_runs"] >= min_runs
-            ]
-            high_performers = [
-                w
-                for w in workflow_stats
-                if w["success_rate"] >= 0.9 and w["total_runs"] >= min_runs
-            ]
-
-            # Get unrated runs
-            unrated_runs = [r for r in recent_runs if r.get("user_rating") is None]
-
-            # Analyze failure patterns
-            failure_patterns = self._analyze_failures(recent_runs)
-
-            # Calculate usage trends
-            usage_trends = self._calculate_usage_trends(recent_runs)
-
-            # Generate initial recommendations
-            recommendations = self._generate_recommendations(
-                workflow_stats, low_performers, failure_patterns, usage_trends
-            )
-
-            return {
-                "analysis_period_days": days,
-                "total_runs_analyzed": len(recent_runs),
-                "unique_workflows": len(workflow_stats),
-                "workflow_stats": workflow_stats,
-                "low_performers": low_performers,
-                "high_performers": high_performers,
-                "unrated_runs_count": len(unrated_runs),
-                "failure_patterns": failure_patterns,
-                "usage_trends": usage_trends,
-                "recommendations": recommendations,
-            }
-
-    async def _get_workflow_stats(self, db, cutoff_str: str, min_runs: int) -> list[dict[str, Any]]:
-        """Get statistics for each workflow."""
-        query = """
-            SELECT
-                workflow_name,
-                COUNT(*) as total_runs,
-                SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful_runs,
-                AVG(CASE WHEN user_rating IS NOT NULL THEN user_rating END) as avg_rating,
-                AVG(tokens_used) as avg_tokens,
-                MAX(started_at) as last_used
-            FROM workflow_runs
-            WHERE started_at >= ?
-            GROUP BY workflow_name
-            ORDER BY total_runs DESC
-        """
-
-        results = []
-        async with db.execute(query, (cutoff_str,)) as cursor:
-            async for row in cursor:
-                total = row["total_runs"]
-                successful = row["successful_runs"]
-                results.append(
+                workflow_stats.append(
                     {
-                        "workflow_name": row["workflow_name"],
+                        "workflow_name": stat.workflow_name,
                         "total_runs": total,
                         "successful_runs": successful,
                         "success_rate": successful / total if total > 0 else 0,
-                        "avg_rating": row["avg_rating"],
-                        "avg_tokens": row["avg_tokens"],
-                        "last_used": row["last_used"],
+                        "avg_rating": avg_rating,
+                        "avg_tokens": avg_tokens,
+                        "last_used": last_used,
                     }
                 )
 
-        return results
+        # Sort by total_runs descending
+        workflow_stats.sort(key=lambda w: w["total_runs"], reverse=True)
 
-    async def _get_recent_runs(self, db, cutoff_str: str) -> list[dict[str, Any]]:
-        """Get recent workflow runs."""
-        query = """
-            SELECT
-                id, workflow_name, goal, started_at, completed_at,
-                success, user_rating, tokens_used, error
-            FROM workflow_runs
-            WHERE started_at >= ?
-            ORDER BY started_at DESC
-        """
+        # Categorize workflows
+        low_performers = [
+            w for w in workflow_stats if w["success_rate"] < 0.7 and w["total_runs"] >= min_runs
+        ]
+        high_performers = [
+            w for w in workflow_stats if w["success_rate"] >= 0.9 and w["total_runs"] >= min_runs
+        ]
 
+        # Get unrated runs
+        unrated_runs = [r for r in run_dicts if r.get("user_rating") is None]
+
+        # Analyze failure patterns
+        failure_patterns = self._analyze_failures(run_dicts)
+
+        # Calculate usage trends
+        usage_trends = self._calculate_usage_trends(run_dicts)
+
+        # Generate initial recommendations
+        recommendations = self._generate_recommendations(
+            workflow_stats, low_performers, failure_patterns, usage_trends
+        )
+
+        return {
+            "analysis_period_days": days,
+            "total_runs_analyzed": len(run_dicts),
+            "unique_workflows": len(workflow_stats),
+            "workflow_stats": workflow_stats,
+            "low_performers": low_performers,
+            "high_performers": high_performers,
+            "unrated_runs_count": len(unrated_runs),
+            "failure_patterns": failure_patterns,
+            "usage_trends": usage_trends,
+            "recommendations": recommendations,
+        }
+
+    def _runs_to_dicts(self, runs: list) -> list[dict[str, Any]]:
+        """Convert WorkflowRun dataclass instances to plain dicts."""
         results = []
-        async with db.execute(query, (cutoff_str,)) as cursor:
-            async for row in cursor:
-                results.append(
-                    {
-                        "id": row["id"],
-                        "workflow_name": row["workflow_name"],
-                        "goal": row["goal"],
-                        "started_at": row["started_at"],
-                        "completed_at": row["completed_at"],
-                        "success": bool(row["success"]),
-                        "user_rating": row["user_rating"],
-                        "tokens_used": row["tokens_used"],
-                        "error": row["error"],
-                    }
-                )
-
+        for run in runs:
+            started_at_str = (
+                run.started_at.isoformat()
+                if hasattr(run.started_at, "isoformat")
+                else str(run.started_at)
+            )
+            results.append(
+                {
+                    "id": run.id,
+                    "workflow_name": run.workflow_name,
+                    "goal": run.goal,
+                    "started_at": started_at_str,
+                    "completed_at": (
+                        run.completed_at.isoformat()
+                        if run.completed_at and hasattr(run.completed_at, "isoformat")
+                        else str(run.completed_at)
+                        if run.completed_at
+                        else None
+                    ),
+                    "success": run.success,
+                    "user_rating": run.user_rating,
+                    "tokens_used": run.tokens_used or 0,
+                    "error": run.error,
+                }
+            )
         return results
 
     def _analyze_failures(self, runs: list[dict]) -> list[dict[str, Any]]:

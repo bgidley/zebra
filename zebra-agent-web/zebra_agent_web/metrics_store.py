@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
@@ -187,6 +188,18 @@ class DjangoMetricsStore(MetricsStore):
         def _get():
             models = WorkflowRunModel.objects.filter(completed_at__isnull=False).order_by(
                 "-completed_at"
+            )[:limit]
+            return [self._model_to_run(m) for m in models]
+
+        return await _get()
+
+    async def get_runs_since(self, cutoff: datetime, limit: int = 500) -> list[WorkflowRun]:
+        """Get all workflow runs since the cutoff datetime, newest first."""
+
+        @sync_to_async
+        def _get():
+            models = WorkflowRunModel.objects.filter(started_at__gte=cutoff).order_by(
+                "-started_at"
             )[:limit]
             return [self._model_to_run(m) for m in models]
 

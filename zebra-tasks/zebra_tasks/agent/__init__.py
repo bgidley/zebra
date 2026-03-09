@@ -6,6 +6,7 @@ from zebra_tasks.agent.consult_memory import ConsultMemoryAction
 from zebra_tasks.agent.creator import WorkflowCreatorAction
 from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
 from zebra_tasks.agent.execute_workflow import ExecuteGoalWorkflowAction
+from zebra_tasks.agent.load_definitions import LoadWorkflowDefinitionsAction
 from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 from zebra_tasks.agent.record_metrics import RecordMetricsAction
 from zebra_tasks.agent.selector import WorkflowSelectorAction
@@ -24,6 +25,7 @@ __all__ = [
     "RecordMetricsAction",
     # Analysis and optimization actions
     "MetricsAnalyzerAction",
+    "LoadWorkflowDefinitionsAction",
     "WorkflowEvaluatorAction",
     "WorkflowOptimizerAction",
 ]

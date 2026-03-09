@@ -1,6 +1,7 @@
 """WorkflowOptimizerAction - Create and optimize workflows based on evaluation."""
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,9 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message
+
+# Matches a pure template reference like "{{some_key}}"
+_PURE_TEMPLATE_RE = re.compile(r"^\{\{(\w+)\}\}$")
 
 
 class WorkflowOptimizerAction(TaskAction):
@@ -190,23 +194,13 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Optimize workflows based on evaluation."""
-        # Get inputs
-        evaluation = task.properties.get("evaluation")
-        if isinstance(evaluation, str):
-            evaluation = context.resolve_template(evaluation)
-            if isinstance(evaluation, str):
-                try:
-                    evaluation = json.loads(evaluation)
-                except json.JSONDecodeError:
-                    pass
+        # Get inputs — resolve template references while preserving dict types.
+        evaluation = self._resolve_property(task, context, "evaluation")
+        existing_workflows = self._resolve_property(task, context, "existing_workflows", default={})
 
         library_path = task.properties.get("workflow_library_path")
         if not library_path:
             library_path = context.process.properties.get("__workflow_library_path__")
-
-        existing_workflows = task.properties.get("existing_workflows", {})
-        if isinstance(existing_workflows, str):
-            existing_workflows = context.resolve_template(existing_workflows)
 
         max_changes = task.properties.get("max_changes", 3)
         dry_run = task.properties.get("dry_run", False)
@@ -361,6 +355,39 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
 
         except Exception as e:
             return TaskResult.fail(f"Workflow optimization failed: {str(e)}")
+
+    def _resolve_property(
+        self,
+        task: TaskInstance,
+        context: ExecutionContext,
+        key: str,
+        default: Any = None,
+    ) -> Any:
+        """Resolve a task property, preserving non-string types.
+
+        If the raw value is a pure template reference like ``"{{foo}}"``,
+        the corresponding process property is returned directly (as a dict,
+        list, etc.) instead of being stringified by ``resolve_template``.
+        """
+        raw = task.properties.get(key, default)
+        if not isinstance(raw, str):
+            return raw
+
+        m = _PURE_TEMPLATE_RE.match(raw.strip())
+        if m:
+            prop_name = m.group(1)
+            value = context.get_process_property(prop_name)
+            if value is not None:
+                return value
+
+        # Fall back to string resolution (handles compound templates)
+        resolved = context.resolve_template(raw)
+        if isinstance(resolved, str):
+            try:
+                return json.loads(resolved)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        return resolved or default
 
     def _get_provider(self, task: TaskInstance, context: ExecutionContext):
         """Get the LLM provider to use."""

@@ -250,9 +250,98 @@ class AgentLoop:
             return False
         return await self.memory.update_user_feedback(run_id, feedback)
 
+    async def run_dream_cycle(
+        self,
+        progress_callback: ProgressCallback | None = None,
+    ) -> dict:
+        """
+        Run the Dream Cycle self-improvement workflow.
+
+        Analyzes recent performance metrics, evaluates workflow effectiveness,
+        and optimizes or creates workflows based on the evaluation.
+
+        Unlike ``process_goal()``, this runs the "Dream Cycle" workflow
+        directly — it does not go through the goal-selection step.
+
+        Args:
+            progress_callback: Optional async callback for progress updates.
+
+        Returns:
+            Dict with dream cycle results including dream_summary,
+            metrics_analysis, evaluation, and optimization_results.
+
+        Raises:
+            ValueError: If the "Dream Cycle" workflow is not found.
+        """
+        run_id = str(uuid.uuid4())
+
+        async def emit(event: str, data: dict[str, Any] | None = None) -> None:
+            if progress_callback:
+                await progress_callback(event, data or {})
+
+        definition = self.library.get_workflow("Dream Cycle")
+
+        properties = {
+            "__llm_provider_name__": self.provider_name,
+            "__llm_model__": self.model,
+            "__started_at__": datetime.now(UTC).isoformat(),
+            # The optimizer needs the library path for saving modified workflows
+            "__workflow_library_path__": str(self.library.library_path),
+        }
+
+        await emit("dream_cycle_started", {"run_id": run_id})
+
+        if progress_callback:
+            self.engine.extras["__progress_callback__"] = progress_callback
+
+        try:
+            process = await self.engine.create_process(definition, properties=properties)
+            await self.engine.start_process(process.id)
+
+            # Dream cycles may take longer than regular goals
+            max_wait = 600  # 10 minutes
+            waited = 0.0
+
+            while waited < max_wait:
+                process = await self.engine.store.load_process(process.id)
+
+                if process.state == ProcessState.COMPLETE:
+                    break
+                elif process.state == ProcessState.FAILED:
+                    error = process.properties.get("__error__", "Dream cycle failed")
+                    await emit("dream_cycle_failed", {"run_id": run_id, "error": str(error)})
+                    return {
+                        "success": False,
+                        "error": str(error),
+                    }
+
+                await asyncio.sleep(1.0)
+                waited += 1.0
+
+            if process.state != ProcessState.COMPLETE:
+                await emit("dream_cycle_failed", {"run_id": run_id, "error": "Timed out"})
+                return {
+                    "success": False,
+                    "error": "Dream cycle timed out",
+                }
+
+            await emit("dream_cycle_completed", {"run_id": run_id})
+
+            return {
+                "success": True,
+                "dream_summary": process.properties.get("dream_summary"),
+                "metrics_analysis": process.properties.get("metrics_analysis"),
+                "evaluation": process.properties.get("evaluation"),
+                "optimization_results": process.properties.get("optimization_results"),
+            }
+
+        finally:
+            self.engine.extras.pop("__progress_callback__", None)
+
     def _is_system_workflow(self, name: str) -> bool:
         """Check if a workflow is a system/internal workflow."""
         system_workflows = {
             "Agent Main Loop",
+            "Dream Cycle",
         }
         return name in system_workflows

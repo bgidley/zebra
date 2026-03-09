@@ -1,12 +1,16 @@
 """WorkflowEvaluatorAction - LLM-based evaluation of workflow effectiveness."""
 
 import json
+import re
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message
+
+# Matches a pure template reference like "{{some_key}}"
+_PURE_TEMPLATE_RE = re.compile(r"^\{\{(\w+)\}\}$")
 
 
 class WorkflowEvaluatorAction(TaskAction):
@@ -164,19 +168,14 @@ Respond with JSON only:
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Evaluate workflows using LLM."""
-        # Get inputs
-        metrics_analysis = task.properties.get("metrics_analysis")
-        if isinstance(metrics_analysis, str):
-            metrics_analysis = context.resolve_template(metrics_analysis)
-            if isinstance(metrics_analysis, str):
-                try:
-                    metrics_analysis = json.loads(metrics_analysis)
-                except json.JSONDecodeError:
-                    pass
-
-        workflow_definitions = task.properties.get("workflow_definitions", {})
-        if isinstance(workflow_definitions, str):
-            workflow_definitions = context.resolve_template(workflow_definitions)
+        # Get inputs — resolve template references while preserving dict types.
+        # When a YAML property is "{{some_key}}", resolve_template would
+        # stringify the dict via str().  Instead, fetch the process property
+        # directly so the original dict is preserved.
+        metrics_analysis = self._resolve_property(task, context, "metrics_analysis")
+        workflow_definitions = self._resolve_property(
+            task, context, "workflow_definitions", default={}
+        )
 
         output_key = task.properties.get("output_key", "workflow_evaluation")
 
@@ -217,6 +216,39 @@ Respond with JSON only:
 
         except Exception as e:
             return TaskResult.fail(f"Workflow evaluation failed: {str(e)}")
+
+    def _resolve_property(
+        self,
+        task: TaskInstance,
+        context: ExecutionContext,
+        key: str,
+        default: Any = None,
+    ) -> Any:
+        """Resolve a task property, preserving non-string types.
+
+        If the raw value is a pure template reference like ``"{{foo}}"``,
+        the corresponding process property is returned directly (as a dict,
+        list, etc.) instead of being stringified by ``resolve_template``.
+        """
+        raw = task.properties.get(key, default)
+        if not isinstance(raw, str):
+            return raw
+
+        m = _PURE_TEMPLATE_RE.match(raw.strip())
+        if m:
+            prop_name = m.group(1)
+            value = context.get_process_property(prop_name)
+            if value is not None:
+                return value
+
+        # Fall back to string resolution (handles compound templates)
+        resolved = context.resolve_template(raw)
+        if isinstance(resolved, str):
+            try:
+                return json.loads(resolved)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        return resolved or default
 
     def _get_provider(self, task: TaskInstance, context: ExecutionContext):
         """Get the LLM provider to use."""

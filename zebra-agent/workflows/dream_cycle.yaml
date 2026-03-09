@@ -2,7 +2,7 @@ name: "Dream Cycle"
 description: "Self-improvement cycle that analyzes performance, evaluates workflows, and optimizes the system"
 tags: ["system", "optimization", "self-improvement", "dream"]
 use_when: "Use this workflow periodically (e.g., daily) to review and improve the agent's capabilities"
-version: 1
+version: 2
 first_task: analyze_metrics
 
 tasks:
@@ -11,38 +11,16 @@ tasks:
     action: metrics_analyzer
     auto: true
     properties:
-      metrics_db_path: "{{__metrics_db_path__}}"
       days_to_analyze: 7
       min_runs_for_analysis: 3
       output_key: metrics_analysis
 
   load_workflows:
     name: "Load Workflow Definitions"
-    action: python_exec
+    action: load_workflow_definitions
     auto: true
     properties:
-      code: |
-        from pathlib import Path
-        import yaml
-
-        library_path = props.get('__workflow_library_path__', '')
-        workflows = {}
-
-        if library_path:
-            path = Path(library_path)
-            if path.exists():
-                for yaml_file in path.glob("*.yaml"):
-                    try:
-                        content = yaml_file.read_text()
-                        data = yaml.safe_load(content)
-                        if data and 'name' in data:
-                            # Skip system workflows
-                            if data.get('name') not in ['Dream Cycle', 'Memory Compact Short', 'Memory Compact Long']:
-                                workflows[data['name']] = content
-                    except Exception:
-                        pass
-
-        result = workflows
+      exclude_system: true
       output_key: workflow_definitions
 
   evaluate_workflows:
@@ -60,7 +38,6 @@ tasks:
     auto: true
     properties:
       evaluation: "{{evaluation}}"
-      workflow_library_path: "{{__workflow_library_path__}}"
       existing_workflows: "{{workflow_definitions}}"
       max_changes: 3
       dry_run: false

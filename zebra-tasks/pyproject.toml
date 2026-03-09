@@ -67,6 +67,7 @@ update_conceptual_memory = "zebra_tasks.agent.update_conceptual_memory:UpdateCon
 record_metrics = "zebra_tasks.agent.record_metrics:RecordMetricsAction"
 # Agent - Analysis and optimization
 metrics_analyzer = "zebra_tasks.agent.analyzer:MetricsAnalyzerAction"
+load_workflow_definitions = "zebra_tasks.agent.load_definitions:LoadWorkflowDefinitionsAction"
 workflow_evaluator = "zebra_tasks.agent.evaluator:WorkflowEvaluatorAction"
 workflow_optimizer = "zebra_tasks.agent.optimizer:WorkflowOptimizerAction"
 

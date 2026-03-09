@@ -229,6 +229,35 @@ async def workflow_stats(request, workflow_name):
 # =============================================================================
 
 
+# run_ids for dream cycles started via POST /api/dream-cycle/ that are still in flight
+_active_dream_runs: set[str] = set()
+
+
+def _run_dream_cycle_in_background(run_id: str) -> None:
+    """Fire run_dream_cycle in a daemon thread with its own event loop.
+
+    Returns immediately; the caller polls GET /api/runs/<run_id>/status/.
+    """
+
+    _active_dream_runs.add(run_id)
+
+    async def _run():
+        await agent_engine.ensure_initialized()
+        agent_loop = agent_engine.get_agent_loop()
+        await agent_loop.run_dream_cycle()
+
+    def _thread():
+        try:
+            asyncio.run(_run())
+        except Exception:
+            logger.exception("Background dream cycle failed for run %s", run_id)
+        finally:
+            _active_dream_runs.discard(run_id)
+
+    t = threading.Thread(target=_thread, daemon=True, name=f"dream-{run_id[:8]}")
+    t.start()
+
+
 def _run_goal_in_background(run_id: str, goal: str) -> None:
     """Fire process_goal in a daemon thread with its own event loop.
 
@@ -294,6 +323,39 @@ def execute_goal(request):
         }
     )
     return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+
+
+@api_view(["POST"])
+def dream_cycle(request):
+    """Start the Dream Cycle self-improvement workflow.
+
+    The dream cycle runs in a background thread. Poll
+    GET /api/runs/<run_id>/status/ to check for completion.
+
+    Returns 202 Accepted with::
+
+        {
+            "run_id": "<uuid>",
+            "status": "processing",
+            "message": "Dream cycle started"
+        }
+    """
+    run_id = str(uuid.uuid4())
+
+    try:
+        _run_dream_cycle_in_background(run_id)
+    except Exception as e:
+        logger.exception("Failed to start dream cycle")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response(
+        {
+            "run_id": run_id,
+            "status": "processing",
+            "message": "Dream cycle started",
+        },
+        status=status.HTTP_202_ACCEPTED,
+    )
 
 
 # =============================================================================
@@ -364,28 +426,34 @@ async def run_detail(request, run_id):
 
 
 @api_view(["POST"])
-async def run_rate(request, run_id):
+def run_rate(request, run_id):
     """Rate a run."""
-    await agent_engine.ensure_initialized()
-    agent_loop = agent_engine.get_agent_loop()
-    metrics = agent_engine.get_metrics()
-
-    run = await metrics.get_run(run_id)
-    if not run:
-        return Response({"error": f"Run '{run_id}' not found"}, status=status.HTTP_404_NOT_FOUND)
-
     req_serializer = RateRunRequestSerializer(data=request.data)
     if not req_serializer.is_valid():
         return Response(req_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     rating = req_serializer.validated_data["rating"]
 
-    try:
+    async def _rate():
+        await agent_engine.ensure_initialized()
+        agent_loop = agent_engine.get_agent_loop()
+        metrics = agent_engine.get_metrics()
+
+        run = await metrics.get_run(run_id)
+        if run is None:
+            return None
         await agent_loop.record_rating(run_id, rating)
-        return Response({"run_id": run_id, "rating": rating})
+        return True
+
+    try:
+        result = async_to_sync(_rate)()
     except Exception as e:
         logger.exception("Failed to rate run")
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    if result is None:
+        return Response({"error": f"Run '{run_id}' not found"}, status=status.HTTP_404_NOT_FOUND)
+    return Response({"run_id": run_id, "rating": rating})
 
 
 def _run_status_impl(run_id):

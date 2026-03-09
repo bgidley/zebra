@@ -18,6 +18,8 @@ urlpatterns = [
     path("workflows/<str:workflow_name>/stats/", views.workflow_stats, name="api_workflow_stats"),
     # Goal execution
     path("goals/", views.execute_goal, name="api_execute_goal"),
+    # Dream cycle
+    path("dream-cycle/", views.dream_cycle, name="api_dream_cycle"),
     # Run endpoints
     path("runs/", views.runs_list, name="api_runs_list"),
     path("runs/<str:run_id>/", views.run_detail, name="api_run_detail"),

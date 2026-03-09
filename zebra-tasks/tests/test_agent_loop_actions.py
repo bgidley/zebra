@@ -5,9 +5,11 @@ These actions support the workflow-based agent loop:
 - RecordMetricsAction - Record workflow run to metrics store
 - AssessAndRecordAction - LLM assessment + memory write after a run
 - ExecuteGoalWorkflowAction - Execute a goal workflow by name
+- MetricsAnalyzerAction - Analyze metrics via MetricsStore interface
+- LoadWorkflowDefinitionsAction - Load workflow YAML via WorkflowLibrary
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -784,3 +786,274 @@ class TestExecuteGoalWorkflowAction:
             {"custom": "value", "__internal__": "hidden", "other": "data"}
         )
         assert result == {"custom": "value", "other": "data"}
+
+
+# =============================================================================
+# MetricsAnalyzerAction Tests
+# =============================================================================
+
+
+def _make_workflow_run(
+    workflow_name="Test Workflow",
+    goal="Test goal",
+    success=True,
+    user_rating=None,
+    tokens_used=100,
+    error=None,
+    days_ago=0,
+):
+    """Helper to create a mock WorkflowRun-like object."""
+    run = MagicMock()
+    run.id = f"run-{id(run)}"
+    run.workflow_name = workflow_name
+    run.goal = goal
+    run.success = success
+    run.user_rating = user_rating
+    run.tokens_used = tokens_used
+    run.error = error
+    run.started_at = datetime.now(UTC) - timedelta(days=days_ago)
+    run.completed_at = datetime.now(UTC) - timedelta(days=days_ago)
+    return run
+
+
+def _make_workflow_stats(workflow_name="Test Workflow", total_runs=5, successful_runs=4):
+    """Helper to create a mock WorkflowStats-like object."""
+    stats = MagicMock()
+    stats.workflow_name = workflow_name
+    stats.total_runs = total_runs
+    stats.successful_runs = successful_runs
+    stats.success_rate = successful_runs / total_runs if total_runs > 0 else 0
+    stats.avg_rating = None
+    stats.last_used = datetime.now(UTC)
+    return stats
+
+
+class TestMetricsAnalyzerAction:
+    """Tests for MetricsAnalyzerAction (uses MetricsStore interface, not SQLite)."""
+
+    @pytest.fixture
+    def mock_metrics_store_for_analyzer(self):
+        """Create a mock metrics store with get_runs_since and get_all_stats."""
+        store = MagicMock()
+        store.get_runs_since = AsyncMock(return_value=[])
+        store.get_all_stats = AsyncMock(return_value=[])
+        store.record_run = AsyncMock()
+        return store
+
+    async def test_no_metrics_store_fails(self, mock_task, mock_context):
+        """Test that missing metrics store returns a failure."""
+        from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
+
+        mock_task.properties = {"days_to_analyze": 7}
+
+        action = MetricsAnalyzerAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is False
+        assert "No metrics store available" in result.error
+
+    async def test_empty_metrics(self, mock_task, mock_context, mock_metrics_store_for_analyzer):
+        """Test analysis with no runs produces valid empty output."""
+        from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
+
+        mock_context.extras["__metrics_store__"] = mock_metrics_store_for_analyzer
+        mock_task.properties = {"days_to_analyze": 7, "output_key": "metrics_analysis"}
+
+        action = MetricsAnalyzerAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        output = result.output
+        assert output["analysis_period_days"] == 7
+        assert output["total_runs_analyzed"] == 0
+        assert output["unique_workflows"] == 0
+        assert output["workflow_stats"] == []
+        assert output["low_performers"] == []
+        assert output["high_performers"] == []
+        assert output["failure_patterns"] == []
+        assert len(output["recommendations"]) > 0  # At least the "all performing well" message
+
+    async def test_with_runs(self, mock_task, mock_context, mock_metrics_store_for_analyzer):
+        """Test analysis with actual run data."""
+        from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
+
+        runs = [
+            _make_workflow_run("Answer Question", "What is 2+2?", True, 5, 50, days_ago=1),
+            _make_workflow_run("Answer Question", "What is 3+3?", True, 4, 60, days_ago=2),
+            _make_workflow_run("Answer Question", "What is pi?", False, None, 80, "Timed out", 3),
+            _make_workflow_run("Brainstorm Ideas", "Ideas for app", True, None, 200, days_ago=1),
+        ]
+        stats = [
+            _make_workflow_stats("Answer Question", 3, 2),
+            _make_workflow_stats("Brainstorm Ideas", 1, 1),
+        ]
+
+        mock_metrics_store_for_analyzer.get_runs_since.return_value = runs
+        mock_metrics_store_for_analyzer.get_all_stats.return_value = stats
+
+        mock_context.extras["__metrics_store__"] = mock_metrics_store_for_analyzer
+        mock_task.properties = {"days_to_analyze": 7, "min_runs_for_analysis": 2}
+
+        action = MetricsAnalyzerAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        output = result.output
+        assert output["total_runs_analyzed"] == 4
+        assert output["unique_workflows"] == 2
+        assert len(output["workflow_stats"]) == 2
+        assert output["unrated_runs_count"] == 2  # two runs without ratings
+        assert len(output["failure_patterns"]) == 1  # Answer Question has failures
+
+    async def test_identifies_low_performers(
+        self, mock_task, mock_context, mock_metrics_store_for_analyzer
+    ):
+        """Test that low-performing workflows are identified."""
+        from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
+
+        # Create a workflow with < 70% success rate
+        runs = [
+            _make_workflow_run("Bad Workflow", "goal 1", False, None, 100, "Error", 1),
+            _make_workflow_run("Bad Workflow", "goal 2", False, None, 100, "Error", 2),
+            _make_workflow_run("Bad Workflow", "goal 3", True, None, 100, days_ago=3),
+        ]
+        stats = [_make_workflow_stats("Bad Workflow", 3, 1)]
+
+        mock_metrics_store_for_analyzer.get_runs_since.return_value = runs
+        mock_metrics_store_for_analyzer.get_all_stats.return_value = stats
+
+        mock_context.extras["__metrics_store__"] = mock_metrics_store_for_analyzer
+        mock_task.properties = {"days_to_analyze": 7, "min_runs_for_analysis": 3}
+
+        action = MetricsAnalyzerAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert len(result.output["low_performers"]) == 1
+        assert result.output["low_performers"][0]["workflow_name"] == "Bad Workflow"
+
+    async def test_custom_output_key(
+        self, mock_task, mock_context, mock_metrics_store_for_analyzer
+    ):
+        """Test using a custom output key."""
+        from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
+
+        mock_context.extras["__metrics_store__"] = mock_metrics_store_for_analyzer
+        mock_task.properties = {"output_key": "my_analysis"}
+
+        action = MetricsAnalyzerAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        mock_context.set_process_property.assert_called()
+        call_args = mock_context.set_process_property.call_args
+        assert call_args[0][0] == "my_analysis"
+
+
+# =============================================================================
+# LoadWorkflowDefinitionsAction Tests
+# =============================================================================
+
+
+class TestLoadWorkflowDefinitionsAction:
+    """Tests for LoadWorkflowDefinitionsAction."""
+
+    @pytest.fixture
+    def mock_workflow_library(self):
+        """Create a mock workflow library."""
+        library = MagicMock()
+        library.list_workflows = AsyncMock(return_value=[])
+        library.get_workflow_yaml = MagicMock(return_value="name: Test\ntasks: {}")
+        return library
+
+    async def test_no_library_fails(self, mock_task, mock_context):
+        """Test that missing library returns a failure."""
+        from zebra_tasks.agent.load_definitions import LoadWorkflowDefinitionsAction
+
+        mock_task.properties = {}
+
+        action = LoadWorkflowDefinitionsAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is False
+        assert "No workflow library available" in result.error
+
+    async def test_empty_library(self, mock_task, mock_context, mock_workflow_library):
+        """Test with an empty workflow library."""
+        from zebra_tasks.agent.load_definitions import LoadWorkflowDefinitionsAction
+
+        mock_context.extras["__workflow_library__"] = mock_workflow_library
+        mock_task.properties = {}
+
+        action = LoadWorkflowDefinitionsAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.output == {}
+
+    async def test_loads_non_system_workflows(self, mock_task, mock_context, mock_workflow_library):
+        """Test that system workflows are excluded by default."""
+        from zebra_tasks.agent.load_definitions import LoadWorkflowDefinitionsAction
+
+        # Create mock workflow infos
+        wf1 = MagicMock()
+        wf1.name = "Answer Question"
+        wf2 = MagicMock()
+        wf2.name = "Agent Main Loop"
+        wf3 = MagicMock()
+        wf3.name = "Dream Cycle"
+        wf4 = MagicMock()
+        wf4.name = "Brainstorm Ideas"
+
+        mock_workflow_library.list_workflows.return_value = [wf1, wf2, wf3, wf4]
+        mock_workflow_library.get_workflow_yaml.return_value = "name: Test\ntasks: {}"
+
+        mock_context.extras["__workflow_library__"] = mock_workflow_library
+        mock_task.properties = {"exclude_system": True}
+
+        action = LoadWorkflowDefinitionsAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        # Should only have Answer Question and Brainstorm Ideas
+        assert "Answer Question" in result.output
+        assert "Brainstorm Ideas" in result.output
+        assert "Agent Main Loop" not in result.output
+        assert "Dream Cycle" not in result.output
+
+    async def test_include_system_workflows(self, mock_task, mock_context, mock_workflow_library):
+        """Test that system workflows can be included."""
+        from zebra_tasks.agent.load_definitions import LoadWorkflowDefinitionsAction
+
+        wf1 = MagicMock()
+        wf1.name = "Answer Question"
+        wf2 = MagicMock()
+        wf2.name = "Agent Main Loop"
+
+        mock_workflow_library.list_workflows.return_value = [wf1, wf2]
+        mock_workflow_library.get_workflow_yaml.return_value = "name: Test\ntasks: {}"
+
+        mock_context.extras["__workflow_library__"] = mock_workflow_library
+        mock_task.properties = {"exclude_system": False}
+
+        action = LoadWorkflowDefinitionsAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert "Answer Question" in result.output
+        assert "Agent Main Loop" in result.output
+
+    async def test_custom_output_key(self, mock_task, mock_context, mock_workflow_library):
+        """Test using a custom output key."""
+        from zebra_tasks.agent.load_definitions import LoadWorkflowDefinitionsAction
+
+        mock_context.extras["__workflow_library__"] = mock_workflow_library
+        mock_task.properties = {"output_key": "my_definitions"}
+
+        action = LoadWorkflowDefinitionsAction()
+        result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        mock_context.set_process_property.assert_called()
+        call_args = mock_context.set_process_property.call_args
+        assert call_args[0][0] == "my_definitions"

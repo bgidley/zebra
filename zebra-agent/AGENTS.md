@@ -89,32 +89,30 @@ not imperative Python code. The `AgentLoop` class is a thin wrapper that runs th
 The workflow handles the complete goal processing flow:
 
 ```
-check_memory
-    |
-    +--[compact_short]--> compact_short_term --> select_workflow
-    +--[compact_long]---> compact_long_term --> select_workflow
-    +--[continue]-------> select_workflow
-                              |
-                              +--[create_new]--> create_workflow --> execute_workflow
-                              +--[use_existing]----------------> execute_workflow
-                                                                      |
-                                                                      v
-                                                                record_metrics
-                                                                      |
-                                                                      v
-                                                                update_memory
+consult_memory --> select_workflow
+                       |
+             +---------+---------+
+             |         |         |
+        create_new  create_variant  use_existing
+             |         |         |
+             +---------+---------+
+                       |
+                execute_workflow
+                       |
+                assess_and_record
+                       |
+             update_conceptual_memory
 ```
 
 **Steps:**
 
-1. **check_memory**: `MemoryCheckAction` checks compaction needs, sets `next_route`
-2. **compact_short_term**: Subworkflow for short-term memory compaction
-3. **compact_long_term**: Subworkflow for long-term memory compaction
-4. **select_workflow**: `WorkflowSelectorAction` uses LLM to pick best workflow
-5. **create_workflow**: `WorkflowCreatorAction` creates new workflow if needed
-6. **execute_workflow**: `ExecuteGoalWorkflowAction` runs the goal workflow
-7. **record_metrics**: `RecordMetricsAction` saves run to metrics store
-8. **update_memory**: `UpdateMemoryAction` adds entry to agent memory
+1. **consult_memory**: `ConsultMemoryAction` reads conceptual memory to produce a workflow shortlist
+2. **select_workflow**: `WorkflowSelectorAction` uses LLM to pick best workflow (informed by memory shortlist)
+3. **create_workflow**: `WorkflowCreatorAction` creates new workflow if no match (route: `create_new`)
+4. **create_variant**: `WorkflowVariantCreatorAction` modifies existing workflow (route: `create_variant`)
+5. **execute_workflow**: `ExecuteGoalWorkflowAction` runs the selected/created workflow
+6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
+7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
 
 ### Task Actions for Agent Loop
 
@@ -122,12 +120,22 @@ These actions (in `zebra-tasks/zebra_tasks/agent/`) power the agent loop:
 
 | Action | File | Purpose |
 |--------|------|---------|
-| `memory_check` | `memory_check.py` | Check memory compaction needs, set routing |
+| `consult_memory` | `consult_memory.py` | Read conceptual memory for workflow shortlist |
 | `workflow_selector` | `selector.py` | LLM-powered workflow selection |
 | `workflow_creator` | `creator.py` | LLM-powered workflow creation |
+| `workflow_variant_creator` | `variant_creator.py` | LLM-powered workflow variant creation |
 | `execute_goal_workflow` | `execute_workflow.py` | Execute workflow by name |
-| `record_metrics` | `record_metrics.py` | Record run to metrics store |
-| `update_memory` | `update_memory.py` | Add entry to memory store |
+| `assess_and_record` | `assess_and_record.py` | LLM assessment + metrics + memory write |
+| `update_conceptual_memory` | `update_conceptual_memory.py` | Incrementally update conceptual memory index |
+
+These actions power the Dream Cycle self-improvement workflow:
+
+| Action | File | Purpose |
+|--------|------|---------|
+| `metrics_analyzer` | `analyzer.py` | Analyze metrics via MetricsStore interface |
+| `load_workflow_definitions` | `load_definitions.py` | Load workflow YAML via WorkflowLibrary |
+| `workflow_evaluator` | `evaluator.py` | LLM-based evaluation of workflow effectiveness |
+| `workflow_optimizer` | `optimizer.py` | Create/optimize workflows based on evaluation |
 
 ### IoC (Inversion of Control) for Stores
 
@@ -154,6 +162,39 @@ async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult
 
 **Note:** Previous versions used `context.process.properties` for store injection, but this violated the JSON-serialization requirement for process properties.
 
+### Storage Abstraction Design Rules
+
+All task actions that read or write agent data **must** use the abstract store
+interfaces (`MemoryStore`, `MetricsStore`) from `context.extras`, never direct
+database access or raw file I/O.
+
+**Why**: `zebra-agent` supports multiple storage backends — `InMemoryMemoryStore`
+for CLI/testing, `DjangoMemoryStore` / `DjangoMetricsStore` for the web app
+(Oracle, PostgreSQL, etc.). Task actions must work identically regardless of
+the backend. Coupling to a specific driver (e.g. `aiosqlite`, `psycopg2`)
+breaks portability across deployments.
+
+**Rules:**
+
+1. **Never import a database driver** (e.g. `aiosqlite`, `psycopg2`) in a task
+   action. All data access goes through the injected store interfaces.
+
+2. **Never read workflow files from disk directly.** Use `WorkflowLibrary` from
+   `context.extras["__workflow_library__"]`, which handles caching, versioning,
+   and path resolution.
+
+3. **Always degrade gracefully** when a store is `None` — return a sensible
+   default rather than failing. This supports standalone use without a database.
+
+4. **New interface methods** must be added to the ABC in
+   `storage/interfaces.py` first, then implemented in *all* backends
+   (`InMemoryMetricsStore`, `DjangoMetricsStore`, and any future backends).
+   A downstream storage implementation must never be required to work around
+   a missing interface method.
+
+5. **Test with mocks**, not real databases. Mock the store interface in unit
+   tests (see `zebra-tasks/tests/test_agent_loop_actions.py` for examples).
+
 ### Key Components
 
 **AgentLoop** (`loop.py`):
@@ -176,8 +217,9 @@ async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult
 
 **MemoryStore** (`storage/interfaces.py`):
 - Abstract interface for agent memory storage
-- Two-tier memory: short-term entries + long-term themes
-- Automatic compaction when thresholds exceeded
+- Two-tier memory: workflow memory (detailed per-run records) + conceptual memory (compact goal-pattern index)
+- Conceptual memory is consulted at the start of each goal for workflow shortlisting
+- Updated incrementally after each run via LLM classification
 
 ### IoC (Inversion of Control) Module
 
@@ -229,8 +271,7 @@ These workflows are internal to the agent and excluded from LLM selection:
 | Workflow | File | Purpose |
 |----------|------|---------|
 | `Agent Main Loop` | `agent_main_loop.yaml` | Main orchestration workflow |
-| `Memory Compact Short` | `memory_compact_short.yaml` | Short-term memory compaction |
-| `Memory Compact Long` | `memory_compact_long.yaml` | Long-term memory compaction |
+| `Dream Cycle` | `dream_cycle.yaml` | Self-improvement: analyze, evaluate, optimize workflows |
 
 System workflows are identified by name in `loop.py`:
 
@@ -238,11 +279,15 @@ System workflows are identified by name in `loop.py`:
 def _is_system_workflow(self, name: str) -> bool:
     system_workflows = {
         "Agent Main Loop",
-        "Memory Compact Short", 
-        "Memory Compact Long",
+        "Dream Cycle",
     }
     return name in system_workflows
 ```
+
+The Dream Cycle can be triggered explicitly via:
+- `AgentLoop.run_dream_cycle()` in Python
+- `python manage.py dream_cycle` in Django (zebra-agent-web)
+- `POST /api/dream-cycle/` API endpoint (zebra-agent-web)
 
 ### Add a New Built-in Workflow
 

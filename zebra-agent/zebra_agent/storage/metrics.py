@@ -7,6 +7,7 @@ Data is lost when the process exits - suitable for testing and ephemeral use cas
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from zebra_agent.storage.interfaces import MetricsStore
@@ -130,6 +131,14 @@ class InMemoryMetricsStore(MetricsStore):
         await self._ensure_initialized()
 
         runs = list(self._runs.values())
+        runs.sort(key=lambda r: r.started_at, reverse=True)
+        return runs[:limit]
+
+    async def get_runs_since(self, cutoff: datetime, limit: int = 500) -> list[WorkflowRun]:
+        """Get all workflow runs since the cutoff datetime, newest first."""
+        await self._ensure_initialized()
+
+        runs = [r for r in self._runs.values() if r.started_at >= cutoff]
         runs.sort(key=lambda r: r.started_at, reverse=True)
         return runs[:limit]
 

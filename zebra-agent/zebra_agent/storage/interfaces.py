@@ -7,6 +7,7 @@ implemented by different backends (in-memory, Django ORM, PostgreSQL, etc.).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -165,6 +166,19 @@ class MetricsStore(ABC):
     @abstractmethod
     async def get_recent_runs(self, limit: int = 10) -> list[WorkflowRun]:
         """Get the most recent workflow runs."""
+        ...
+
+    @abstractmethod
+    async def get_runs_since(self, cutoff: datetime, limit: int = 500) -> list[WorkflowRun]:
+        """Get all workflow runs since the cutoff datetime, newest first.
+
+        Args:
+            cutoff: Only include runs with started_at >= cutoff.
+            limit: Maximum number of runs to return.
+
+        Returns:
+            List of WorkflowRun objects, ordered by started_at descending.
+        """
         ...
 
     @abstractmethod

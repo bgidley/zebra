@@ -11,12 +11,16 @@ This document tracks unimplemented features and improvements based on the DESIGN
 
 ### .1 Tidying Up
 - [recreate db]
+- Feedback form seems buggy
 
 ### .5 Learning loops
-- [ ] Long term memory signposts to detail memory as needed
 - [ ] Dream workflows run daily to optimize memory
 - [ ] Add memory into the agent loop
 - [ ] When not sure LLM can run 2 parallel workflows to compare results and show to human for vote
+
+### Efficent LLM usage
+- [ ] Use smaller models for reduced cost 
+
 
 ### 1. Task Actions Library Expansion ⚠️
 
@@ -24,6 +28,8 @@ This document tracks unimplemented features and improvements based on the DESIGN
 
 **Missing Actions:**
 - [x] File I/O operations (read, write, copy, move, delete, search) - Completed 2026-02-01
+- [ ] Web Search
+- [ ] OpenCode / Claude Agents as Actions
 - [ ] HTTP/REST API calling (GET, POST, PUT, DELETE with auth)
 - [ ] Database operations (query, insert, update, delete)
 - [ ] Git operations (clone, commit, push, pull, branch)
