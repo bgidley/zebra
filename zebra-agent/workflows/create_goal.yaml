@@ -1,0 +1,51 @@
+name: "Create Goal"
+description: "Queue a goal for budget-managed execution by the daemon"
+tags: ["agent", "system", "goal"]
+use_when: "INTERNAL USE ONLY - web form for queueing goals into the budget daemon"
+version: 1
+first_task: get_goal_input
+
+tasks:
+  # Step 1: Collect goal text, priority, and optional deadline from the user
+  get_goal_input:
+    name: "Describe Your Goal"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Queue a Goal"
+        description: "Enter your goal and optional scheduling parameters. The budget daemon will execute it when budget allows."
+        required: [goal]
+        properties:
+          goal:
+            type: string
+            title: "Goal"
+            format: multiline
+            minLength: 5
+            description: "What do you want the agent to accomplish?"
+          priority:
+            type: integer
+            title: "Priority"
+            minimum: 1
+            maximum: 5
+            default: 3
+            description: "1 = lowest, 5 = highest"
+          deadline:
+            type: string
+            title: "Deadline (optional)"
+            description: "ISO datetime deadline, e.g. 2026-03-14T18:00:00Z. Leave blank for no deadline."
+
+  # Step 2: Queue the goal as a CREATED Agent Main Loop process
+  queue_goal:
+    name: "Queue Goal"
+    action: queue_goal
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      priority: "{{priority}}"
+      deadline: "{{deadline}}"
+      output_key: queue_result
+
+routings:
+  - from: get_goal_input
+    to: queue_goal
