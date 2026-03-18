@@ -271,6 +271,34 @@ class SQLiteStore(StateStore):
         rows = await cursor.fetchall()
         return [self._row_to_process(row) for row in rows]
 
+    async def get_processes_by_state(
+        self,
+        state: ProcessState,
+        exclude_children: bool = False,
+    ) -> list[ProcessInstance]:
+        """Get processes in a specific state, ordered by created_at ascending."""
+        conn = self._ensure_connected()
+        if exclude_children:
+            cursor = await conn.execute(
+                """
+                SELECT * FROM process_instances
+                WHERE state = ? AND parent_process_id IS NULL
+                ORDER BY created_at ASC
+                """,
+                (state.value,),
+            )
+        else:
+            cursor = await conn.execute(
+                """
+                SELECT * FROM process_instances
+                WHERE state = ?
+                ORDER BY created_at ASC
+                """,
+                (state.value,),
+            )
+        rows = await cursor.fetchall()
+        return [self._row_to_process(row) for row in rows]
+
     def _row_to_process(self, row: aiosqlite.Row) -> ProcessInstance:
         return ProcessInstance(
             id=row["id"],

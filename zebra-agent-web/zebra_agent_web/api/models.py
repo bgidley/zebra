@@ -143,8 +143,19 @@ class WorkflowRunModel(models.Model):
     success = models.BooleanField(default=False)
     user_rating = models.IntegerField(blank=True, null=True, help_text="1-5 rating")
     tokens_used = models.IntegerField(default=0)
+    input_tokens = models.IntegerField(default=0, help_text="Input (prompt) tokens used")
+    output_tokens = models.IntegerField(default=0, help_text="Output (completion) tokens used")
+    cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        default=0,
+        help_text="USD cost of this run",
+    )
     error = models.TextField(blank=True, null=True, help_text="Error message if failed")
     output = models.TextField(blank=True, null=True, help_text="Workflow output/result")
+    model = models.CharField(
+        max_length=255, blank=True, default="", help_text="LLM model used for this run"
+    )
 
     class Meta:
         db_table = "zebra_workflow_runs"
@@ -219,6 +230,9 @@ class WorkflowMemoryModel(models.Model):
         default="",
         db_index=True,
         help_text="Link to the workflow run for post-hoc updates",
+    )
+    model = models.CharField(
+        max_length=255, blank=True, default="", help_text="LLM model used for this run"
     )
 
     class Meta:

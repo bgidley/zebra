@@ -73,8 +73,12 @@ class InMemoryMetricsStore(MetricsStore):
                 success=run.success,
                 user_rating=rating,
                 tokens_used=run.tokens_used,
+                input_tokens=run.input_tokens,
+                output_tokens=run.output_tokens,
+                cost=run.cost,
                 error=run.error,
                 output=run.output,
+                model=run.model,
             )
 
     async def get_run(self, run_id: str) -> WorkflowRun | None:
@@ -149,6 +153,15 @@ class InMemoryMetricsStore(MetricsStore):
         runs = [r for r in self._runs.values() if r.workflow_name == workflow_name]
         runs.sort(key=lambda r: r.started_at, reverse=True)
         return runs[:limit]
+
+    async def get_total_cost_since(self, since: datetime) -> float:
+        """Return the total USD cost of all runs completed since *since*."""
+        await self._ensure_initialized()
+        return sum(
+            r.cost
+            for r in self._runs.values()
+            if r.completed_at is not None and r.completed_at >= since
+        )
 
     # =========================================================================
     # Task Execution Operations

@@ -220,6 +220,23 @@ class DjangoStore(StateStore):
 
         return await _get()
 
+    async def get_processes_by_state(
+        self,
+        state: ProcessState,
+        exclude_children: bool = False,
+    ) -> list[ProcessInstance]:
+        """Get processes in a specific state, ordered by created_at ascending."""
+
+        @sync_to_async
+        def _get():
+            qs = ProcessInstanceModel.objects.filter(state=state.value)
+            if exclude_children:
+                qs = qs.filter(parent_process_id__isnull=True)
+            qs = qs.order_by("created_at")
+            return [self._model_to_process(m) for m in qs]
+
+        return await _get()
+
     def _model_to_process(self, model: ProcessInstanceModel) -> ProcessInstance:
         """Convert Django model to ProcessInstance."""
         properties = json.loads(model.properties) if model.properties else {}

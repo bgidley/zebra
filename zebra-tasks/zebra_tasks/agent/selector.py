@@ -342,7 +342,8 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
                 prompt += f"- {name}{marker}: {desc}\n"
                 if use_when:
                     prompt += f"  USE WHEN: {use_when}\n"
-                prompt += f"  (success: {rate:.0%}, tags: {tags_str})\n"
+                rate_str = f"{rate:.0%}" if isinstance(rate, (int, float)) else str(rate)
+                prompt += f"  (success: {rate_str}, tags: {tags_str})\n"
         else:
             prompt += "No workflows available yet. You must create a new one.\n"
 

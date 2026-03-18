@@ -425,6 +425,74 @@ my_task:
 
 See `zebra-py/zebra/templates/feature_implementation.yaml` and `bug_fix.yaml` for examples.
 
+## Cost Manager & Budget Daemon Architecture
+
+The system tracks LLM costs and manages a daily dollar-based budget for queued goal execution.
+
+### How Cost Tracking Works
+
+```
+LLMCallAction._track_tokens()
+    → pricing.calculate_cost(model, input_tokens, output_tokens)
+    → accumulates __total_cost__ on process properties
+    → soft-warns via __budget_manager__ from engine.extras
+
+ExecuteGoalWorkflowAction._wait_for_completion()
+    → propagates cost, input_tokens, output_tokens from child → parent
+
+AssessAndRecordAction
+    → reads cost/tokens from {{execution_result.*}} templates
+    → records to WorkflowRun (metrics store)
+```
+
+### Goal Queue (No Separate Table)
+
+Workflow process instances in `CREATED` state **are** the queue. Users submit goals via the "Create Goal" workflow, which creates an Agent Main Loop process in `CREATED` state with `goal`, `priority`, `deadline` properties. The daemon picks these up.
+
+### Budget Daemon
+
+The daemon auto-starts as a background `asyncio.create_task()` inside the ASGI server on first request (via `DaemonStarterMiddleware` in `asgi.py`). It can also run standalone via `python manage.py run_daemon`.
+
+Loop: `pick_next() → budget_check → start_process → poll until done → log cost → repeat`
+
+### Key Files
+
+| File | Package | Purpose |
+|------|---------|---------|
+| `zebra_tasks/llm/pricing.py` | zebra-tasks | Hardcoded Anthropic pricing table, `calculate_cost()` |
+| `zebra_tasks/agent/queue_goal.py` | zebra-tasks | `QueueGoalAction` — creates CREATED process |
+| `zebra_agent/budget.py` | zebra-agent | `BudgetManager` — daily budget with linear pacing |
+| `zebra_agent/scheduler.py` | zebra-agent | `GoalScheduler` — priority + deadline + age scoring |
+| `zebra_agent_web/api/daemon.py` | zebra-agent-web | Shared daemon loop (`run_daemon_loop()`) |
+| `zebra_agent_web/asgi.py` | zebra-agent-web | ASGI middleware auto-starts daemon |
+| `zebra_agent/workflows/create_goal.yaml` | zebra-agent | "Create Goal" workflow (human input → queue) |
+
+### Settings (in `ZEBRA_AGENT_SETTINGS`)
+
+| Setting | Env Var | Default | Purpose |
+|---------|---------|---------|---------|
+| `DAILY_BUDGET_USD` | `ZEBRA_DAILY_BUDGET_USD` | 50.00 | Daily LLM spend limit |
+| `DAEMON_POLL_INTERVAL` | `ZEBRA_DAEMON_POLL_INTERVAL` | 30 | Seconds between queue polls |
+| `BUDGET_RESET_HOUR` | `ZEBRA_BUDGET_RESET_HOUR` | 0 | Hour (UTC) when daily budget resets |
+| `GOAL_COST_WARNING_USD` | `ZEBRA_GOAL_COST_WARNING_USD` | 5.00 | Per-goal soft warning threshold |
+| `DAEMON_AUTO_START` | `ZEBRA_DAEMON_AUTO_START` | true | Auto-start daemon in ASGI server |
+
+### Configurable LLM Model Selection
+
+Users can choose between Claude Haiku, Sonnet, and Opus at multiple levels:
+
+- **Per-request**: `model` parameter in goal form or API call
+- **Per-workflow-task**: `model` property on any `llm_call` task in YAML
+- **Server-wide default**: `LLM_MODEL` in `ZEBRA_AGENT_SETTINGS`
+
+Model resolution: task property > process property (`__llm_model__`) > server default > provider default.
+
+Valid model aliases: `haiku`, `sonnet`, `opus` (resolved to full model IDs like `claude-sonnet-4-20250514`).
+
+### Orphaned Process Visibility
+
+When a daemon-executed goal fails before `assess_and_record` runs, no `WorkflowRunModel` is created. The activity view handles this by querying the process store for COMPLETE/FAILED processes with a `run_id` property but no metrics record, using the engine's `__task_output_*` process properties for task history.
+
 ## Related Documentation
 
 - **[DESIGN.md](DESIGN.md)** - Original Java architecture and design patterns

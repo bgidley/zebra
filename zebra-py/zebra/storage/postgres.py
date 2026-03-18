@@ -297,6 +297,33 @@ class PostgreSQLStore(StateStore):
         )
         return [self._row_to_process(row) for row in rows]
 
+    async def get_processes_by_state(
+        self,
+        state: ProcessState,
+        exclude_children: bool = False,
+    ) -> list[ProcessInstance]:
+        """Get processes in a specific state, ordered by created_at ascending."""
+        pool = self._ensure_pool()
+        if exclude_children:
+            rows = await pool.fetch(
+                """
+                SELECT * FROM process_instances
+                WHERE state = $1 AND parent_process_id IS NULL
+                ORDER BY created_at ASC
+                """,
+                state.value,
+            )
+        else:
+            rows = await pool.fetch(
+                """
+                SELECT * FROM process_instances
+                WHERE state = $1
+                ORDER BY created_at ASC
+                """,
+                state.value,
+            )
+        return [self._row_to_process(row) for row in rows]
+
     def _row_to_process(self, row: asyncpg.Record) -> ProcessInstance:
         """Convert database row to ProcessInstance."""
         return ProcessInstance(

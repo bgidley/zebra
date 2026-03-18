@@ -29,8 +29,12 @@ class WorkflowRun:
     success: bool = False
     user_rating: int | None = None  # 1-5
     tokens_used: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost: float = 0.0  # USD cost of this run
     error: str | None = None
     output: Any = None
+    model: str | None = None  # LLM model used (e.g. "claude-sonnet-4-20250514")
 
     @classmethod
     def create(cls, workflow_name: str, goal: str) -> "WorkflowRun":

@@ -48,10 +48,30 @@ async def dashboard(request):
     successful_runs = sum(s.successful_runs for s in all_stats)
     success_rate = successful_runs / total_runs if total_runs > 0 else 0
 
+    # Budget status
+    budget_status = None
+    try:
+        budget_manager = agent_engine.get_budget_manager()
+        budget_status = await budget_manager.get_status()
+        # Add queue depth
+        from zebra.core.models import ProcessState
+
+        from zebra_agent_web.api.engine import get_engine
+
+        await engine.ensure_initialized()
+        wf_engine = get_engine()
+        created_processes = await wf_engine.store.get_processes_by_state(
+            ProcessState.CREATED, exclude_children=True
+        )
+        budget_status["queue_depth"] = len(created_processes)
+    except RuntimeError:
+        pass  # Budget manager not initialized
+
     context = {
         "workflows_count": len(workflows),
         "total_runs": total_runs,
         "success_rate": f"{success_rate:.0%}",
+        "budget": budget_status,
         "recent_runs": [
             {
                 "id": r.id,
@@ -268,11 +288,17 @@ async def run_goal_execute(request):
     if not goal:
         return HttpResponse("Goal is required", status=400)
 
+    # Resolve optional model selection
+    from zebra_tasks.llm.models import resolve_model_name
+
+    model_name = request.POST.get("model", "").strip() or None
+    resolved_model = resolve_model_name(model_name) if model_name else None
+
     # Generate run ID upfront so client can connect to WebSocket
     run_id = str(uuid.uuid4())
 
     # Start background task for goal execution
-    task = asyncio.create_task(_execute_goal_background(run_id, goal))
+    task = asyncio.create_task(_execute_goal_background(run_id, goal, model=resolved_model))
     _active_tasks[run_id] = task
 
     # Add cleanup callback
@@ -286,7 +312,108 @@ async def run_goal_execute(request):
     return render(request, "pages/goal_processing.html", context)
 
 
-async def _execute_goal_background(run_id: str, goal: str) -> None:
+@require_http_methods(["POST"])
+async def run_goal_queue(request):
+    """Queue a goal for budget-managed execution via the daemon.
+
+    Creates an Agent Main Loop process in CREATED state with priority/deadline
+    properties. The daemon will pick it up when budget allows.
+    """
+    goal = request.POST.get("goal", "").strip()
+    if not goal:
+        return HttpResponse("Goal is required", status=400)
+
+    from zebra_tasks.llm.models import resolve_model_name
+
+    model_name = request.POST.get("model", "").strip() or None
+    resolved_model = resolve_model_name(model_name) if model_name else None
+
+    priority = request.POST.get("priority", "3").strip()
+    try:
+        priority = max(1, min(5, int(priority)))
+    except (TypeError, ValueError):
+        priority = 3
+
+    deadline = request.POST.get("deadline", "").strip()
+    # Convert HTML datetime-local (YYYY-MM-DDTHH:MM) to ISO format with timezone
+    if deadline:
+        deadline = deadline.replace("T", "T") + ":00Z" if "Z" not in deadline else deadline
+
+    await agent_engine.ensure_initialized()
+    await engine.ensure_initialized()
+
+    from zebra.core.models import ProcessState
+    from zebra_agent_web.api.engine import get_engine
+
+    library = agent_engine.get_library()
+    wf_engine = get_engine()
+
+    try:
+        definition = library.get_workflow("Agent Main Loop")
+    except ValueError as e:
+        return HttpResponse(f"Cannot load Agent Main Loop workflow: {e}", status=500)
+
+    # Gather available workflows
+    workflows = await library.list_workflows()
+    available = [
+        {
+            "name": w.name,
+            "description": w.description,
+            "tags": w.tags,
+            "success_rate": f"{w.success_rate:.0%}" if w.use_count > 0 else "N/A",
+            "use_count": w.use_count,
+            "use_when": w.use_when,
+        }
+        for w in workflows
+        if "system" not in (w.tags or [])
+    ]
+
+    import uuid as _uuid
+    from datetime import UTC, datetime
+
+    run_id = str(_uuid.uuid4())
+    properties = {
+        "goal": goal,
+        "run_id": run_id,
+        "priority": priority,
+        "available_workflows": available,
+        "__llm_provider_name__": "anthropic",
+        "__llm_model__": resolved_model,
+        "__started_at__": datetime.now(UTC).isoformat(),
+    }
+    if deadline:
+        properties["deadline"] = deadline
+
+    try:
+        process = await wf_engine.create_process(definition, properties=properties)
+        logger.info(
+            "Queued goal as process %s (priority=%d, deadline=%s)",
+            process.id[:12],
+            priority,
+            deadline or "none",
+        )
+    except Exception as e:
+        logger.exception("Failed to queue goal")
+        return HttpResponse(f"Failed to queue goal: {e}", status=500)
+
+    # Return a success partial
+    html = (
+        f'<div class="bg-green-900/30 border border-green-700 rounded-lg p-6 text-center">'
+        f'<svg class="mx-auto h-10 w-10 text-green-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">'
+        f'<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />'
+        f"</svg>"
+        f'<h3 class="text-lg font-semibold text-green-300">Goal Queued</h3>'
+        f'<p class="text-sm text-gray-400 mt-1">Priority {priority}'
+        f"{' | Deadline: ' + deadline if deadline else ''}</p>"
+        f'<p class="text-xs text-gray-500 mt-2">Process ID: {process.id[:12]}... '
+        f"The budget daemon will start this goal when budget allows.</p>"
+        f'<a href="/activity/" class="inline-block mt-3 text-indigo-400 hover:text-indigo-300 text-sm">View Activity</a>'
+        f"</div>"
+    )
+    return HttpResponse(html)
+
+
+async def _execute_goal_background(run_id: str, goal: str, model: str | None = None) -> None:
     """Execute goal in background, sending progress via WebSocket channel layer.
 
     This function runs as an asyncio task, independent of the HTTP request.
@@ -314,6 +441,7 @@ async def _execute_goal_background(run_id: str, goal: str) -> None:
             goal,
             progress_callback=progress_callback,
             run_id=run_id,
+            model=model,
         )
 
         # Send completion event
@@ -347,15 +475,119 @@ def is_task_active(run_id: str) -> bool:
     return run_id in _active_tasks
 
 
+async def _run_detail_pending_fallback(request, run_id: str):
+    """Render a status page for a run whose metrics record doesn't exist yet.
+
+    This handles *any* process lifecycle state where ``assess_and_record`` has
+    not (yet) created a ``WorkflowRunModel``:
+
+    * **CREATED** — goal is queued, waiting for the daemon.
+    * **RUNNING** — goal is being executed.
+    * **COMPLETE / FAILED** — execution finished but ``assess_and_record``
+      never ran (e.g. the workflow crashed early).  The process's own
+      ``__task_output_*`` properties contain the task history.
+    """
+    await engine.ensure_initialized()
+    from zebra.core.models import ProcessState
+
+    from zebra_agent_web.api.engine import get_engine
+
+    wf_engine = get_engine()
+
+    # Search across all lifecycle states for a process with this run_id.
+    process_match = None
+    match_state = None
+    for state in (
+        ProcessState.CREATED,
+        ProcessState.RUNNING,
+        ProcessState.COMPLETE,
+        ProcessState.FAILED,
+    ):
+        processes = await wf_engine.store.get_processes_by_state(state, exclude_children=True)
+        for proc in processes:
+            if (proc.properties or {}).get("run_id") == run_id:
+                process_match = proc
+                match_state = state
+                break
+        if process_match:
+            break
+
+    if not process_match:
+        return HttpResponse("Run not found", status=404)
+
+    props = process_match.properties or {}
+    is_queued = match_state == ProcessState.CREATED
+    is_running = match_state == ProcessState.RUNNING
+    is_complete = match_state == ProcessState.COMPLETE
+    is_failed = match_state == ProcessState.FAILED
+
+    # Derive a human-readable state label.
+    state_labels = {
+        ProcessState.CREATED: "Queued",
+        ProcessState.RUNNING: "Running",
+        ProcessState.COMPLETE: "Completed",
+        ProcessState.FAILED: "Failed",
+    }
+    state_label = state_labels.get(match_state, str(match_state))
+
+    # For completed/failed processes, extract task history from properties.
+    task_outputs = []
+    if is_complete or is_failed:
+        # __task_output_{task_def_id} keys hold each task's output.
+        for key, value in sorted(props.items()):
+            if key.startswith("__task_output_"):
+                task_def_id = key[len("__task_output_") :]
+                task_outputs.append(
+                    {
+                        "task_definition_id": task_def_id,
+                        "output": value,
+                    }
+                )
+
+    # If we're here, assess_and_record never ran — so the workflow didn't
+    # complete its full lifecycle.  Mark as not-successful.
+    error = props.get("__error__")
+    success = False
+
+    context = {
+        "run_id": run_id,
+        "process_id": process_match.id,
+        "goal": props.get("goal", ""),
+        "is_queued": is_queued,
+        "is_running": is_running,
+        "is_complete": is_complete,
+        "is_failed": is_failed,
+        "success": success,
+        "state_label": state_label,
+        "priority": props.get("priority", 3),
+        "deadline": props.get("deadline"),
+        "model": props.get("__llm_model__"),
+        "started_at": process_match.created_at,
+        "completed_at": process_match.completed_at,
+        "tokens_used": props.get("__total_tokens__", 0),
+        "cost": props.get("__total_cost__", 0.0),
+        "error": error,
+        "task_outputs": task_outputs,
+    }
+    return render(request, "pages/run_pending.html", context)
+
+
 async def run_detail(request, run_id):
-    """View details of a specific run."""
+    """View details of a specific run.
+
+    If the metrics record doesn't exist yet (goal is queued or still running),
+    fall back to the process store and render a "pending" status page instead
+    of a bare 404.
+    """
     await agent_engine.ensure_initialized()
     metrics = agent_engine.get_metrics()
     library = agent_engine.get_library()
 
     run = await metrics.get_run(run_id)
     if not run:
-        return HttpResponse("Run not found", status=404)
+        # No metrics record yet — check if there's a process with this run_id
+        # that is still queued (CREATED) or running (RUNNING).
+        return await _run_detail_pending_fallback(request, run_id)
 
     # Load task executions for this run
     task_executions = await metrics.get_task_executions(run_id)
@@ -406,6 +638,8 @@ async def run_detail(request, run_id):
             }
         )
 
+    from zebra_tasks.llm.models import friendly_model_name
+
     context = {
         "run": {
             "id": run.id,
@@ -415,9 +649,13 @@ async def run_detail(request, run_id):
             "output": _format_output(run.output),
             "error": run.error,
             "tokens_used": run.tokens_used,
+            "cost": run.cost,
+            "input_tokens": run.input_tokens,
+            "output_tokens": run.output_tokens,
             "user_rating": run.user_rating,
             "started_at": run.started_at,
             "completed_at": run.completed_at,
+            "model": friendly_model_name(run.model),
         },
         "workflow_svg": workflow_svg,
         "task_executions": formatted_executions,
@@ -548,6 +786,7 @@ async def activity(request):
                 "tokens_used": run.tokens_used,
                 "user_rating": None,
                 "is_running": True,
+                "is_queued": False,
                 "tasks": tasks_data,
                 "has_human_tasks": any(t["is_human"] for t in tasks_data),
             }
@@ -574,6 +813,7 @@ async def activity(request):
                 "tokens_used": 0,
                 "user_rating": None,
                 "is_running": True,
+                "is_queued": False,
                 "tasks": tasks_data,
                 "has_human_tasks": any(t["is_human"] for t in tasks_data),
             }
@@ -596,6 +836,7 @@ async def activity(request):
                     "tokens_used": 0,
                     "user_rating": None,
                     "is_running": True,
+                    "is_queued": False,
                     "tasks": orphan_tasks,
                     "has_human_tasks": any(t["is_human"] for t in orphan_tasks),
                 }
@@ -669,6 +910,7 @@ async def activity(request):
                     "tokens_used": 0,
                     "user_rating": None,
                     "is_running": False,
+                    "is_queued": False,
                     "tasks": [task_data],
                     "has_human_tasks": is_human,
                 }
@@ -690,18 +932,98 @@ async def activity(request):
                     "tokens_used": run.tokens_used,
                     "user_rating": run.user_rating,
                     "is_running": False,
+                    "is_queued": False,
                     "tasks": [],
                     "has_human_tasks": False,
                 }
             )
 
+        # Surface orphaned COMPLETE/FAILED processes that have a run_id but
+        # no WorkflowRunModel (assess_and_record never ran — e.g. the
+        # workflow crashed before reaching that task).
+        known_run_ids = {g["run_id"] for g in activity_groups if g.get("run_id")}
+        from zebra.core.models import ProcessState as _PS
+
+        for state in (_PS.COMPLETE, _PS.FAILED):
+            try:
+                procs = await store.get_processes_by_state(state, exclude_children=True)
+                for proc in procs:
+                    props = proc.properties or {}
+                    rid = props.get("run_id")
+                    if not rid or rid in known_run_ids:
+                        continue
+                    goal = props.get("goal", f"Run {rid[:8]}…")
+                    error = props.get("__error__")
+                    # These processes never reached assess_and_record,
+                    # which means they didn't complete successfully —
+                    # mark them as failed regardless of process state.
+                    activity_groups.append(
+                        {
+                            "run_id": rid,
+                            "goal": goal[:120] + "..." if len(goal) > 120 else goal,
+                            "workflow_name": props.get("__workflow_name__"),
+                            "started_at": proc.created_at,
+                            "completed_at": proc.completed_at,
+                            "success": False,
+                            "tokens_used": props.get("__total_tokens__", 0),
+                            "user_rating": None,
+                            "is_running": False,
+                            "is_queued": False,
+                            "is_orphan": True,
+                            "tasks": [],
+                            "has_human_tasks": False,
+                        }
+                    )
+                    known_run_ids.add(rid)
+            except Exception:
+                logger.debug(
+                    "Could not load %s processes for activity",
+                    state.value,
+                    exc_info=True,
+                )
+
+    # Add queued goals (CREATED state processes) to activity
+    from zebra.core.models import ProcessState
+
+    try:
+        created_processes = await store.get_processes_by_state(
+            ProcessState.CREATED, exclude_children=True
+        )
+        for process in created_processes:
+            props = process.properties or {}
+            goal = props.get("goal", "")
+            priority = props.get("priority", 3)
+            deadline = props.get("deadline")
+            activity_groups.append(
+                {
+                    "run_id": props.get("run_id"),
+                    "goal": goal[:120] + "..." if len(goal) > 120 else goal,
+                    "workflow_name": None,
+                    "started_at": process.created_at,
+                    "completed_at": None,
+                    "success": None,
+                    "tokens_used": 0,
+                    "user_rating": None,
+                    "is_running": False,
+                    "is_queued": True,
+                    "priority": priority,
+                    "deadline": deadline,
+                    "tasks": [],
+                    "has_human_tasks": False,
+                }
+            )
+    except Exception:
+        logger.debug("Could not load queued goals", exc_info=True)
+
     has_running = any(g["is_running"] for g in activity_groups)
+    has_queued = any(g.get("is_queued") for g in activity_groups)
 
     context = {
         "groups": activity_groups,
         "human_only": human_only,
         "show_completed": show_completed,
         "has_running": has_running,
+        "has_queued": has_queued,
     }
 
     if request.headers.get("HX-Request"):

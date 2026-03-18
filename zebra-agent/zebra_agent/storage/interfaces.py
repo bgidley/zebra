@@ -186,6 +186,14 @@ class MetricsStore(ABC):
         """Get recent runs for a specific workflow."""
         ...
 
+    @abstractmethod
+    async def get_total_cost_since(self, since: datetime) -> float:
+        """Return the total USD cost of all runs completed since *since*.
+
+        Used by BudgetManager to calculate daily spend.
+        """
+        ...
+
     # =========================================================================
     # Task Execution Operations
     # =========================================================================

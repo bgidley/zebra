@@ -42,7 +42,28 @@ Context:
                         </div>
                     </div>
                     <div class="ml-4 flex items-center gap-3">
-                        {% if group.is_running %}
+                        {% if group.is_queued %}
+                        <!-- Queued badge -->
+                        <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-purple-900 text-purple-300">
+                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            queued
+                        </span>
+                        {% if group.priority %}
+                        <span class="px-2 py-0.5 text-xs font-medium rounded {% if group.priority >= 4 %}bg-red-900/50 text-red-300{% elif group.priority >= 3 %}bg-yellow-900/50 text-yellow-300{% else %}bg-gray-700 text-gray-400{% endif %}">
+                            P{{ group.priority }}
+                        </span>
+                        {% endif %}
+                        {% if group.deadline %}
+                        <span class="px-2 py-0.5 text-xs font-medium rounded bg-amber-900/50 text-amber-300" title="{{ group.deadline }}">
+                            <svg class="inline h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            deadline
+                        </span>
+                        {% endif %}
+                        {% elif group.is_running %}
                         <!-- Running badge -->
                         <span class="inline-flex items-center gap-2 px-2 py-1 text-xs font-medium rounded bg-blue-900 text-blue-300">
                             <svg class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
@@ -68,7 +89,7 @@ Context:
 
                         {% if group.run_id %}
                         <a href="/runs/{{ group.run_id }}/" class="text-indigo-400 hover:text-indigo-300 text-sm">
-                            Details
+                            {% if group.is_queued %}Status{% elif group.is_running %}Status{% else %}Details{% endif %}
                         </a>
                         {% endif %}
                     </div>

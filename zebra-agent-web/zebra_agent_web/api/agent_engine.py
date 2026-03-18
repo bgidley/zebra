@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from django.conf import settings
 
 if TYPE_CHECKING:
+    from zebra_agent.budget import BudgetManager
     from zebra_agent.library import WorkflowLibrary
     from zebra_agent.loop import AgentLoop
 
@@ -24,6 +25,7 @@ _library: "WorkflowLibrary | None" = None
 _metrics: "DjangoMetricsStore | None" = None
 _memory: "DjangoMemoryStore | None" = None
 _agent_loop: "AgentLoop | None" = None
+_budget_manager: "BudgetManager | None" = None
 _initialized = False
 
 
@@ -122,6 +124,20 @@ async def _async_init() -> None:
     await ensure_workflow_engine()
     engine = get_engine()
 
+    # Initialize budget manager
+    from zebra_agent.budget import BudgetManager
+
+    global _budget_manager
+    _budget_manager = BudgetManager(
+        daily_budget_usd=agent_settings.get("DAILY_BUDGET_USD", 50.0),
+        metrics_store=_metrics,
+        reset_hour=agent_settings.get("BUDGET_RESET_HOUR", 0),
+        warning_threshold_usd=agent_settings.get("GOAL_COST_WARNING_USD", 5.0),
+    )
+
+    # Inject budget manager into engine extras for IoC access
+    engine.extras["__budget_manager__"] = _budget_manager
+
     # Initialize agent loop with memory
     _agent_loop = AgentLoop(
         library=_library,
@@ -177,6 +193,17 @@ def get_agent_loop() -> "AgentLoop":
     if _agent_loop is None:
         raise RuntimeError("Agent loop not initialized. Call ensure_initialized() first.")
     return _agent_loop
+
+
+def get_budget_manager() -> "BudgetManager":
+    """Get the BudgetManager instance.
+
+    Raises:
+        RuntimeError: If the budget manager hasn't been initialized.
+    """
+    if _budget_manager is None:
+        raise RuntimeError("Budget manager not initialized. Call ensure_initialized() first.")
+    return _budget_manager
 
 
 async def ensure_initialized() -> None:

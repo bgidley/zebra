@@ -258,7 +258,7 @@ def _run_dream_cycle_in_background(run_id: str) -> None:
     t.start()
 
 
-def _run_goal_in_background(run_id: str, goal: str) -> None:
+def _run_goal_in_background(run_id: str, goal: str, model: str | None = None) -> None:
     """Fire process_goal in a daemon thread with its own event loop.
 
     Returns immediately; the caller polls GET /api/runs/<run_id>/status/.
@@ -271,7 +271,7 @@ def _run_goal_in_background(run_id: str, goal: str) -> None:
     async def _run():
         await agent_engine.ensure_initialized()
         agent_loop = agent_engine.get_agent_loop()
-        await agent_loop.process_goal(goal, run_id=run_id)
+        await agent_loop.process_goal(goal, run_id=run_id, model=model)
 
     def _thread():
         try:
@@ -306,10 +306,16 @@ def execute_goal(request):
         return Response(req_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     goal = req_serializer.validated_data["goal"]
+    model_name = req_serializer.validated_data.get("model")
     run_id = str(uuid.uuid4())
 
+    # Resolve friendly model name (e.g. "haiku") to API model ID
+    from zebra_tasks.llm.models import resolve_model_name
+
+    resolved_model = resolve_model_name(model_name) if model_name else None
+
     try:
-        _run_goal_in_background(run_id, goal)
+        _run_goal_in_background(run_id, goal, model=resolved_model)
     except Exception as e:
         logger.exception("Failed to start goal execution")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -507,6 +513,8 @@ def run_status(request, run_id):
         )
 
     # Completed (success or failure)
+    from zebra_tasks.llm.models import friendly_model_name
+
     return Response(
         {
             "status": "completed" if run.success else "failed",
@@ -517,6 +525,7 @@ def run_status(request, run_id):
             "error": run.error,
             "tokens_used": run.tokens_used,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+            "model": friendly_model_name(run.model),
         }
     )
 
@@ -618,6 +627,42 @@ def run_diagram(request, run_id):
 # =============================================================================
 # Execution monitoring endpoints (read-only + task completion)
 # =============================================================================
+
+
+@api_view(["GET"])
+async def budget_status(request):
+    """Return current budget status and goal queue depth.
+
+    Response::
+
+        {
+            "daily_budget": 50.0,
+            "spent_today": 1.234,
+            "remaining": 48.766,
+            "paced_allowance": 12.5,
+            "available": 11.266,
+            "pct_used": "2.5%",
+            "reset_hour": 0,
+            "hours_since_reset": 6.0,
+            "queue_depth": 3
+        }
+    """
+    await agent_engine.ensure_initialized()
+
+    budget_manager = agent_engine.get_budget_manager()
+    status = await budget_manager.get_status()
+
+    # Add queue depth
+    from zebra.core.models import ProcessState
+    from zebra_agent_web.api.engine import get_engine
+
+    wf_engine = get_engine()
+    created_processes = await wf_engine.store.get_processes_by_state(
+        ProcessState.CREATED, exclude_children=True
+    )
+    status["queue_depth"] = len(created_processes)
+
+    return Response(status)
 
 
 @api_view(["GET"])

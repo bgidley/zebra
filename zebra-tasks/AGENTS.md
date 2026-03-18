@@ -36,6 +36,9 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/analyzer.py` | MetricsAnalyzerAction - analyze workflow metrics |
 | `zebra_tasks/agent/evaluator.py` | WorkflowEvaluatorAction - LLM workflow evaluation |
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization |
+| `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
+| `zebra_tasks/llm/pricing.py` | Anthropic pricing table, `calculate_cost()`, `estimate_goal_cost()` |
+| `zebra_tasks/llm/models.py` | ANTHROPIC_MODELS, `resolve_model_name()` model aliases |
 | `tests/` | Test suite |
 
 ## Module-Specific Commands
@@ -153,7 +156,9 @@ Call an LLM provider from a workflow task.
 | `response_format` | string | "text" | "text" or "json" |
 | `output_key` | string | "llm_response" | Where to store response |
 | `provider` | string | null | Provider name override |
-| `model` | string | null | Model name override |
+| `model` | string | null | Model name override (supports aliases: `haiku`, `sonnet`, `opus`) |
+
+**Cost Tracking:** `LLMCallAction._track_tokens()` calculates cost via `pricing.calculate_cost()`, accumulates `__total_cost__` and `__token_history__` on process properties, and soft-warns via `__budget_manager__` from `context.extras` if the per-goal cost exceeds a threshold.
 
 ### SubworkflowAction
 
@@ -272,13 +277,16 @@ Execute a workflow by name and capture its output.
 | `success` | bool | Whether workflow completed successfully |
 | `output` | any | Workflow's output |
 | `tokens_used` | int | Total tokens used |
+| `cost` | float | Total LLM cost in USD (propagated from child process) |
+| `input_tokens` | int | Total input tokens used |
+| `output_tokens` | int | Total output tokens used |
 | `error` | string | Error message if failed |
 
 **Store Access:** Reads `__workflow_library__` from `context.extras` (engine-level dependency injection).
 
-### RecordMetricsAction
+### AssessAndRecordAction (formerly RecordMetricsAction)
 
-Record workflow run to metrics store.
+LLM-powered assessment of workflow run + record to metrics store + write memory entry.
 
 **Properties:**
 
@@ -290,6 +298,9 @@ Record workflow run to metrics store.
 | `success` | bool | - | Whether run succeeded |
 | `output` | any | null | Workflow output |
 | `tokens_used` | int | 0 | Tokens used |
+| `cost` | float | 0.0 | Total LLM cost in USD |
+| `input_tokens` | int | 0 | Total input tokens |
+| `output_tokens` | int | 0 | Total output tokens |
 | `error` | string | null | Error message if failed |
 | `started_at` | string | null | ISO timestamp when run started |
 
@@ -299,7 +310,7 @@ Record workflow run to metrics store.
 |-------|------|-------------|
 | `recorded` | bool | Whether metrics were recorded |
 
-**Store Access:** Reads `__metrics_store__` from `context.extras` (engine-level dependency injection). Gracefully degrades if not available.
+**Store Access:** Reads `__metrics_store__` and `__memory_store__` from `context.extras` (engine-level dependency injection). Gracefully degrades if not available.
 
 ### UpdateMemoryAction
 
@@ -321,6 +332,30 @@ Add memory entry for completed workflow run.
 | `added` | bool | Whether memory entry was added |
 
 **Store Access:** Reads `__memory_store__` from `context.extras` (engine-level dependency injection). Gracefully degrades if not available.
+
+### QueueGoalAction
+
+Queue a goal for deferred execution by the budget daemon. Creates an Agent Main Loop process in `CREATED` state.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `goal` | string | - | Goal text to queue |
+| `priority` | int | 3 | Priority 1-5 (1 = highest) |
+| `deadline` | string | null | ISO datetime deadline (approaching deadlines boost priority) |
+| `model` | string | null | LLM model override for the queued goal |
+| `output_key` | string | "queued_goal" | Where to store result |
+
+**Output:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `process_id` | string | ID of the created CREATED process |
+| `goal` | string | The queued goal text |
+| `priority` | int | Assigned priority |
+
+**Store Access:** Uses `context.extras["__workflow_library__"]` and `context.extras["__state_store__"]` (engine store) to create the process.
 
 ## Testing Task Actions
 

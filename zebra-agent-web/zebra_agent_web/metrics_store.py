@@ -70,8 +70,12 @@ class DjangoMetricsStore(MetricsStore):
                     "success": run.success,
                     "user_rating": run.user_rating,
                     "tokens_used": run.tokens_used,
+                    "input_tokens": run.input_tokens,
+                    "output_tokens": run.output_tokens,
+                    "cost": run.cost,
                     "error": run.error,
                     "output": output_str,
+                    "model": run.model or "",
                 },
             )
 
@@ -217,6 +221,18 @@ class DjangoMetricsStore(MetricsStore):
 
         return await _get()
 
+    async def get_total_cost_since(self, since: datetime) -> float:
+        """Return the total USD cost of all runs completed since *since*."""
+
+        @sync_to_async
+        def _get():
+            result = WorkflowRunModel.objects.filter(completed_at__gte=since).aggregate(
+                total=Sum("cost")
+            )
+            return float(result["total"] or 0)
+
+        return await _get()
+
     def _model_to_run(self, model: WorkflowRunModel) -> WorkflowRun:
         """Convert Django model to WorkflowRun dataclass."""
         # Parse output if it's JSON
@@ -236,8 +252,12 @@ class DjangoMetricsStore(MetricsStore):
             success=model.success,
             user_rating=model.user_rating,
             tokens_used=model.tokens_used or 0,
+            input_tokens=model.input_tokens or 0,
+            output_tokens=model.output_tokens or 0,
+            cost=float(model.cost or 0),
             error=model.error,
             output=output,
+            model=model.model or None,
         )
 
     # =========================================================================

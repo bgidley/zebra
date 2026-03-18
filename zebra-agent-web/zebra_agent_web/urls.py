@@ -20,6 +20,7 @@ urlpatterns = [
     # Run Goal
     path("run/", web_views.run_goal_form, name="run_goal_form"),
     path("run/execute/", web_views.run_goal_execute, name="run_goal_execute"),
+    path("run/queue/", web_views.run_goal_queue, name="run_goal_queue"),
     # Activity (unified view: in-progress, pending tasks, history)
     path("activity/", web_views.activity, name="activity"),
     # Workflows

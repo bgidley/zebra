@@ -67,7 +67,7 @@
     </div>
     
     <!-- Metadata -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <p class="text-sm text-gray-400">Started</p>
             <p class="text-white mt-1">{{ run.started_at|date:"M d, Y H:i:s" }}</p>
@@ -77,8 +77,23 @@
             <p class="text-white mt-1">{{ run.completed_at|date:"M d, Y H:i:s"|default:"In progress" }}</p>
         </div>
         <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Model</p>
+            <p class="text-white mt-1 capitalize">{{ run.model|default:"sonnet" }}</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <p class="text-sm text-gray-400">Tokens Used</p>
             <p class="text-white mt-1">{{ run.tokens_used|default:"0" }}</p>
+            {% if run.input_tokens or run.output_tokens %}
+            <p class="text-xs text-gray-500 mt-0.5">{{ run.input_tokens|default:"0" }} in / {{ run.output_tokens|default:"0" }} out</p>
+            {% endif %}
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Cost</p>
+            {% if run.cost %}
+            <p class="text-white mt-1">${{ run.cost|floatformat:6 }}</p>
+            {% else %}
+            <p class="text-gray-500 mt-1">N/A</p>
+            {% endif %}
         </div>
         <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <p class="text-sm text-gray-400">User Rating</p>

@@ -37,7 +37,8 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/serializers.py` | DRF serializers |
 | `zebra_agent_web/api/urls.py` | API URL routing |
 | `zebra_agent_web/api/engine.py` | Engine integration |
-| `zebra_agent_web/api/agent_engine.py` | Agent engine wrapper |
+| `zebra_agent_web/api/agent_engine.py` | Agent engine wrapper (creates BudgetManager + injection) |
+| `zebra_agent_web/api/daemon.py` | Shared daemon loop (`run_daemon_loop()`) |
 | `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
 | `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory) |
 | `zebra_agent_web/metrics_store.py` | DjangoMetricsStore (MetricsStore for metrics) |
@@ -46,6 +47,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `templates/` | Django templates |
 | `templates/pages/` | Full page templates |
 | `templates/partials/` | Partial templates (HTMX) |
+| `templates/pages/run_pending.html` | Queued/running/completed/failed process detail (no metrics record) |
 | `templates/components/` | Reusable components |
 | `static/` | Static assets (CSS, JS) |
 | `static/js/workflow-diagram.js` | Shared workflow diagram JavaScript |
@@ -233,6 +235,11 @@ Key settings in `settings.py`:
 | `DATABASES` | Database connection (via Django ORM) |
 | `CORS_ALLOWED_ORIGINS` | CORS configuration |
 | `REST_FRAMEWORK` | DRF settings |
+| `ZEBRA_AGENT_SETTINGS.DAEMON_AUTO_START` | Auto-start budget daemon in ASGI server (default: true) |
+| `ZEBRA_AGENT_SETTINGS.DAILY_BUDGET_USD` | Daily LLM spend limit (default: 50.00) |
+| `ZEBRA_AGENT_SETTINGS.DAEMON_POLL_INTERVAL` | Seconds between daemon queue polls (default: 30) |
+| `ZEBRA_AGENT_SETTINGS.BUDGET_RESET_HOUR` | Hour (UTC) when daily budget resets (default: 0) |
+| `ZEBRA_AGENT_SETTINGS.GOAL_COST_WARNING_USD` | Per-goal soft warning threshold (default: 5.00) |
 
 ## Async Views and DRF
 
@@ -423,6 +430,26 @@ This means adding new task actions to `zebra-tasks` (with entry points in its
 `pyproject.toml`) automatically makes them available in the web UI without any
 code changes in `zebra-agent-web`.
 
+### Budget Daemon (`api/daemon.py` + `asgi.py`)
+
+The daemon auto-starts as a background `asyncio.create_task()` inside the ASGI server on first HTTP/WebSocket request via `DaemonStarterMiddleware` in `asgi.py`. It can also run standalone via `python manage.py run_daemon`.
+
+**Loop:** `pick_next() → budget_check → start_process → poll until done → log cost → repeat`
+
+- `DaemonStarterMiddleware`: ASGI middleware that wraps the Daphne application; on first request, spawns the daemon task. Controlled by `DAEMON_AUTO_START` setting.
+- `run_daemon_loop()`: Shared reusable daemon loop in `api/daemon.py`, used by both the middleware and the management command.
+- Daphne does **not** support ASGI lifespan protocol, hence the first-request middleware approach.
+
+### Orphaned Process Visibility
+
+When a daemon-executed goal fails before `assess_and_record` runs, no `WorkflowRunModel` is created. The activity view (`web_views.py`) handles this by:
+
+1. Querying the process store for COMPLETE/FAILED processes with a `run_id` property
+2. Filtering out those that already have a `WorkflowRunModel`
+3. Rendering them in the activity list with `success=False` and task history from `__task_output_*` process properties
+
+The `run_detail` view also has a `_run_detail_pending_fallback()` that searches all 4 process states (CREATED, RUNNING, COMPLETE, FAILED) to render process info from properties instead of returning 404.
+
 ### Workflow Diagram (`diagram.py`)
 
 Generates SVG workflow visualizations showing:
@@ -509,12 +536,13 @@ POST /api/tasks/<task_id>/complete/
 
 | URL | View | Purpose |
 |-----|------|---------|
-| `/` | `dashboard` | Main dashboard |
-| `/run/` | `run_goal_form` | Goal input form |
+| `/` | `dashboard` | Main dashboard (includes budget status card) |
+| `/run/` | `run_goal_form` | Goal input form (includes priority/deadline/queue options) |
 | `/run/execute/` | `run_goal_execute` | Start goal execution |
+| `/run/queue/` | `run_goal_queue` | Queue goal for deferred daemon execution |
 | `/runs/` | `recent_runs` | Run history |
 | `/runs/in-progress/` | `in_progress_runs` | Currently running goals |
-| `/runs/<id>/` | `run_detail` | Run details with diagram |
+| `/runs/<id>/` | `run_detail` | Run details with diagram (includes cost column) |
 | `/workflows/` | `workflow_library` | Workflow library |
 | `/tasks/` | `pending_tasks` | Pending human tasks list |
 | `/tasks/<id>/` | `human_task_form` | Human task form page |
@@ -522,6 +550,7 @@ POST /api/tasks/<task_id>/complete/
 | `/api/processes/<id>/pending-tasks/` | `process_pending_tasks` | Get pending human tasks with schema (API) |
 | `/api/runs/<id>/diagram/` | `run_diagram` | Get workflow diagram SVG (API) |
 | `/api/tasks/<id>/complete/` | `task_complete` | Complete a human/manual task (API) |
+| `/api/budget/` | `budget_status` | Get budget status JSON (API) |
 
 ### WebSocket Routes
 

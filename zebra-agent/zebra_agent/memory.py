@@ -35,6 +35,7 @@ class WorkflowMemoryEntry:
     rating: int | None = None  # User rating 1-5 if provided
     user_feedback: str = ""  # Free-text user feedback for next run
     run_id: str = ""  # Link back to the workflow run for post-hoc updates
+    model: str = ""  # LLM model used (e.g. "claude-sonnet-4-20250514")
 
     @classmethod
     def create(
@@ -49,6 +50,7 @@ class WorkflowMemoryEntry:
         rating: int | None = None,
         user_feedback: str = "",
         run_id: str = "",
+        model: str = "",
     ) -> WorkflowMemoryEntry:
         """Create a new entry with auto-generated ID and timestamp."""
         return cls(
@@ -64,6 +66,7 @@ class WorkflowMemoryEntry:
             rating=rating,
             user_feedback=user_feedback,
             run_id=run_id,
+            model=model,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -81,6 +84,7 @@ class WorkflowMemoryEntry:
             "rating": self.rating,
             "user_feedback": self.user_feedback,
             "run_id": self.run_id,
+            "model": self.model,
         }
 
     @classmethod
@@ -99,6 +103,7 @@ class WorkflowMemoryEntry:
             rating=data.get("rating"),
             user_feedback=data.get("user_feedback", ""),
             run_id=data.get("run_id", ""),
+            model=data.get("model", ""),
         )
 
 

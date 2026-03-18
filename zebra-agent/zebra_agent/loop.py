@@ -93,6 +93,7 @@ class AgentLoop:
         goal: str,
         progress_callback: ProgressCallback | None = None,
         run_id: str | None = None,
+        model: str | None = None,
     ) -> AgentResult:
         """
         Process a user goal through the agent loop workflow.
@@ -150,7 +151,7 @@ class AgentLoop:
             "run_id": run_id,
             "available_workflows": available_workflows,
             "__llm_provider_name__": self.provider_name,
-            "__llm_model__": self.model,
+            "__llm_model__": model or self.model,
             "__started_at__": datetime.now(UTC).isoformat(),
         }
 
@@ -343,5 +344,6 @@ class AgentLoop:
         system_workflows = {
             "Agent Main Loop",
             "Dream Cycle",
+            "Create Goal",
         }
         return name in system_workflows

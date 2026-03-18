@@ -80,6 +80,33 @@ class StateStore(ABC):
         """Get all processes that are in RUNNING state (excluding PAUSED)."""
         pass
 
+    async def get_processes_by_state(
+        self,
+        state: "ProcessState",
+        exclude_children: bool = False,
+    ) -> list[ProcessInstance]:
+        """Get processes in a specific state, ordered by created_at ascending.
+
+        Args:
+            state: The ``ProcessState`` to filter on.
+            exclude_children: If True, only return top-level processes
+                (``parent_process_id IS NULL``).
+
+        Returns:
+            List of matching ``ProcessInstance`` objects.
+
+        The default implementation calls ``list_processes`` and filters
+        in memory. Backends should override for efficiency.
+        """
+        from zebra.core.models import ProcessState as PS
+
+        processes = await self.list_processes(include_completed=(state in (PS.COMPLETE, PS.FAILED)))
+        results = [p for p in processes if p.state == state]
+        if exclude_children:
+            results = [p for p in results if p.parent_process_id is None]
+        results.sort(key=lambda p: p.created_at)
+        return results
+
     # =========================================================================
     # Task Instance Operations
     # =========================================================================

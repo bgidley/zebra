@@ -65,6 +65,7 @@ execute_goal_workflow = "zebra_tasks.agent.execute_workflow:ExecuteGoalWorkflowA
 assess_and_record = "zebra_tasks.agent.assess_and_record:AssessAndRecordAction"
 update_conceptual_memory = "zebra_tasks.agent.update_conceptual_memory:UpdateConceptualMemoryAction"
 record_metrics = "zebra_tasks.agent.record_metrics:RecordMetricsAction"
+queue_goal = "zebra_tasks.agent.queue_goal:QueueGoalAction"
 # Agent - Analysis and optimization
 metrics_analyzer = "zebra_tasks.agent.analyzer:MetricsAnalyzerAction"
 load_workflow_definitions = "zebra_tasks.agent.load_definitions:LoadWorkflowDefinitionsAction"

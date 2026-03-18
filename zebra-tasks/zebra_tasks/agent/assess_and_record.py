@@ -81,6 +81,27 @@ class AssessAndRecordAction(TaskAction):
             name="tokens_used", type="int", description="Tokens used", required=False, default=0
         ),
         ParameterDef(
+            name="input_tokens",
+            type="int",
+            description="Input tokens used",
+            required=False,
+            default=0,
+        ),
+        ParameterDef(
+            name="output_tokens",
+            type="int",
+            description="Output tokens used",
+            required=False,
+            default=0,
+        ),
+        ParameterDef(
+            name="cost",
+            type="float",
+            description="USD cost of execution",
+            required=False,
+            default=0.0,
+        ),
+        ParameterDef(
             name="error",
             type="string",
             description="Error message if failed",
@@ -141,6 +162,9 @@ Respond with JSON only:
         success = self._resolve(task, context, "success", "false")
         output = self._resolve_any(task, context, "output")
         tokens_used = self._resolve(task, context, "tokens_used", "0")
+        input_tokens = self._resolve(task, context, "input_tokens", "0")
+        output_tokens = self._resolve(task, context, "output_tokens", "0")
+        cost = self._resolve(task, context, "cost", "0")
         error = self._resolve(task, context, "error", "")
         started_at = self._resolve(task, context, "started_at", "")
         provider_name = task.properties.get("provider", "anthropic")
@@ -155,6 +179,21 @@ Respond with JSON only:
                 tokens_used = int(tokens_used)
             except ValueError:
                 tokens_used = 0
+        if isinstance(input_tokens, str):
+            try:
+                input_tokens = int(input_tokens)
+            except ValueError:
+                input_tokens = 0
+        if isinstance(output_tokens, str):
+            try:
+                output_tokens = int(output_tokens)
+            except ValueError:
+                output_tokens = 0
+        if isinstance(cost, str):
+            try:
+                cost = float(cost)
+            except ValueError:
+                cost = 0.0
 
         result = {"recorded": False, "assessed": False, "effectiveness_notes": ""}
 
@@ -179,11 +218,15 @@ Respond with JSON only:
                     if output is not None
                     else None,
                     tokens_used=int(tokens_used),
+                    input_tokens=int(input_tokens),
+                    output_tokens=int(output_tokens),
+                    cost=float(cost),
                     error=str(error)[:500] if error else None,
                     started_at=datetime.fromisoformat(started_at)
                     if started_at and "{{" not in started_at
                     else datetime.now(UTC),
                     completed_at=datetime.now(UTC),
+                    model=context.process.properties.get("__llm_model__"),
                 )
                 await metrics_store.record_run(run)
 
@@ -285,6 +328,7 @@ Respond with JSON only:
                     effectiveness_notes=effectiveness_notes,
                     tokens_used=int(tokens_used),
                     run_id=run_id,
+                    model=context.process.properties.get("__llm_model__", ""),
                 )
                 await memory_store.add_workflow_memory(entry)
                 logger.info(

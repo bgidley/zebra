@@ -125,6 +125,10 @@ class WorkflowVariantCreatorAction(TaskAction):
         "7. Set `result_key` to the output_key of the final task that produces the main\n"
         "   human-readable result. If the source has a result_key, update it as needed.\n"
         "   The result_key value is what the UI shows as the workflow output.\n"
+        "8. You may add a `model` property to individual llm_call tasks to override the\n"
+        "   default model. Available values: 'haiku' (fastest/cheapest), 'sonnet'\n"
+        "   (balanced, default), 'opus' (most capable). Only set model when a task has\n"
+        "   clearly different needs — most tasks should omit it.\n"
         "\n"
         "The available task actions are the same as in the source workflow."
     )

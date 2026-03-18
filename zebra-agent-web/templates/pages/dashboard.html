@@ -38,6 +38,44 @@
             </div>
         </div>
     </div>
+
+    {% if budget %}
+    <!-- Budget Status -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-white">Budget Status</h2>
+            <span class="text-sm text-gray-400">Resets at {{ budget.reset_hour }}:00 UTC</span>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+            <div>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">Daily Budget</p>
+                <p class="text-xl font-bold text-white mt-1">${{ budget.daily_budget|floatformat:2 }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">Spent Today</p>
+                <p class="text-xl font-bold text-white mt-1">${{ budget.spent_today|floatformat:4 }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">Remaining</p>
+                <p class="text-xl font-bold {% if budget.remaining > 0 %}text-green-400{% else %}text-red-400{% endif %} mt-1">${{ budget.remaining|floatformat:4 }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">Paced Available</p>
+                <p class="text-xl font-bold {% if budget.available > 0 %}text-green-400{% else %}text-amber-400{% endif %} mt-1">${{ budget.available|floatformat:4 }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">Queue Depth</p>
+                <p class="text-xl font-bold text-indigo-400 mt-1">{{ budget.queue_depth }}</p>
+            </div>
+        </div>
+        <!-- Budget progress bar -->
+        <div class="w-full bg-gray-700 rounded-full h-2.5">
+            <div class="h-2.5 rounded-full {% if budget.spent_today > budget.paced_allowance %}bg-amber-500{% else %}bg-indigo-500{% endif %}"
+                 style="width: min({{ budget.pct_used }}, 100%)"></div>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">{{ budget.pct_used }} of daily budget used ({{ budget.hours_since_reset }}h since reset)</p>
+    </div>
+    {% endif %}
     
     <!-- Content Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">

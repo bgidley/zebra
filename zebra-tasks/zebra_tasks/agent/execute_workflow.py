@@ -252,6 +252,9 @@ class ExecuteGoalWorkflowAction(TaskAction):
                 "success": False,
                 "output": None,
                 "tokens_used": 0,
+                "cost": 0.0,
+                "input_tokens": 0,
+                "output_tokens": 0,
                 "error": str(e),
             }
             context.set_process_property(output_key, error_result)
@@ -347,16 +350,28 @@ class ExecuteGoalWorkflowAction(TaskAction):
             if process.state == ProcessState.COMPLETE:
                 output = self._extract_output(process.properties, definition)
                 tokens = process.properties.get("__total_tokens__", 0)
+                cost = process.properties.get("__total_cost__", 0.0)
+                token_history = process.properties.get("__token_history__", [])
+                input_tok = sum(e.get("input", 0) for e in token_history)
+                output_tok = sum(e.get("output", 0) for e in token_history)
 
                 return {
                     "success": True,
                     "output": output,
                     "tokens_used": tokens,
+                    "cost": cost,
+                    "input_tokens": input_tok,
+                    "output_tokens": output_tok,
                     "error": None,
                 }, task_executions
 
             if process.state == ProcessState.FAILED:
                 error = process.properties.get("__error__", "Process failed")
+                tokens = process.properties.get("__total_tokens__", 0)
+                cost = process.properties.get("__total_cost__", 0.0)
+                token_history = process.properties.get("__token_history__", [])
+                input_tok = sum(e.get("input", 0) for e in token_history)
+                output_tok = sum(e.get("output", 0) for e in token_history)
 
                 # Mark last task as failed
                 if task_executions:
@@ -366,7 +381,10 @@ class ExecuteGoalWorkflowAction(TaskAction):
                 return {
                     "success": False,
                     "output": None,
-                    "tokens_used": process.properties.get("__total_tokens__", 0),
+                    "tokens_used": tokens,
+                    "cost": cost,
+                    "input_tokens": input_tok,
+                    "output_tokens": output_tok,
                     "error": str(error),
                 }, task_executions
 

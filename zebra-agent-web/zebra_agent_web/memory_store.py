@@ -70,6 +70,7 @@ class DjangoMemoryStore(MemoryStore):
                     "rating": entry.rating,
                     "user_feedback": entry.user_feedback,
                     "run_id": entry.run_id,
+                    "model": entry.model,
                 },
             )
 
@@ -104,6 +105,7 @@ class DjangoMemoryStore(MemoryStore):
                     rating=m.rating,
                     user_feedback=m.user_feedback,
                     run_id=m.run_id,
+                    model=m.model,
                 )
                 for m in qs
             ]
@@ -135,6 +137,7 @@ class DjangoMemoryStore(MemoryStore):
                     rating=m.rating,
                     user_feedback=m.user_feedback,
                     run_id=m.run_id,
+                    model=m.model,
                 )
                 for m in qs
             ]
@@ -255,7 +258,10 @@ class DjangoMemoryStore(MemoryStore):
         for entry in entries:
             status = "SUCCESS" if entry.success else "FAILED"
             rating_str = f" | rating: {entry.rating}/5" if entry.rating else ""
-            lines.append(f"\n[{entry.timestamp.strftime('%Y-%m-%d')}] {status}{rating_str}")
+            model_str = f" | model: {entry.model}" if entry.model else ""
+            lines.append(
+                f"\n[{entry.timestamp.strftime('%Y-%m-%d')}] {status}{rating_str}{model_str}"
+            )
             lines.append(f"Goal: {entry.goal}")
             lines.append(f"Output: {entry.output_summary[:200]}")
             if entry.effectiveness_notes:

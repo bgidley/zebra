@@ -85,6 +85,18 @@ class InMemoryStore(StateStore):
         """Get all processes in RUNNING state (excluding PAUSED)."""
         return [p for p in self._processes.values() if p.state == ProcessState.RUNNING]
 
+    async def get_processes_by_state(
+        self,
+        state: ProcessState,
+        exclude_children: bool = False,
+    ) -> list[ProcessInstance]:
+        """Get processes in a specific state, ordered by created_at ascending."""
+        results = [p for p in self._processes.values() if p.state == state]
+        if exclude_children:
+            results = [p for p in results if p.parent_process_id is None]
+        results.sort(key=lambda p: p.created_at)
+        return results
+
     # =========================================================================
     # Task Instance Operations
     # =========================================================================

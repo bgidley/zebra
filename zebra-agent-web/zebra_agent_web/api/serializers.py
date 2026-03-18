@@ -85,6 +85,14 @@ class ExecuteGoalRequestSerializer(serializers.Serializer):
     """Request serializer for executing a goal."""
 
     goal = serializers.CharField(help_text="The goal to accomplish")
+    model = serializers.ChoiceField(
+        choices=["haiku", "sonnet", "opus"],
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        default=None,
+        help_text="LLM model: haiku, sonnet, opus (default: sonnet)",
+    )
 
 
 class CreateWorkflowRequestSerializer(serializers.Serializer):

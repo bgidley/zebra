@@ -176,8 +176,8 @@ class LLMCallAction(TaskAction):
                 max_tokens=max_tokens,
             )
 
-            # Track token usage
-            self._track_tokens(context, response.usage)
+            # Track token usage and cost
+            self._track_tokens(context, response.usage, model=response.model)
 
             # Process response
             content = response.content or ""
@@ -287,10 +287,20 @@ class LLMCallAction(TaskAction):
                 return match.group(1).strip()
         return content
 
-    def _track_tokens(self, context: ExecutionContext, usage: TokenUsage) -> None:
-        """Track token usage in process properties."""
+    def _track_tokens(
+        self, context: ExecutionContext, usage: TokenUsage, model: str | None = None
+    ) -> None:
+        """Track token usage and dollar cost in process properties."""
+        from zebra_tasks.llm.pricing import calculate_cost
+
         current = context.get_process_property("__total_tokens__", 0)
         context.set_process_property("__total_tokens__", current + usage.total_tokens)
+
+        # Calculate cost for this call
+        call_cost = calculate_cost(model, usage.input_tokens, usage.output_tokens)
+        current_cost = context.get_process_property("__total_cost__", 0.0)
+        new_total_cost = current_cost + call_cost
+        context.set_process_property("__total_cost__", new_total_cost)
 
         # Also track per-task breakdown
         token_history = context.get_process_property("__token_history__", [])
@@ -299,6 +309,20 @@ class LLMCallAction(TaskAction):
                 "input": usage.input_tokens,
                 "output": usage.output_tokens,
                 "total": usage.total_tokens,
+                "cost": call_cost,
+                "model": model,
             }
         )
         context.set_process_property("__token_history__", token_history)
+
+        # Soft budget warning (if BudgetManager is available via IoC)
+        budget_manager = context.extras.get("__budget_manager__")
+        if budget_manager is not None:
+            try:
+                import asyncio
+
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(budget_manager.check_and_warn(new_total_cost))
+            except Exception:
+                pass  # Non-critical — don't fail the LLM call

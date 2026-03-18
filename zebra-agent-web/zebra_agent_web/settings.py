@@ -165,6 +165,15 @@ ZEBRA_AGENT_SETTINGS = {
     "LIBRARY_PATH": os.environ.get("ZEBRA_LIBRARY_PATH", "~/.zebra/workflows"),
     "LLM_PROVIDER": os.environ.get("ZEBRA_LLM_PROVIDER", "anthropic"),
     "LLM_MODEL": os.environ.get("ZEBRA_LLM_MODEL", None),
+    # Budget & daemon settings
+    "DAILY_BUDGET_USD": float(os.environ.get("ZEBRA_DAILY_BUDGET_USD", "50.00")),
+    "DAEMON_POLL_INTERVAL": int(os.environ.get("ZEBRA_DAEMON_POLL_INTERVAL", "30")),
+    "BUDGET_RESET_HOUR": int(os.environ.get("ZEBRA_BUDGET_RESET_HOUR", "0")),
+    "GOAL_COST_WARNING_USD": float(os.environ.get("ZEBRA_GOAL_COST_WARNING_USD", "5.00")),
+    # Auto-start the budget daemon inside the ASGI server process.
+    # Set to False (or ZEBRA_DAEMON_AUTO_START=0) to disable and use
+    # the standalone ``python manage.py run_daemon`` command instead.
+    "DAEMON_AUTO_START": os.environ.get("ZEBRA_DAEMON_AUTO_START", "1") != "0",
 }
 
 # Logging

@@ -26,6 +26,8 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/storage/interfaces.py` | Abstract storage interfaces (MemoryStore, MetricsStore) |
 | `zebra_agent/storage/memory.py` | InMemoryMemoryStore implementation |
 | `zebra_agent/storage/metrics.py` | InMemoryMetricsStore implementation |
+| `zebra_agent/budget.py` | BudgetManager — daily budget with linear pacing |
+| `zebra_agent/scheduler.py` | GoalScheduler — priority + deadline + age scoring |
 | `zebra_agent/ioc/` | IoC (Inversion of Control) module |
 | `zebra_agent/ioc/container.py` | `ZebraContainer` - dependency injection container |
 | `zebra_agent/ioc/registry.py` | `IoCActionRegistry` - action registry with constructor injection |
@@ -215,6 +217,20 @@ breaks portability across deployments.
 - Tracks user ratings (1-5 scale)
 - Calculates success rates for workflow selection
 
+**BudgetManager** (`budget.py`):
+- Tracks daily LLM spend against a configurable dollar budget
+- Linear pacing: `allowed_at_time = daily_budget * (elapsed / 24h)`
+- `can_start_goal(estimated_cost)` checks remaining budget
+- `warn_if_over(goal_id, cost_so_far)` logs soft warning if per-goal threshold exceeded
+- Stateless: calculates "spent today" by querying `MetricsStore.get_total_cost_since()`
+
+**GoalScheduler** (`scheduler.py`):
+- Picks the next goal to execute from CREATED processes
+- Scoring formula: `priority_score + deadline_boost + age_bonus`
+- Priority 1-5 mapped to scores (1=highest gets highest score)
+- Approaching deadlines exponentially boost effective priority
+- Age-based anti-starvation prevents low-priority goals from waiting forever
+
 **MemoryStore** (`storage/interfaces.py`):
 - Abstract interface for agent memory storage
 - Two-tier memory: workflow memory (detailed per-run records) + conceptual memory (compact goal-pattern index)
@@ -272,6 +288,7 @@ These workflows are internal to the agent and excluded from LLM selection:
 |----------|------|---------|
 | `Agent Main Loop` | `agent_main_loop.yaml` | Main orchestration workflow |
 | `Dream Cycle` | `dream_cycle.yaml` | Self-improvement: analyze, evaluate, optimize workflows |
+| `Create Goal` | `create_goal.yaml` | Human input → queue goal as CREATED process |
 
 System workflows are identified by name in `loop.py`:
 
@@ -280,6 +297,7 @@ def _is_system_workflow(self, name: str) -> bool:
     system_workflows = {
         "Agent Main Loop",
         "Dream Cycle",
+        "Create Goal",
     }
     return name in system_workflows
 ```
