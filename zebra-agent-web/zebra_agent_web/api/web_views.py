@@ -12,6 +12,7 @@ All URLs are simplified since this is an agent-only application:
 import asyncio
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from asgiref.sync import sync_to_async
@@ -342,7 +343,6 @@ async def run_goal_queue(request):
     await agent_engine.ensure_initialized()
     await engine.ensure_initialized()
 
-    from zebra.core.models import ProcessState
     from zebra_agent_web.api.engine import get_engine
 
     library = agent_engine.get_library()
@@ -799,14 +799,16 @@ async def activity(request):
         if run_id in in_progress_run_ids:
             continue
         tasks_data = await _get_tasks_for_processes(processes, store, wf_engine, human_only)
-        if not tasks_data:
-            continue
         earliest = min((p.created_at for p in processes), default=None)
+        # Recover goal/workflow context from process properties
+        root_props = (processes[0].properties or {}) if processes else {}
+        goal = root_props.get("goal", f"Run {run_id[:8]}…")
+        workflow_name = root_props.get("__workflow_name__")
         activity_groups.append(
             {
                 "run_id": run_id,
-                "goal": f"Run {run_id[:8]}…",
-                "workflow_name": None,
+                "goal": goal[:120] + "..." if len(goal) > 120 else goal,
+                "workflow_name": workflow_name,
                 "started_at": earliest,
                 "completed_at": None,
                 "success": None,
@@ -917,30 +919,33 @@ async def activity(request):
             )
         already_shown_process_ids.add(ready_task.process_id)
 
-    # Optionally include completed runs
-    if show_completed:
-        completed_runs = await metrics.get_completed_runs(limit=20)
-        for run in completed_runs:
-            activity_groups.append(
-                {
-                    "run_id": run.id,
-                    "goal": run.goal[:120] + "..." if len(run.goal) > 120 else run.goal,
-                    "workflow_name": run.workflow_name,
-                    "started_at": run.started_at,
-                    "completed_at": run.completed_at,
-                    "success": run.success,
-                    "tokens_used": run.tokens_used,
-                    "user_rating": run.user_rating,
-                    "is_running": False,
-                    "is_queued": False,
-                    "tasks": [],
-                    "has_human_tasks": False,
-                }
-            )
+    # Always show recent completed runs (last 5). When show_completed is
+    # toggled on, show the full history instead (last 20).
+    _RECENT_COMPLETED_LIMIT = 5
+    completed_limit = 20 if show_completed else _RECENT_COMPLETED_LIMIT
+    completed_runs = await metrics.get_completed_runs(limit=completed_limit)
+    for run in completed_runs:
+        activity_groups.append(
+            {
+                "run_id": run.id,
+                "goal": run.goal[:120] + "..." if len(run.goal) > 120 else run.goal,
+                "workflow_name": run.workflow_name,
+                "started_at": run.started_at,
+                "completed_at": run.completed_at,
+                "success": run.success,
+                "tokens_used": run.tokens_used,
+                "user_rating": run.user_rating,
+                "is_running": False,
+                "is_queued": False,
+                "tasks": [],
+                "has_human_tasks": False,
+            }
+        )
 
-        # Surface orphaned COMPLETE/FAILED processes that have a run_id but
-        # no WorkflowRunModel (assess_and_record never ran — e.g. the
-        # workflow crashed before reaching that task).
+    # Surface orphaned COMPLETE/FAILED processes that have a run_id but
+    # no WorkflowRunModel (assess_and_record never ran — e.g. the
+    # workflow crashed before reaching that task).
+    if show_completed:
         known_run_ids = {g["run_id"] for g in activity_groups if g.get("run_id")}
         from zebra.core.models import ProcessState as _PS
 
@@ -953,7 +958,6 @@ async def activity(request):
                     if not rid or rid in known_run_ids:
                         continue
                     goal = props.get("goal", f"Run {rid[:8]}…")
-                    error = props.get("__error__")
                     # These processes never reached assess_and_record,
                     # which means they didn't complete successfully —
                     # mark them as failed regardless of process state.
@@ -1014,6 +1018,62 @@ async def activity(request):
             )
     except Exception:
         logger.debug("Could not load queued goals", exc_info=True)
+
+    # --- Staleness detection for running groups ---
+    # A running process is considered stale if its most recent update
+    # was more than 24 hours ago.
+    _STALE_THRESHOLD = timedelta(hours=24)
+    now = datetime.now(UTC)
+    for group in activity_groups:
+        if group["is_running"]:
+            # Use updated_at from the associated processes if available
+            run_id = group.get("run_id")
+            latest_update = group.get("started_at")
+            if run_id and run_id in run_id_to_processes:
+                procs = run_id_to_processes[run_id]
+                latest_update = max(
+                    (p.updated_at for p in procs),
+                    default=latest_update,
+                )
+            elif not run_id and orphan_processes:
+                latest_update = max(
+                    (p.updated_at for p in orphan_processes),
+                    default=latest_update,
+                )
+            group["is_stale"] = (
+                latest_update is not None and (now - latest_update) > _STALE_THRESHOLD
+            )
+            group["last_updated"] = latest_update
+        else:
+            group["is_stale"] = False
+
+    # --- Assign sections and sort ---
+    # Sections: running (non-stale) > running (stale) > queued > recent/history
+    def _sort_key(g):
+        # Within each bucket, sort newest first (negative timestamp).
+        ts = (g.get("started_at") or now).timestamp()
+        if g["is_running"] and not g["is_stale"]:
+            return (0, -ts)
+        if g["is_running"] and g["is_stale"]:
+            return (1, -ts)
+        if g.get("is_queued"):
+            return (2, -ts)
+        # Completed — sort by completed_at newest first
+        completed_ts = (g.get("completed_at") or g.get("started_at") or now).timestamp()
+        return (3, -completed_ts)
+
+    activity_groups.sort(key=_sort_key)
+
+    # Tag each group with a section label for template rendering
+    for group in activity_groups:
+        if group["is_running"] and not group["is_stale"]:
+            group["section"] = "running"
+        elif group["is_running"] and group["is_stale"]:
+            group["section"] = "stale"
+        elif group.get("is_queued"):
+            group["section"] = "queued"
+        else:
+            group["section"] = "recent"
 
     has_running = any(g["is_running"] for g in activity_groups)
     has_queued = any(g.get("is_queued") for g in activity_groups)

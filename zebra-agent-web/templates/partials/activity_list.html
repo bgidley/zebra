@@ -4,7 +4,8 @@ Unified activity list showing goals grouped with their tasks.
 Context:
   groups - list of activity groups, each with:
     run_id, goal, workflow_name, started_at, completed_at, success,
-    tokens_used, user_rating, is_running, tasks, has_human_tasks
+    tokens_used, user_rating, is_running, is_queued, is_stale,
+    section (running|stale|queued|recent), tasks, has_human_tasks
   human_only - boolean, current filter state
   show_completed - boolean, current filter state
   has_running - boolean, whether any running goals exist
@@ -19,8 +20,26 @@ Context:
 
     {% if groups %}
     <div class="space-y-4">
+        {% with current_section="" %}
         {% for group in groups %}
-        <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+
+        {% comment %}
+        Section headers — shown when the section changes between groups.
+        Using ifchanged to detect transitions.
+        {% endcomment %}
+        {% ifchanged group.section %}
+        {% if group.section == "running" %}
+        <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-2">In Progress</h2>
+        {% elif group.section == "stale" %}
+        <h2 class="text-xs font-semibold text-yellow-600 uppercase tracking-wider pt-4">Stale</h2>
+        {% elif group.section == "queued" %}
+        <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-4">Queued</h2>
+        {% elif group.section == "recent" %}
+        <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-4">{% if show_completed %}History{% else %}Recent{% endif %}</h2>
+        {% endif %}
+        {% endifchanged %}
+
+        <div class="bg-gray-800 rounded-lg border {% if group.is_stale %}border-yellow-800/50{% else %}border-gray-700{% endif %} overflow-hidden {% if group.is_stale %}opacity-70{% endif %}">
             <!-- Goal Header -->
             <div class="px-6 py-4 {% if group.tasks %}border-b border-gray-700{% endif %}">
                 <div class="flex items-center justify-between">
@@ -29,7 +48,7 @@ Context:
                         <div class="flex items-center gap-4 mt-1 text-sm text-gray-400">
                             {% if group.workflow_name %}
                             <span>{{ group.workflow_name }}</span>
-                            {% elif group.is_running %}
+                            {% elif group.is_running and not group.is_stale %}
                             <span class="text-yellow-400">Selecting workflow...</span>
                             {% endif %}
                             <span>{{ group.started_at|date:"M d, H:i" }}</span>
@@ -63,6 +82,14 @@ Context:
                             deadline
                         </span>
                         {% endif %}
+                        {% elif group.is_running and group.is_stale %}
+                        <!-- Stale badge -->
+                        <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-yellow-900/60 text-yellow-400" title="Last updated {{ group.last_updated|date:'M d, H:i' }}">
+                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            stale
+                        </span>
                         {% elif group.is_running %}
                         <!-- Running badge -->
                         <span class="inline-flex items-center gap-2 px-2 py-1 text-xs font-medium rounded bg-blue-900 text-blue-300">
@@ -108,8 +135,8 @@ Context:
             </div>
 
             {% if group.is_running %}
-            <!-- Workflow Diagram (only for running goals with a workflow selected) -->
-            {% if group.workflow_name and group.run_id %}
+            <!-- Workflow Diagram (only for non-stale running goals with a workflow selected) -->
+            {% if group.workflow_name and group.run_id and not group.is_stale %}
             <div class="px-4 py-3 border-b border-gray-700">
                 {% include "partials/workflow_diagram.html" with run_id=group.run_id workflow_name=group.workflow_name auto_refresh="true" refresh_interval="3000" show_header="false" %}
             </div>
@@ -154,6 +181,7 @@ Context:
             {% endif %}
         </div>
         {% endfor %}
+        {% endwith %}
     </div>
     {% else %}
     <div class="bg-gray-800 rounded-lg border border-gray-700 px-6 py-12 text-center text-gray-500">
@@ -161,7 +189,7 @@ Context:
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <p class="mt-2 text-sm">No activity{% if not show_completed %} in progress{% endif %}</p>
+        <p class="mt-2 text-sm">No activity</p>
         <a href="/run/" class="mt-1 text-indigo-400 hover:text-indigo-300 text-xs">Start a new goal</a>
     </div>
     {% endif %}

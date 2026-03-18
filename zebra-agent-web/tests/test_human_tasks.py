@@ -4,6 +4,8 @@ Tests use InMemoryStore and a real WorkflowEngine (no Django ORM or Oracle),
 monkey-patching the engine singleton so views use test fixtures.
 """
 
+from datetime import UTC
+
 import pytest
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessDefinition, RoutingDefinition, TaskDefinition
@@ -317,6 +319,227 @@ class TestPendingTasksList:
         assert b"Ask User" in response.content
         # Partial should have the polling attributes
         assert b"hx-trigger" in response.content
+
+
+# ===========================================================================
+# Web View Tests: Activity Page Improvements
+# ===========================================================================
+
+
+def _auto_task_only_definition():
+    """A workflow with only auto tasks (no human tasks)."""
+    return ProcessDefinition(
+        id="auto-task-wf",
+        name="Auto Task Workflow",
+        version=1,
+        first_task_id="step1",
+        tasks={
+            "step1": TaskDefinition(
+                id="step1",
+                name="Step One",
+                auto=True,
+            ),
+            "step2": TaskDefinition(
+                id="step2",
+                name="Step Two",
+                auto=True,
+            ),
+        },
+        routings=[
+            RoutingDefinition(id="r1", source_task_id="step1", dest_task_id="step2"),
+        ],
+    )
+
+
+async def _create_running_process_with_auto_task(wf_engine, store, run_id, goal):
+    """Create a RUNNING process with only auto tasks in READY state.
+
+    We build the state manually because the engine auto-executes auto tasks,
+    so we can't rely on start_process() to leave them in READY state.
+    """
+    from zebra.core.models import ProcessState, TaskInstance, TaskState
+
+    defn = _auto_task_only_definition()
+    await store.save_definition(defn)
+
+    process = await wf_engine.create_process(defn)
+    # Manually transition to RUNNING with a READY auto task
+    updated = process.model_copy(
+        update={
+            "state": ProcessState.RUNNING,
+            "properties": {"run_id": run_id, "goal": goal},
+        }
+    )
+    await store.save_process(updated)
+
+    # Create a READY auto task
+    task = TaskInstance(
+        id=f"auto-task-{run_id}",
+        task_definition_id="step1",
+        process_id=process.id,
+        state=TaskState.READY,
+        foe_id=f"foe-{run_id}",
+    )
+    await store.save_task(task)
+
+    return process, task
+
+
+class TestActivityAutoTasks:
+    """Tests for showing running processes with only non-human tasks."""
+
+    async def test_running_process_with_auto_tasks_shown(self, client, wf_engine, store):
+        """A running process with only auto tasks still appears on activity page.
+
+        Even with human_only=true (default), the *group* should appear — only
+        the task list is filtered. Previously, groups were silently dropped
+        when all pending tasks were auto tasks.
+        """
+        await _create_running_process_with_auto_task(
+            wf_engine, store, "test-auto-run", "Run auto tasks"
+        )
+
+        # Default view (human_only=true)
+        response = await client.get("/activity/")
+        assert response.status_code == 200
+        # The group should appear even without visible tasks
+        assert b"Run auto tasks" in response.content
+        assert b"running" in response.content
+
+    async def test_auto_tasks_visible_when_human_only_false(self, client, wf_engine, store):
+        """With human_only=false, auto tasks appear in the task list."""
+        await _create_running_process_with_auto_task(
+            wf_engine, store, "test-auto-visible", "Show auto tasks"
+        )
+
+        response = await client.get("/activity/?human_only=false")
+        assert response.status_code == 200
+        assert b"Step One" in response.content
+        assert b"ready" in response.content
+
+
+class _ConfigurableMetricsStore:
+    """Metrics store stub with configurable completed runs."""
+
+    def __init__(self, completed_runs=None, in_progress_runs=None):
+        self._completed = completed_runs or []
+        self._in_progress = in_progress_runs or []
+
+    async def get_in_progress_runs(self):
+        return self._in_progress
+
+    async def get_completed_runs(self, limit=20):
+        return self._completed[:limit]
+
+    async def get_recent_runs(self, limit=10):
+        return self._completed[:limit]
+
+    async def get_run(self, run_id):
+        return next((r for r in self._completed if r.id == run_id), None)
+
+    async def get_task_executions(self, run_id):
+        return []
+
+
+class TestActivityRecentCompletions:
+    """Tests for showing recent completed runs by default."""
+
+    async def test_recent_completions_shown_without_toggle(self, client, store, wf_engine):
+        """Completed runs appear on /activity/ without show_completed=true."""
+        from datetime import datetime
+
+        import zebra_agent_web.api.agent_engine as agent_engine_module
+        from zebra_agent.metrics import WorkflowRun
+
+        completed_run = WorkflowRun(
+            id="test-recent-run",
+            workflow_name="Answer Question",
+            goal="What is the meaning of life?",
+            success=True,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            tokens_used=100,
+        )
+        agent_engine_module._metrics = _ConfigurableMetricsStore(completed_runs=[completed_run])
+
+        # Default view — no show_completed toggle
+        response = await client.get("/activity/")
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "What is the meaning of life?" in content
+        assert "Answer Question" in content
+        assert "success" in content
+
+    async def test_show_full_history_label(self, client):
+        """The toggle label says 'Show full history' not 'Include completed'."""
+        response = await client.get("/activity/")
+        assert response.status_code == 200
+        assert b"Show full history" in response.content
+        assert b"Include completed" not in response.content
+
+
+class TestActivityStaleness:
+    """Tests for stale running process detection."""
+
+    async def test_stale_process_marked_in_response(self, client, wf_engine, store):
+        """A running process with old updated_at gets the 'stale' badge."""
+        from datetime import datetime, timedelta
+
+        defn = _simple_human_task_definition()
+        process = await wf_engine.create_process(defn)
+        await wf_engine.start_process(process.id)
+
+        # Make the process look stale (updated 48 hours ago)
+        run_id = "test-stale-run-id"
+        running_process = await store.load_process(process.id)
+        stale_time = datetime.now(UTC) - timedelta(hours=48)
+        updated = running_process.model_copy(
+            update={
+                "properties": {"run_id": run_id, "goal": "Old stale goal"},
+                "updated_at": stale_time,
+            }
+        )
+        await store.save_process(updated)
+
+        response = await client.get("/activity/")
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "stale" in content.lower()
+        assert "Old stale goal" in content
+
+    async def test_fresh_process_not_marked_stale(self, client, wf_engine, store):
+        """A recently updated running process does NOT get the stale badge."""
+        defn = _simple_human_task_definition()
+        process = await wf_engine.create_process(defn)
+        await wf_engine.start_process(process.id)
+
+        run_id = "test-fresh-run-id"
+        running_process = await store.load_process(process.id)
+        updated = running_process.model_copy(
+            update={
+                "properties": {"run_id": run_id, "goal": "Fresh goal"},
+            }
+        )
+        await store.save_process(updated)
+
+        response = await client.get("/activity/")
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Fresh goal" in content
+        # Should NOT have the stale section header or badge for this process
+        assert "Stale" not in content
+
+    async def test_section_headers_rendered(self, client, wf_engine, store):
+        """Activity page renders section headers for different group types."""
+        defn = _simple_human_task_definition()
+        process = await wf_engine.create_process(defn)
+        await wf_engine.start_process(process.id)
+
+        response = await client.get("/activity/")
+        assert response.status_code == 200
+        content = response.content.decode()
+        # Should have "In Progress" section header for the running process
+        assert "In Progress" in content
 
 
 # ===========================================================================

@@ -136,6 +136,22 @@ class StateStore(ABC):
         """Get all tasks in RUNNING state, optionally filtered by process_id."""
         pass
 
+    async def get_ready_tasks(self) -> list[TaskInstance]:
+        """Get all tasks in READY state across all processes.
+
+        The default implementation iterates all non-terminal processes and
+        collects READY tasks. Backends should override for efficiency.
+        """
+        from zebra.core.models import TaskState as TS
+
+        results: list[TaskInstance] = []
+        processes = await self.list_processes(include_completed=False)
+        for proc in processes:
+            tasks = await self.load_tasks_for_process(proc.id)
+            results.extend(t for t in tasks if t.state == TS.READY)
+        results.sort(key=lambda t: t.created_at)
+        return results
+
     # =========================================================================
     # Flow of Execution Operations
     # =========================================================================
