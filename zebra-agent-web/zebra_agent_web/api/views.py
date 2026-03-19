@@ -884,3 +884,87 @@ def task_complete(request, task_id):
     except Exception as e:
         logger.exception("Failed to complete task")
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ===========================================================================
+# Process Cancel / Delete
+# ===========================================================================
+
+
+@api_view(["POST"])
+def process_cancel(request, process_id):
+    """Cancel a running or paused process by failing it.
+
+    Moves the process and all its non-terminal tasks to FAILED state.
+    The process data is preserved for debugging.
+
+    Request body (optional):
+        {"reason": "Human-readable cancellation reason"}
+
+    Returns:
+        200: {"cancelled": true, "process_id": "...", "state": "failed"}
+        404: Process not found
+        409: Process is already in a terminal state
+    """
+    reason = "Cancelled by user"
+    if request.data and isinstance(request.data, dict):
+        reason = request.data.get("reason", reason)
+
+    async def _cancel():
+        await engine.ensure_initialized()
+        wf_engine = engine.get_engine()
+        return await wf_engine.fail_process(process_id, reason)
+
+    try:
+        process = async_to_sync(_cancel)()
+        return Response(
+            {
+                "cancelled": True,
+                "process_id": process.id,
+                "state": process.state.value,
+            }
+        )
+    except Exception as e:
+        from zebra.core.exceptions import InvalidStateTransitionError, ProcessNotFoundError
+
+        if isinstance(e, ProcessNotFoundError):
+            return Response(
+                {"error": f"Process '{process_id}' not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if isinstance(e, InvalidStateTransitionError):
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_409_CONFLICT,
+            )
+        logger.exception("Failed to cancel process")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+def process_delete(request, process_id):
+    """Hard-delete a process and all its tasks, FOEs, and locks.
+
+    This is a destructive operation. The process data is removed permanently.
+    Associated WorkflowRunModel (metrics) records are NOT deleted.
+
+    Returns:
+        200: {"deleted": true, "process_id": "..."}
+        404: Process not found
+    """
+
+    async def _delete():
+        await engine.ensure_initialized()
+        store = engine.get_store()
+        process = await store.load_process(process_id)
+        if not process:
+            return False
+        return await store.delete_process(process_id)
+
+    deleted = async_to_sync(_delete)()
+    if not deleted:
+        return Response(
+            {"error": f"Process '{process_id}' not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    return Response({"deleted": True, "process_id": process_id})

@@ -19,7 +19,8 @@ from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods, require_POST
 
 from zebra_agent_web.api import agent_engine, engine
 
@@ -774,6 +775,7 @@ async def activity(request):
     for run in in_progress:
         processes = run_id_to_processes.get(run.id, [])
         tasks_data = await _get_tasks_for_processes(processes, store, wf_engine, human_only)
+        root_proc_ids = [p.id for p in processes if not p.parent_process_id]
 
         activity_groups.append(
             {
@@ -789,6 +791,7 @@ async def activity(request):
                 "is_queued": False,
                 "tasks": tasks_data,
                 "has_human_tasks": any(t["is_human"] for t in tasks_data),
+                "process_ids": root_proc_ids,
             }
         )
 
@@ -804,6 +807,7 @@ async def activity(request):
         root_props = (processes[0].properties or {}) if processes else {}
         goal = root_props.get("goal", f"Run {run_id[:8]}…")
         workflow_name = root_props.get("__workflow_name__")
+        root_proc_ids = [p.id for p in processes if not p.parent_process_id]
         activity_groups.append(
             {
                 "run_id": run_id,
@@ -818,6 +822,7 @@ async def activity(request):
                 "is_queued": False,
                 "tasks": tasks_data,
                 "has_human_tasks": any(t["is_human"] for t in tasks_data),
+                "process_ids": root_proc_ids,
             }
         )
 
@@ -841,6 +846,7 @@ async def activity(request):
                     "is_queued": False,
                     "tasks": orphan_tasks,
                     "has_human_tasks": any(t["is_human"] for t in orphan_tasks),
+                    "process_ids": [p.id for p in orphan_processes],
                 }
             )
 
@@ -1132,6 +1138,27 @@ async def _get_tasks_for_processes(
             )
 
     return tasks_data
+
+
+@csrf_exempt
+@require_POST
+async def cancel_process(request, process_id):
+    """Cancel a stale process via HTMX and redirect back to activity."""
+    await engine.ensure_initialized()
+    wf_engine = engine.get_engine()
+
+    try:
+        await wf_engine.fail_process(process_id, "Cancelled by user")
+    except Exception:
+        logger.debug("Failed to cancel process %s", process_id, exc_info=True)
+
+    # For HTMX requests, use HX-Redirect to trigger a full page reload
+    # so all sections (running, stale, recent) are refreshed properly.
+    if request.headers.get("HX-Request"):
+        response = HttpResponse(status=200)
+        response["HX-Redirect"] = "/activity/"
+        return response
+    return redirect("/activity/")
 
 
 # Legacy URL redirects for backward compatibility

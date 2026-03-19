@@ -974,3 +974,111 @@ class TestRunStatus:
         assert response.status_code in (200, 404)
         data = response.json()
         assert "status" in data
+
+
+# ===========================================================================
+# API Tests: Process Cancel / Delete
+# ===========================================================================
+
+
+class TestProcessCancel:
+    """Tests for POST /api/processes/<id>/cancel/."""
+
+    async def test_cancel_running_process(self, client, wf_engine, store):
+        """Cancelling a running process moves it to FAILED state."""
+        defn = _simple_human_task_definition()
+        process, _ = await _start_workflow(wf_engine, defn)
+
+        response = await client.post(
+            f"/api/processes/{process.id}/cancel/",
+            data={"reason": "Test cancel"},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cancelled"] is True
+        assert data["state"] == "failed"
+
+        # Verify persisted
+        reloaded = await store.load_process(process.id)
+        assert reloaded.state.value == "failed"
+        assert reloaded.properties["__error__"] == "Test cancel"
+
+    async def test_cancel_already_completed_returns_409(self, client, wf_engine):
+        """Cancelling an already-completed process returns 409 Conflict."""
+        from zebra.core.models import ProcessDefinition, TaskDefinition
+
+        # Use a simple auto-completing workflow
+        defn = ProcessDefinition(
+            id="auto-wf",
+            name="Auto",
+            version=1,
+            first_task_id="step",
+            tasks={"step": TaskDefinition(id="step", name="Step", auto=True)},
+            routings=[],
+        )
+        process = await wf_engine.create_process(defn)
+        await wf_engine.start_process(process.id)
+
+        response = await client.post(
+            f"/api/processes/{process.id}/cancel/",
+            content_type="application/json",
+        )
+        assert response.status_code == 409
+
+    async def test_cancel_not_found_returns_404(self, client):
+        """Cancelling a non-existent process returns 404."""
+        response = await client.post(
+            "/api/processes/nonexistent-id/cancel/",
+            content_type="application/json",
+        )
+        assert response.status_code == 404
+
+    async def test_cancel_default_reason(self, client, wf_engine, store):
+        """When no reason is provided, a default reason is used."""
+        defn = _simple_human_task_definition()
+        process, _ = await _start_workflow(wf_engine, defn)
+
+        response = await client.post(
+            f"/api/processes/{process.id}/cancel/",
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+
+        reloaded = await store.load_process(process.id)
+        assert reloaded.properties["__error__"] == "Cancelled by user"
+
+
+class TestProcessDelete:
+    """Tests for DELETE /api/processes/<id>/delete/."""
+
+    async def test_delete_process(self, client, wf_engine, store):
+        """Deleting a process removes it from the store."""
+        defn = _simple_human_task_definition()
+        process, _ = await _start_workflow(wf_engine, defn)
+
+        response = await client.delete(f"/api/processes/{process.id}/delete/")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["deleted"] is True
+
+        # Verify it's gone
+        reloaded = await store.load_process(process.id)
+        assert reloaded is None
+
+    async def test_delete_not_found_returns_404(self, client):
+        """Deleting a non-existent process returns 404."""
+        response = await client.delete("/api/processes/nonexistent-id/delete/")
+        assert response.status_code == 404
+
+    async def test_delete_removes_tasks(self, client, wf_engine, store):
+        """Deleting a process also removes its tasks."""
+        defn = _simple_human_task_definition()
+        process, pending = await _start_workflow(wf_engine, defn)
+        task_id = pending[0].id
+
+        await client.delete(f"/api/processes/{process.id}/delete/")
+
+        # Task should also be gone
+        task = await store.load_task(task_id)
+        assert task is None

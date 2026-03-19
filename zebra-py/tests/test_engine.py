@@ -3,6 +3,7 @@
 import pytest
 
 from zebra.core.engine import WorkflowEngine
+from zebra.core.exceptions import InvalidStateTransitionError, ProcessNotFoundError
 from zebra.core.models import (
     ProcessDefinition,
     ProcessState,
@@ -393,3 +394,106 @@ class TestTaskSync:
         # Now process should be complete
         process = await store.load_process(process.id)
         assert process.state == ProcessState.COMPLETE
+
+
+# ===========================================================================
+# fail_process() Tests
+# ===========================================================================
+
+
+def _human_task_definition():
+    """A workflow with a human task that stays in READY state."""
+    return ProcessDefinition(
+        id="human-wf",
+        name="Human Workflow",
+        version=1,
+        first_task_id="manual",
+        tasks={
+            "manual": TaskDefinition(id="manual", name="Manual Step", auto=False),
+            "done": TaskDefinition(id="done", name="Done", auto=True),
+        },
+        routings=[
+            RoutingDefinition(id="r1", source_task_id="manual", dest_task_id="done"),
+        ],
+    )
+
+
+class TestFailProcess:
+    """Tests for WorkflowEngine.fail_process()."""
+
+    async def test_fail_running_process(self, engine, store):
+        """A running process can be moved to FAILED state."""
+        defn = _human_task_definition()
+        process = await engine.create_process(defn)
+        await engine.start_process(process.id)
+
+        result = await engine.fail_process(process.id, "Timed out")
+
+        assert result.state == ProcessState.FAILED
+        assert result.properties["__error__"] == "Timed out"
+        assert result.completed_at is not None
+
+        # Verify persisted state
+        reloaded = await store.load_process(process.id)
+        assert reloaded.state == ProcessState.FAILED
+
+    async def test_fail_paused_process(self, engine, store):
+        """A paused process can also be failed."""
+        defn = _human_task_definition()
+        process = await engine.create_process(defn)
+        await engine.start_process(process.id)
+        await engine.pause_process(process.id)
+
+        result = await engine.fail_process(process.id, "Cancelled")
+        assert result.state == ProcessState.FAILED
+
+    async def test_fail_created_process(self, engine, store):
+        """A CREATED (not yet started) process can be failed."""
+        defn = _human_task_definition()
+        process = await engine.create_process(defn)
+
+        result = await engine.fail_process(process.id, "No longer needed")
+        assert result.state == ProcessState.FAILED
+
+    async def test_fail_completed_process_raises(self, engine, simple_definition):
+        """Cannot fail a process that is already COMPLETE."""
+        process = await engine.create_process(simple_definition)
+        await engine.start_process(process.id)
+
+        with pytest.raises(InvalidStateTransitionError, match="terminal state"):
+            await engine.fail_process(process.id, "Too late")
+
+    async def test_fail_already_failed_process_raises(self, engine, store):
+        """Cannot fail a process that is already FAILED."""
+        defn = _human_task_definition()
+        process = await engine.create_process(defn)
+        await engine.start_process(process.id)
+        await engine.fail_process(process.id, "First failure")
+
+        with pytest.raises(InvalidStateTransitionError, match="terminal state"):
+            await engine.fail_process(process.id, "Second failure")
+
+    async def test_fail_sets_tasks_to_failed(self, engine, store):
+        """All non-terminal tasks are moved to FAILED when process is failed."""
+        defn = _human_task_definition()
+        process = await engine.create_process(defn)
+        await engine.start_process(process.id)
+
+        # Verify task is READY before failing
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        assert pending[0].state == TaskState.READY
+
+        await engine.fail_process(process.id, "Cleanup")
+
+        # Check the task is now FAILED
+        tasks = await store.load_tasks_for_process(process.id)
+        for task in tasks:
+            assert task.state == TaskState.FAILED
+            assert task.error == "Cleanup"
+            assert task.completed_at is not None
+
+    async def test_fail_process_not_found_raises(self, engine):
+        """Failing a non-existent process raises ProcessNotFoundError."""
+        with pytest.raises(ProcessNotFoundError):
+            await engine.fail_process("nonexistent-id", "reason")

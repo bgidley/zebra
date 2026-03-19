@@ -32,6 +32,12 @@ urlpatterns = [
         web_views.workflow_delete,
         name="workflow_delete",
     ),
+    # Process actions (HTMX)
+    path(
+        "processes/<str:process_id>/cancel/",
+        web_views.cancel_process,
+        name="cancel_process",
+    ),
     # Human Tasks (form pages still accessible directly)
     path("tasks/<str:task_id>/", web_views.human_task_form, name="human_task_form"),
     path("tasks/<str:task_id>/submit/", web_views.human_task_submit, name="human_task_submit"),

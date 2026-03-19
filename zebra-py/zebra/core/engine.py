@@ -228,6 +228,71 @@ class WorkflowEngine:
 
         return process
 
+    async def fail_process(
+        self,
+        process_id: str,
+        reason: str = "Cancelled",
+    ) -> ProcessInstance:
+        """Force a process into the FAILED state.
+
+        All non-terminal tasks (PENDING, AWAITING_SYNC, READY, RUNNING) are
+        moved to FAILED. FOEs are left in place for debugging. The process
+        is marked FAILED with ``__error__`` set to *reason*.
+
+        This is useful for cancelling stale/stuck processes that will never
+        complete on their own (e.g. abandoned human tasks, timed-out goals).
+
+        Args:
+            process_id: ID of the process to fail.
+            reason: Human-readable reason stored in ``__error__``.
+
+        Returns:
+            The updated ProcessInstance in FAILED state.
+
+        Raises:
+            ProcessNotFoundError: If process doesn't exist.
+            InvalidStateTransitionError: If process is already terminal
+                (COMPLETE or FAILED).
+        """
+        process = await self._load_process(process_id)
+
+        terminal_process_states = {ProcessState.COMPLETE, ProcessState.FAILED}
+        if process.state in terminal_process_states:
+            raise InvalidStateTransitionError(
+                f"Process {process_id} is already in terminal state {process.state.value}"
+            )
+
+        # Fail all non-terminal tasks
+        terminal_task_states = {TaskState.COMPLETE, TaskState.FAILED}
+        now = datetime.now(UTC)
+        tasks = await self.store.load_tasks_for_process(process_id)
+        for task in tasks:
+            if task.state not in terminal_task_states:
+                task = task.model_copy(
+                    update={
+                        "state": TaskState.FAILED,
+                        "error": reason,
+                        "updated_at": now,
+                        "completed_at": now,
+                    }
+                )
+                await self.store.save_task(task)
+
+        # Fail the process itself
+        props = dict(process.properties)
+        props["__error__"] = reason
+        process = process.model_copy(
+            update={
+                "state": ProcessState.FAILED,
+                "properties": props,
+                "updated_at": now,
+                "completed_at": now,
+            }
+        )
+        await self.store.save_process(process)
+        logger.info("Process %s failed: %s", process_id, reason)
+        return process
+
     # =========================================================================
     # Task Transitions
     # =========================================================================

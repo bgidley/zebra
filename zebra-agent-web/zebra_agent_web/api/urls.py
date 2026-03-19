@@ -39,4 +39,15 @@ urlpatterns = [
     ),
     path("tasks/<str:task_id>/", views.task_detail, name="api_task_detail"),
     path("tasks/<str:task_id>/complete/", views.task_complete, name="api_task_complete"),
+    # Process lifecycle
+    path(
+        "processes/<str:process_id>/cancel/",
+        views.process_cancel,
+        name="api_process_cancel",
+    ),
+    path(
+        "processes/<str:process_id>/delete/",
+        views.process_delete,
+        name="api_process_delete",
+    ),
 ]

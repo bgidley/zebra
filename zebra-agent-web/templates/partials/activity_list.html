@@ -119,6 +119,18 @@ Context:
                             {% if group.is_queued %}Status{% elif group.is_running %}Status{% else %}Details{% endif %}
                         </a>
                         {% endif %}
+
+                        {% if group.is_stale and group.process_ids %}
+                        {% for pid in group.process_ids %}
+                        <button hx-post="/processes/{{ pid }}/cancel/"
+                                hx-target="#activity-list"
+                                hx-swap="outerHTML"
+                                hx-confirm="Cancel this stale process?"
+                                class="text-red-400 hover:text-red-300 text-xs font-medium">
+                            Cancel
+                        </button>
+                        {% endfor %}
+                        {% endif %}
                     </div>
                 </div>
 
