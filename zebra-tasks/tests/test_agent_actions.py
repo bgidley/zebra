@@ -88,6 +88,7 @@ def mock_context():
     context = MagicMock()
     context.process = MagicMock()
     context.process.properties = {}
+    context.extras = {}
     context.get_process_property = MagicMock(side_effect=lambda k, d=None: context.process.properties.get(k, d))
     context.set_process_property = MagicMock(side_effect=lambda k, v: context.process.properties.__setitem__(k, v))
     context.resolve_template = MagicMock(side_effect=lambda x: x)
@@ -97,12 +98,54 @@ def mock_context():
 class TestMetricsAnalyzerAction:
     """Tests for MetricsAnalyzerAction."""
 
-    async def test_analyze_empty_db(self, metrics_db, mock_task, mock_context):
-        """Test analyzing an empty database."""
+    @pytest.fixture
+    async def empty_metrics_store(self):
+        """Create an empty InMemoryMetricsStore."""
+        from zebra_agent.storage.metrics import InMemoryMetricsStore
+
+        store = InMemoryMetricsStore()
+        await store.initialize()
+        return store
+
+    @pytest.fixture
+    async def populated_metrics_store(self):
+        """Create an InMemoryMetricsStore with test data."""
+        from zebra_agent.metrics import WorkflowRun
+        from zebra_agent.storage.metrics import InMemoryMetricsStore
+
+        store = InMemoryMetricsStore()
+        await store.initialize()
+
+        now = datetime.now()
+        day1 = now - timedelta(days=1)
+        day2 = now - timedelta(days=2)
+        day3 = now - timedelta(days=3)
+
+        runs = [
+            WorkflowRun(id="run-1", workflow_name="Answer Question", goal="What is 2+2?",
+                        started_at=day1, completed_at=day1, success=True, user_rating=5, tokens_used=100),
+            WorkflowRun(id="run-2", workflow_name="Answer Question", goal="What is the capital of France?",
+                        started_at=day1, completed_at=day1, success=True, user_rating=4, tokens_used=80),
+            WorkflowRun(id="run-3", workflow_name="Answer Question", goal="Explain quantum physics",
+                        started_at=day2, completed_at=day2, success=False, tokens_used=200, error="Timeout"),
+            WorkflowRun(id="run-4", workflow_name="Brainstorm Ideas", goal="Birthday party ideas",
+                        started_at=day2, completed_at=day2, success=True, user_rating=5, tokens_used=150),
+            WorkflowRun(id="run-5", workflow_name="Brainstorm Ideas", goal="Business name ideas",
+                        started_at=day3, completed_at=day3, success=True, user_rating=3, tokens_used=120),
+            WorkflowRun(id="run-6", workflow_name="Summarize Text", goal="Summarize this article",
+                        started_at=day3, completed_at=day3, success=False, tokens_used=90, error="Invalid input"),
+        ]
+        for run in runs:
+            await store.record_run(run)
+
+        return store
+
+    async def test_analyze_empty_db(self, empty_metrics_store, mock_task, mock_context):
+        """Test analyzing an empty metrics store."""
         from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
 
         action = MetricsAnalyzerAction()
-        mock_task.properties = {"metrics_db_path": str(metrics_db)}
+        mock_context.extras["__metrics_store__"] = empty_metrics_store
 
         result = await action.run(mock_task, mock_context)
 
@@ -112,15 +155,13 @@ class TestMetricsAnalyzerAction:
         assert analysis["unique_workflows"] == 0
         assert len(analysis["workflow_stats"]) == 0
 
-    async def test_analyze_with_data(self, populated_metrics_db, mock_task, mock_context):
-        """Test analyzing a populated database."""
+    async def test_analyze_with_data(self, populated_metrics_store, mock_task, mock_context):
+        """Test analyzing a populated metrics store."""
         from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
 
         action = MetricsAnalyzerAction()
-        mock_task.properties = {
-            "metrics_db_path": str(populated_metrics_db),
-            "days_to_analyze": 30,
-        }
+        mock_context.extras["__metrics_store__"] = populated_metrics_store
+        mock_task.properties = {"days_to_analyze": 30}
 
         result = await action.run(mock_task, mock_context)
 
@@ -136,15 +177,13 @@ class TestMetricsAnalyzerAction:
         assert "Answer Question" in workflow_names
         assert "Brainstorm Ideas" in workflow_names
 
-    async def test_analyze_identifies_low_performers(self, populated_metrics_db, mock_task, mock_context):
+    async def test_analyze_identifies_low_performers(self, populated_metrics_store, mock_task, mock_context):
         """Test that low performers are identified."""
         from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
 
         action = MetricsAnalyzerAction()
-        mock_task.properties = {
-            "metrics_db_path": str(populated_metrics_db),
-            "min_runs_for_analysis": 1,
-        }
+        mock_context.extras["__metrics_store__"] = populated_metrics_store
+        mock_task.properties = {"min_runs_for_analysis": 1}
 
         result = await action.run(mock_task, mock_context)
 
@@ -155,14 +194,12 @@ class TestMetricsAnalyzerAction:
         low_performer_names = [lp["workflow_name"] for lp in low_performers]
         assert "Summarize Text" in low_performer_names
 
-    async def test_analyze_failure_patterns(self, populated_metrics_db, mock_task, mock_context):
+    async def test_analyze_failure_patterns(self, populated_metrics_store, mock_task, mock_context):
         """Test that failure patterns are identified."""
         from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
 
         action = MetricsAnalyzerAction()
-        mock_task.properties = {
-            "metrics_db_path": str(populated_metrics_db),
-        }
+        mock_context.extras["__metrics_store__"] = populated_metrics_store
 
         result = await action.run(mock_task, mock_context)
 
@@ -172,15 +209,13 @@ class TestMetricsAnalyzerAction:
         # Should have patterns for workflows with failures
         assert len(failure_patterns) > 0
 
-    async def test_analyze_generates_recommendations(self, populated_metrics_db, mock_task, mock_context):
+    async def test_analyze_generates_recommendations(self, populated_metrics_store, mock_task, mock_context):
         """Test that recommendations are generated."""
         from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
 
         action = MetricsAnalyzerAction()
-        mock_task.properties = {
-            "metrics_db_path": str(populated_metrics_db),
-            "min_runs_for_analysis": 1,
-        }
+        mock_context.extras["__metrics_store__"] = populated_metrics_store
+        mock_task.properties = {"min_runs_for_analysis": 1}
 
         result = await action.run(mock_task, mock_context)
 
@@ -188,17 +223,16 @@ class TestMetricsAnalyzerAction:
         recommendations = result.output["recommendations"]
         assert len(recommendations) > 0
 
-    async def test_analyze_no_db_path(self, mock_task, mock_context):
-        """Test error when no database path provided."""
+    async def test_analyze_no_metrics_store(self, mock_task, mock_context):
+        """Test error when no metrics store is available."""
         from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
 
         action = MetricsAnalyzerAction()
-        mock_task.properties = {}
 
         result = await action.run(mock_task, mock_context)
 
         assert result.success is False
-        assert "No metrics_db_path provided" in result.error
+        assert "No metrics store available" in result.error
 
 
 class TestWorkflowEvaluatorAction:

@@ -124,8 +124,9 @@ class TestAgentLoopIntegration:
 
     async def test_multiple_goals_accumulate_memory(self, agent_loop, django_stores):
         """Test that multiple goals build up memory entries."""
-        # Get initial entry count
-        initial_entries = await django_stores.memory.get_recent_workflow_memories()
+        # Use a large limit to ensure we count all entries, not just the most recent 20
+        large_limit = 10000
+        initial_entries = await django_stores.memory.get_recent_workflow_memories(limit=large_limit)
         initial_count = len(initial_entries)
 
         goals = [
@@ -139,7 +140,7 @@ class TestAgentLoopIntegration:
             assert result.success, f"Failed on goal '{goal}': {result.error}"
 
         # Verify memory has accumulated
-        final_entries = await django_stores.memory.get_recent_workflow_memories()
+        final_entries = await django_stores.memory.get_recent_workflow_memories(limit=large_limit)
         final_count = len(final_entries)
 
         assert final_count >= initial_count + 3, (
