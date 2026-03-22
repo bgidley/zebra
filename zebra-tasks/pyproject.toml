@@ -71,6 +71,7 @@ metrics_analyzer = "zebra_tasks.agent.analyzer:MetricsAnalyzerAction"
 load_workflow_definitions = "zebra_tasks.agent.load_definitions:LoadWorkflowDefinitionsAction"
 workflow_evaluator = "zebra_tasks.agent.evaluator:WorkflowEvaluatorAction"
 workflow_optimizer = "zebra_tasks.agent.optimizer:WorkflowOptimizerAction"
+ethics_gate = "zebra_tasks.agent.ethics_gate:EthicsGateAction"
 
 [build-system]
 requires = ["hatchling"]

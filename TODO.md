@@ -10,12 +10,12 @@ This document tracks unimplemented features and improvements based on the DESIGN
 ## High Priority
 
 ### .1 Tidying Up
-- [recreate db]
-- Feedback form seems buggy
+- Feedback form seems buggy need to check it's learning
+
+### Self Improvement
+- Allow Zebra to improve itself by using claude agent SDK directly on code
 
 ### .5 Learning loops
-- [ ] Dream workflows run daily to optimize memory
-- [ ] Add memory into the agent loop
 - [ ] When not sure LLM can run 2 parallel workflows to compare results and show to human for vote
 
 ### Efficent LLM usage

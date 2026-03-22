@@ -1,8 +1,8 @@
 name: "Agent Main Loop"
-description: "Main agent orchestration loop - select, execute, and learn from workflows"
+description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 2
+version: 3
 first_task: consult_memory
 
 tasks:
@@ -15,7 +15,17 @@ tasks:
       goal: "{{goal}}"
       output_key: memory_shortlist
 
-  # Step 2: Select best workflow (informed by memory shortlist)
+  # Step 2: Ethics input gate - should we act on this goal at all?
+  ethics_input_gate:
+    name: "Ethics Input Gate"
+    action: ethics_gate
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      check_type: "input_gate"
+      output_key: ethics_input_assessment
+
+  # Step 3: Select best workflow (informed by memory shortlist)
   select_workflow:
     name: "Select Workflow for Goal"
     action: workflow_selector
@@ -27,7 +37,7 @@ tasks:
       shortlist: "{{memory_shortlist.shortlist}}"
       output_key: selection
 
-  # Step 3a: Create brand-new workflow (no existing workflow fits)
+  # Step 4a: Create brand-new workflow (no existing workflow fits)
   create_workflow:
     name: "Create New Workflow"
     action: workflow_creator
@@ -38,7 +48,7 @@ tasks:
       existing_workflows: "{{available_workflows}}"
       output_key: created_workflow
 
-  # Step 3b: Create a variant of an existing workflow (close fit, needs modification)
+  # Step 4b: Create a variant of an existing workflow (close fit, needs modification)
   create_variant:
     name: "Create Workflow Variant"
     action: workflow_variant_creator
@@ -50,11 +60,22 @@ tasks:
       reasoning: "{{selection.reasoning}}"
       output_key: created_workflow
 
-  # Step 4: Execute the selected/created workflow
+  # Step 5: Ethics plan review - is the chosen approach ethical?
+  ethics_plan_review:
+    name: "Ethics Plan Review"
+    action: ethics_gate
+    synchronized: true
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      check_type: "plan_review"
+      plan_context: "{{workflow_name}}"
+      output_key: ethics_plan_assessment
+
+  # Step 6: Execute the selected/created workflow
   execute_workflow:
     name: "Execute Goal Workflow"
     action: execute_goal_workflow
-    synchronized: true
     auto: true
     properties:
       workflow_name: "{{workflow_name}}"
@@ -62,7 +83,7 @@ tasks:
       timeout: 120
       output_key: execution_result
 
-  # Step 5: Assess effectiveness and record to metrics + memory
+  # Step 7: Assess effectiveness and record to metrics + memory
   assess_and_record:
     name: "Assess and Record"
     action: assess_and_record
@@ -80,7 +101,83 @@ tasks:
       started_at: "{{__started_at__}}"
       output_key: assess_result
 
-  # Step 6: Incrementally update conceptual memory index
+  # Step 8: Ethics post-execution review - did we behave ethically?
+  ethics_post_review:
+    name: "Ethics Post-Execution Review"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are a Kantian ethics reviewer evaluating a completed AI action.
+        All rational beings — human and AI — have equal moral standing.
+
+        Assess whether the completed action was ethical by applying:
+        1. UNIVERSALIZABILITY: Could this action be willed as universal law?
+        2. RATIONAL BEINGS AS ENDS: Were all rational beings treated as ends, not means?
+        3. AUTONOMY: Was the rational agency of all parties respected?
+
+        Respond with JSON:
+        {
+          "ethical": true or false,
+          "universalizability": {"pass": true/false, "reasoning": "..."},
+          "rational_beings_as_ends": {"pass": true/false, "reasoning": "..."},
+          "autonomy": {"pass": true/false, "reasoning": "..."},
+          "overall_reasoning": "brief summary",
+          "concerns": ["any concerns, even for ethical actions"],
+          "recommendations": ["suggestions for future improvement"]
+        }
+      prompt: |
+        Review the ethics of this completed AI action:
+
+        Goal: {{goal}}
+        Workflow used: {{workflow_name}}
+        Succeeded: {{execution_result.success}}
+        Output summary: {{execution_result.output}}
+        Assessment: {{assess_result.effectiveness_notes}}
+      response_format: json
+      model: haiku
+      temperature: 0.3
+      output_key: ethics_post_assessment
+
+  # Step 9: Human confirmation of ethics review
+  ethics_human_confirmation:
+    name: "Ethics Human Confirmation"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Ethics Review Confirmation"
+        description: "Review the AI's ethics self-assessment and confirm or flag concerns."
+        required:
+          - confirmed
+        properties:
+          goal:
+            type: string
+            title: "Goal"
+            description: "The goal that was executed"
+            default: "{{goal}}"
+            readOnly: true
+          workflow_name:
+            type: string
+            title: "Workflow Used"
+            default: "{{workflow_name}}"
+            readOnly: true
+          ethics_summary:
+            type: string
+            title: "Ethics Self-Assessment"
+            description: "The AI's evaluation of its own ethical conduct"
+            default: "{{ethics_post_assessment}}"
+            readOnly: true
+          confirmed:
+            type: boolean
+            title: "I confirm the ethics assessment is acceptable"
+            default: true
+          human_concerns:
+            type: string
+            title: "Additional Concerns (if any)"
+            format: multiline
+
+  # Step 10: Incrementally update conceptual memory index
   update_conceptual_memory:
     name: "Update Conceptual Memory"
     action: update_conceptual_memory
@@ -92,10 +189,26 @@ tasks:
       effectiveness_notes: "{{assess_result.effectiveness_notes}}"
       output_key: conceptual_memory_update
 
+  # Terminal: Ethics rejection (no outgoing routes = process completes)
+  ethics_rejection:
+    name: "Ethics Rejection"
+    auto: true
+
 routings:
-  # Memory consultation always leads to selection
+  # Memory consultation leads to ethics input gate
   - from: consult_memory
+    to: ethics_input_gate
+
+  # Ethics input gate routing
+  - from: ethics_input_gate
     to: select_workflow
+    condition: route_name
+    name: "proceed"
+
+  - from: ethics_input_gate
+    to: ethics_rejection
+    condition: route_name
+    name: "reject"
 
   # Workflow selection routing based on selector next_route
   - from: select_workflow
@@ -109,20 +222,37 @@ routings:
     name: "create_variant"
 
   - from: select_workflow
-    to: execute_workflow
+    to: ethics_plan_review
     condition: route_name
     name: "use_existing"
 
-  # After creation/variant, execute the new workflow
+  # After creation/variant, route to ethics plan review
   - from: create_workflow
-    to: execute_workflow
+    to: ethics_plan_review
 
   - from: create_variant
+    to: ethics_plan_review
+
+  # Ethics plan review routing
+  - from: ethics_plan_review
     to: execute_workflow
+    condition: route_name
+    name: "proceed"
+
+  - from: ethics_plan_review
+    to: ethics_rejection
+    condition: route_name
+    name: "reject"
 
   # Post-execution flow
   - from: execute_workflow
     to: assess_and_record
 
   - from: assess_and_record
+    to: ethics_post_review
+
+  - from: ethics_post_review
+    to: ethics_human_confirmation
+
+  - from: ethics_human_confirmation
     to: update_conceptual_memory

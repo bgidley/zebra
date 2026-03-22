@@ -47,6 +47,38 @@ The engine handles:
 - Routing evaluation (serial vs parallel)
 - Synchronization/join points for parallel branches
 
+### Conditional Routing
+
+Tasks can drive branching by returning `TaskResult.ok(output=..., next_route="route_name")`.
+The engine matches `next_route` against routing definitions:
+
+```yaml
+routings:
+  - from: decision_task
+    to: branch_a
+    condition: route_name
+    name: "approved"
+  - from: decision_task
+    to: branch_b
+    condition: route_name
+    name: "rejected"
+```
+
+Only the matching route is followed. Used for ethics gates, workflow selection, memory checks, etc.
+
+### Synchronized Tasks (Join Points)
+
+When multiple parallel branches must merge before continuing, mark the join task with `synchronized: true`:
+
+```yaml
+merge_results:
+  name: "Merge Results"
+  action: my_merge_action
+  synchronized: true
+```
+
+The engine waits for all incoming Flow-of-Execution (FOE) tokens before executing a synchronized task.
+
 ## Workspace-Level Commands
 
 ### Setup & Build
@@ -363,6 +395,27 @@ engine = WorkflowEngine(store, registry, extras={
 memory_store = context.extras.get("__memory_store__")
 ```
 
+10. **Storage abstraction in task actions** - Never import database drivers (`aiosqlite`, `psycopg2`, etc.) in task actions. Access data through store interfaces from `context.extras`. Never read workflow files from disk directly — use `WorkflowLibrary`. Always degrade gracefully when a store is `None` (log a warning and skip, rather than crashing). See `zebra-agent/AGENTS.md` for full storage rules.
+
+## Creating a New Task Action
+
+When adding a new task action, follow this end-to-end checklist:
+
+1. Create the action class in `zebra-tasks/zebra_tasks/` (appropriate subdirectory), inheriting from `TaskAction`
+2. Implement `async def run(self, task, context) -> TaskResult`
+3. Add a `description` class attribute and define `inputs`/`outputs` using `ParameterDef` from `zebra.tasks.base`
+4. **Register as entry point** in `zebra-tasks/pyproject.toml`:
+   ```toml
+   [project.entry-points."zebra.tasks"]
+   my_action = "zebra_tasks.my_module:MyAction"
+   ```
+5. Run `uv sync --all-packages` to refresh entry points
+6. Add tests in `zebra-tasks/tests/`
+
+The `IoCActionRegistry` (in `zebra-agent/ioc/`) auto-discovers entry points at startup — manual `registry.register_action()` is only needed for non-entry-point actions or tests.
+
+For conditional routing, return `TaskResult.ok(output=..., next_route="route_name")` where `next_route` matches a routing's `name` field in the YAML definition.
+
 ## Human Tasks (Convention-Based Pattern)
 
 Human/manual tasks use a convention-based `auto: false` pattern. No special action class is needed. The task definition's `properties.schema` contains a standard JSON Schema that defines the form fields:
@@ -392,25 +445,9 @@ my_task:
           format: multiline
 ```
 
-**JSON Schema Widget Mapping:**
+Use `readOnly: true` on schema fields to display computed/read-only values. Use `default: "{{template}}"` to pre-populate fields from workflow properties.
 
-| Schema Type | Format/Constraint | Widget |
-|-------------|-------------------|--------|
-| `string` | (default) | text input |
-| `string` | `format: multiline` | textarea |
-| `string` | `format: email` | email input |
-| `string` | `format: url` | url input |
-| `string` | `format: date` | date input |
-| `string` | `enum: [...]` | select dropdown |
-| `boolean` | | checkbox |
-| `integer` / `number` | | number input |
-| `array` | `items.enum: [...]` | multiselect |
-
-**Form Utilities** (`zebra.forms` module):
-- `schema_to_form(schema)` - Converts JSON Schema dict to `FormSchema` (renderable field list)
-- `validate_form_data(schema, data)` - Validates submission, returns list of `ValidationError`
-- `coerce_form_data(schema, raw_data)` - Converts HTML form strings to proper Python types
-- `get_routes_from_definition(task_def_id, routings)` - Extracts route names for conditional routing UI
+See `zebra-py/AGENTS.md` for JSON Schema widget mapping and form utility functions (`zebra.forms` module).
 
 **Lifecycle:**
 
@@ -427,27 +464,7 @@ See `zebra-py/zebra/templates/feature_implementation.yaml` and `bug_fix.yaml` fo
 
 ## Cost Manager & Budget Daemon Architecture
 
-The system tracks LLM costs and manages a daily dollar-based budget for queued goal execution.
-
-### How Cost Tracking Works
-
-```
-LLMCallAction._track_tokens()
-    → pricing.calculate_cost(model, input_tokens, output_tokens)
-    → accumulates __total_cost__ on process properties
-    → soft-warns via __budget_manager__ from engine.extras
-
-ExecuteGoalWorkflowAction._wait_for_completion()
-    → propagates cost, input_tokens, output_tokens from child → parent
-
-AssessAndRecordAction
-    → reads cost/tokens from {{execution_result.*}} templates
-    → records to WorkflowRun (metrics store)
-```
-
-### Goal Queue (No Separate Table)
-
-Workflow process instances in `CREATED` state **are** the queue. Users submit goals via the "Create Goal" workflow, which creates an Agent Main Loop process in `CREATED` state with `goal`, `priority`, `deadline` properties. The daemon picks these up.
+The system tracks LLM costs and manages a daily dollar-based budget for queued goal execution. Costs accumulate via `__total_cost__` on process properties and propagate from child to parent processes. The goal queue uses process instances in `CREATED` state — no separate table.
 
 ### Budget Daemon
 
@@ -455,17 +472,7 @@ The daemon auto-starts as a background `asyncio.create_task()` inside the ASGI s
 
 Loop: `pick_next() → budget_check → start_process → poll until done → log cost → repeat`
 
-### Key Files
-
-| File | Package | Purpose |
-|------|---------|---------|
-| `zebra_tasks/llm/pricing.py` | zebra-tasks | Hardcoded Anthropic pricing table, `calculate_cost()` |
-| `zebra_tasks/agent/queue_goal.py` | zebra-tasks | `QueueGoalAction` — creates CREATED process |
-| `zebra_agent/budget.py` | zebra-agent | `BudgetManager` — daily budget with linear pacing |
-| `zebra_agent/scheduler.py` | zebra-agent | `GoalScheduler` — priority + deadline + age scoring |
-| `zebra_agent_web/api/daemon.py` | zebra-agent-web | Shared daemon loop (`run_daemon_loop()`) |
-| `zebra_agent_web/asgi.py` | zebra-agent-web | ASGI middleware auto-starts daemon |
-| `zebra_agent/workflows/create_goal.yaml` | zebra-agent | "Create Goal" workflow (human input → queue) |
+See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking flow, key files, and orphaned process handling.
 
 ### Settings (in `ZEBRA_AGENT_SETTINGS`)
 
