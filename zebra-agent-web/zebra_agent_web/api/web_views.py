@@ -476,6 +476,232 @@ def is_task_active(run_id: str) -> bool:
     return run_id in _active_tasks
 
 
+def _resolve_task_inputs(
+    task_properties: dict[str, Any],
+    process_properties: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve {{template}} vars in task properties for display.
+
+    Lightweight version of ExecutionContext.resolve_template() that operates
+    on a plain dict. Used to show resolved input values on the run detail page.
+    """
+    import re
+
+    skip_keys = {"output_key"}
+
+    def _dig(obj: object, parts: list[str]) -> object:
+        for part in parts:
+            if isinstance(obj, dict):
+                obj = obj.get(part)
+            else:
+                return None
+        return obj
+
+    def _resolve_value(template: str) -> str:
+        def replace_var(match: re.Match) -> str:
+            var = match.group(1)
+            if "." in var:
+                parts = var.split(".")
+                root, rest = parts[0], parts[1:]
+                # Legacy: {{task_id.output}} → __task_output_task_id
+                if len(rest) == 1 and rest[0] == "output":
+                    output = process_properties.get(f"__task_output_{root}")
+                    if output is not None:
+                        return str(output)
+                # Dict navigation: {{prop.key.subkey}}
+                prop_value = process_properties.get(root)
+                if prop_value is not None:
+                    result = _dig(prop_value, rest)
+                    if result is not None:
+                        return str(result)
+                return str(process_properties.get(var, match.group(0)))
+            return str(process_properties.get(var, match.group(0)))
+
+        return re.sub(r"\{\{(\w+(?:\.\w+)*)\}\}", replace_var, template)
+
+    resolved = {}
+    for key, value in task_properties.items():
+        if key in skip_keys:
+            continue
+        if isinstance(value, str) and "{{" in value:
+            resolved[key] = _resolve_value(value)
+        else:
+            resolved[key] = value
+    return resolved
+
+
+async def _build_parent_flow_context(
+    run_id: str,
+    store,
+    library,
+) -> dict | None:
+    """Build context for the parent Agent Main Loop orchestration flow.
+
+    Finds the parent process for a run, generates a diagram from its
+    __task_output_* properties, and resolves task inputs for display.
+
+    Returns None if the parent process or definition is not found.
+    """
+    from zebra.core.models import ProcessState
+
+    # Find the parent (root) process with this run_id.
+    # Don't use exclude_children=True because the DB may store empty string
+    # instead of NULL for parent_process_id on root processes.
+    parent_process = None
+    for state in (
+        ProcessState.RUNNING,
+        ProcessState.COMPLETE,
+        ProcessState.FAILED,
+        ProcessState.CREATED,
+    ):
+        try:
+            procs = await store.get_processes_by_state(state)
+            for proc in procs:
+                props = proc.properties or {}
+                if props.get("run_id") == run_id and not proc.parent_process_id:
+                    parent_process = proc
+                    break
+        except Exception:
+            continue
+        if parent_process:
+            break
+
+    if not parent_process:
+        return None
+
+    # Load the Agent Main Loop definition
+    try:
+        parent_def = library.get_workflow("Agent Main Loop")
+    except (ValueError, KeyError):
+        return None
+
+    parent_props = parent_process.properties or {}
+
+    # Build synthetic TaskExecution records from __task_output_* keys
+    from zebra_agent.metrics import TaskExecution
+
+    completed_task_ids = set()
+    for key in parent_props:
+        if key.startswith("__task_output_"):
+            task_id = key[len("__task_output_"):]
+            if task_id in parent_def.tasks:
+                completed_task_ids.add(task_id)
+
+    # Determine execution order from completed tasks
+    # Walk the routing graph in definition order to assign order numbers
+    order = 1
+    ordered_tasks: dict[str, int] = {}
+    visited = set()
+
+    def _walk_order(task_id: str):
+        nonlocal order
+        if task_id in visited or task_id not in parent_def.tasks:
+            return
+        visited.add(task_id)
+        if task_id in completed_task_ids:
+            ordered_tasks[task_id] = order
+            order += 1
+        # Follow outgoing routes
+        for routing in parent_def.routings:
+            if routing.source_task_id == task_id:
+                _walk_order(routing.dest_task_id)
+
+    if parent_def.first_task_id:
+        _walk_order(parent_def.first_task_id)
+
+    # Also catch any completed tasks not reached by routing walk
+    for tid in completed_task_ids:
+        if tid not in ordered_tasks:
+            ordered_tasks[tid] = order
+            order += 1
+
+    synthetic_executions = []
+    for task_id in parent_def.tasks:
+        if task_id in ordered_tasks:
+            task_def = parent_def.tasks[task_id]
+            synthetic_executions.append(
+                TaskExecution(
+                    id=f"synthetic-{task_id}",
+                    run_id=run_id,
+                    task_definition_id=task_id,
+                    task_name=task_def.name or task_id,
+                    execution_order=ordered_tasks[task_id],
+                    state="complete",
+                    started_at=parent_process.created_at,
+                )
+            )
+
+    # Also mark the current process state for running tasks
+    if parent_process.state.value == "running":
+        # Find tasks that are in-progress (in definition but not completed)
+        for task_id in parent_def.tasks:
+            if task_id not in completed_task_ids and task_id not in ordered_tasks:
+                # Check if this task could be the currently running one
+                # by seeing if all its predecessors are complete
+                predecessors_complete = True
+                for routing in parent_def.routings:
+                    if routing.dest_task_id == task_id:
+                        if routing.source_task_id not in completed_task_ids:
+                            predecessors_complete = False
+                            break
+                if predecessors_complete and task_id == parent_def.first_task_id or (
+                    predecessors_complete
+                    and any(
+                        r.source_task_id in completed_task_ids
+                        for r in parent_def.routings
+                        if r.dest_task_id == task_id
+                    )
+                ):
+                    task_def = parent_def.tasks[task_id]
+                    synthetic_executions.append(
+                        TaskExecution(
+                            id=f"synthetic-{task_id}",
+                            run_id=run_id,
+                            task_definition_id=task_id,
+                            task_name=task_def.name or task_id,
+                            execution_order=order,
+                            state="running",
+                            started_at=parent_process.created_at,
+                        )
+                    )
+
+    # Generate SVG with prefix
+    from zebra_agent_web.diagram import generate_workflow_svg
+
+    parent_svg = generate_workflow_svg(
+        parent_def, synthetic_executions, task_id_prefix="parent-"
+    )
+
+    # Build task panels with resolved inputs and outputs
+    task_panels = []
+    for task_id, task_def in parent_def.tasks.items():
+        task_output = parent_props.get(f"__task_output_{task_id}")
+        resolved_inputs = _resolve_task_inputs(task_def.properties, parent_props)
+        state = "complete" if task_id in completed_task_ids else "not_executed"
+
+        task_panels.append(
+            {
+                "task_id": task_id,
+                "task_name": task_def.name or task_id,
+                "execution_order": ordered_tasks.get(task_id),
+                "state": state,
+                "resolved_inputs": resolved_inputs,
+                "output": _format_output(task_output) if task_output else None,
+            }
+        )
+
+    # Sort panels by execution order (completed first, then unexecuted)
+    task_panels.sort(
+        key=lambda p: (p["execution_order"] or 999, p["task_id"])
+    )
+
+    return {
+        "workflow_name": parent_def.name,
+        "svg": parent_svg,
+        "task_panels": task_panels,
+    }
+
+
 async def _run_detail_pending_fallback(request, run_id: str):
     """Render a status page for a run whose metrics record doesn't exist yet.
 
@@ -496,6 +722,8 @@ async def _run_detail_pending_fallback(request, run_id: str):
     wf_engine = get_engine()
 
     # Search across all lifecycle states for a process with this run_id.
+    # Don't use exclude_children=True because the DB may store empty string
+    # instead of NULL for parent_process_id on root processes.
     process_match = None
     match_state = None
     for state in (
@@ -504,9 +732,12 @@ async def _run_detail_pending_fallback(request, run_id: str):
         ProcessState.COMPLETE,
         ProcessState.FAILED,
     ):
-        processes = await wf_engine.store.get_processes_by_state(state, exclude_children=True)
+        processes = await wf_engine.store.get_processes_by_state(state)
         for proc in processes:
-            if (proc.properties or {}).get("run_id") == run_id:
+            if (
+                (proc.properties or {}).get("run_id") == run_id
+                and not proc.parent_process_id
+            ):
                 process_match = proc
                 match_state = state
                 break
@@ -550,6 +781,17 @@ async def _run_detail_pending_fallback(request, run_id: str):
     error = props.get("__error__")
     success = False
 
+    # Build parent orchestration flow context
+    await agent_engine.ensure_initialized()
+    library = agent_engine.get_library()
+    parent_flow = None
+    try:
+        parent_flow = await _build_parent_flow_context(
+            run_id, wf_engine.store, library
+        )
+    except Exception:
+        logger.debug("Could not build parent flow for run %s", run_id, exc_info=True)
+
     context = {
         "run_id": run_id,
         "process_id": process_match.id,
@@ -569,6 +811,7 @@ async def _run_detail_pending_fallback(request, run_id: str):
         "cost": props.get("__total_cost__", 0.0),
         "error": error,
         "task_outputs": task_outputs,
+        "parent_flow": parent_flow,
     }
     return render(request, "pages/run_pending.html", context)
 
@@ -608,14 +851,44 @@ async def run_detail(request, run_id):
             # Workflow not found in library (may have been deleted)
             pass
 
+    # Build parent orchestration flow context
+    await engine.ensure_initialized()
+    store = engine.get_store()
+    parent_flow = None
+    try:
+        parent_flow = await _build_parent_flow_context(run_id, store, library)
+    except Exception:
+        logger.debug("Could not build parent flow for run %s", run_id, exc_info=True)
+
+    # Try to load child process properties for resolving task inputs
+    child_process_props: dict[str, Any] = {}
+    if parent_flow:
+        try:
+            from zebra.core.models import ProcessState
+
+            for state in (ProcessState.RUNNING, ProcessState.COMPLETE, ProcessState.FAILED):
+                procs = await store.get_processes_by_state(state, exclude_children=False)
+                for proc in procs:
+                    p = proc.properties or {}
+                    if p.get("run_id") == run_id and proc.parent_process_id:
+                        child_process_props = p
+                        break
+                if child_process_props:
+                    break
+        except Exception:
+            logger.debug("Could not load child process for run %s", run_id, exc_info=True)
+
     # Format task executions for template
     formatted_executions = []
     for exec in task_executions:
         # Get task definition properties if available
         task_props = {}
+        resolved_inputs: dict[str, Any] = {}
         if workflow_definition and exec.task_definition_id in workflow_definition.tasks:
             task_def = workflow_definition.tasks[exec.task_definition_id]
             task_props = task_def.properties
+            if child_process_props:
+                resolved_inputs = _resolve_task_inputs(task_props, child_process_props)
 
         # Calculate duration
         duration = None
@@ -636,6 +909,7 @@ async def run_detail(request, run_id):
                 "output": _format_output(exec.output),
                 "error": exec.error,
                 "properties": task_props,
+                "resolved_inputs": resolved_inputs,
             }
         )
 
@@ -660,6 +934,7 @@ async def run_detail(request, run_id):
         },
         "workflow_svg": workflow_svg,
         "task_executions": formatted_executions,
+        "parent_flow": parent_flow,
     }
 
     return render(request, "pages/run_detail.html", context)
@@ -735,6 +1010,7 @@ async def activity(request):
     """
     human_only = request.GET.get("human_only", "true") == "true"
     show_completed = request.GET.get("show_completed", "false") == "true"
+    group_by = request.GET.get("group_by", "status")
 
     await agent_engine.ensure_initialized()
     await engine.ensure_initialized()
@@ -921,6 +1197,7 @@ async def activity(request):
                     "is_queued": False,
                     "tasks": [task_data],
                     "has_human_tasks": is_human,
+                    "process_ids": [],
                 }
             )
         already_shown_process_ids.add(ready_task.process_id)
@@ -945,6 +1222,7 @@ async def activity(request):
                 "is_queued": False,
                 "tasks": [],
                 "has_human_tasks": False,
+                "process_ids": [],
             }
         )
 
@@ -982,6 +1260,7 @@ async def activity(request):
                             "is_orphan": True,
                             "tasks": [],
                             "has_human_tasks": False,
+                            "process_ids": [],
                         }
                     )
                     known_run_ids.add(rid)
@@ -1020,6 +1299,7 @@ async def activity(request):
                     "deadline": deadline,
                     "tasks": [],
                     "has_human_tasks": False,
+                    "process_ids": [process.id],
                 }
             )
     except Exception:
@@ -1054,32 +1334,64 @@ async def activity(request):
             group["is_stale"] = False
 
     # --- Assign sections and sort ---
-    # Sections: running (non-stale) > running (stale) > queued > recent/history
-    def _sort_key(g):
-        # Within each bucket, sort newest first (negative timestamp).
-        ts = (g.get("started_at") or now).timestamp()
-        if g["is_running"] and not g["is_stale"]:
-            return (0, -ts)
-        if g["is_running"] and g["is_stale"]:
-            return (1, -ts)
-        if g.get("is_queued"):
-            return (2, -ts)
-        # Completed — sort by completed_at newest first
-        completed_ts = (g.get("completed_at") or g.get("started_at") or now).timestamp()
-        return (3, -completed_ts)
+    if group_by == "date":
+        # Date-based grouping: running always on top, then today/yesterday/this_week/older
+        today = now.date()
+        yesterday = today - timedelta(days=1)
+        week_ago = today - timedelta(days=7)
 
-    activity_groups.sort(key=_sort_key)
+        def _date_section(g):
+            ref = g.get("completed_at") or g.get("started_at")
+            if ref is None:
+                return "older"
+            d = ref.date()
+            if d == today:
+                return "today"
+            elif d == yesterday:
+                return "yesterday"
+            elif d >= week_ago:
+                return "this_week"
+            return "older"
 
-    # Tag each group with a section label for template rendering
-    for group in activity_groups:
-        if group["is_running"] and not group["is_stale"]:
-            group["section"] = "running"
-        elif group["is_running"] and group["is_stale"]:
-            group["section"] = "stale"
-        elif group.get("is_queued"):
-            group["section"] = "queued"
-        else:
-            group["section"] = "recent"
+        _date_order = {
+            "today": 0, "yesterday": 1, "this_week": 2, "older": 3,
+        }
+
+        for group in activity_groups:
+            group["section"] = _date_section(group)
+
+        def _sort_key(g):
+            ts = (g.get("started_at") or now).timestamp()
+            return (_date_order.get(g["section"], 5), -ts)
+
+        activity_groups.sort(key=_sort_key)
+    else:
+        # Status-based grouping (default):
+        # running (non-stale) > stale > queued > recent/history
+        def _sort_key(g):
+            ts = (g.get("started_at") or now).timestamp()
+            if g["is_running"] and not g["is_stale"]:
+                return (0, -ts)
+            if g["is_running"] and g["is_stale"]:
+                return (1, -ts)
+            if g.get("is_queued"):
+                return (2, -ts)
+            completed_ts = (
+                g.get("completed_at") or g.get("started_at") or now
+            ).timestamp()
+            return (3, -completed_ts)
+
+        activity_groups.sort(key=_sort_key)
+
+        for group in activity_groups:
+            if group["is_running"] and not group["is_stale"]:
+                group["section"] = "running"
+            elif group["is_running"] and group["is_stale"]:
+                group["section"] = "stale"
+            elif group.get("is_queued"):
+                group["section"] = "queued"
+            else:
+                group["section"] = "recent"
 
     has_running = any(g["is_running"] for g in activity_groups)
     has_queued = any(g.get("is_queued") for g in activity_groups)
@@ -1088,6 +1400,7 @@ async def activity(request):
         "groups": activity_groups,
         "human_only": human_only,
         "show_completed": show_completed,
+        "group_by": group_by,
         "has_running": has_running,
         "has_queued": has_queued,
     }
@@ -1154,6 +1467,25 @@ async def cancel_process(request, process_id):
 
     # For HTMX requests, use HX-Redirect to trigger a full page reload
     # so all sections (running, stale, recent) are refreshed properly.
+    if request.headers.get("HX-Request"):
+        response = HttpResponse(status=200)
+        response["HX-Redirect"] = "/activity/"
+        return response
+    return redirect("/activity/")
+
+
+@csrf_exempt
+@require_POST
+async def bulk_cancel_processes(request):
+    """Bulk cancel multiple processes via HTMX."""
+    process_ids = request.POST.getlist("process_ids")
+    await engine.ensure_initialized()
+    wf_engine = engine.get_engine()
+    for pid in process_ids:
+        try:
+            await wf_engine.fail_process(pid, "Bulk cancelled by user")
+        except Exception:
+            logger.debug("Failed to cancel process %s", pid, exc_info=True)
     if request.headers.get("HX-Request"):
         response = HttpResponse(status=200)
         response["HX-Redirect"] = "/activity/"

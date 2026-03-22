@@ -38,6 +38,11 @@ urlpatterns = [
         web_views.cancel_process,
         name="cancel_process",
     ),
+    path(
+        "processes/bulk-cancel/",
+        web_views.bulk_cancel_processes,
+        name="bulk_cancel_processes",
+    ),
     # Human Tasks (form pages still accessible directly)
     path("tasks/<str:task_id>/", web_views.human_task_form, name="human_task_form"),
     path("tasks/<str:task_id>/submit/", web_views.human_task_submit, name="human_task_submit"),

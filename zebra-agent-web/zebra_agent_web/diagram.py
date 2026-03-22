@@ -59,15 +59,18 @@ class WorkflowDiagramGenerator:
         self,
         definition: ProcessDefinition,
         executions: list[TaskExecution] | None = None,
+        task_id_prefix: str = "",
     ):
         """Initialize the diagram generator.
 
         Args:
             definition: The workflow definition to visualize
             executions: Optional list of task executions showing what was run
+            task_id_prefix: Prefix for task IDs in onclick/data attributes (for namespacing)
         """
         self.definition = definition
         self.executions = executions or []
+        self.task_id_prefix = task_id_prefix
 
         # Build execution state lookup
         self.execution_state: dict[str, str] = {}
@@ -301,9 +304,10 @@ class WorkflowDiagramGenerator:
             name = name[: max_chars - 2] + ".."
 
         # Build node SVG
+        prefixed_id = self.task_id_prefix + task.id
         parts = [
-            f'<g class="node" data-task-id="{html.escape(task.id)}" '
-            f"onclick=\"selectTask('{html.escape(task.id)}')\" "
+            f'<g class="node" data-task-id="{html.escape(prefixed_id)}" '
+            f"onclick=\"selectTask('{html.escape(prefixed_id)}')\" "
             f'role="button" tabindex="0">',
             # Background rectangle
             f'<rect class="node-rect" '
@@ -477,15 +481,17 @@ class WorkflowDiagramGenerator:
 def generate_workflow_svg(
     definition: ProcessDefinition,
     executions: list[TaskExecution] | None = None,
+    task_id_prefix: str = "",
 ) -> str:
     """Generate an SVG diagram for a workflow.
 
     Args:
         definition: The workflow definition
         executions: Optional list of task executions
+        task_id_prefix: Prefix for task IDs in onclick/data attributes
 
     Returns:
         SVG string
     """
-    generator = WorkflowDiagramGenerator(definition, executions)
+    generator = WorkflowDiagramGenerator(definition, executions, task_id_prefix)
     return generator.generate_svg()

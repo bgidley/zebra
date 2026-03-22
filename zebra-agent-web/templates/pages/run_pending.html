@@ -197,6 +197,97 @@
     </div>
     {% endif %}
 
+    <!-- Parent Orchestration Flow -->
+    {% if parent_flow %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700" x-data="{ showParent: true, selectedTask: '' }">
+        <div class="px-6 py-4 cursor-pointer hover:bg-gray-700/30 transition-colors"
+             @click="showParent = !showParent"
+             :class="showParent ? 'border-b border-gray-700' : ''">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-white">Orchestration Flow</h2>
+                    <p class="text-sm text-gray-400 mt-1">{{ parent_flow.workflow_name }}</p>
+                </div>
+                <svg class="h-5 w-5 text-gray-400 transition-transform"
+                     :class="showParent ? 'rotate-180' : ''"
+                     fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </div>
+        </div>
+        <div x-show="showParent" x-collapse x-cloak>
+            <!-- Parent diagram -->
+            <div class="p-6 overflow-x-auto">
+                {{ parent_flow.svg|safe }}
+            </div>
+            <!-- Parent task panels -->
+            {% if parent_flow.task_panels %}
+            <div class="divide-y divide-gray-700">
+                {% for task in parent_flow.task_panels %}
+                <div class="task-detail-panel"
+                     id="task-panel-parent-{{ task.task_id }}"
+                     x-data="{ expanded: false }">
+                    <!-- Task Header -->
+                    <div class="px-6 py-3 cursor-pointer hover:bg-gray-700/30 transition-colors"
+                         @click="expanded = !expanded">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                {% if task.execution_order %}
+                                <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-700 text-xs text-gray-300 font-mono">
+                                    {{ task.execution_order }}
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-800 text-xs text-gray-500 font-mono">
+                                    -
+                                </span>
+                                {% endif %}
+                                <span class="font-medium text-white">{{ task.task_name }}</span>
+                                <span class="text-sm text-gray-500">({{ task.task_id }})</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                {% if task.state == "complete" %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-900/50 text-green-400 text-xs">Complete</span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-700 text-gray-400 text-xs">Not executed</span>
+                                {% endif %}
+                                <svg class="h-5 w-5 text-gray-400 transition-transform"
+                                     :class="expanded ? 'rotate-180' : ''"
+                                     fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Task Details (expandable) -->
+                    <div x-show="expanded" x-collapse class="px-6 pb-4 space-y-4">
+                        {% if task.resolved_inputs %}
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-400 mb-2">Inputs</h4>
+                            <div class="bg-gray-900 rounded-lg p-3 text-xs overflow-x-auto">
+                                {% for key, value in task.resolved_inputs.items %}
+                                <div class="mb-1">
+                                    <span class="text-indigo-400">{{ key }}:</span>
+                                    <span class="text-gray-300 whitespace-pre-wrap">{{ value|truncatechars:500 }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if task.output %}
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-400 mb-2">Output</h4>
+                            <pre class="text-gray-300 text-sm whitespace-pre-wrap break-words bg-gray-900 rounded-lg p-3 max-h-64 overflow-auto">{{ task.output }}</pre>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Task History (from process __task_output_* properties) -->
     {% if task_outputs %}
     <div class="bg-gray-800 rounded-lg border border-gray-700">
