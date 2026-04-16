@@ -1,0 +1,81 @@
+{% comment %}
+Human task form partial - renders a JSON Schema form for completing a human task.
+
+Parameters passed via context:
+  - task: dict with id, task_definition_id, state, process_id
+  - task_def: dict with name, properties (including schema)
+  - form: FormSchema object
+  - field_errors: dict of {field_name: [error_messages]}
+  - routes: list of route name strings (for conditional routing)
+  - process_name: name of the parent process/workflow
+  - form_description: resolved description from schema (may include template vars)
+{% endcomment %}
+{% load form_tags %}
+
+<div id="task-form-{{ task.id }}" class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+    {% comment %} Header {% endcomment %}
+    <div class="mb-6">
+        <div class="flex items-center gap-2 mb-1">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-900 text-amber-200">
+                Awaiting Input
+            </span>
+            {% if process_name %}
+            <span class="text-xs text-gray-500">{{ process_name }}</span>
+            {% endif %}
+        </div>
+        <h3 class="text-lg font-semibold text-white">{{ form.title|default:task_def.name }}</h3>
+        {% if form_description %}
+        <p class="text-sm text-gray-400 mt-1 whitespace-pre-line">{{ form_description }}</p>
+        {% endif %}
+    </div>
+
+    {% comment %} Prior task outputs - show generated content for user reference {% endcomment %}
+    {% if prior_outputs %}
+    <div class="mb-6 space-y-3">
+        {% for label, value in prior_outputs.items %}
+        <div class="bg-gray-900 rounded-md border border-gray-600 p-4">
+            <div class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">{{ label }}</div>
+            <div class="text-sm text-gray-200 whitespace-pre-wrap">{% if value is not None %}{{ value }}{% endif %}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% comment %} Form {% endcomment %}
+    <form hx-post="{% url 'human_task_submit' task_id=task.id %}"
+          hx-target="#task-form-{{ task.id }}"
+          hx-swap="outerHTML">
+        {% csrf_token %}
+
+        {% comment %} Render schema fields (submitted_values repopulates on validation error) {% endcomment %}
+        {% render_schema_form form field_errors submitted_values %}
+
+        {% comment %} Route selection or submit button {% endcomment %}
+        <div class="mt-6 flex items-center gap-3">
+            {% if routes %}
+                {% for route in routes %}
+                <button type="submit" name="next_route" value="{{ route }}"
+                        class="px-4 py-2 rounded-md text-sm font-medium
+                               {% if forloop.first %}bg-indigo-600 hover:bg-indigo-500 text-white{% else %}bg-gray-700 hover:bg-gray-600 text-gray-200{% endif %}
+                               focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    {{ route|title }}
+                </button>
+                {% endfor %}
+            {% else %}
+                <button type="submit"
+                        class="px-4 py-2 rounded-md text-sm font-medium bg-indigo-600
+                               hover:bg-indigo-500 text-white focus:outline-none
+                               focus:ring-2 focus:ring-indigo-500">
+                    Submit
+                </button>
+            {% endif %}
+
+            <span class="htmx-indicator">
+                <svg class="animate-spin h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+            </span>
+        </div>
+    </form>
+</div>

@@ -1,0 +1,39 @@
+# Simple Sequential Workflow
+# A minimal workflow for testing basic sequential execution
+
+name: "Simple Sequential"
+version: 1
+first_task: start
+
+tasks:
+  start:
+    name: "Start"
+    properties:
+      message: "Workflow started"
+
+  step_one:
+    name: "Step One"
+    action: shell
+    properties:
+      command: "echo 'Executing step one'"
+
+  step_two:
+    name: "Step Two"
+    action: shell
+    properties:
+      command: "echo 'Executing step two'"
+
+  end:
+    name: "End"
+    properties:
+      message: "Workflow completed"
+
+routings:
+  - from: start
+    to: step_one
+
+  - from: step_one
+    to: step_two
+
+  - from: step_two
+    to: end

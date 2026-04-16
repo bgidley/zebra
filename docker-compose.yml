@@ -1,0 +1,16 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_DEBUG=0
+      - DJANGO_ALLOWED_HOSTS=*
+    volumes:
+      - ./.env:/app/.env:ro,z
+      - ~/.zebra/workflows:/root/.zebra/workflows:z
+      - zebra-logs:/app/zebra-agent-web/tmp
+    restart: unless-stopped
+
+volumes:
+  zebra-logs:

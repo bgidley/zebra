@@ -1,0 +1,288 @@
+<!-- Goal Processing - Shows WebSocket-connected progress UI -->
+<div id="goal-progress" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
+    <!-- Header with spinner -->
+    <div class="flex items-center gap-3">
+        <div id="progress-spinner" class="animate-spin h-6 w-6 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
+        <span id="progress-title" class="text-lg font-medium text-white">Processing your goal...</span>
+    </div>
+    
+    <!-- Goal text -->
+    <div class="text-sm text-gray-400">
+        <span class="font-medium">Goal:</span> {{ goal }}
+    </div>
+    
+    <!-- Workflow Diagram Container (initially hidden) -->
+    <div id="workflow-diagram-container" class="hidden border-t border-gray-700 pt-4 mt-4">
+        {% include "partials/workflow_diagram.html" with run_id=run_id auto_refresh="true" refresh_interval="2000" %}
+    </div>
+    
+    <!-- Progress log -->
+    <div id="progress-log" class="space-y-2 text-sm font-mono text-gray-300 max-h-80 overflow-y-auto bg-gray-900 rounded-lg p-4">
+        <div class="text-gray-500">Connecting to server...</div>
+    </div>
+    
+    <!-- Hidden run ID for JavaScript -->
+    <input type="hidden" id="run-id" value="{{ run_id }}">
+</div>
+
+<script>
+(function() {
+    const runId = document.getElementById('run-id').value;
+    const progressLog = document.getElementById('progress-log');
+    const progressTitle = document.getElementById('progress-title');
+    const progressSpinner = document.getElementById('progress-spinner');
+    const progressContainer = document.getElementById('goal-progress');
+    const diagramContainer = document.getElementById('workflow-diagram-container');
+    
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 3;
+    let ws = null;
+    let workflowDiagram = null;
+    let currentWorkflowName = null;
+    
+    function addLog(message, className = '') {
+        const div = document.createElement('div');
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        if (className) div.className = className;
+        progressLog.appendChild(div);
+        progressLog.scrollTop = progressLog.scrollHeight;
+    }
+    
+    function showDiagram(workflowName) {
+        currentWorkflowName = workflowName;
+        diagramContainer.classList.remove('hidden');
+        
+        // Initialize the shared WorkflowDiagram component
+        const diagramElement = diagramContainer.querySelector('.workflow-diagram-component');
+        if (diagramElement && !workflowDiagram) {
+            workflowDiagram = new WorkflowDiagram(diagramElement);
+            workflowDiagram.start();
+        } else if (workflowDiagram) {
+            workflowDiagram.refresh();
+        }
+    }
+    
+    function stopDiagramRefresh() {
+        if (workflowDiagram) {
+            workflowDiagram.stop();
+        }
+    }
+    
+    function showCompletion(success, data) {
+        // Stop spinner and diagram refresh
+        progressSpinner.classList.remove('animate-spin');
+        stopDiagramRefresh();
+        
+        if (success) {
+            progressSpinner.classList.remove('border-indigo-500');
+            progressSpinner.classList.add('border-green-500', 'border-2');
+            progressSpinner.innerHTML = '<svg class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+            progressTitle.textContent = 'Goal completed successfully!';
+            progressTitle.classList.add('text-green-400');
+            
+            // Add link to full result
+            const linkDiv = document.createElement('div');
+            linkDiv.className = 'mt-4 pt-4 border-t border-gray-700';
+            linkDiv.innerHTML = `
+                <a href="/runs/${runId}/" class="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300">
+                    <span>View full result</span>
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                </a>
+            `;
+            progressContainer.appendChild(linkDiv);
+            
+            // Show output preview if available
+            if (data.output) {
+                const outputDiv = document.createElement('div');
+                outputDiv.className = 'mt-4 pt-4 border-t border-gray-700';
+                outputDiv.innerHTML = `
+                    <h3 class="text-sm font-medium text-gray-300 mb-2">Result Preview</h3>
+                    <div class="bg-gray-900 rounded-lg p-4 text-gray-200 whitespace-pre-wrap font-mono text-sm max-h-48 overflow-y-auto">${escapeHtml(data.output.substring(0, 500))}${data.output.length > 500 ? '...' : ''}</div>
+                `;
+                progressContainer.insertBefore(outputDiv, linkDiv);
+            }
+        } else {
+            progressSpinner.classList.remove('border-indigo-500');
+            progressSpinner.classList.add('border-red-500', 'border-2');
+            progressSpinner.innerHTML = '<svg class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+            progressTitle.textContent = 'Goal execution failed';
+            progressTitle.classList.add('text-red-400');
+            
+            // Show error
+            if (data.error) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'mt-4 p-4 bg-red-900/20 border border-red-800 rounded-lg text-red-300';
+                errorDiv.textContent = data.error;
+                progressContainer.appendChild(errorDiv);
+            }
+        }
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    function connectWebSocket() {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/goal/${runId}/`);
+        
+        ws.onopen = () => {
+            addLog('Connected to server', 'text-green-400');
+            reconnectAttempts = 0;
+        };
+        
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            switch(data.event) {
+                case 'pending':
+                    addLog('Waiting for execution to start...');
+                    break;
+                    
+                case 'started':
+                    addLog('Goal execution started');
+                    break;
+                    
+                case 'selecting_workflow':
+                    addLog(`Analyzing goal and selecting workflow (${data.available_count} available)...`);
+                    break;
+                    
+                case 'creating_workflow':
+                    addLog(`Creating new workflow${data.suggested_name ? ': ' + data.suggested_name : ''}...`, 'text-yellow-400');
+                    break;
+                    
+                case 'workflow_selected':
+                    const createdText = data.created_new ? ' (newly created)' : '';
+                    addLog(`Selected workflow: ${data.workflow_name}${createdText}`, 'text-indigo-400');
+                    if (data.reasoning) {
+                        addLog(`  Reason: ${data.reasoning}`, 'text-gray-500 ml-4');
+                    }
+                    // Show the workflow diagram
+                    showDiagram(data.workflow_name);
+                    break;
+                    
+                case 'workflow_starting':
+                    addLog(`Starting workflow execution (${data.total_tasks} tasks)...`);
+                    // Refresh diagram to show initial state
+                    if (workflowDiagram) {
+                        workflowDiagram.refresh();
+                    }
+                    break;
+                    
+                case 'task_started':
+                    addLog(`Starting task: ${data.task_name}`, 'text-blue-400');
+                    // Refresh diagram to show task in progress
+                    if (workflowDiagram) {
+                        workflowDiagram.refresh();
+                    }
+                    break;
+                    
+                case 'task_completed':
+                    addLog(`Task ${data.task_index}/${data.total_tasks}: ${data.task_name}`, 'text-green-400');
+                    if (data.output_preview) {
+                        addLog(`  ${data.output_preview.substring(0, 100)}...`, 'text-gray-500 ml-4 truncate');
+                    }
+                    // Refresh diagram to show completed task
+                    if (workflowDiagram) {
+                        workflowDiagram.refresh();
+                    }
+                    break;
+                    
+                case 'human_task_pending':
+                    addLog(`Waiting for input: ${data.task_name}`, 'text-amber-400 font-medium');
+                    // Show link to the task form
+                    const taskLink = document.createElement('div');
+                    taskLink.className = 'mt-2 p-3 bg-amber-900/20 border border-amber-700 rounded-lg';
+                    taskLink.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-amber-200">This workflow needs your input to continue.</span>
+                            <a href="/tasks/${escapeHtml(data.task_id)}/" 
+                               class="px-3 py-1.5 text-sm rounded-md bg-amber-600 hover:bg-amber-500 text-white font-medium">
+                                Open Form
+                            </a>
+                        </div>
+                    `;
+                    progressContainer.insertBefore(taskLink, progressLog);
+                    // Refresh diagram
+                    if (workflowDiagram) {
+                        workflowDiagram.refresh();
+                    }
+                    break;
+                    
+                case 'completed':
+                    addLog('Workflow execution completed!', 'text-green-400 font-bold');
+                    if (data.tokens_used) {
+                        addLog(`Tokens used: ${data.tokens_used}`, 'text-gray-500');
+                    }
+                    showCompletion(true, data);
+                    ws.close();
+                    break;
+                    
+                case 'failed':
+                    addLog(`Execution failed: ${data.error}`, 'text-red-400 font-bold');
+                    showCompletion(false, data);
+                    ws.close();
+                    break;
+                    
+                case 'error':
+                    addLog(`Error: ${data.message}`, 'text-red-400');
+                    break;
+                    
+                default:
+                    addLog(`Event: ${data.event}`);
+            }
+        };
+        
+        ws.onerror = (error) => {
+            addLog('WebSocket error', 'text-yellow-400');
+        };
+        
+        ws.onclose = (event) => {
+            // Only try to reconnect if we haven't completed
+            if (!progressContainer.querySelector('.text-green-400.font-bold, .text-red-400.font-bold')) {
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    addLog(`Connection lost, reconnecting (${reconnectAttempts}/${maxReconnectAttempts})...`, 'text-yellow-400');
+                    setTimeout(connectWebSocket, 2000);
+                } else {
+                    addLog('Connection lost. Checking status via API...', 'text-yellow-400');
+                    pollStatus();
+                }
+            }
+        };
+    }
+    
+    function pollStatus() {
+        fetch(`/api/runs/${runId}/status/`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'completed') {
+                    addLog('Workflow completed!', 'text-green-400 font-bold');
+                    showCompletion(true, data);
+                } else if (data.status === 'failed') {
+                    addLog('Workflow failed', 'text-red-400 font-bold');
+                    showCompletion(false, data);
+                } else if (data.status === 'processing') {
+                    addLog('Still processing...', 'text-gray-400');
+                    // Try to show diagram if we have a workflow name
+                    if (data.workflow_name && !currentWorkflowName) {
+                        showDiagram(data.workflow_name);
+                    }
+                    setTimeout(pollStatus, 3000);
+                } else {
+                    addLog(`Status: ${data.status}`, 'text-gray-400');
+                }
+            })
+            .catch(err => {
+                addLog(`Failed to check status: ${err}`, 'text-red-400');
+            });
+    }
+    
+    // Start WebSocket connection
+    connectWebSocket();
+})();
+</script>

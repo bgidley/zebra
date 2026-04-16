@@ -1,0 +1,59 @@
+[project]
+name = "zebra-workspace"
+version = "0.1.0"
+description = "Zebra workflow engine workspace"
+requires-python = ">=3.11"
+dependencies = [
+    "djangorestframework-stubs>=3.16.7",
+]
+
+[tool.uv.workspace]
+members = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-agent-web"]
+
+[tool.uv.sources]
+zebra-workflow = { workspace = true }
+zebra-tasks = { workspace = true }
+zebra-agent = { workspace = true }
+zebra-agent-web = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "pytest-dotenv>=0.5.2",
+    "ruff>=0.1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["zebra-py/tests", "zebra-tasks/tests", "zebra-agent/tests", "zebra-agent-web/tests"]
+pythonpath = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-agent-web"]
+addopts = "--import-mode=importlib"
+env_files = [".env"]
+
+[tool.coverage.run]
+source = ["zebra", "zebra_tasks", "zebra_agent", "zebra_agent_web"]
+branch = true
+omit = [
+    "*/__main__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "class.*Protocol.*:",
+    "@abstractmethod",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}{{ form.title|default:task_def.name }} - Zebra Agent{% endblock %}
+{% block page_title %}{{ task_def.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    {% comment %} Breadcrumb {% endcomment %}
+    <nav class="mb-4 text-sm text-gray-400">
+        <a href="{% url 'pending_tasks' %}" class="hover:text-gray-200">Pending Tasks</a>
+        <span class="mx-2">/</span>
+        <span class="text-gray-200">{{ task_def.name }}</span>
+    </nav>
+
+    {% include "partials/human_task_form.html" %}
+</div>
+{% endblock %}

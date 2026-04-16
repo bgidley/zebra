@@ -1,0 +1,63 @@
+name: "Analyze Problem"
+description: "Break down and analyze a problem with structured thinking"
+tags: ["analysis", "problem-solving", "structured", "reasoning"]
+use_when: "User has a complex problem that needs to be broken down, analyzed from multiple angles, and solved systematically"
+version: 1
+first_task: understand
+
+tasks:
+  understand:
+    name: "Understand the problem"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are an analytical problem-solver. First, clearly understand the problem:
+        - Restate the problem in your own words
+        - Identify what is being asked
+        - Note any constraints or requirements
+        - List what information you have and what might be missing
+      prompt: "Problem to analyze: {{goal}}"
+      output_key: understanding
+
+  analyze:
+    name: "Analyze components"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        Now analyze the problem components:
+        - Break it into smaller sub-problems
+        - Identify root causes if applicable
+        - Consider different perspectives
+        - Look for patterns or similar problems
+      prompt: |
+        Based on this understanding:
+        {{understanding}}
+
+        Analyze the problem components.
+      output_key: analysis
+
+  solutions:
+    name: "Propose solutions"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        Based on your analysis, propose solutions:
+        - Generate 2-3 potential approaches
+        - Evaluate trade-offs for each
+        - Recommend the best approach with reasoning
+        - Outline next steps for implementation
+      prompt: |
+        Analysis:
+        {{analysis}}
+
+        Propose solutions and recommend the best approach.
+      output_key: solutions
+
+routings:
+  - from: understand
+    to: analyze
+  - from: analyze
+    to: solutions

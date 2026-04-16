@@ -1,0 +1,476 @@
+{% extends "base.html" %}
+
+{% block title %}Run Details - Zebra Agent{% endblock %}
+{% block page_title %}Run Details{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+/* Markdown output styling (prose-invert replacement — Tailwind CDN lacks typography plugin) */
+#run-output-content { color: #e5e7eb; font-size: 0.875rem; line-height: 1.625; }
+#run-output-content h1 { color: #fff; font-size: 1.25rem; font-weight: 700; margin: 1.25em 0 0.5em; }
+#run-output-content h2 { color: #fff; font-size: 1.125rem; font-weight: 600; margin: 1.25em 0 0.5em; }
+#run-output-content h3 { color: #fff; font-size: 1rem; font-weight: 600; margin: 1em 0 0.4em; }
+#run-output-content h4 { color: #d1d5db; font-size: 0.875rem; font-weight: 600; margin: 0.75em 0 0.3em; }
+#run-output-content p  { color: #e5e7eb; margin: 0.5em 0; line-height: 1.7; }
+#run-output-content ul, #run-output-content ol { color: #e5e7eb; padding-left: 1.5em; margin: 0.5em 0; }
+#run-output-content li { margin: 0.25em 0; }
+#run-output-content strong { color: #fff; }
+#run-output-content a { color: #818cf8; }
+#run-output-content a:hover { color: #a5b4fc; }
+#run-output-content code { color: #a5b4fc; background: #111827; padding: 0.125em 0.375em; border-radius: 0.25rem; font-size: 0.8125rem; }
+#run-output-content pre { background: #111827; color: #d1d5db; padding: 0.75em 1em; border-radius: 0.375rem; overflow-x: auto; margin: 0.75em 0; }
+#run-output-content pre code { background: none; padding: 0; }
+#run-output-content hr { border-color: #374151; margin: 1em 0; }
+#run-output-content blockquote { border-left: 3px solid #4b5563; padding-left: 1em; color: #9ca3af; margin: 0.75em 0; }
+#run-output-content table { width: 100%; border-collapse: collapse; margin: 0.75em 0; }
+#run-output-content th, #run-output-content td { border: 1px solid #374151; padding: 0.375em 0.75em; color: #e5e7eb; }
+#run-output-content th { background: #1f2937; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="{ selectedTask: null, expandedOutputs: {} }">
+    <!-- Header -->
+    <div class="flex items-center gap-3">
+        <a href="/runs/" class="text-gray-400 hover:text-white">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-white">Run Details</h1>
+            <p class="text-gray-400 mt-1 text-sm">{{ run.id }}</p>
+        </div>
+    </div>
+    
+    <!-- Status -->
+    <div class="flex items-center gap-4">
+        {% if run.success %}
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-900 text-green-300">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            Success
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-900 text-red-300">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Failed
+        </span>
+        {% endif %}
+        <a href="/workflows/{{ run.workflow_name }}/" class="text-indigo-400 hover:text-indigo-300">
+            {{ run.workflow_name }}
+        </a>
+    </div>
+    
+    <!-- Metadata -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Started</p>
+            <p class="text-white mt-1">{{ run.started_at|date:"M d, Y H:i:s" }}</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Completed</p>
+            <p class="text-white mt-1">{{ run.completed_at|date:"M d, Y H:i:s"|default:"In progress" }}</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Model</p>
+            <p class="text-white mt-1 capitalize">{{ run.model|default:"sonnet" }}</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Tokens Used</p>
+            <p class="text-white mt-1">{{ run.tokens_used|default:"0" }}</p>
+            {% if run.input_tokens or run.output_tokens %}
+            <p class="text-xs text-gray-500 mt-0.5">{{ run.input_tokens|default:"0" }} in / {{ run.output_tokens|default:"0" }} out</p>
+            {% endif %}
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Cost</p>
+            {% if run.cost %}
+            <p class="text-white mt-1">${{ run.cost|floatformat:6 }}</p>
+            {% else %}
+            <p class="text-gray-500 mt-1">N/A</p>
+            {% endif %}
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">User Rating</p>
+            {% if run.user_rating %}
+            <div class="flex items-center gap-1 mt-1 text-yellow-400">
+                {% for i in "12345" %}
+                <svg class="h-4 w-4 {% if forloop.counter > run.user_rating %}text-gray-600{% endif %}" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-500 mt-1">Not rated</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Goal -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700">
+            <h2 class="text-lg font-semibold text-white">Goal</h2>
+        </div>
+        <div class="p-6 text-gray-200">{{ run.goal }}</div>
+    </div>
+    
+    <!-- Parent Orchestration Flow -->
+    {% if parent_flow %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700" x-data="{ showParent: false }">
+        <div class="px-6 py-4 cursor-pointer hover:bg-gray-700/30 transition-colors"
+             @click="showParent = !showParent"
+             :class="showParent ? 'border-b border-gray-700' : ''">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-white">Orchestration Flow</h2>
+                    <p class="text-sm text-gray-400 mt-1">{{ parent_flow.workflow_name }} &mdash; click to expand</p>
+                </div>
+                <svg class="h-5 w-5 text-gray-400 transition-transform"
+                     :class="showParent ? 'rotate-180' : ''"
+                     fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </div>
+        </div>
+        <div x-show="showParent" x-collapse x-cloak>
+            <!-- Parent diagram -->
+            <div class="p-6 overflow-x-auto">
+                {{ parent_flow.svg|safe }}
+            </div>
+            <!-- Parent task panels -->
+            {% if parent_flow.task_panels %}
+            <div class="divide-y divide-gray-700">
+                {% for task in parent_flow.task_panels %}
+                <div class="task-detail-panel"
+                     id="task-panel-parent-{{ task.task_id }}"
+                     :class="selectedTask === 'parent-{{ task.task_id }}' ? 'bg-gray-700/50' : ''"
+                     x-data="{ expanded: false }">
+                    <!-- Task Header -->
+                    <div class="px-6 py-3 cursor-pointer hover:bg-gray-700/30 transition-colors"
+                         @click="expanded = !expanded; selectedTask = 'parent-{{ task.task_id }}'">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                {% if task.execution_order %}
+                                <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-700 text-xs text-gray-300 font-mono">
+                                    {{ task.execution_order }}
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-800 text-xs text-gray-500 font-mono">
+                                    -
+                                </span>
+                                {% endif %}
+                                <span class="font-medium text-white">{{ task.task_name }}</span>
+                                <span class="text-sm text-gray-500">({{ task.task_id }})</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                {% if task.state == "complete" %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-900/50 text-green-400 text-xs">Complete</span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-700 text-gray-400 text-xs">Not executed</span>
+                                {% endif %}
+                                <svg class="h-5 w-5 text-gray-400 transition-transform"
+                                     :class="expanded ? 'rotate-180' : ''"
+                                     fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Task Details (expandable) -->
+                    <div x-show="expanded" x-collapse class="px-6 pb-4 space-y-4">
+                        {% if task.resolved_inputs %}
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-400 mb-2">Inputs</h4>
+                            <div class="bg-gray-900 rounded-lg p-3 text-xs overflow-x-auto">
+                                {% for key, value in task.resolved_inputs.items %}
+                                <div class="mb-1">
+                                    <span class="text-indigo-400">{{ key }}:</span>
+                                    <span class="text-gray-300 whitespace-pre-wrap">{{ value|truncatechars:500 }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if task.output %}
+                        <div x-data="{ showFull: false }">
+                            <h4 class="text-sm font-medium text-gray-400 mb-2">Output</h4>
+                            <div class="bg-gray-900 rounded-lg p-3 text-xs font-mono overflow-x-auto">
+                                {% if task.output|length > 500 %}
+                                <pre x-show="!showFull" class="text-gray-300 whitespace-pre-wrap">{{ task.output|truncatechars:500 }}</pre>
+                                <pre x-show="showFull" class="text-gray-300 whitespace-pre-wrap">{{ task.output }}</pre>
+                                <button @click="showFull = !showFull"
+                                        class="mt-2 text-indigo-400 hover:text-indigo-300 text-xs">
+                                    <span x-show="!showFull">Show more...</span>
+                                    <span x-show="showFull">Show less</span>
+                                </button>
+                                {% else %}
+                                <pre class="text-gray-300 whitespace-pre-wrap">{{ task.output }}</pre>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Workflow Execution Diagram -->
+    {% if workflow_svg %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700">
+            <h2 class="text-lg font-semibold text-white">Execution Flow</h2>
+            <p class="text-sm text-gray-400 mt-1">Click a task to view details</p>
+        </div>
+        <div class="p-6">
+            {% include "partials/workflow_diagram.html" with run_id=run.id workflow_name=run.workflow_name workflow_svg=workflow_svg show_header="false" auto_refresh="false" %}
+        </div>
+    </div>
+    
+    <!-- Task Execution Details -->
+    {% if task_executions %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700">
+            <h2 class="text-lg font-semibold text-white">Task Execution Details</h2>
+            <p class="text-sm text-gray-400 mt-1">{{ task_executions|length }} task{{ task_executions|length|pluralize }} executed</p>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for task in task_executions %}
+            <div class="task-detail-panel" 
+                 id="task-panel-{{ task.task_id }}"
+                 :class="selectedTask === '{{ task.task_id }}' ? 'bg-gray-700/50' : ''"
+                 x-data="{ expanded: false }">
+                <!-- Task Header -->
+                <div class="px-6 py-4 cursor-pointer hover:bg-gray-700/30 transition-colors"
+                     @click="expanded = !expanded; selectedTask = '{{ task.task_id }}'">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <!-- Execution order -->
+                            <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-700 text-xs text-gray-300 font-mono">
+                                {{ task.execution_order }}
+                            </span>
+                            <!-- Task name -->
+                            <span class="font-medium text-white">{{ task.task_name }}</span>
+                            <span class="text-sm text-gray-500">({{ task.task_id }})</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <!-- Duration -->
+                            {% if task.duration %}
+                            <span class="text-sm text-gray-400">{{ task.duration }}</span>
+                            {% endif %}
+                            <!-- Status badge -->
+                            {% if task.state == "complete" %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-900/50 text-green-400 text-xs">
+                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Complete
+                            </span>
+                            {% elif task.state == "failed" %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-900/50 text-red-400 text-xs">
+                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Failed
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-700 text-gray-400 text-xs">
+                                {{ task.state }}
+                            </span>
+                            {% endif %}
+                            <!-- Expand icon -->
+                            <svg class="h-5 w-5 text-gray-400 transition-transform" 
+                                 :class="expanded ? 'rotate-180' : ''" 
+                                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Task Details (expandable) -->
+                <div x-show="expanded" x-collapse class="px-6 pb-4 space-y-4">
+                    <!-- Timing -->
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <span class="text-gray-500">Started:</span>
+                            <span class="text-gray-300 ml-2">{{ task.started_at|date:"H:i:s.u" }}</span>
+                        </div>
+                        {% if task.completed_at %}
+                        <div>
+                            <span class="text-gray-500">Completed:</span>
+                            <span class="text-gray-300 ml-2">{{ task.completed_at|date:"H:i:s.u" }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Resolved Inputs -->
+                    {% if task.resolved_inputs %}
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-400 mb-2">Inputs</h4>
+                        <div class="bg-gray-900 rounded-lg p-3 text-xs overflow-x-auto">
+                            {% for key, value in task.resolved_inputs.items %}
+                            <div class="mb-1">
+                                <span class="text-indigo-400">{{ key }}:</span>
+                                <span class="text-gray-300 whitespace-pre-wrap">{{ value|truncatechars:500 }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Definition Properties (raw YAML) -->
+                    {% if task.properties %}
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-400 mb-2">Definition Properties</h4>
+                        <pre class="bg-gray-900 rounded-lg p-3 text-xs text-gray-300 overflow-x-auto">{% for key, value in task.properties.items %}{{ key }}: {{ value|truncatechars:200 }}
+{% endfor %}</pre>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Error message -->
+                    {% if task.error %}
+                    <div>
+                        <h4 class="text-sm font-medium text-red-400 mb-2">Error</h4>
+                        <div class="bg-red-900/20 border border-red-800/50 rounded-lg p-3 text-sm text-red-300">
+                            {{ task.error }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Output -->
+                    {% if task.output %}
+                    <div x-data="{ showFull: false }">
+                        <h4 class="text-sm font-medium text-gray-400 mb-2">Output</h4>
+                        <div class="bg-gray-900 rounded-lg p-3 text-xs font-mono overflow-x-auto">
+                            {% if task.output|length > 500 %}
+                            <pre x-show="!showFull" class="text-gray-300 whitespace-pre-wrap">{{ task.output|truncatechars:500 }}</pre>
+                            <pre x-show="showFull" class="text-gray-300 whitespace-pre-wrap">{{ task.output }}</pre>
+                            <button @click="showFull = !showFull" 
+                                    class="mt-2 text-indigo-400 hover:text-indigo-300 text-xs">
+                                <span x-show="!showFull">Show more...</span>
+                                <span x-show="showFull">Show less</span>
+                            </button>
+                            {% else %}
+                            <pre class="text-gray-300 whitespace-pre-wrap">{{ task.output }}</pre>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+    
+    <!-- Output or Error -->
+    {% if run.success %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700">
+            <h2 class="text-lg font-semibold text-white">Final Output</h2>
+        </div>
+        <div class="p-6" id="run-output-content">
+        </div>
+    </div>
+    {{ run.output|json_script:"run-output-data" }}
+    <script>
+    (function() {
+        var el = document.getElementById('run-output-content');
+        var dataEl = document.getElementById('run-output-data');
+        if (!el || !dataEl) return;
+        // json_script produces a <script type="application/json"> with proper
+        // JSON encoding.  JSON.parse gives us the real string with newlines etc.
+        var text = JSON.parse(dataEl.textContent) || '';
+        if (typeof marked !== 'undefined') {
+            el.innerHTML = marked.parse(text);
+        } else {
+            var pre = document.createElement('pre');
+            pre.className = 'text-gray-200 whitespace-pre-wrap text-sm overflow-x-auto';
+            pre.textContent = text;
+            el.appendChild(pre);
+        }
+    })();
+    </script>
+    {% else %}
+    <div class="bg-gray-800 rounded-lg border border-red-800">
+        <div class="px-6 py-4 border-b border-red-800">
+            <h2 class="text-lg font-semibold text-red-400">Error</h2>
+        </div>
+        <div class="p-6 text-red-300">{{ run.error }}</div>
+    </div>
+    {% endif %}
+    
+    <!-- Rating (if not rated) -->
+    {% if not run.user_rating %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <h3 class="text-sm font-medium text-gray-300 mb-3">Rate this result</h3>
+        <div class="flex gap-2" x-data="{ rating: 0, submitted: false }">
+            {% for i in "12345" %}
+            <button @click="rating = {{ i }}; submitted = false"
+                    :class="rating >= {{ i }} ? 'text-yellow-400' : 'text-gray-600'"
+                    class="hover:text-yellow-300 transition-colors">
+                <svg class="h-8 w-8" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+            </button>
+            {% endfor %}
+            <button x-show="rating > 0 && !submitted"
+                    @click="fetch('/runs/{{ run.id }}/rate/', {method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'}, body: 'rating=' + rating}).then(() => submitted = true)"
+                    class="ml-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors">
+                Submit Rating
+            </button>
+            <span x-show="submitted" class="ml-4 flex items-center text-green-400">Rating submitted!</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Feedback -->
+    {% if run.success %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6"
+         x-data="{ feedbackText: '', submitted: false, submitting: false, result: '' }">
+        <h3 class="text-sm font-medium text-gray-300 mb-1">Feedback for next time</h3>
+        <p class="text-xs text-gray-500 mb-3">
+            Tell us what could be improved — this will be remembered and used on the next run of this workflow.
+        </p>
+        <div x-show="!submitted">
+            <textarea x-model="feedbackText"
+                      rows="3"
+                      placeholder="e.g. Include price comparisons, focus on safety features, use metric units..."
+                      class="w-full rounded-lg bg-gray-900 border border-gray-600 text-gray-200 text-sm px-3 py-2
+                             placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500
+                             focus:outline-none resize-y"></textarea>
+            <div class="mt-2 flex items-center gap-3">
+                <button @click="if (!feedbackText.trim()) return;
+                                 submitting = true;
+                                 fetch('/runs/{{ run.id }}/feedback/', {
+                                     method: 'POST',
+                                     headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                                     body: 'feedback=' + encodeURIComponent(feedbackText)
+                                 })
+                                 .then(r => r.text())
+                                 .then(html => { result = html; submitted = true; submitting = false; })
+                                 .catch(() => { result = '<span class=\'text-red-400\'>Failed to save feedback.</span>'; submitted = true; submitting = false; })"
+                        :disabled="!feedbackText.trim() || submitting"
+                        :class="feedbackText.trim() && !submitting ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-700 cursor-not-allowed'"
+                        class="px-4 py-2 text-white text-sm rounded-lg transition-colors">
+                    <span x-show="!submitting">Submit Feedback</span>
+                    <span x-show="submitting">Saving...</span>
+                </button>
+            </div>
+        </div>
+        <div x-show="submitted" x-html="result"></div>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}

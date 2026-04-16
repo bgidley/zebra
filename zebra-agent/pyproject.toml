@@ -1,0 +1,52 @@
+[project]
+name = "zebra-agent"
+version = "0.1.0"
+description = "Self-improving agent library that uses zebra workflows"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Zebra Contributors" }]
+keywords = ["workflow", "agent", "llm", "ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "zebra-workflow",
+    "zebra-tasks[anthropic]",
+    "pyyaml>=6.0",
+    "dependency-injector>=4.44.0",
+]
+
+[tool.uv.sources]
+zebra-workflow = { workspace = true }
+zebra-tasks = { workspace = true }
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["zebra_agent"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

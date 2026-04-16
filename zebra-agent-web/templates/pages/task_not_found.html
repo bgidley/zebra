@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}{{ error_title|default:"Task Not Found" }} - Zebra Agent{% endblock %}
+{% block page_title %}{{ error_title|default:"Task Not Found" }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    {% comment %} Breadcrumb {% endcomment %}
+    <nav class="mb-4 text-sm text-gray-400">
+        <a href="/activity/" class="hover:text-gray-200">Activity</a>
+        <span class="mx-2">/</span>
+        <span class="text-gray-200">Task Not Found</span>
+    </nav>
+
+    <div class="rounded-lg border border-amber-700 bg-amber-900/20 p-6">
+        <div class="flex items-start gap-4">
+            <div class="flex-shrink-0">
+                <svg class="h-8 w-8 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-lg font-semibold text-amber-200">{{ error_title|default:"Task Not Found" }}</h2>
+                <p class="mt-2 text-gray-300">{{ error_message|default:"This task could not be found." }}</p>
+                <div class="mt-4 flex gap-3">
+                    <a href="/activity/"
+                       class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg transition-colors">
+                        View Activity
+                    </a>
+                    <a href="/"
+                       class="inline-flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors">
+                        Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

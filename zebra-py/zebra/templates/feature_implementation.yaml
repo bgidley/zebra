@@ -1,0 +1,156 @@
+# Feature Implementation Workflow
+# A workflow template for implementing new features with human review steps.
+#
+# Human tasks use auto:false with a JSON Schema form in properties.schema.
+# The engine leaves the task in READY state. External callers read the schema
+# to render a form, then call engine.complete_task(task_id, result) to resume.
+
+name: "Feature Implementation"
+version: 1
+first_task: gather_requirements
+
+tasks:
+  gather_requirements:
+    name: "Gather Requirements"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Feature Requirements"
+        required: [description]
+        properties:
+          description:
+            type: string
+            title: "Feature Description"
+            description: "What feature should we implement? Describe the requirements."
+            format: multiline
+            minLength: 20
+          priority:
+            type: string
+            title: "Priority"
+            enum: [high, medium, low]
+            default: medium
+
+  analyze_codebase:
+    name: "Analyze Codebase"
+    action: shell
+    properties:
+      command: "echo 'Analyzing codebase structure...'"
+
+  create_plan:
+    name: "Create Implementation Plan"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Implementation Plan"
+        description: "Based on the requirements: {{gather_requirements.output}}"
+        required: [plan]
+        properties:
+          plan:
+            type: string
+            title: "Plan"
+            description: |
+              Create a detailed implementation plan including:
+              1. Files to modify or create
+              2. Key changes needed
+              3. Testing approach
+            format: multiline
+
+  review_plan:
+    name: "Review Plan"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Review Plan"
+        description: "Please review this implementation plan: {{create_plan.output}}"
+        required: [feedback]
+        properties:
+          feedback:
+            type: string
+            title: "Feedback"
+            description: "Any comments on the plan?"
+            format: multiline
+
+  implement:
+    name: "Implement Feature"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Implement Feature"
+        description: "Please implement the feature according to: {{create_plan.output}}"
+        required: [summary]
+        properties:
+          summary:
+            type: string
+            title: "Implementation Summary"
+            description: "Describe what was implemented."
+            format: multiline
+
+  run_tests:
+    name: "Run Tests"
+    action: shell
+    properties:
+      command: "echo 'Running tests...'"
+      # In real use: pytest tests/
+
+  code_review:
+    name: "Code Review"
+    auto: false
+    synchronized: true
+    properties:
+      schema:
+        type: object
+        title: "Code Review"
+        description: "Test results: {{run_tests.output}}"
+        required: [review]
+        properties:
+          review:
+            type: string
+            title: "Review Comments"
+            description: "Please review the changes and provide feedback."
+            format: multiline
+          approved:
+            type: boolean
+            title: "Approved?"
+            default: false
+
+  complete:
+    name: "Complete"
+    properties:
+      message: "Feature implementation workflow completed!"
+
+routings:
+  - from: gather_requirements
+    to: analyze_codebase
+
+  - from: analyze_codebase
+    to: create_plan
+
+  - from: create_plan
+    to: review_plan
+
+  - from: review_plan
+    to: implement
+    condition: route_name
+    name: "yes"
+
+  - from: review_plan
+    to: create_plan
+    condition: route_name
+    name: "modify"
+
+  - from: implement
+    to: run_tests
+    parallel: true
+
+  - from: implement
+    to: code_review
+
+  - from: run_tests
+    to: code_review
+
+  - from: code_review
+    to: complete

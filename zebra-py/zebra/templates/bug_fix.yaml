@@ -1,0 +1,145 @@
+# Bug Fix Workflow
+# A workflow template for fixing bugs systematically.
+#
+# Human tasks use auto:false with a JSON Schema form in properties.schema.
+# The engine leaves the task in READY state. External callers read the schema
+# to render a form, then call engine.complete_task(task_id, result) to resume.
+
+name: "Bug Fix"
+version: 1
+first_task: describe_bug
+
+tasks:
+  describe_bug:
+    name: "Describe Bug"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Describe the Bug"
+        required: [summary, severity]
+        properties:
+          summary:
+            type: string
+            title: "Summary"
+            description: "One-line description of the bug"
+            minLength: 10
+            placeholder: "Brief description..."
+          severity:
+            type: string
+            title: "Severity"
+            enum: [critical, high, medium, low]
+            default: medium
+          expected_behavior:
+            type: string
+            title: "Expected Behavior"
+            format: multiline
+          actual_behavior:
+            type: string
+            title: "Actual Behavior"
+            format: multiline
+          steps_to_reproduce:
+            type: string
+            title: "Steps to Reproduce"
+            format: multiline
+
+  investigate:
+    name: "Investigate Root Cause"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Investigate Root Cause"
+        description: "Bug description: {{describe_bug.output}}"
+        required: [findings]
+        properties:
+          findings:
+            type: string
+            title: "Root Cause Analysis"
+            description: "What files and code paths are involved?"
+            format: multiline
+
+  create_test:
+    name: "Create Failing Test"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Create Failing Test"
+        description: "Based on the investigation: {{investigate.output}}"
+        required: [test_code]
+        properties:
+          test_code:
+            type: string
+            title: "Test Code"
+            description: "Write a test that reproduces the bug (should currently fail)."
+            format: multiline
+
+  implement_fix:
+    name: "Implement Fix"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Implement Fix"
+        description: "Test case: {{create_test.output}}"
+        required: [fix_description]
+        properties:
+          fix_description:
+            type: string
+            title: "Fix Description"
+            description: "Implement the fix to make the test pass."
+            format: multiline
+
+  run_tests:
+    name: "Run Tests"
+    action: shell
+    properties:
+      command: "echo 'Running test suite...'"
+
+  verify_fix:
+    name: "Verify Fix"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Verify Fix"
+        description: "Test results: {{run_tests.output}}"
+        required: [verified]
+        properties:
+          verified:
+            type: string
+            title: "Does the fix resolve the bug?"
+            description: "Are all tests passing? Choose yes to complete or no to go back."
+            enum: ["yes", "no"]
+
+  complete:
+    name: "Complete"
+    properties:
+      message: "Bug fix workflow completed!"
+
+routings:
+  - from: describe_bug
+    to: investigate
+
+  - from: investigate
+    to: create_test
+
+  - from: create_test
+    to: implement_fix
+
+  - from: implement_fix
+    to: run_tests
+
+  - from: run_tests
+    to: verify_fix
+
+  - from: verify_fix
+    to: complete
+    condition: route_name
+    name: "yes"
+
+  - from: verify_fix
+    to: implement_fix
+    condition: route_name
+    name: "no"

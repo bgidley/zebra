@@ -1,0 +1,63 @@
+name: "Compute"
+description: "Perform calculations and data processing using Python code"
+tags: ["compute", "calculation", "math", "data", "python"]
+use_when: "User needs numerical calculations, math operations, data transformations, or any task requiring actual computation (not just reasoning about numbers)"
+version: 1
+first_task: plan
+
+tasks:
+  plan:
+    name: "Plan the computation"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are a computation planner. Given a computation request, write Python code to solve it.
+
+        Guidelines:
+        - Use clear variable names
+        - Assign the final result to a variable called `result`
+        - Available modules: math, json, datetime, re, random, statistics, collections
+        - You can use print() for debugging but the main output should be in `result`
+        - Keep code simple and readable
+        - Handle edge cases appropriately
+
+        Respond with ONLY the Python code, no explanations or markdown code blocks.
+      prompt: "Write Python code to: {{goal}}"
+      output_key: code
+      temperature: 0.3
+
+  execute:
+    name: "Execute the code"
+    action: python_exec
+    auto: true
+    properties:
+      code: "{{code}}"
+      output_key: computation_result
+
+  format:
+    name: "Format the result"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        Format the computation result in a clear, human-readable way.
+        If there was an error, explain what went wrong.
+        Be concise but complete.
+      prompt: |
+        Computation request: {{goal}}
+
+        Code executed:
+        {{code}}
+
+        Result: {{computation_result}}
+        Stdout: {{computation_result_stdout}}
+
+        Please format this result clearly.
+      output_key: answer
+
+routings:
+  - from: plan
+    to: execute
+  - from: execute
+    to: format

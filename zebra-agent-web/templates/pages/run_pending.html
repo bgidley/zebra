@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}Run {{ state_label }} - Zebra Agent{% endblock %}
+{% block page_title %}Run {{ state_label }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center gap-3">
+        <a href="/activity/?show_completed=true" class="text-gray-400 hover:text-white">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-white">Run {{ state_label }}</h1>
+            <p class="text-gray-400 mt-1 text-sm">{{ run_id }}</p>
+        </div>
+    </div>
+
+    <!-- Status Badge -->
+    <div class="flex items-center gap-4">
+        {% if is_queued %}
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-900 text-purple-300">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            Queued
+        </span>
+        {% elif is_running %}
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900 text-blue-300">
+            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Running
+        </span>
+        {% elif is_failed %}
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-900 text-red-300">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Failed
+        </span>
+        {% elif is_complete %}
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full {% if success %}bg-green-900 text-green-300{% else %}bg-yellow-900 text-yellow-300{% endif %}">
+            {% if success %}
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            Completed
+            {% else %}
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            Completed with errors
+            {% endif %}
+        </span>
+        {% endif %}
+    </div>
+
+    <!-- Info Card -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        {% if is_queued %}
+        <div class="flex items-start gap-4">
+            <div class="flex-shrink-0 mt-0.5">
+                <svg class="h-8 w-8 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Waiting in Queue</h3>
+                <p class="text-gray-400 mt-1">
+                    This goal is queued and waiting for the budget daemon to start execution.
+                    Detailed results will be available once the run completes.
+                </p>
+            </div>
+        </div>
+        {% elif is_running %}
+        <div class="flex items-start gap-4">
+            <div class="flex-shrink-0 mt-0.5">
+                <svg class="animate-spin h-8 w-8 text-blue-400" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Execution in Progress</h3>
+                <p class="text-gray-400 mt-1">
+                    This goal is currently being executed. Detailed results including task
+                    breakdowns, token usage, and cost will be available once the run completes.
+                </p>
+            </div>
+        </div>
+        {% elif is_failed or not success %}
+        <div class="flex items-start gap-4">
+            <div class="flex-shrink-0 mt-0.5">
+                <svg class="h-8 w-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Execution Failed</h3>
+                <p class="text-gray-400 mt-1">
+                    This goal failed during execution before the final assessment step could run.
+                    The workflow task history below shows what happened.
+                </p>
+            </div>
+        </div>
+        {% elif success %}
+        <div class="flex items-start gap-4">
+            <div class="flex-shrink-0 mt-0.5">
+                <svg class="h-8 w-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Execution Completed</h3>
+                <p class="text-gray-400 mt-1">
+                    This goal completed but the assessment record was not created.
+                    The workflow task history below shows the execution details.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Error details -->
+    {% if error %}
+    <div class="bg-red-900/30 rounded-lg border border-red-800 p-6">
+        <h3 class="text-sm font-semibold text-red-300 uppercase tracking-wider mb-2">Error</h3>
+        <pre class="text-red-200 text-sm whitespace-pre-wrap break-words">{{ error }}</pre>
+    </div>
+    {% endif %}
+
+    <!-- Metadata -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Status</p>
+            <p class="mt-1 {% if is_queued %}text-purple-300{% elif is_running %}text-blue-300{% elif is_failed or not success %}text-red-300{% else %}text-green-300{% endif %}">
+                {{ state_label }}
+            </p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Created</p>
+            <p class="text-white mt-1">{{ started_at|date:"M d, Y H:i:s" }}</p>
+        </div>
+        {% if completed_at %}
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Completed</p>
+            <p class="text-white mt-1">{{ completed_at|date:"M d, Y H:i:s" }}</p>
+        </div>
+        {% endif %}
+        {% if tokens_used %}
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Tokens Used</p>
+            <p class="text-white mt-1">{{ tokens_used }}</p>
+        </div>
+        {% endif %}
+        {% if cost %}
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Cost</p>
+            <p class="text-white mt-1">${{ cost }}</p>
+        </div>
+        {% endif %}
+        {% if priority %}
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Priority</p>
+            <p class="mt-1">
+                <span class="px-2 py-0.5 text-sm font-medium rounded {% if priority >= 4 %}bg-red-900/50 text-red-300{% elif priority >= 3 %}bg-yellow-900/50 text-yellow-300{% else %}bg-gray-700 text-gray-400{% endif %}">
+                    P{{ priority }}
+                </span>
+            </p>
+        </div>
+        {% endif %}
+        {% if deadline %}
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Deadline</p>
+            <p class="text-amber-300 mt-1">{{ deadline }}</p>
+        </div>
+        {% endif %}
+        {% if model %}
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Model</p>
+            <p class="text-white mt-1 capitalize">{{ model }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Goal -->
+    {% if goal %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700">
+            <h2 class="text-lg font-semibold text-white">Goal</h2>
+        </div>
+        <div class="p-6 text-gray-200">{{ goal }}</div>
+    </div>
+    {% endif %}
+
+    <!-- Parent Orchestration Flow -->
+    {% if parent_flow %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700" x-data="{ showParent: true, selectedTask: '' }">
+        <div class="px-6 py-4 cursor-pointer hover:bg-gray-700/30 transition-colors"
+             @click="showParent = !showParent"
+             :class="showParent ? 'border-b border-gray-700' : ''">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-white">Orchestration Flow</h2>
+                    <p class="text-sm text-gray-400 mt-1">{{ parent_flow.workflow_name }}</p>
+                </div>
+                <svg class="h-5 w-5 text-gray-400 transition-transform"
+                     :class="showParent ? 'rotate-180' : ''"
+                     fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </div>
+        </div>
+        <div x-show="showParent" x-collapse x-cloak>
+            <!-- Parent diagram -->
+            <div class="p-6 overflow-x-auto">
+                {{ parent_flow.svg|safe }}
+            </div>
+            <!-- Parent task panels -->
+            {% if parent_flow.task_panels %}
+            <div class="divide-y divide-gray-700">
+                {% for task in parent_flow.task_panels %}
+                <div class="task-detail-panel"
+                     id="task-panel-parent-{{ task.task_id }}"
+                     x-data="{ expanded: false }">
+                    <!-- Task Header -->
+                    <div class="px-6 py-3 cursor-pointer hover:bg-gray-700/30 transition-colors"
+                         @click="expanded = !expanded">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                {% if task.execution_order %}
+                                <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-700 text-xs text-gray-300 font-mono">
+                                    {{ task.execution_order }}
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-800 text-xs text-gray-500 font-mono">
+                                    -
+                                </span>
+                                {% endif %}
+                                <span class="font-medium text-white">{{ task.task_name }}</span>
+                                <span class="text-sm text-gray-500">({{ task.task_id }})</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                {% if task.state == "complete" %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-900/50 text-green-400 text-xs">Complete</span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-700 text-gray-400 text-xs">Not executed</span>
+                                {% endif %}
+                                <svg class="h-5 w-5 text-gray-400 transition-transform"
+                                     :class="expanded ? 'rotate-180' : ''"
+                                     fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Task Details (expandable) -->
+                    <div x-show="expanded" x-collapse class="px-6 pb-4 space-y-4">
+                        {% if task.resolved_inputs %}
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-400 mb-2">Inputs</h4>
+                            <div class="bg-gray-900 rounded-lg p-3 text-xs overflow-x-auto">
+                                {% for key, value in task.resolved_inputs.items %}
+                                <div class="mb-1">
+                                    <span class="text-indigo-400">{{ key }}:</span>
+                                    <span class="text-gray-300 whitespace-pre-wrap">{{ value|truncatechars:500 }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if task.output %}
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-400 mb-2">Output</h4>
+                            <pre class="text-gray-300 text-sm whitespace-pre-wrap break-words bg-gray-900 rounded-lg p-3 max-h-64 overflow-auto">{{ task.output }}</pre>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Task History (from process __task_output_* properties) -->
+    {% if task_outputs %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700">
+            <h2 class="text-lg font-semibold text-white">Task History</h2>
+            <p class="text-gray-400 text-sm mt-1">Tasks executed before the workflow ended</p>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for task in task_outputs %}
+            <div class="p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-xs font-mono text-gray-500 bg-gray-700 px-2 py-0.5 rounded">{{ task.task_definition_id }}</span>
+                </div>
+                <pre class="text-gray-300 text-sm whitespace-pre-wrap break-words bg-gray-900 rounded p-3 max-h-64 overflow-auto">{{ task.output }}</pre>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Process ID -->
+    <div class="text-xs text-gray-600">
+        Process ID: {{ process_id }}
+    </div>
+
+    <!-- Auto-refresh for running goals -->
+    {% if is_running %}
+    <div hx-get="/runs/{{ run_id }}/"
+         hx-trigger="every 10s"
+         hx-target="body"
+         hx-select=".space-y-6"
+         hx-swap="outerHTML">
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

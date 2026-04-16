@@ -1,0 +1,16 @@
+{% load static %}
+{% with current_path=request.path %}
+{% if url == "/" %}
+    {% if current_path == "/" %}
+        {% with is_active=True %}{% include "partials/_nav_link.html" %}{% endwith %}
+    {% else %}
+        {% with is_active=False %}{% include "partials/_nav_link.html" %}{% endwith %}
+    {% endif %}
+{% else %}
+    {% if current_path|slice:":8" == url|slice:":8" %}
+        {% with is_active=True %}{% include "partials/_nav_link.html" %}{% endwith %}
+    {% else %}
+        {% with is_active=False %}{% include "partials/_nav_link.html" %}{% endwith %}
+    {% endif %}
+{% endif %}
+{% endwith %}

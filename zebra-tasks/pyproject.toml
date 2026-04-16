@@ -1,0 +1,92 @@
+[project]
+name = "zebra-tasks"
+version = "0.1.0"
+description = "Reusable task actions for the Zebra workflow engine"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Zebra Contributors" }]
+keywords = ["workflow", "tasks", "llm", "agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "zebra-workflow",
+    "pydantic>=2.0",
+    "httpx>=0.25",
+    "python-dotenv>=1.0",
+    "aiofiles>=23.0",
+]
+
+[tool.uv.sources]
+zebra-workflow = { workspace = true }
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.18"]
+openai = ["openai>=1.0"]
+all = ["anthropic>=0.18", "openai>=1.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+]
+
+[project.entry-points."zebra.tasks"]
+# LLM
+llm_call = "zebra_tasks.llm.action:LLMCallAction"
+# Subtasks
+subworkflow = "zebra_tasks.subtasks.spawn:SubworkflowAction"
+wait_subworkflow = "zebra_tasks.subtasks.wait:WaitForSubworkflowAction"
+parallel_subworkflows = "zebra_tasks.subtasks.parallel:ParallelSubworkflowsAction"
+# Filesystem
+file_read = "zebra_tasks.filesystem.read:FileReadAction"
+file_write = "zebra_tasks.filesystem.write:FileWriteAction"
+file_copy = "zebra_tasks.filesystem.copy:FileCopyAction"
+file_move = "zebra_tasks.filesystem.move:FileMoveAction"
+file_delete = "zebra_tasks.filesystem.delete:FileDeleteAction"
+file_search = "zebra_tasks.filesystem.search:FileSearchAction"
+file_exists = "zebra_tasks.filesystem.info:FileExistsAction"
+file_info = "zebra_tasks.filesystem.info:FileInfoAction"
+directory_list = "zebra_tasks.filesystem.info:DirectoryListAction"
+# Compute
+python_exec = "zebra_tasks.compute.python_exec:PythonExecAction"
+# Agent - Core loop actions
+consult_memory = "zebra_tasks.agent.consult_memory:ConsultMemoryAction"
+workflow_selector = "zebra_tasks.agent.selector:WorkflowSelectorAction"
+workflow_creator = "zebra_tasks.agent.creator:WorkflowCreatorAction"
+workflow_variant_creator = "zebra_tasks.agent.variant_creator:WorkflowVariantCreatorAction"
+execute_goal_workflow = "zebra_tasks.agent.execute_workflow:ExecuteGoalWorkflowAction"
+assess_and_record = "zebra_tasks.agent.assess_and_record:AssessAndRecordAction"
+update_conceptual_memory = "zebra_tasks.agent.update_conceptual_memory:UpdateConceptualMemoryAction"
+record_metrics = "zebra_tasks.agent.record_metrics:RecordMetricsAction"
+queue_goal = "zebra_tasks.agent.queue_goal:QueueGoalAction"
+# Agent - Analysis and optimization
+metrics_analyzer = "zebra_tasks.agent.analyzer:MetricsAnalyzerAction"
+load_workflow_definitions = "zebra_tasks.agent.load_definitions:LoadWorkflowDefinitionsAction"
+workflow_evaluator = "zebra_tasks.agent.evaluator:WorkflowEvaluatorAction"
+workflow_optimizer = "zebra_tasks.agent.optimizer:WorkflowOptimizerAction"
+ethics_gate = "zebra_tasks.agent.ethics_gate:EthicsGateAction"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["zebra_tasks"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

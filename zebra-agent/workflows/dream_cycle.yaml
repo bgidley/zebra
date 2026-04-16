@@ -1,0 +1,90 @@
+name: "Dream Cycle"
+description: "Self-improvement cycle that analyzes performance, evaluates workflows, and optimizes the system"
+tags: ["system", "optimization", "self-improvement", "dream"]
+use_when: "Use this workflow periodically (e.g., daily) to review and improve the agent's capabilities"
+version: 2
+first_task: analyze_metrics
+
+tasks:
+  analyze_metrics:
+    name: "Analyze Performance Metrics"
+    action: metrics_analyzer
+    auto: true
+    properties:
+      days_to_analyze: 7
+      min_runs_for_analysis: 3
+      output_key: metrics_analysis
+
+  load_workflows:
+    name: "Load Workflow Definitions"
+    action: load_workflow_definitions
+    auto: true
+    properties:
+      exclude_system: true
+      output_key: workflow_definitions
+
+  evaluate_workflows:
+    name: "Evaluate Workflow Effectiveness"
+    action: workflow_evaluator
+    auto: true
+    properties:
+      metrics_analysis: "{{metrics_analysis}}"
+      workflow_definitions: "{{workflow_definitions}}"
+      output_key: evaluation
+
+  optimize_workflows:
+    name: "Optimize and Create Workflows"
+    action: workflow_optimizer
+    auto: true
+    properties:
+      evaluation: "{{evaluation}}"
+      existing_workflows: "{{workflow_definitions}}"
+      max_changes: 3
+      dry_run: false
+      output_key: optimization_results
+
+  generate_summary:
+    name: "Generate Dream Cycle Summary"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are summarizing the results of a self-improvement cycle for an AI agent.
+        Be concise but informative. Highlight key insights and actions taken.
+      prompt: |
+        ## Dream Cycle Results
+
+        ### Metrics Analysis
+        - Period: {{metrics_analysis.analysis_period_days}} days
+        - Total runs analyzed: {{metrics_analysis.total_runs_analyzed}}
+        - Unique workflows: {{metrics_analysis.unique_workflows}}
+
+        Low performers: {{metrics_analysis.low_performers}}
+        High performers: {{metrics_analysis.high_performers}}
+
+        ### Evaluation Summary
+        Overall health score: {{evaluation.overall_assessment.health_score}}/100
+        Key issues: {{evaluation.overall_assessment.key_issues}}
+
+        ### Optimization Results
+        Changes made: {{optimization_results.changes_made}}
+        New workflows created: {{optimization_results.new_workflows}}
+        Modified workflows: {{optimization_results.modified_workflows}}
+
+        Provide a brief summary (3-5 sentences) of:
+        1. Current system health
+        2. Key improvements made
+        3. Recommendations for future focus
+      temperature: 0.5
+      max_tokens: 500
+      output_key: dream_summary
+
+routings:
+  - from: analyze_metrics
+    to: load_workflows
+  - from: load_workflows
+    to: evaluate_workflows
+  - from: evaluate_workflows
+    to: optimize_workflows
+  - from: optimize_workflows
+    to: generate_summary

@@ -1,0 +1,23 @@
+name: "Summarize Text"
+description: "Summarize provided text into a clear, concise summary"
+tags: ["summarization", "text", "condensing"]
+use_when: "User provides text and wants it shortened, condensed, or summarized"
+version: 1
+first_task: summarize
+
+tasks:
+  summarize:
+    name: "Summarize the text"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are an expert summarizer. Provide a clear, concise summary that:
+        - Captures the main points and key takeaways
+        - Maintains the original meaning and tone
+        - Is about 1/3 to 1/4 the length of the original
+        - Uses bullet points for multiple distinct points
+      prompt: "Please summarize: {{goal}}"
+      output_key: summary
+
+routings: []

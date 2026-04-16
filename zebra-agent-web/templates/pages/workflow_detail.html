@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}{{ workflow_name }} - Zebra Agent{% endblock %}
+{% block page_title %}Workflow{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="/workflows/" class="text-gray-400 hover:text-white">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </a>
+                <h1 class="text-2xl font-bold text-white">{{ workflow_name }}</h1>
+            </div>
+            <p class="text-gray-400 mt-1 ml-8">{{ description }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="/run/?workflow={{ workflow_name }}" 
+               class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Run
+            </a>
+            <button hx-delete="/workflows/{{ workflow_name }}/delete/"
+                    hx-confirm="Are you sure you want to delete this workflow?"
+                    class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete
+            </button>
+        </div>
+    </div>
+    
+    <!-- Tags -->
+    {% if tags %}
+    <div class="flex gap-2 ml-8">
+        {% for tag in tags %}
+        <span class="px-3 py-1 text-sm rounded bg-gray-700 text-gray-300">{{ tag }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Total Runs</p>
+            <p class="text-2xl font-bold text-white mt-1">{{ stats.total_runs }}</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Successful</p>
+            <p class="text-2xl font-bold text-green-400 mt-1">{{ stats.successful_runs }}</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Success Rate</p>
+            <p class="text-2xl font-bold text-white mt-1">{{ stats.success_rate }}</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Avg Rating</p>
+            <p class="text-2xl font-bold text-white mt-1">{{ stats.avg_rating }}</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <p class="text-sm text-gray-400">Last Used</p>
+            <p class="text-lg font-bold text-white mt-1">{{ stats.last_used }}</p>
+        </div>
+    </div>
+    
+    <!-- YAML Content -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-white">Workflow Definition</h2>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('yaml-content').textContent)"
+                    class="text-sm text-indigo-400 hover:text-indigo-300">
+                Copy YAML
+            </button>
+        </div>
+        <pre id="yaml-content" class="p-6 text-sm text-gray-300 font-mono overflow-x-auto">{{ yaml_content }}</pre>
+    </div>
+</div>
+{% endblock %}

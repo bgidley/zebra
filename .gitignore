@@ -3,3 +3,11 @@
 target
 test-output
 *.ipr
+__pycache__/
+*.pyc
+.coverage
+htmlcov/
+.pytest_cache/
+.env
+.env.local
+tmp

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Run Goal - Zebra Agent{% endblock %}
+{% block page_title %}Run Goal{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-2xl font-bold text-white">Run Goal</h1>
+        <p class="text-gray-400 mt-1">Enter your goal and the agent will select and execute the best workflow</p>
+    </div>
+    
+    <!-- Goal Form -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <form hx-post="/run/execute/" 
+              hx-target="#result-container"
+              hx-indicator="#loading-indicator"
+              id="goal-form">
+            <div class="space-y-4">
+                <div>
+                    <label for="goal" class="block text-sm font-medium text-gray-300 mb-2">What do you want to accomplish?</label>
+                    <textarea id="goal" name="goal" rows="4" required
+                              class="w-full px-4 py-3 bg-gray-900 border border-gray-600 rounded-lg text-white text-lg
+                                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                                     placeholder-gray-500"
+                              placeholder="e.g., Write a summary of the key points about climate change..."></textarea>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="model" class="block text-sm font-medium text-gray-300 mb-2">Model</label>
+                        <select id="model" name="model"
+                                class="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white
+                                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="">Default (Sonnet)</option>
+                            <option value="haiku">Haiku &mdash; fastest, low cost</option>
+                            <option value="sonnet">Sonnet &mdash; balanced</option>
+                            <option value="opus">Opus &mdash; most capable</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="priority" class="block text-sm font-medium text-gray-300 mb-2">Priority (for queue)</label>
+                        <select id="priority" name="priority"
+                                class="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white
+                                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="1">1 &mdash; Low</option>
+                            <option value="2">2 &mdash; Below Normal</option>
+                            <option value="3" selected>3 &mdash; Normal</option>
+                            <option value="4">4 &mdash; High</option>
+                            <option value="5">5 &mdash; Urgent</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="deadline" class="block text-sm font-medium text-gray-300 mb-2">Deadline (optional)</label>
+                        <input type="datetime-local" id="deadline" name="deadline"
+                               class="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white
+                                      focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <p class="text-sm text-gray-500">
+                        <strong>Execute</strong> runs immediately. <strong>Queue</strong> adds to the budget daemon's queue.
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <button type="button"
+                                hx-post="/run/queue/"
+                                hx-target="#result-container"
+                                hx-include="#goal-form"
+                                class="inline-flex items-center gap-2 px-5 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors font-medium">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            Queue Goal
+                        </button>
+                        <button type="submit"
+                                class="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Execute Now
+                            <span id="loading-indicator" class="htmx-indicator">
+                                <svg class="animate-spin h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Result Container -->
+    <div id="result-container"></div>
+    
+    <!-- Available Workflows -->
+    {% if workflows %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700">
+            <h2 class="text-lg font-semibold text-white">Available Workflows</h2>
+            <p class="text-sm text-gray-400 mt-1">The agent will choose from these based on your goal</p>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for workflow in workflows %}
+            <div class="px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-white font-medium">{{ workflow.name }}</p>
+                        <p class="text-sm text-gray-400">{{ workflow.description }}</p>
+                    </div>
+                    <span class="text-sm text-gray-500">{{ workflow.success_rate }} success</span>
+                </div>
+                {% if workflow.tags %}
+                <div class="flex gap-2 mt-2">
+                    {% for tag in workflow.tags %}
+                    <span class="px-2 py-0.5 text-xs rounded bg-gray-700 text-gray-300">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

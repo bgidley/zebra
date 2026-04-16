@@ -1,0 +1,212 @@
+{% comment %}
+Compact table view of activity groups with multi-select.
+
+Context:
+  groups - list of activity groups, each with:
+    run_id, goal, workflow_name, started_at, completed_at, success,
+    tokens_used, user_rating, is_running, is_queued, is_stale,
+    section, tasks, has_human_tasks, process_ids
+  human_only - boolean, current filter state
+  show_completed - boolean, current filter state
+  group_by - "status" or "date"
+  has_running - boolean, whether any running goals exist
+{% endcomment %}
+
+<div id="activity-list"
+     {% if has_running %}
+     hx-get="{% url 'activity' %}?human_only={{ human_only|yesno:'true,false' }}&show_completed={{ show_completed|yesno:'true,false' }}&group_by={{ group_by }}"
+     hx-trigger="every 5s"
+     hx-swap="outerHTML"
+     {% endif %}>
+
+    {% if groups %}
+    <!-- Bulk action toolbar -->
+    <div x-show="selectedCount > 0" x-cloak
+         class="mb-3 flex items-center gap-3 bg-gray-800 rounded-lg px-4 py-2 border border-indigo-700/50">
+        <span class="text-sm text-gray-300" x-text="selectedCount + ' selected'"></span>
+        <button x-show="hasSelectedCancellable"
+                hx-post="{% url 'bulk_cancel_processes' %}"
+                hx-include="#bulk-pids"
+                hx-confirm="Cancel selected processes?"
+                class="px-3 py-1 text-xs font-medium rounded bg-red-900/80 text-red-300 hover:bg-red-800 transition-colors">
+            Cancel Selected
+        </button>
+    </div>
+
+    <!-- Table -->
+    <div class="overflow-x-auto rounded-lg border border-gray-700">
+    <table class="w-full text-sm text-left text-gray-300">
+        <thead class="text-xs text-gray-500 uppercase tracking-wider bg-gray-800/80">
+            <tr>
+                <th class="w-8 px-3 py-2">
+                    <input type="checkbox"
+                           @change="toggleAll($event)"
+                           :checked="allSelected"
+                           class="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900">
+                </th>
+                <th class="px-3 py-2 w-24">Status</th>
+                <th class="px-3 py-2">Goal</th>
+                <th class="px-3 py-2 w-36">Workflow</th>
+                <th class="px-3 py-2 w-32">Started</th>
+                <th class="px-3 py-2 w-24">Tokens</th>
+                <th class="px-3 py-2 w-24">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-700/50">
+            {% for group in groups %}
+
+            {% comment %} Section header row {% endcomment %}
+            {% ifchanged group.section %}
+            <tr class="bg-gray-800/60">
+                <td colspan="7" class="px-3 py-1.5">
+                    <span class="text-xs font-semibold uppercase tracking-wider
+                        {% if group.section == 'stale' %}text-yellow-600
+                        {% elif group.section == 'running' %}text-blue-400
+                        {% elif group.section == 'queued' %}text-purple-400
+                        {% else %}text-gray-500{% endif %}">
+                        {% if group.section == "running" %}In Progress
+                        {% elif group.section == "stale" %}Stale
+                        {% elif group.section == "queued" %}Queued
+                        {% elif group.section == "recent" %}{% if show_completed %}History{% else %}Recent{% endif %}
+                        {% elif group.section == "today" %}Today
+                        {% elif group.section == "yesterday" %}Yesterday
+                        {% elif group.section == "this_week" %}This Week
+                        {% elif group.section == "older" %}Older
+                        {% endif %}
+                    </span>
+                </td>
+            </tr>
+            {% endifchanged %}
+
+            {% comment %} Data row {% endcomment %}
+            <tr x-data="{expanded: false}"
+                class="{% if group.is_stale %}bg-yellow-900/10{% else %}hover:bg-gray-800/40{% endif %} transition-colors">
+                {% comment %} Checkbox {% endcomment %}
+                <td class="px-3 py-2">
+                    {% if group.process_ids %}
+                    <input type="checkbox"
+                           data-row-id="{{ group.run_id|default:group.goal }}"
+                           data-process-ids="{{ group.process_ids|join:',' }}"
+                           :checked="selectedIds.has('{{ group.run_id|default:group.goal }}')"
+                           @change="toggleSelect('{{ group.run_id|default:group.goal }}')"
+                           class="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900">
+                    {% else %}
+                    <input type="checkbox" disabled
+                           class="rounded bg-gray-700/50 border-gray-600/50 cursor-not-allowed">
+                    {% endif %}
+                </td>
+                {% comment %} Status pill {% endcomment %}
+                <td class="px-3 py-2">
+                    {% if group.is_queued %}
+                    <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-purple-900/80 text-purple-300">queued</span>
+                    {% elif group.is_running and group.is_stale %}
+                    <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-900/80 text-yellow-400">stale</span>
+                    {% elif group.is_running %}
+                    <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-blue-900/80 text-blue-300">running</span>
+                    {% elif group.success %}
+                    <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-green-900/80 text-green-300">success</span>
+                    {% elif group.success == False %}
+                    <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-red-900/80 text-red-300">failed</span>
+                    {% else %}
+                    <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-gray-700 text-gray-400">done</span>
+                    {% endif %}
+                    {% if group.priority and group.is_queued %}
+                    <span class="ml-1 text-xs {% if group.priority >= 4 %}text-red-400{% elif group.priority >= 3 %}text-yellow-400{% else %}text-gray-500{% endif %}">P{{ group.priority }}</span>
+                    {% endif %}
+                </td>
+                {% comment %} Goal {% endcomment %}
+                <td class="px-3 py-2 max-w-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="truncate text-white" title="{{ group.goal }}">{{ group.goal }}</span>
+                        {% if group.tasks %}
+                        <button @click="expanded=!expanded"
+                                class="flex-shrink-0 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                                :class="{'text-gray-300': expanded}">
+                            <span x-text="expanded ? '&#9660;' : '&#9654;'"></span>
+                            {{ group.tasks|length }} task{{ group.tasks|length|pluralize }}
+                        </button>
+                        {% endif %}
+                        {% if group.has_human_tasks %}
+                        <span class="flex-shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50">input needed</span>
+                        {% endif %}
+                    </div>
+                </td>
+                {% comment %} Workflow {% endcomment %}
+                <td class="px-3 py-2 text-gray-400 text-xs truncate">
+                    {% if group.workflow_name %}{{ group.workflow_name }}{% elif group.is_running and not group.is_stale %}<span class="text-yellow-400">selecting...</span>{% else %}-{% endif %}
+                </td>
+                {% comment %} Started {% endcomment %}
+                <td class="px-3 py-2 text-gray-400 text-xs whitespace-nowrap">
+                    {{ group.started_at|date:"M d, H:i" }}
+                </td>
+                {% comment %} Tokens {% endcomment %}
+                <td class="px-3 py-2 text-gray-400 text-xs">
+                    {% if group.tokens_used %}{{ group.tokens_used }}{% else %}-{% endif %}
+                </td>
+                {% comment %} Actions {% endcomment %}
+                <td class="px-3 py-2">
+                    <div class="flex items-center gap-2">
+                        {% if group.run_id %}
+                        <a href="/runs/{{ group.run_id }}/"
+                           class="text-indigo-400 hover:text-indigo-300 text-xs">Details</a>
+                        {% endif %}
+                        {% if group.is_stale and group.process_ids %}
+                        {% for pid in group.process_ids %}
+                        <button hx-post="/processes/{{ pid }}/cancel/"
+                                hx-target="#activity-list" hx-swap="outerHTML"
+                                hx-confirm="Cancel this stale process?"
+                                class="text-red-400 hover:text-red-300 text-xs font-medium">Cancel</button>
+                        {% endfor %}
+                        {% endif %}
+                        {% if group.user_rating %}
+                        <span class="text-yellow-400 text-xs">{{ group.user_rating }}</span>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+
+            {% comment %} Expandable tasks sub-row {% endcomment %}
+            {% if group.tasks %}
+            <tr x-show="expanded" x-cloak>
+                <td colspan="7" class="bg-gray-800/60 px-8 py-2">
+                    <div class="space-y-1">
+                        {% for task in group.tasks %}
+                        {% if task.is_human %}
+                        <a href="{% url 'human_task_form' task_id=task.id %}"
+                           class="flex items-center justify-between py-1.5 px-3 rounded bg-gray-750 border border-gray-700 hover:border-indigo-500 transition-colors">
+                            <div class="min-w-0">
+                                <span class="text-xs text-white font-medium">{{ task.task_name }}</span>
+                                <span class="text-xs text-gray-500 ml-2">{{ task.process_name }}{% if task.schema_title %} &mdash; {{ task.schema_title }}{% endif %}</span>
+                            </div>
+                            <span class="flex-shrink-0 px-2 py-0.5 text-xs font-medium rounded bg-amber-900 text-amber-200">Awaiting Input</span>
+                        </a>
+                        {% else %}
+                        <div class="flex items-center justify-between py-1.5 px-3 rounded bg-gray-750 border border-gray-700/50">
+                            <div class="min-w-0">
+                                <span class="text-xs text-gray-300">{{ task.task_name }}</span>
+                                <span class="text-xs text-gray-500 ml-2">{{ task.process_name }}</span>
+                            </div>
+                            <span class="px-2 py-0.5 text-xs font-medium rounded bg-gray-700 text-gray-400">ready</span>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </td>
+            </tr>
+            {% endif %}
+
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 px-6 py-12 text-center text-gray-500">
+        <svg class="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="mt-2 text-sm">No activity</p>
+        <a href="/run/" class="mt-1 text-indigo-400 hover:text-indigo-300 text-xs">Start a new goal</a>
+    </div>
+    {% endif %}
+</div>
