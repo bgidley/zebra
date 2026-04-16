@@ -2,6 +2,10 @@
 
 This file provides coding agents with essential guidelines for working on the Zebra workflow engine codebase.
 
+## Specification
+
+The specs folder should be used for requirements and design. Read the AGENTS.md in this folder for an index, always update it if adding new files.
+
 ## External File Loading
 
 CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
