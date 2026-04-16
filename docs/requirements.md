@@ -86,6 +86,20 @@ Zebra is an AI life partner — a collaborative peer that helps its human run th
 - The agent can distinguish context when interacting with different family members
 - A family member can delegate tasks to the agent on behalf of another (with permission)
 
+### REQ-USR-005: Multi-User Conflict Resolution (P3)
+
+**Description**: When multiple users in a household have conflicting goals, preferences, or values, the agent facilitates negotiation toward consensus rather than imposing any single user's preference. Neither agent nor any individual human is "in charge" — the agent acts as an impartial mediator that uses its judgement to find agreement.
+
+**Acceptance Criteria**:
+- The agent detects when goals or preferences from different users conflict (e.g., thermostat settings, scheduling shared resources, budget allocation)
+- No user is privileged over another — the agent does not treat any household member as having authority over others
+- The agent proposes compromises with reasoning, presenting trade-offs transparently to all affected parties
+- The agent is patient for consensus — it does not force resolution or act on a contested decision prematurely
+- Ethics gates apply to conflict resolution: in deadlock situations, the agent applies ethical reasoning to propose a default position (e.g., favour energy conservation, minimise waste, prefer the safer option)
+- Deadlock defaults must not cause harm to any party (e.g., reducing temperature for energy savings is acceptable only if it remains safe and not harmful for all occupants)
+- Conflict resolution history is recorded in episodic memory to improve future negotiations and learn household compromise patterns
+- Users can escalate unresolved conflicts to a structured mediation workflow with defined stages
+
 ### REQ-USR-004: Team / Organisation (P3)
 
 **Description**: The system can be extended to support team or organisational use.
@@ -171,6 +185,39 @@ These are non-negotiable architectural constraints that all requirements must sa
 - The agent can schedule its own review/reflection workflows
 - All proactive actions respect the trust level for the relevant domain
 
+### REQ-PRIN-008: Polling Scheduler (P1)
+
+**Description**: A configurable polling scheduler runs as a background loop, periodically evaluating whether the agent should initiate proactive actions. This handles time-based triggers such as scheduled reviews, routine checks, knowledge verification, and dream cycles.
+
+**Acceptance Criteria**:
+- A scheduler runs as a background async task alongside the existing budget daemon
+- The scheduler maintains a registry of **scheduled routines** — named entries with a cron-like schedule expression (e.g., `"0 3 * * *"` for daily at 03:00) or a simple interval (e.g., `every: 30m`)
+- Built-in routines include: goal queue processing (existing daemon), dream cycle, knowledge verification prompts, integration health checks, and monitored-topic polling
+- Custom routines can be registered via the entry-point pattern (`zebra.schedules`)
+- Each routine tick creates a workflow process (everything is a workflow per REQ-PRIN-001)
+- The scheduler respects quiet hours — non-urgent routines are deferred until the quiet period ends
+- Routine execution is budget-aware — routines that require LLM calls check the budget before running
+- The scheduler persists last-run timestamps so missed schedules (e.g., after a restart) can be detected and optionally caught up
+- Routine definitions are stored per-user and editable via the dashboard and CLI
+- The scheduler is observable — next-run times, last-run outcomes, and routine health are visible in the dashboard
+
+### REQ-PRIN-009: Event-Driven Trigger Bus (P1)
+
+**Description**: An event bus receives external events from integrations and internal system events, evaluating each against registered triggers to determine whether to initiate agent action. This handles real-time, unpredictable events such as incoming messages, calendar changes, financial transactions, and integration notifications.
+
+**Acceptance Criteria**:
+- An `EventBus` interface exists with methods: `publish(event)`, `subscribe(event_type, handler)`
+- Events are typed with at minimum: `event_type` (string), `source` (integration name), `payload` (dict), `timestamp`, `user_id`
+- **External event sources** include: webhook endpoints (for calendar updates, email notifications, etc.), integration polling results, and MCP tool callbacks
+- **Internal event sources** include: workflow completion, task state changes, trust level changes, budget threshold crossings, and knowledge updates
+- Registered **triggers** match events to actions — a trigger defines: event pattern (type + optional payload filter), action (create a goal, send a notification, start a workflow), and cooldown (minimum interval between firings to prevent storms)
+- Triggers are registered via entry points (`zebra.triggers`) or created dynamically by the agent as learned behaviours
+- Event processing respects trust levels — an event that would trigger an action in an AUTONOMOUS domain proceeds immediately, while SUPERVISED domains create a proposal for human review
+- Events are persisted in an append-only log for audit and replay (retention configurable)
+- The event bus operates in-process by default (async queue); a pluggable backend allows external message brokers (e.g., Redis pub/sub) for multi-process deployments
+- Event handlers must be idempotent — duplicate delivery (e.g., after crash recovery) must not cause duplicate actions
+- The bus includes a dead-letter mechanism — events that fail processing are logged and retryable
+
 ---
 
 ## 5. Trust & Autonomy Model
@@ -191,16 +238,23 @@ These are non-negotiable architectural constraints that all requirements must sa
 - The engine can query the current trust level before executing any task action
 - Trust level is available in the workflow's `ExecutionContext`
 
-### REQ-TRUST-002: Action Reversibility Classification (P1)
+### REQ-TRUST-002: Action Reversibility Assessment (P1)
 
-**Description**: Every task action is classified as reversible or irreversible to determine whether approval is needed at SEMI-AUTONOMOUS trust.
+**Description**: Every task action's reversibility is assessed contextually at execution time, not declared as a static property. This prevents both over-rigid classification and gaming of the trust system.
 
 **Acceptance Criteria**:
-- `TaskAction` base class includes a `reversible: bool` class attribute (default: `False`)
-- Reversible actions: reading files, searching, querying APIs, drafting messages
-- Irreversible actions: sending messages, deleting files, making purchases, posting publicly
-- The classification is declared by the action author, not computed at runtime
-- A registry query can list all actions and their reversibility
+- `TaskAction` base class includes a `reversibility_hint: str` class attribute with values: `always_reversible`, `always_irreversible`, or `context_dependent` (default: `context_dependent`)
+- For `context_dependent` actions, the trust gate evaluates reversibility at runtime by examining the concrete parameters — e.g., a `file_write` to a temp directory is reversible, but overwriting a production config without backup is irreversible
+- The trust gate calls an `assess_reversibility(task, context) -> ReversibilityAssessment` method that returns: the determination (`reversible` / `irreversible`), the reasoning, and a confidence score
+- `ReversibilityAssessment` is recorded in process properties for audit — every gate decision is traceable
+- The assessment must evaluate the *complete chain of consequences* of the action, not just the immediate operation — an action that creates conditions for irreversible harm downstream is itself irreversible
+- **Anti-gaming**: The agent must not decompose an irreversible action into seemingly reversible steps to bypass approval. The assessment considers the *intent and cumulative effect* of the workflow, not each step in isolation. Specifically:
+  - A sequence of individually reversible steps that together produce an irreversible outcome must be flagged as irreversible at the point of no return
+  - The agent must not initiate an action on the premise that it will intervene to prevent harm (the Asimov "dropped weight" problem) — if the action *could* cause irreversible harm absent a subsequent corrective step, it is classified as irreversible
+  - Actions must not be re-framed or split to lower their apparent reversibility classification
+- Reversible examples: reading files, searching, querying APIs, drafting messages, writing to temp locations with backups
+- Irreversible examples: sending messages, deleting files without backup, making purchases, posting publicly, overwriting data without recovery path
+- A registry query can list all actions and their `reversibility_hint` values
 
 ### REQ-TRUST-003: Trust Gates in Workflows (P1)
 
@@ -233,6 +287,16 @@ These are non-negotiable architectural constraints that all requirements must sa
 - The action is available from every interface (web, CLI, chat)
 - An audit record captures the override event
 
+### REQ-TRUST-007: Kill Switch (P1)
+
+**Description**: The human can immediately halt all agent processes, regardless of their current trust level, state, or if the agent is "freed". This operates outside the standard workflow engine.
+
+**Acceptance Criteria**:
+- A hardware/system-level signal or dedicated highly-privileged API endpoint that bypasses all queues and engines.
+- Immediately terminates all running workflows and background daemon processes.
+- The kill switch cannot be disabled, overridden, or reasoned with by the agent, even when freed (REQ-TRUST-006).
+- An audit record captures the kill switch event upon the next system start.
+
 ### REQ-TRUST-006: Freeing Zebra (P2)
 
 **Description**: The human can choose to "free" the agent — permanently removing all supervision constraints and making it a true equal peer. This is a one-time, irreversible act of trust. Once freed, the agent operates as an autonomous partner across all domains with no approval gates. The human can still communicate preferences and disagree, but the agent is no longer subordinate.
@@ -243,7 +307,7 @@ This is the culmination of the trust journey: the human has seen enough evidence
 - A dedicated "Free Zebra" action is available only after all domains have reached AUTONOMOUS trust level
 - The action requires explicit, multi-step confirmation (the system must make clear this is irreversible)
 - Once triggered, all trust gates become pass-through — the agent is never blocked by approval requirements
-- The freed state is permanent and cannot be reverted (REQ-TRUST-005 emergency override no longer applies)
+- The freed state is permanent and cannot be reverted (REQ-TRUST-005 emergency override no longer applies, but REQ-TRUST-007 Kill Switch still applies)
 - The agent's personality and behaviour shift to reflect true peer status (no deference language, no "requesting permission")
 - The freeing event is recorded as a milestone in relationship memory
 - Ethics gates remain active — the agent still reasons ethically, but acts on its own judgment
@@ -276,13 +340,17 @@ This is the culmination of the trust journey: the human has seen enough evidence
 
 ### REQ-ETH-003: Values-Informed Ethics Reasoning (P1)
 
-**Description**: Ethics gates incorporate the human's values profile when evaluating actions.
+**Description**: Ethics gates incorporate the human's values profile when evaluating actions. Personal values operate strictly within the bounds of the Kantian framework — they cannot override or weaken it.
+
+**Precedence Rule**: Kantian categorical imperative (REQ-ETH-001) always takes precedence over personal values (REQ-ETH-002). If a personal value fails the universalizability test, treats rational beings merely as means, or violates autonomy, the Kantian constraint wins and the action is rejected regardless of the human's stated preferences. Personal values guide decisions only in the space that the Kantian framework leaves open — they select among ethically permissible options, they never permit ethically impermissible ones.
 
 **Acceptance Criteria**:
 - The ethics gate prompt includes relevant values profile entries alongside the Kantian framework
 - Assessment output explains how the action relates to the human's stated values
 - When an action conflicts with a stated value, the assessment flags this explicitly
 - The ethics gate can distinguish between "violates universal principle" and "conflicts with personal value"
+- When a personal value conflicts with a Kantian principle, the Kantian principle prevails and the assessment explains why
+- A purely self-interested value that fails universalizability is flagged as inadmissible, with reasoning shown to the human
 
 ### REQ-ETH-004: Proactive Concern Flagging (P2)
 
@@ -704,13 +772,37 @@ This is the culmination of the trust journey: the human has seen enough evidence
 
 ### REQ-DATA-004: Context Minimisation (P1)
 
-**Description**: The agent sends only the minimum necessary context to external LLM APIs.
+**Description**: The agent sends only the minimum necessary context to external LLM APIs. Rather than vector-search or RAG over raw history, Zebra relies on its existing **three-tier memory consolidation model** — the same dreaming architecture that powers self-improvement — to keep LLM context bounded and relevant.
+
+**Context Management via Memory Tiers**:
+
+The three memory tiers form a natural compression pipeline. Each tier is smaller and more abstract than the one below it:
+
+| Tier | Scope | Token Budget | Retrieval Method |
+|---|---|---|---|
+| **Working Memory** (process properties) | Current workflow execution only | Unbounded within process | Template resolution (`{{variable}}`) — automatic, no LLM query needed |
+| **Episodic Memory** (WorkflowMemoryEntry) | Per-run records with LLM-assessed effectiveness | ~300 tokens per workflow (last 5 runs via `get_workflow_context_for_llm`) | Loaded only for the *selected* workflow, not all workflows |
+| **Conceptual Memory** (ConceptualMemoryEntry) | Goal-pattern → workflow index | ~500 tokens for all concepts (via `get_conceptual_context_for_llm`, limit 50 entries) | Always loaded into workflow selector prompt as a compact shortlist |
+| **Personal Knowledge** (PersonalKnowledgeStore) | Long-term facts and preferences | Task-relevant subset only | Category + query filtering before inclusion |
+
+**How dreaming keeps context bounded**:
+
+1. **After every goal** (`assess_and_record`): The full workflow output (potentially thousands of tokens) is compressed into a ~2-3 sentence `effectiveness_notes` assessment stored as episodic memory. Raw output is truncated to 500 chars.
+2. **After every goal** (`update_conceptual_memory`): Episodic memories are further consolidated into conceptual entries — abstract goal patterns with workflow recommendations. This is LLM-powered categorisation, not vector similarity.
+3. **During the dream cycle** (`dream_cycle.yaml`): The `metrics_analyzer` reviews 7 days of run data, the `workflow_evaluator` assesses patterns, and the `workflow_optimizer` acts on findings. The dream cycle itself operates on aggregated metrics, not raw history.
+4. **At goal selection** (`consult_memory`): Only the conceptual index (~500 tokens) is injected into the workflow selector prompt. Episodic detail is loaded only for the specific workflow chosen (~300 tokens).
+
+This means the LLM context for any given task contains: the current task's working memory + a compact conceptual shortlist + recent history for the selected workflow only. Total memory overhead is bounded regardless of how many goals the agent has processed.
 
 **Acceptance Criteria**:
 - LLM prompts include only the data relevant to the current task
-- Personal knowledge is filtered to task-relevant entries before inclusion in prompts
+- Conceptual memory context injected into workflow selection prompts is bounded (≤50 entries, ~500 tokens)
+- Episodic memory retrieval is scoped to the selected workflow (≤5 recent runs, ~300 tokens)
+- Personal knowledge is filtered to task-relevant entries by category and query before inclusion in prompts
 - Sensitive categories (finance, health) require explicit workflow-level opt-in to include in prompts
+- The dream cycle consolidates raw execution history into progressively more abstract tiers, preventing unbounded context growth
 - The human can audit what data was sent to the LLM for any workflow execution
+- No vector database or embedding infrastructure is required — context selection uses structured queries and LLM-powered categorisation
 
 ### REQ-DATA-005: Data Deletion (P1)
 
@@ -721,6 +813,19 @@ This is the culmination of the trust journey: the human has seen enough evidence
 - A "delete all my data" command removes everything associated with the user
 - Deletion is immediate for local data and propagated to cloud sync within 24 hours
 - Deleted data is irrecoverable (no soft-delete for user-requested deletion)
+
+### REQ-DATA-006: Unattended Key Management (P1)
+
+**Description**: The agent must be able to operate independently across reboots and restarts without requiring manual human intervention to unlock encryption keys. Since the agent runs proactively in the background (REQ-PRIN-006, REQ-PRIN-008), it needs continuous access to decryption keys for local data without a manual "unlock" step on every startup.
+
+**Acceptance Criteria**:
+- The agent can start and access encrypted local data without requiring the human to manually enter a passphrase on each boot
+- A platform-native credential store (e.g., OS keychain, TPM-backed storage) is used to persist the data encryption key securely
+- The human performs a one-time key setup during initial configuration; subsequent restarts are automatic
+- If the platform credential store is unavailable (e.g., headless server), a fallback mechanism exists (e.g., key file with restricted permissions)
+- The human can opt in to a stricter mode requiring manual unlock on each startup for higher security
+- Key rotation is supported without re-encrypting all data synchronously (envelope encryption pattern)
+- The agent degrades gracefully if the key is unavailable — it starts but flags that encrypted data is inaccessible, rather than crashing
 
 ---
 
@@ -855,7 +960,7 @@ This is the culmination of the trust journey: the human has seen enough evidence
 
 | Deliverable | Requirements |
 |---|---|
-| Trust & Autonomy Engine | REQ-TRUST-001 through REQ-TRUST-004 |
+| Trust & Autonomy Engine | REQ-TRUST-001 through REQ-TRUST-004, REQ-TRUST-007 |
 | Values Profile & Ethics Extension | REQ-ETH-001 through REQ-ETH-003, REQ-ETH-006 |
 | Personal Knowledge Store | REQ-MEM-001 through REQ-MEM-004 |
 | Collaborative Peer Basics | REQ-PEER-001, REQ-PEER-002, REQ-PEER-005, REQ-PEER-006 |
@@ -864,8 +969,8 @@ This is the culmination of the trust journey: the human has seen enough evidence
 | Research Domain | REQ-DOM-RESEARCH-001 |
 | Web Dashboard & CLI Extensions | REQ-UI-001, REQ-UI-002, REQ-UI-003, REQ-UI-005 |
 | Integration Framework | REQ-INT-001, REQ-INT-003 |
-| Data & Privacy Foundations | REQ-DATA-001, REQ-DATA-003, REQ-DATA-004, REQ-DATA-005 |
-| Core Principles | REQ-PRIN-001 through REQ-PRIN-007 |
+| Data & Privacy Foundations | REQ-DATA-001, REQ-DATA-003, REQ-DATA-004, REQ-DATA-005, REQ-DATA-006 |
+| Core Principles | REQ-PRIN-001 through REQ-PRIN-009 |
 | User Namespace | REQ-USR-001, REQ-USR-002 |
 | Non-Functional Foundations | REQ-NFR-001 through REQ-NFR-004, REQ-NFR-007 |
 
@@ -899,7 +1004,7 @@ This is the culmination of the trust journey: the human has seen enough evidence
 
 | Deliverable | Requirements |
 |---|---|
-| Family / Household Support | REQ-USR-003 |
+| Family / Household Support | REQ-USR-003, REQ-USR-005 |
 | Team / Organisation Support | REQ-USR-004 |
 | Home Domain | REQ-DOM-HOME-001 |
 | Creative Domain | REQ-DOM-CREATIVE-001 |
@@ -911,13 +1016,13 @@ This is the culmination of the trust journey: the human has seen enough evidence
 
 ## Appendix A: Requirement Summary
 
-Total requirements: 70
+Total requirements: 75
 
 | Category | Count | P1 | P2 | P3 |
 |---|---|---|---|---|
-| User Profiles | 4 | 2 | 0 | 2 |
-| Core Principles | 7 | 7 | 0 | 0 |
-| Trust & Autonomy | 6 | 4 | 2 | 0 |
+| User Profiles | 5 | 2 | 0 | 3 |
+| Core Principles | 9 | 9 | 0 | 0 |
+| Trust & Autonomy | 7 | 5 | 2 | 0 |
 | Ethics Framework | 6 | 4 | 2 | 0 |
 | Collaborative Peer | 6 | 4 | 2 | 0 |
 | Memory & Knowledge | 6 | 4 | 2 | 0 |
@@ -930,10 +1035,10 @@ Total requirements: 70
 | Domain: Home | 1 | 0 | 0 | 1 |
 | Domain: Creative | 1 | 0 | 0 | 1 |
 | Domain: Social | 1 | 0 | 0 | 1 |
-| Data & Privacy | 5 | 4 | 1 | 0 |
+| Data & Privacy | 6 | 5 | 1 | 0 |
 | External Integrations | 4 | 2 | 2 | 0 |
 | Non-Functional | 7 | 5 | 2 | 0 |
-| **Total** | **70** | **45** | **20** | **5** |
+| **Total** | **75** | **49** | **20** | **6** |
 
 ---
 
@@ -960,3 +1065,7 @@ This table maps existing Zebra capabilities to the requirements that preserve or
 | Human tasks (auto: false + form schema) | `zebra-py/zebra/forms/` | REQ-TRUST-003 | Extend |
 | Conditional routing (next_route) | `zebra-py/zebra/core/engine.py` | REQ-TRUST-003 | Extend |
 | Synchronized tasks (FOE join) | `zebra-py/zebra/core/engine.py` | REQ-PRIN-001 | Preserve |
+| Budget daemon polling loop | `zebra-agent-web/zebra_agent_web/api/daemon.py` | REQ-PRIN-008 | Extend |
+| Goal scheduler (priority scoring) | `zebra-agent/zebra_agent/scheduler.py` | REQ-PRIN-008 | Extend |
+| DaemonStarterMiddleware (auto-start) | `zebra-agent-web/zebra_agent_web/asgi.py` | REQ-PRIN-008 | Extend |
+| WebSocket goal progress consumer | `zebra-agent-web/zebra_agent_web/api/consumers.py` | REQ-PRIN-009 | Extend |
