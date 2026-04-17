@@ -4,7 +4,12 @@ This file provides coding agents with essential guidelines for working on the Ze
 
 ## Specification
 
-The specs folder should be used for requirements and design. Read the AGENTS.md in this folder for an index, always update it if adding new files.
+Documentation is split into two folders. Both have their own `AGENTS.md` index — read the index for the folder you are writing in, and always update it when adding new files.
+
+- [docs/](docs/) — **product-level material only**: requirements, vision, roadmap (e.g. `requirements.md`). See [docs/AGENTS.md](docs/AGENTS.md).
+- [specs/](specs/) — **all technical / implementation-level material**: as-is snapshots, data models, protocols, module specs (e.g. `zebra-as-is.md`, `distributed-data-model.md`). See [specs/AGENTS.md](specs/AGENTS.md).
+
+**Note on location**: when adding a new document, decide by audience — product/requirements content goes in `docs/`, anything that describes code, architecture, data structures, or implementation decisions goes in `specs/`. If unsure, default to `specs/`.
 
 ## External File Loading
 
