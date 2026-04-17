@@ -8,6 +8,7 @@ This directory contains requirements and design specifications for Zebra.
 |------|---------|--------|
 | [zebra-as-is.md](zebra-as-is.md) | Snapshot of the current implementation: architectural layers, per-package capabilities, strengths, weaknesses, gaps vs. requirements | Current |
 | [distributed-data-model.md](distributed-data-model.md) | Design for local-first multi-user data sync (Phase 3) | Draft |
+| [backlog.md](backlog.md) | Concrete actionable work items not captured as requirements (task actions, WCP patterns, ops, docs, known bugs) | Current |
 
 ## Conventions
 
