@@ -82,6 +82,18 @@ REQ-NFR-004 (observability) and REQ-NFR-007 (security) are stated at principle l
 
 ## Test Coverage
 
+See [testing-strategy.md](testing-strategy.md) for the philosophy (E2E black-box through the web UX as primary layer, narrow units only for stable contracts).
+
+**Migration to target layout** (per testing-strategy.md §Test organisation):
+
+- [ ] Add `e2e/`, `smoke/`, `unit/` subdirs and pytest markers (`@pytest.mark.e2e/smoke/unit`) to each package's `tests/`
+- [ ] Stand up the first cassette-based E2E scenario (goal happy path) in `zebra-agent-web/tests/e2e/` as the template
+- [ ] Choose cassette tooling (VCR.py vs. bespoke recorder for streaming responses)
+- [ ] Triage every existing test against the strategy doc: keep (move to `unit/`), rewrite as E2E, or delete
+- [ ] Wire CI to run `e2e` + `smoke` + `unit` on PR, `e2e_live` nightly
+
+**Scenarios still to build:**
+
 - [ ] End-to-end suite covering agent main loop from goal → assess_and_record
 - [ ] Performance regression suite (throughput, p95 latency on representative workflows)
 - [ ] Chaos tests — fault injection at storage and LLM provider boundaries
