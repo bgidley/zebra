@@ -278,8 +278,112 @@ After every subsequent feature:
 - Submit a goal end-to-end, confirm the new capability is exercised.
 - Review `specs/` diff to confirm docs kept in sync.
 
+---
+
+## Phase 12 — Task Actions Library (enabler track)
+
+The entry-point pattern (REQ-PRIN-002) is in place; these concrete actions are missing. Each is a 1-day slice: action class + entry-point registration + tests. Pulled into earlier phases as domains demand them.
+
+- **F62.** HTTP/REST client — GET/POST/PUT/DELETE with auth (bearer, basic, API key).
+- **F63.** Database ops — query/insert/update/delete against SQLite, Postgres, Oracle.
+- **F64.** Git ops — clone, commit, push, pull, branch, diff.
+- **F65.** Email / webhook notifications — SMTP send, generic webhook POST.
+- **F66.** Data transforms — CSV parsing, JSON manipulation, XML parsing.
+- **F67.** Archive ops — zip/tar create and extract.
+- **F68.** Template rendering — Jinja2, Mustache.
+- **F69.** Web search action.
+- **F70.** OpenCode / Claude Agent SDK as a task action (delegating a sub-goal to an external coding agent).
+
+Package layout: `zebra-tasks/zebra_tasks/{http,database,git,notifications,data,archive,template,search,agent_delegate}/`.
+
+---
+
+## Phase 13 — Workflow Control-Flow Patterns (enabler track)
+
+9 of 43 WCP patterns implemented (see `zebra-py/workflows.md`). Priority additions; each pattern ships with a YAML example workflow and E2E test.
+
+- **F71.** WCP-9 Structured Discriminator — first-wins, ignore rest.
+- **F72.** WCP-16 Deferred Choice — runtime path selection.
+- **F73.** WCP-18 Milestone — state-based activation.
+- **F74.** WCP-22 Recursion — self-referential workflows.
+- **F75.** WCP-28 Blocking Discriminator — M-out-of-N completion.
+- **F76.** WCP-33 Static Partial Join for Multiple Instances.
+- **F77.** WCP-41 Thread Merge — safe concurrent path merging.
+
+---
+
+## Phase 14 — Ops, Performance & Security concretion (enabler track)
+
+Concretes requirements stated at principle level (REQ-NFR-004 observability, REQ-NFR-007 security).
+
+### Observability
+- **F78.** OpenTelemetry tracing across engine + task actions. (Builds on F3's Prometheus + structlog baseline.)
+- **F79.** Sentry (or equivalent) error tracking integration.
+- **F80.** Dashboard tiles for memory-system metrics — entries by category, query latency, storage size.
+
+### Security
+- **F81.** Rate limiting on public endpoints.
+- **F82.** Input validation + sanitisation at API boundaries.
+- **F83.** TLS termination / reverse-proxy deployment docs.
+- **F84.** Dependency vulnerability scanning in CI.
+- **F85.** Audit log of all external API calls (supports REQ-NFR-007 acceptance criterion). Complements F20 ethics audit.
+
+### Performance
+- **F86.** SQLite/Postgres indexing review for process + task queries.
+- **F87.** Connection pooling for DB and HTTP task actions.
+- **F88.** Optional Redis cache layer for hot lookups (memory, conceptual index).
+- **F89.** Lazy-load workflow definitions — don't parse all YAML on startup.
+- **F90.** Batch task state transitions where the engine processes multiple ready tasks.
+
+### Extended test scenarios (beyond F1 baseline)
+- **F91.** Performance regression suite (throughput, p95 latency). Feeds F55.
+- **F92.** Chaos tests — fault injection at storage and LLM provider boundaries.
+- **F93.** Load tests — high-volume queued goals, concurrent processes. Feeds F56.
+- **F94.** Security tests — injection, auth bypass, credential leakage in logs.
+- **F95.** Browser tests for the web dashboard (Playwright).
+
+---
+
+## Phase 15 — Learning & Cost improvements
+
+Referenced in passing by REQ-NFR-003 (budget) and REQ-DOM-CODE-001 (dream cycle).
+
+- **F96.** Parallel-comparison voting — when uncertain, run two workflow variants in parallel and present both outputs to the human to pick a winner. Feeds episodic memory.
+- **F97.** Cost-aware model routing — pick Haiku/Sonnet/Opus per task based on complexity and remaining budget. Resolution order already exists (task > process > server default); missing piece is the *decision policy*.
+- **F98.** Self-improvement via Claude Agent SDK — let Zebra edit its own code/workflows via the SDK, not just YAML edits. Distinct from the dream cycle (which operates on metrics and workflow structure).
+
+---
+
+## Phase 16 — User-facing documentation
+
+Requirements reference docs but don't enumerate them.
+
+- **F99.** Getting Started tutorial — create your first goal end-to-end.
+- **F100.** User Guide — values profile, trust levels, memory, domains.
+- **F101.** Auto-generated API reference from docstrings.
+- **F102.** Migration guide for users of the legacy Java implementation.
+- **F103.** Troubleshooting guide — common errors, log interpretation.
+- **F104.** Deployment guide — single-user local install, optional Docker.
+
+---
+
+## Known bugs / follow-ups
+
+- **F105.** Feedback form — verify the learning loop actually updates episodic/conceptual memory when a human submits a rating.
+
+---
+
 ## Out of scope for this plan
 
-- Detailed technical design inside each feature — produced per-feature via separate plan mode sessions.
+**Planning-level exclusions:**
+- Detailed technical design inside each feature — produced per-feature via separate plan-mode sessions.
 - Prioritising P2/P3 above P1 within a phase: the P1-flagged items lead each phase.
 - Rewrites of existing working modules (engine, FOE, IoC) — refactor only when a feature requires it.
+
+**Product-level exclusions** (dropped because they conflict with local-first / single-user posture — REQ-PRIN-005, REQ-USR-001 — or are speculative):
+- Multi-node distributed execution, gRPC coordination, etcd/Redis consensus.
+- Multi-agent collaboration protocols between Zebra instances (superseded by REQ-PRIN-007 workflow sharing, which is lighter-weight).
+- Knowledge graph integration (Neo4j / Neptune).
+- Natural-language-to-YAML workflow generation.
+- Meta-learning, genetic algorithms, reinforcement learning, counterfactual reasoning.
+- Kubernetes / Helm / Terraform / blue-green deployment tooling.
