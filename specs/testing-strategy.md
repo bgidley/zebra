@@ -96,7 +96,7 @@ This section describes the **target** layout. Today every package uses a flat `t
 
 Nightly/live runs are allowed to be flaky-tolerant (retry once); PR-gating tests must be deterministic.
 
-**Migration path** (tracked in [backlog.md](backlog.md)):
+**Migration path** (tracked as feature F1 in [../plan/backlog.md](../plan/backlog.md)):
 
 1. Create the `e2e/`, `smoke/`, `unit/` subdirectories per package and wire up `pytest` markers (`@pytest.mark.e2e`, `@pytest.mark.smoke`, `@pytest.mark.unit`) so CI can select layers.
 2. Triage existing tests against the "What we do still unit-test" and "What we explicitly do not test" lists in this doc. For each existing test, either:
