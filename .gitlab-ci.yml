@@ -28,9 +28,11 @@ unit:
 e2e:
   stage: e2e
   # Per specs/testing-strategy.md: SQLite + cassette LLM for the PR gate.
-  # Real Oracle + real Anthropic are reserved for the scheduled e2e-live job.
+  # Copy .env for ANTHROPIC_API_KEY (cassette recorder needs it for new interactions)
+  # but unset ORACLE_DSN so Django uses SQLite.
   script:
-    - uv run pytest zebra-agent-web/tests/e2e/ -m e2e
+    - cp /home/opc/projects/zebra/.env .env
+    - ORACLE_DSN= uv run pytest zebra-agent-web/tests/e2e/ -m e2e
 
 e2e-live:
   stage: e2e
