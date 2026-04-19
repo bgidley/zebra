@@ -11,3 +11,4 @@ htmlcov/
 .env
 .env.local
 tmp
+.air/mcp.json
