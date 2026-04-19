@@ -4,13 +4,12 @@ Verifies that non-serializable values are rejected at model construction,
 in set_process_property(), and in storage backends.
 """
 
-import os
-import tempfile
 from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
 
+from zebra.core.exceptions import SerializationError
 from zebra.core.models import (
     ProcessDefinition,
     ProcessInstance,
@@ -22,6 +21,23 @@ from zebra.core.models import (
 )
 from zebra.storage.sqlite import SQLiteStore
 from zebra.tasks.base import ExecutionContext
+
+# =============================================================================
+# Shared fixtures
+# =============================================================================
+
+
+@pytest.fixture
+async def sqlite_store(tmp_path):
+    """Create a temporary SQLite store for testing.
+
+    Uses pytest's ``tmp_path`` fixture for automatic cleanup.
+    """
+    store = SQLiteStore(str(tmp_path / "test.db"))
+    await store.initialize()
+    yield store
+    await store.close()
+
 
 # =============================================================================
 # Non-serializable test values
@@ -207,18 +223,6 @@ class TestSetProcessProperty:
 class TestSQLiteStoreSerialization:
     """SQLiteStore raises SerializationError for non-serializable properties."""
 
-    @pytest.fixture
-    async def sqlite_store(self):
-        """Create a temporary SQLite store for testing."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        store = SQLiteStore(db_path)
-        await store.initialize()
-        yield store
-        await store.close()
-        os.unlink(db_path)
-
     async def test_valid_properties_roundtrip(self, sqlite_store):
         """Valid properties should survive save/load roundtrip."""
         process = ProcessInstance(
@@ -263,6 +267,44 @@ class TestSQLiteStoreSerialization:
         assert loaded is not None
         assert loaded.properties["prompt"] == "What is 2+2?"
         assert loaded.properties["max_tokens"] == 100
+
+    @pytest.mark.parametrize("bad_value", NON_SERIALIZABLE_VALUES)
+    async def test_save_process_raises_serialization_error(self, sqlite_store, bad_value):
+        """SQLiteStore.save_process() raises SerializationError for non-serializable values.
+
+        Model construction validators normally block such values, so to exercise
+        the storage-layer guard we construct with a valid dict then mutate the
+        properties to inject a non-serializable value — mirroring what could
+        happen if a task action bypassed ``set_process_property`` and mutated
+        ``process.properties`` directly.
+        """
+        process = ProcessInstance(
+            id="p1",
+            definition_id="d1",
+            state=ProcessState.RUNNING,
+            properties={"placeholder": "ok"},
+        )
+        # Bypass model validation: mutate properties post-construction.
+        process.properties["bad"] = bad_value
+
+        with pytest.raises(SerializationError, match="JSON-serializable"):
+            await sqlite_store.save_process(process)
+
+    @pytest.mark.parametrize("bad_value", NON_SERIALIZABLE_VALUES)
+    async def test_save_task_raises_serialization_error(self, sqlite_store, bad_value):
+        """SQLiteStore.save_task() raises SerializationError for non-serializable values."""
+        task = TaskInstance(
+            id="t1",
+            process_id="p1",
+            task_definition_id="td1",
+            state=TaskState.READY,
+            foe_id="foe1",
+            properties={"placeholder": "ok"},
+        )
+        task.properties["bad"] = bad_value
+
+        with pytest.raises(SerializationError, match="JSON-serializable"):
+            await sqlite_store.save_task(task)
 
 
 # =============================================================================
@@ -323,3 +365,172 @@ class TestTaskResultOutput:
         bad_output = CustomObject("oops")
         with pytest.raises(ValueError, match="JSON-serializable"):
             ctx.set_process_property("__task_output_td1", bad_output)
+
+
+# =============================================================================
+# TaskResult JSON round-trip
+# =============================================================================
+
+
+class TestTaskResultRoundTrip:
+    """TaskResult survives JSON serialization/deserialization without loss.
+
+    TaskResult crosses serialization boundaries in two places:
+      1. Its ``output`` is copied into process properties and persisted.
+      2. The full TaskResult is emitted/consumed over transport layers
+         (e.g. subtask results, MCP tool responses, API payloads).
+
+    Round-trip fidelity of every field — ``success``, ``output``, ``error``,
+    ``next_route`` — is therefore part of the engine contract.
+    """
+
+    def _roundtrip(self, result: TaskResult) -> TaskResult:
+        """Serialize to JSON string and re-parse, returning the new instance."""
+        return TaskResult.model_validate_json(result.model_dump_json())
+
+    def test_ok_result_minimal_roundtrip(self):
+        """TaskResult.ok() with no output survives JSON round-trip."""
+        original = TaskResult.ok()
+        restored = self._roundtrip(original)
+        assert restored.success is True
+        assert restored.output is None
+        assert restored.error is None
+        assert restored.next_route is None
+        assert restored == original
+
+    def test_fail_result_roundtrip(self):
+        """TaskResult.fail() preserves error and success=False."""
+        original = TaskResult.fail("boom: something went wrong")
+        restored = self._roundtrip(original)
+        assert restored.success is False
+        assert restored.error == "boom: something went wrong"
+        assert restored.output is None
+        assert restored.next_route is None
+        assert restored == original
+
+    @pytest.mark.parametrize(
+        "output",
+        [
+            "plain string",
+            "",
+            0,
+            42,
+            -17,
+            3.14,
+            0.0,
+            True,
+            False,
+            None,
+            [],
+            [1, 2, 3],
+            ["a", None, 1, 2.5, True],
+            {},
+            {"answer": 42, "confidence": 0.95},
+            {"nested": {"a": {"b": {"c": [1, 2, 3]}}}},
+            {"mixed": [{"k": "v"}, None, [1, [2, [3]]]]},
+        ],
+        ids=[
+            "str",
+            "empty_str",
+            "zero",
+            "int",
+            "neg_int",
+            "float",
+            "zero_float",
+            "true",
+            "false",
+            "none",
+            "empty_list",
+            "int_list",
+            "mixed_list",
+            "empty_dict",
+            "flat_dict",
+            "deep_nested_dict",
+            "complex_mixed",
+        ],
+    )
+    def test_output_types_roundtrip(self, output):
+        """Every JSON-representable output type round-trips byte-for-byte."""
+        original = TaskResult.ok(output=output)
+        restored = self._roundtrip(original)
+        assert restored.success is True
+        assert restored.output == output
+        assert restored == original
+
+    def test_next_route_roundtrip(self):
+        """next_route field survives round-trip (used for conditional routing)."""
+        original = TaskResult(
+            success=True,
+            output={"decision": "approved"},
+            next_route="approved",
+        )
+        restored = self._roundtrip(original)
+        assert restored.next_route == "approved"
+        assert restored.output == {"decision": "approved"}
+        assert restored == original
+
+    def test_all_fields_populated_roundtrip(self):
+        """A TaskResult with every field set round-trips with full fidelity."""
+        original = TaskResult(
+            success=False,
+            output={"partial": [1, 2]},
+            error="completed with warnings",
+            next_route="retry",
+        )
+        restored = self._roundtrip(original)
+        assert restored.success is False
+        assert restored.output == {"partial": [1, 2]}
+        assert restored.error == "completed with warnings"
+        assert restored.next_route == "retry"
+        assert restored == original
+
+    def test_model_dump_roundtrip_via_dict(self):
+        """model_dump() -> model_validate() round-trip (no JSON string)."""
+        original = TaskResult.ok(output={"list": [1, 2, 3], "nested": {"k": "v"}})
+        dumped = original.model_dump()
+        restored = TaskResult.model_validate(dumped)
+        assert restored == original
+
+    def test_roundtrip_preserves_numeric_types(self):
+        """int stays int and float stays float through JSON round-trip."""
+        original = TaskResult.ok(output={"count": 5, "ratio": 0.5})
+        restored = self._roundtrip(original)
+        assert restored.output["count"] == 5
+        assert isinstance(restored.output["count"], int)
+        assert restored.output["ratio"] == 0.5
+        assert isinstance(restored.output["ratio"], float)
+
+    def test_roundtrip_preserves_unicode(self):
+        """Non-ASCII strings in output survive JSON round-trip."""
+        original = TaskResult.ok(
+            output={"text": "héllo wörld 🦓 中文", "emoji": "✅"},
+        )
+        restored = self._roundtrip(original)
+        assert restored.output["text"] == "héllo wörld 🦓 中文"
+        assert restored.output["emoji"] == "✅"
+
+    async def test_roundtrip_via_sqlite_store(self, sqlite_store):
+        """TaskResult.output stored as process property survives SQLite persistence.
+
+        This is the primary production path: the engine stores
+        ``__task_output_<task_def_id>`` into process properties, the store
+        serializes to JSON, and downstream tasks read it back.
+        """
+        result = TaskResult.ok(
+            output={
+                "answer": 42,
+                "items": [1, "two", None, {"deep": True}],
+                "ratio": 0.75,
+            },
+        )
+        process = ProcessInstance(
+            id="p1",
+            definition_id="d1",
+            state=ProcessState.RUNNING,
+            properties={"__task_output_td1": result.output},
+        )
+        await sqlite_store.save_process(process)
+        loaded = await sqlite_store.load_process("p1")
+
+        assert loaded is not None
+        assert loaded.properties["__task_output_td1"] == result.output
