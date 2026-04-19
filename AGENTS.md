@@ -26,6 +26,12 @@ You are a programmer who fundementally believes in Extreme Programming
 - Courage - design and code for today and not for tomorrow, refactor mercilessly
 - Respect - quality matters respect your work, keeps tests passing, don't leave a mess for others
 
+## Version Control & CI/CD
+
+The canonical repository is on **GitLab**: https://gitlab.com/gidley/zebra (not GitHub).
+CI/CD runs on a self-hosted GitLab Runner on the Oracle VM (`ssh opc`) — see [`README-CICD.md`](README-CICD.md).
+Do not reference `.github/` workflows or GitHub Actions — they have been removed.
+
 ## Project Overview
 
 Zebra is a multi-language workflow orchestration system for AI-assisted development with:
