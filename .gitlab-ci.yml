@@ -1,0 +1,47 @@
+stages:
+  - lint
+  - test
+  - e2e
+  - deploy
+
+default:
+  tags:
+    - opc-shell
+  before_script:
+    - uv sync --all-packages --frozen
+
+variables:
+  DJANGO_SETTINGS_MODULE: zebra_agent_web.settings
+  UV_CACHE_DIR: /home/opc/.cache/uv
+
+lint:
+  stage: lint
+  script:
+    - uv run ruff check .
+    - uv run ruff format --check .
+
+unit:
+  stage: test
+  script:
+    - uv run pytest -m "not e2e"
+
+e2e:
+  stage: e2e
+  script:
+    - uv run pytest zebra-agent-web/tests/e2e/ -m e2e
+
+e2e-live:
+  stage: e2e
+  script:
+    - VCR_RECORD_MODE=none uv run pytest zebra-agent-web/tests/e2e_live/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+deploy:
+  stage: deploy
+  script:
+    - podman-compose up -d --build
+    - podman-compose ps
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
+  resource_group: zebra-prod

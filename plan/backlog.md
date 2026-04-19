@@ -33,7 +33,7 @@ Phases 1–11 are ordered by user-visible value. Phases 12–16 are **enabler tr
 **Outcome**: CI green on every PR, E2E tests exercise the Django UI end-to-end using recorded LLM cassettes, regression signal before any new feature lands.
 
 Scope:
-- Set up `.github/workflows/ci.yml`: `uv sync --all-packages`, `ruff check`, `ruff format --check`, `pytest` on SQLite.
+- Set up `.gitlab-ci.yml`: `uv sync --all-packages --frozen`, `ruff check`, `ruff format --check`, `pytest` on SQLite. Self-hosted GitLab Runner on the Oracle VM — see [`deploy/gitlab-runner-bootstrap.md`](../deploy/gitlab-runner-bootstrap.md).
 - Add `tests/e2e/` in `zebra-agent-web/` using Django test client + channels test client.
   - Golden-path goal flow: submit → daemon picks up → workflow runs → cost appears → completion.
   - Human task loop: goal pauses on `auto:false` task → form schema exposed → submit form → workflow resumes.
@@ -47,10 +47,10 @@ Scope:
   - `WorkflowEngine.create_process` / `start_process` / `complete_task` public signatures.
   - `forms.py` `schema_to_form` / `coerce_form_data` / `validate_form_data`.
 - Gap-fill coverage for currently-untested modules: `zebra_tasks.consult_memory`, `update_conceptual_memory`, `analyze`, `evaluator`, `optimizer`, `variant_creator`, `python_exec`, `assess_and_record`.
-- Add nightly CI job (or label-triggered) that runs the E2E suite against real Anthropic + Postgres.
+- Add nightly CI job that runs the real-LLM E2E suite against Oracle. Configured as a GitLab Pipeline Schedule targeting the `e2e-live` job (`$CI_PIPELINE_SOURCE == "schedule"`).
 - Document running the suite in `specs/testing-strategy.md` (commands, cassette refresh workflow, how to extend).
 
-Critical files: new `.github/workflows/ci.yml`; new `zebra-agent-web/tests/e2e/`; extend `zebra-agent-web/conftest.py`; new cassette helper under `zebra-tasks/zebra_tasks/llm/_testing.py`; update `specs/testing-strategy.md`.
+Critical files: new `.gitlab-ci.yml`; new `deploy/gitlab-runner-bootstrap.md`; new `zebra-agent-web/tests/e2e/`; extend `zebra-agent-web/conftest.py`; new cassette helper under `zebra-tasks/zebra_tasks/llm/_testing.py`; update `specs/testing-strategy.md`.
 
 ---
 
@@ -269,7 +269,7 @@ Role-based access, org policy layer over capabilities. E2E: role-based visibilit
 ## Verification (plan-level)
 
 After F1 ships:
-- `uv run pytest` green locally and on GitHub Actions CI.
+- `uv run pytest` green locally and on GitLab CI (self-hosted runner on the Oracle VM).
 - Nightly job runs the same E2E suite against real Anthropic + Postgres.
 - Any future feature lands with ≥1 E2E test extending the canonical harness — otherwise not done.
 

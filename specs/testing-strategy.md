@@ -96,6 +96,8 @@ This section describes the **target** layout. Today every package uses a flat `t
 
 Nightly/live runs are allowed to be flaky-tolerant (retry once); PR-gating tests must be deterministic.
 
+**CI host:** GitLab ([`.gitlab-ci.yml`](../.gitlab-ci.yml)) driving a self-hosted runner on the Oracle VM (shell executor, Podman for deploy). The nightly real-LLM run is a GitLab Pipeline Schedule, not a cron expression in YAML. See [`deploy/gitlab-runner-bootstrap.md`](../deploy/gitlab-runner-bootstrap.md).
+
 **Migration path** (tracked as feature F1 in [../plan/backlog.md](../plan/backlog.md)):
 
 1. Create the `e2e/`, `smoke/`, `unit/` subdirectories per package and wire up `pytest` markers (`@pytest.mark.e2e`, `@pytest.mark.smoke`, `@pytest.mark.unit`) so CI can select layers.
