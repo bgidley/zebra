@@ -10,7 +10,6 @@ import pytest
 
 from zebra_tasks.llm.base import LLMResponse, TokenUsage
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
@@ -270,7 +269,14 @@ class TestWorkflowEvaluatorAction:
             "analysis_period_days": 7,
             "total_runs_analyzed": 10,
             "unique_workflows": 1,
-            "workflow_stats": [{"workflow_name": "answer_question", "total_runs": 10, "success_rate": 0.9, "avg_rating": 4.5}],
+            "workflow_stats": [
+                {
+                    "workflow_name": "answer_question",
+                    "total_runs": 10,
+                    "success_rate": 0.9,
+                    "avg_rating": 4.5,
+                }
+            ],
             "low_performers": [],
             "failure_patterns": [],
             "recommendations": ["Looking good"],
@@ -324,7 +330,9 @@ class TestWorkflowEvaluatorAction:
         result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
 
         assert result.success is True
-        assert mock_context.process.properties["my_eval"]["overall_assessment"]["health_score"] == 80
+        assert (
+            mock_context.process.properties["my_eval"]["overall_assessment"]["health_score"] == 80
+        )
 
     async def test_token_tracking_updated(self, mock_task, mock_context):
         from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
@@ -367,7 +375,14 @@ class TestWorkflowEvaluatorAction:
 
         mock_task.properties = {
             "metrics_analysis": {
-                "workflow_stats": [{"workflow_name": "bad_wf", "total_runs": 5, "success_rate": 0.4, "avg_rating": None}],
+                "workflow_stats": [
+                    {
+                        "workflow_name": "bad_wf",
+                        "total_runs": 5,
+                        "success_rate": 0.4,
+                        "avg_rating": None,
+                    }
+                ],
                 "low_performers": [{"workflow_name": "bad_wf", "success_rate": 0.4}],
                 "failure_patterns": [],
                 "recommendations": [],

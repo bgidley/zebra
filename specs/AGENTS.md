@@ -11,7 +11,7 @@ This directory contains requirements and design specifications for Zebra.
 | [distributed-data-model.md](distributed-data-model.md) | Design for local-first multi-user data sync (Phase 3) | Draft |
 | [testing-strategy.md](testing-strategy.md) | Testing philosophy: E2E black-box through the web UX as primary layer, narrow units only for stable contracts | Draft |
 
-The concrete feature backlog lives in [../plan/backlog.md](../plan/backlog.md).
+The concrete feature backlog is tracked as [GitLab issues](https://gitlab.com/gidley/zebra/-/issues).
 
 ## Conventions
 
