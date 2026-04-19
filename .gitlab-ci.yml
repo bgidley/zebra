@@ -28,11 +28,14 @@ unit:
 e2e:
   stage: e2e
   script:
+    # Authoritative Oracle + Anthropic creds live at /home/opc/projects/zebra/.env
+    - cp /home/opc/projects/zebra/.env .env
     - uv run pytest zebra-agent-web/tests/e2e/ -m e2e
 
 e2e-live:
   stage: e2e
   script:
+    - cp /home/opc/projects/zebra/.env .env
     - VCR_RECORD_MODE=none uv run pytest zebra-agent-web/tests/e2e_live/
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
@@ -40,6 +43,9 @@ e2e-live:
 deploy:
   stage: deploy
   script:
+    # docker-compose.yml mounts ./.env into the container; the authoritative
+    # copy lives at /home/opc/projects/zebra/.env on the VM.
+    - cp /home/opc/projects/zebra/.env .env
     - podman-compose up -d --build
     - podman-compose ps
   rules:
