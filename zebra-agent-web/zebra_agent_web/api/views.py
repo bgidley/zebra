@@ -950,6 +950,39 @@ def process_cancel(request, process_id):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# ===========================================================================
+# Kill Switch
+# ===========================================================================
+
+
+@api_view(["GET", "POST"])
+def kill_switch_view(request):
+    """Read or update the system-wide kill switch.
+
+    GET  → {"halted": bool, "halted_at": "...", "halted_reason": "..."}
+    POST {"halted": true, "reason": "..."} → same shape
+
+    Setting halted=true stops the daemon from picking up new processes and
+    cancels any in-flight process at its next polling checkpoint.
+    """
+    from zebra_agent_web.api import kill_switch as ks
+
+    if request.method == "GET":
+        info = async_to_sync(ks.get_status)()
+        return Response(info)
+
+    # POST — update the flag
+    halted = request.data.get("halted")
+    if not isinstance(halted, bool):
+        return Response(
+            {"error": "'halted' must be a boolean"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    reason = request.data.get("reason", "") if halted else ""
+    info = async_to_sync(ks.set_halted)(halted, reason=reason)
+    return Response(info)
+
+
 @api_view(["DELETE"])
 def process_delete(request, process_id):
     """Hard-delete a process and all its tasks, FOEs, and locks.

@@ -272,3 +272,26 @@ class ConceptualMemoryModel(models.Model):
 
     def __str__(self):
         return f"Concept: {self.concept[:60]}"
+
+
+# =============================================================================
+# System State (Kill Switch)
+# =============================================================================
+
+
+class SystemStateModel(models.Model):
+    """Singleton system-wide state record (always pk=1).
+
+    Use SystemStateModel.objects.get_or_create(pk=1) to access.
+    """
+
+    halted = models.BooleanField(default=False)
+    halted_at = models.DateTimeField(null=True, blank=True)
+    halted_reason = models.CharField(max_length=500, blank=True, default="")
+
+    class Meta:
+        db_table = "zebra_system_state"
+        verbose_name = "System State"
+
+    def __str__(self):
+        return f"SystemState halted={self.halted}"

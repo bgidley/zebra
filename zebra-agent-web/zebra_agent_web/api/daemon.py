@@ -97,6 +97,13 @@ async def _tick(
     """One iteration: pick a goal, check budget, execute, log cost."""
     from zebra.core.models import ProcessState
 
+    from zebra_agent_web.api.kill_switch import is_halted
+
+    # 0. Kill-switch guard — skip pickup while system is halted
+    if await is_halted():
+        logger.warning("[daemon:halted] Kill switch active — skipping pickup")
+        return
+
     # 1. Pick highest-priority CREATED process
     process = await scheduler.pick_next()
     if process is None:
@@ -147,6 +154,15 @@ async def _tick(
     poll_sec = 2.0
 
     while waited < max_wait:
+        if await is_halted():
+            logger.warning(
+                "[daemon:halted] Kill switch set mid-flight — cancelling %s", process.id[:12]
+            )
+            try:
+                await engine.fail_process(process.id, "Kill switch activated")
+            except Exception:
+                logger.exception("Failed to cancel in-flight process %s", process.id[:12])
+            return
         process = await engine.store.load_process(process.id)
         if process.state in (ProcessState.COMPLETE, ProcessState.FAILED):
             break
