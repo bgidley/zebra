@@ -31,6 +31,9 @@ testpaths = ["zebra-py/tests", "zebra-tasks/tests", "zebra-agent/tests", "zebra-
 pythonpath = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-agent-web"]
 addopts = "--import-mode=importlib"
 env_files = [".env"]
+markers = [
+    "e2e: End-to-end tests through the Django UI",
+]
 
 [tool.coverage.run]
 source = ["zebra", "zebra_tasks", "zebra_agent", "zebra_agent_web"]

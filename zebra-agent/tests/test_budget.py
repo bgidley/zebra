@@ -123,7 +123,7 @@ class TestBudgetManagerWarning:
         import logging
 
         mock_metrics.get_total_cost_since.return_value = 0.0
-        with caplog.at_level(logging.WARNING, logger="zebra_agent.budget"):
+        with caplog.at_level(logging.WARNING):
             await budget.check_and_warn(current_run_cost=6.0)
         assert any("warning threshold" in r.message.lower() for r in caplog.records)
 

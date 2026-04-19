@@ -92,14 +92,22 @@ CHANNEL_LAYERS = {
 # defined in zebra_agent_web/api/models.py
 #
 # Configure your preferred database backend below (Oracle, PostgreSQL, SQLite, etc.)
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.oracle",
-        "NAME": os.environ.get("ORACLE_DSN", ""),
-        "USER": os.environ.get("ORACLE_USERNAME", ""),
-        "PASSWORD": os.environ.get("ORACLE_PASSWORD", ""),
+if os.environ.get("ORACLE_DSN"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.oracle",
+            "NAME": os.environ.get("ORACLE_DSN", ""),
+            "USER": os.environ.get("ORACLE_USERNAME", ""),
+            "PASSWORD": os.environ.get("ORACLE_PASSWORD", ""),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 # Alternative configurations:
 # PostgreSQL:

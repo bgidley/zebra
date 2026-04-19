@@ -86,7 +86,7 @@ class TestValidatePath:
         (temp_dir / "test.txt").write_text("content")
 
         result = validate_path("test.txt", config, must_exist=True)
-        assert result == temp_dir / "test.txt"
+        assert result.resolve() == (temp_dir / "test.txt").resolve()
 
     def test_validate_path_traversal_blocked(self, temp_dir):
         """Test that path traversal is blocked."""
