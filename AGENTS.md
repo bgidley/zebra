@@ -32,6 +32,14 @@ The canonical repository is on **GitLab**: https://gitlab.com/gidley/zebra (not 
 CI/CD runs on a self-hosted GitLab Runner on the Oracle VM (`ssh opc`) — see [`README-CICD.md`](README-CICD.md).
 Do not reference `.github/` workflows or GitHub Actions — they have been removed.
 
+## Plan Tracking
+
+All feature and bug work is tracked as **GitLab issues** at https://gitlab.com/gidley/zebra/-/issues.
+
+- Issues are labelled with `phase::N-<name>` scoped labels matching the backlog phases (F1–F105).
+- When starting work on a feature, reference the corresponding issue number in commit messages and MR descriptions (e.g. `Closes #12`).
+- Do **not** create or edit markdown plan files (e.g. `plan/backlog.md`) — GitLab issues are the single source of truth for the backlog.
+
 ## Project Overview
 
 Zebra is a multi-language workflow orchestration system for AI-assisted development with:
