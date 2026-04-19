@@ -27,9 +27,9 @@ unit:
 
 e2e:
   stage: e2e
+  # Per specs/testing-strategy.md: SQLite + cassette LLM for the PR gate.
+  # Real Oracle + real Anthropic are reserved for the scheduled e2e-live job.
   script:
-    # Authoritative Oracle + Anthropic creds live at /home/opc/projects/zebra/.env
-    - cp /home/opc/projects/zebra/.env .env
     - uv run pytest zebra-agent-web/tests/e2e/ -m e2e
 
 e2e-live:
