@@ -4,79 +4,99 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('api', '0002_memory_models'),
+        ("api", "0002_memory_models"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ConceptualMemoryModel',
+            name="ConceptualMemoryModel",
             fields=[
-                ('id', models.CharField(max_length=255, primary_key=True, serialize=False)),
-                ('concept', models.CharField(db_index=True, help_text='Goal pattern / category', max_length=500)),
-                ('recommended_workflows', models.JSONField(default=list, help_text='List of {name, fit_notes, avg_rating, use_count} dicts')),
-                ('anti_patterns', models.TextField(blank=True, default='', help_text="What doesn't work here")),
-                ('last_updated', models.DateTimeField(db_index=True)),
-                ('tokens', models.IntegerField(default=0)),
+                ("id", models.CharField(max_length=255, primary_key=True, serialize=False)),
+                (
+                    "concept",
+                    models.CharField(
+                        db_index=True, help_text="Goal pattern / category", max_length=500
+                    ),
+                ),
+                (
+                    "recommended_workflows",
+                    models.JSONField(
+                        default=list,
+                        help_text="List of {name, fit_notes, avg_rating, use_count} dicts",
+                    ),
+                ),
+                (
+                    "anti_patterns",
+                    models.TextField(blank=True, default="", help_text="What doesn't work here"),
+                ),
+                ("last_updated", models.DateTimeField(db_index=True)),
+                ("tokens", models.IntegerField(default=0)),
             ],
             options={
-                'verbose_name': 'Conceptual Memory',
-                'verbose_name_plural': 'Conceptual Memories',
-                'db_table': 'zebra_conceptual_memories',
+                "verbose_name": "Conceptual Memory",
+                "verbose_name_plural": "Conceptual Memories",
+                "db_table": "zebra_conceptual_memories",
             },
         ),
         migrations.CreateModel(
-            name='WorkflowMemoryModel',
+            name="WorkflowMemoryModel",
             fields=[
-                ('id', models.CharField(max_length=255, primary_key=True, serialize=False)),
-                ('timestamp', models.DateTimeField(db_index=True)),
-                ('workflow_name', models.CharField(db_index=True, max_length=255)),
-                ('goal', models.TextField(help_text="User's goal/request")),
-                ('success', models.BooleanField(default=False)),
-                ('input_summary', models.TextField(help_text='What went into the workflow')),
-                ('output_summary', models.TextField(help_text='What came out of the workflow')),
-                ('effectiveness_notes', models.TextField(blank=True, default='', help_text="LLM assessment of what worked / didn't")),
-                ('tokens_used', models.IntegerField(default=0)),
-                ('rating', models.IntegerField(blank=True, help_text='User rating 1-5', null=True)),
+                ("id", models.CharField(max_length=255, primary_key=True, serialize=False)),
+                ("timestamp", models.DateTimeField(db_index=True)),
+                ("workflow_name", models.CharField(db_index=True, max_length=255)),
+                ("goal", models.TextField(help_text="User's goal/request")),
+                ("success", models.BooleanField(default=False)),
+                ("input_summary", models.TextField(help_text="What went into the workflow")),
+                ("output_summary", models.TextField(help_text="What came out of the workflow")),
+                (
+                    "effectiveness_notes",
+                    models.TextField(
+                        blank=True, default="", help_text="LLM assessment of what worked / didn't"
+                    ),
+                ),
+                ("tokens_used", models.IntegerField(default=0)),
+                ("rating", models.IntegerField(blank=True, help_text="User rating 1-5", null=True)),
             ],
             options={
-                'verbose_name': 'Workflow Memory',
-                'verbose_name_plural': 'Workflow Memories',
-                'db_table': 'zebra_workflow_memories',
+                "verbose_name": "Workflow Memory",
+                "verbose_name_plural": "Workflow Memories",
+                "db_table": "zebra_workflow_memories",
             },
         ),
         migrations.RemoveIndex(
-            model_name='longtermthememodel',
-            name='zebra_memor_created_750cc5_idx',
+            model_name="longtermthememodel",
+            name="zebra_memor_created_750cc5_idx",
         ),
         migrations.DeleteModel(
-            name='LongTermThemeModel',
+            name="LongTermThemeModel",
         ),
         migrations.RemoveIndex(
-            model_name='memoryentrymodel',
-            name='zebra_memor_timesta_9a80c2_idx',
+            model_name="memoryentrymodel",
+            name="zebra_memor_timesta_9a80c2_idx",
         ),
         migrations.DeleteModel(
-            name='MemoryEntryModel',
+            name="MemoryEntryModel",
         ),
         migrations.RemoveIndex(
-            model_name='shorttermsummarymodel',
-            name='zebra_memor_created_7cfca9_idx',
+            model_name="shorttermsummarymodel",
+            name="zebra_memor_created_7cfca9_idx",
         ),
         migrations.DeleteModel(
-            name='ShortTermSummaryModel',
+            name="ShortTermSummaryModel",
         ),
         migrations.AddIndex(
-            model_name='conceptualmemorymodel',
-            index=models.Index(fields=['-last_updated'], name='zebra_conce_last_up_3d1a71_idx'),
+            model_name="conceptualmemorymodel",
+            index=models.Index(fields=["-last_updated"], name="zebra_conce_last_up_3d1a71_idx"),
         ),
         migrations.AddIndex(
-            model_name='workflowmemorymodel',
-            index=models.Index(fields=['-timestamp'], name='zebra_workf_timesta_777137_idx'),
+            model_name="workflowmemorymodel",
+            index=models.Index(fields=["-timestamp"], name="zebra_workf_timesta_777137_idx"),
         ),
         migrations.AddIndex(
-            model_name='workflowmemorymodel',
-            index=models.Index(fields=['workflow_name', '-timestamp'], name='zebra_workf_workflo_6effef_idx'),
+            model_name="workflowmemorymodel",
+            index=models.Index(
+                fields=["workflow_name", "-timestamp"], name="zebra_workf_workflo_6effef_idx"
+            ),
         ),
     ]

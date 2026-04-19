@@ -183,6 +183,7 @@ class TestAnthropicProviderStreaming:
                 import importlib
 
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
                 importlib.reload(anthropic_provider)
 
                 provider = anthropic_provider.AnthropicProvider()
@@ -236,6 +237,7 @@ class TestOpenAIProviderStreaming:
                 import importlib
 
                 import zebra_tasks.llm.providers.openai as openai_provider
+
                 importlib.reload(openai_provider)
 
                 provider = openai_provider.OpenAIProvider()
@@ -294,6 +296,7 @@ class TestOpenAIProviderToolCalls:
                 import importlib
 
                 import zebra_tasks.llm.providers.openai as openai_provider
+
                 importlib.reload(openai_provider)
 
                 provider = openai_provider.OpenAIProvider()
@@ -374,11 +377,13 @@ tasks:
             # Complete immediately
             async def complete():
                 import asyncio
+
                 await asyncio.sleep(0.02)
                 for p in mock_store.processes.values():
                     p.state = ProcessState.COMPLETE
 
             import asyncio
+
             asyncio.create_task(complete())
 
             action = ParallelSubworkflowsAction()
@@ -411,11 +416,13 @@ tasks:
 
         async def complete():
             import asyncio
+
             await asyncio.sleep(0.02)
             for p in mock_store.processes.values():
                 p.state = ProcessState.COMPLETE
 
         import asyncio
+
         asyncio.create_task(complete())
 
         action = ParallelSubworkflowsAction()
@@ -449,12 +456,14 @@ tasks:
 
         async def fail_all():
             import asyncio
+
             await asyncio.sleep(0.02)
             for p in mock_store.processes.values():
                 p.state = ProcessState.FAILED
                 p.properties["__error__"] = "Failed"
 
         import asyncio
+
         asyncio.create_task(fail_all())
 
         action = ParallelSubworkflowsAction()
@@ -498,6 +507,7 @@ class TestAnthropicStreamingWithTools:
                 import importlib
 
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
                 importlib.reload(anthropic_provider)
 
                 provider = anthropic_provider.AnthropicProvider()
@@ -564,6 +574,7 @@ class TestOpenAIStreamingEmpty:
                 import importlib
 
                 import zebra_tasks.llm.providers.openai as openai_provider
+
                 importlib.reload(openai_provider)
 
                 provider = openai_provider.OpenAIProvider()

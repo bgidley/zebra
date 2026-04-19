@@ -72,9 +72,7 @@ class ShellTaskAction(TaskAction):
                 )
 
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=timeout
-                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             except TimeoutError:
                 proc.kill()
                 return TaskResult.fail(f"Command timed out after {timeout} seconds")

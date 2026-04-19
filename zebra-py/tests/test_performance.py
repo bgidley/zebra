@@ -434,7 +434,8 @@ class TestDatabaseComparison:
             for r in results[1:]:
                 ratio = r.elapsed_seconds / baseline.elapsed_seconds
                 print(
-                    f"    {r.store_name}: {ratio:.1f}x slower ({r.tasks_per_second:.1f} vs {baseline.tasks_per_second:.1f} tasks/s)"
+                    f"    {r.store_name}: {ratio:.1f}x slower "
+                    f"({r.tasks_per_second:.1f} vs {baseline.tasks_per_second:.1f} tasks/s)"
                 )
 
         assert len(results) >= 1
@@ -457,7 +458,8 @@ class TestDatabaseComparison:
         print("\n" + "=" * 70)
         print("DATABASE COMPARISON: Parallel Workflows (with branching)")
         print(
-            f"Workflows: {NUM_WORKFLOWS} | Branches: {BRANCHES_PER_WORKFLOW} | Tasks/workflow: {TASKS_PER_WORKFLOW}"
+            f"Workflows: {NUM_WORKFLOWS} | Branches: {BRANCHES_PER_WORKFLOW} | "
+            f"Tasks/workflow: {TASKS_PER_WORKFLOW}"
         )
         print("=" * 70)
 
@@ -501,7 +503,8 @@ class TestDatabaseComparison:
             for r in results[1:]:
                 ratio = r.elapsed_seconds / baseline.elapsed_seconds
                 print(
-                    f"    {r.store_name}: {ratio:.1f}x slower ({r.tasks_per_second:.1f} vs {baseline.tasks_per_second:.1f} tasks/s)"
+                    f"    {r.store_name}: {ratio:.1f}x slower "
+                    f"({r.tasks_per_second:.1f} vs {baseline.tasks_per_second:.1f} tasks/s)"
                 )
 
         assert len(results) >= 1
@@ -568,7 +571,8 @@ class TestDatabaseComparison:
             for r in results[1:]:
                 ratio = r.elapsed_seconds / baseline.elapsed_seconds
                 print(
-                    f"    {r.store_name}: {ratio:.1f}x slower ({r.tasks_per_second:.1f} vs {baseline.tasks_per_second:.1f} tasks/s)"
+                    f"    {r.store_name}: {ratio:.1f}x slower "
+                    f"({r.tasks_per_second:.1f} vs {baseline.tasks_per_second:.1f} tasks/s)"
                 )
 
         assert len(results) >= 1

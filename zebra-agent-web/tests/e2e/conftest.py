@@ -3,15 +3,16 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 # Ensure django is set up
 import django
+import pytest
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "zebra_agent_web.settings")
 django.setup()
 
 # We don't override django_db_setup here so that we use the standard test DB behavior
 # (pytest-django will create a test database for us).
+
 
 @pytest.fixture(scope="function")
 def django_stores(db):
@@ -40,6 +41,7 @@ def django_stores(db):
 
     return Stores(store, memory, metrics)
 
+
 @pytest.fixture(scope="function")
 def workflow_library(tmp_path, django_stores):
     from zebra_agent.library import WorkflowLibrary
@@ -53,6 +55,7 @@ def workflow_library(tmp_path, django_stores):
         library.copy_builtin_workflows(builtin_path)
 
     return library
+
 
 @pytest.fixture(scope="function")
 def workflow_engine(django_stores):
@@ -68,6 +71,7 @@ def workflow_engine(django_stores):
 
     return WorkflowEngine(django_stores.store, registry)
 
+
 @pytest.fixture(autouse=True)
 def cassette_provider(request):
     """Patch the get_provider registry to use CassetteProvider."""
@@ -79,20 +83,23 @@ def cassette_provider(request):
 
     def mock_get_provider(name, model=None):
         base_provider = original_get_provider(name, model)
-        
+
         # Build cassette path based on test name
         cassette_dir = Path(__file__).parent / "cassettes"
         cassette_name = f"{request.node.name}.json"
-        
+
         # If running the 'test-nightly-oracle' job, we may want 'rewrite' or 'none' based on env.
         # By default, use 'once' (record if missing).
         record_mode = os.environ.get("VCR_RECORD_MODE", "once")
-        
-        return CassetteProvider(base_provider, cassette_path=cassette_dir / cassette_name, record_mode=record_mode)
+
+        return CassetteProvider(
+            base_provider, cassette_path=cassette_dir / cassette_name, record_mode=record_mode
+        )
 
     with patch("zebra_tasks.llm.providers.registry.get_provider", side_effect=mock_get_provider):
         with patch("zebra_tasks.llm.providers.get_provider", side_effect=mock_get_provider):
             yield
+
 
 @pytest.fixture(scope="function")
 def agent_loop(workflow_library, workflow_engine, django_stores, cassette_provider):

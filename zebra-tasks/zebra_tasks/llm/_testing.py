@@ -2,12 +2,18 @@
 
 import hashlib
 import json
-import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-from zebra_tasks.llm.base import LLMProvider, LLMResponse, Message, TokenUsage, ToolCall, ToolDefinition
+from zebra_tasks.llm.base import (
+    LLMProvider,
+    LLMResponse,
+    Message,
+    TokenUsage,
+    ToolCall,
+    ToolDefinition,
+)
 
 
 def _hash_request(
@@ -21,15 +27,18 @@ def _hash_request(
     # We only care about the semantic content, not exact object references
     msg_repr = [{"role": m.role.value, "content": m.content, "name": m.name} for m in messages]
     tools_repr = [{"name": t.name} for t in (tools or [])]
-    
-    payload = json.dumps({
-        "messages": msg_repr,
-        "tools": tools_repr,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "stop_sequences": stop_sequences,
-    }, sort_keys=True)
-    
+
+    payload = json.dumps(
+        {
+            "messages": msg_repr,
+            "tools": tools_repr,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stop_sequences": stop_sequences,
+        },
+        sort_keys=True,
+    )
+
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -37,13 +46,14 @@ class CassetteProvider(LLMProvider):
     """
     LLM provider that records and replays interactions to a JSON tape.
     """
-    
+
     def __init__(self, wrapped: LLMProvider, cassette_path: str | Path, record_mode: str = "once"):
         """
         Args:
             wrapped: The actual provider to wrap (e.g., AnthropicProvider).
             cassette_path: Path to the JSON cassette file.
-            record_mode: 'once' (record if missing), 'rewrite' (always record), 'none' (never record, fail if missing).
+            record_mode: 'once' (record if missing), 'rewrite' (always record),
+                'none' (never record, fail if missing).
         """
         self.wrapped = wrapped
         self.cassette_path = Path(cassette_path)
@@ -52,7 +62,7 @@ class CassetteProvider(LLMProvider):
 
     def _load_cassette(self) -> dict[str, dict[str, Any]]:
         if self.cassette_path.exists():
-            with open(self.cassette_path, "r", encoding="utf-8") as f:
+            with open(self.cassette_path, encoding="utf-8") as f:
                 try:
                     return json.load(f)
                 except json.JSONDecodeError:
@@ -81,9 +91,13 @@ class CassetteProvider(LLMProvider):
 
         self._cassette = self._load_cassette()
 
-        if self.record_mode == "rewrite" or (self.record_mode == "once" and key not in self._cassette):
+        if self.record_mode == "rewrite" or (
+            self.record_mode == "once" and key not in self._cassette
+        ):
             # Record
-            response = await self.wrapped.complete(messages, tools, temperature, max_tokens, stop_sequences)
+            response = await self.wrapped.complete(
+                messages, tools, temperature, max_tokens, stop_sequences
+            )
             data = {
                 "content": response.content,
                 "finish_reason": response.finish_reason,
@@ -101,7 +115,9 @@ class CassetteProvider(LLMProvider):
             return response
 
         if key not in self._cassette:
-            raise ValueError(f"Interaction not found in cassette {self.cassette_path} and record_mode is 'none'.")
+            raise ValueError(
+                f"Interaction not found in cassette {self.cassette_path} and record_mode is 'none'."
+            )
 
         # Replay
         data = self._cassette[key]
@@ -109,7 +125,7 @@ class CassetteProvider(LLMProvider):
             ToolCall(id=tc["id"], name=tc["name"], arguments=tc["arguments"])
             for tc in data.get("tool_calls", [])
         ]
-        
+
         return LLMResponse(
             content=data["content"],
             tool_calls=tool_calls if tool_calls else None,
@@ -131,17 +147,22 @@ class CassetteProvider(LLMProvider):
 
         self._cassette = self._load_cassette()
 
-        if self.record_mode == "rewrite" or (self.record_mode == "once" and key not in self._cassette):
+        if self.record_mode == "rewrite" or (
+            self.record_mode == "once" and key not in self._cassette
+        ):
             chunks = []
             async for chunk in self.wrapped.stream(messages, tools, temperature, max_tokens):
                 chunks.append(chunk)
                 yield chunk
-            
+
             self._save_cassette(key, {"chunks": chunks})
             return
 
         if key not in self._cassette:
-            raise ValueError(f"Stream interaction not found in cassette {self.cassette_path} and record_mode is 'none'.")
+            raise ValueError(
+                f"Stream interaction not found in cassette {self.cassette_path} "
+                "and record_mode is 'none'."
+            )
 
         for chunk in self._cassette[key]["chunks"]:
             yield chunk

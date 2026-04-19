@@ -26,6 +26,14 @@ from zebra.core.models import (
 )
 from zebra.storage.base import StateStore
 
+from .api.models import (
+    FlowOfExecutionModel,
+    ProcessDefinitionModel,
+    ProcessInstanceModel,
+    ProcessLockModel,
+    TaskInstanceModel,
+)
+
 
 def _serialize_json(data: Any, context: str) -> str:
     """Serialize data to JSON, raising SerializationError on failure.
@@ -46,14 +54,6 @@ def _serialize_json(data: Any, context: str) -> str:
             f"(strings, numbers, booleans, lists, dicts, and None)."
         ) from e
 
-
-from .api.models import (
-    FlowOfExecutionModel,
-    ProcessDefinitionModel,
-    ProcessInstanceModel,
-    ProcessLockModel,
-    TaskInstanceModel,
-)
 
 logger = logging.getLogger(__name__)
 

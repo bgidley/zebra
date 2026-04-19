@@ -40,8 +40,10 @@ def discover_actions() -> dict[str, type["TaskAction"]]:
         eps = entry_points(group=TASKS_GROUP)
     else:
         all_eps = entry_points()
-        eps = all_eps.get(TASKS_GROUP, []) if isinstance(all_eps, dict) else all_eps.select(
-            group=TASKS_GROUP
+        eps = (
+            all_eps.get(TASKS_GROUP, [])
+            if isinstance(all_eps, dict)
+            else all_eps.select(group=TASKS_GROUP)
         )
 
     actions: dict[str, type[TaskAction]] = {}
@@ -68,8 +70,10 @@ def discover_conditions() -> dict[str, type["ConditionAction"]]:
         eps = entry_points(group=CONDITIONS_GROUP)
     else:
         all_eps = entry_points()
-        eps = all_eps.get(CONDITIONS_GROUP, []) if isinstance(all_eps, dict) else all_eps.select(
-            group=CONDITIONS_GROUP
+        eps = (
+            all_eps.get(CONDITIONS_GROUP, [])
+            if isinstance(all_eps, dict)
+            else all_eps.select(group=CONDITIONS_GROUP)
         )
 
     conditions: dict[str, type[ConditionAction]] = {}

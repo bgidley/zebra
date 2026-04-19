@@ -1,7 +1,5 @@
 """Tests for the pricing module."""
 
-import pytest
-
 from zebra_tasks.llm.pricing import (
     ANTHROPIC_PRICING,
     DEFAULT_PRICING,

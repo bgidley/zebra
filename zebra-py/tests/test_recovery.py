@@ -433,7 +433,7 @@ async def test_recovery_foe_orphan_cleanup(engine):
     assert len(foes_before) > 0
 
     # Run recovery
-    resumed = await engine.resume_all_processes()
+    await engine.resume_all_processes()
 
     # Check that orphaned FOE was cleaned up (excluding construct/destruct FOEs)
     foes_after = await engine.store.load_foes_for_process(process.id)

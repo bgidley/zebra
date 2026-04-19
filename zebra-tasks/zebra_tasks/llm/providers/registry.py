@@ -39,6 +39,7 @@ def get_provider(name: str, model: str | None = None) -> LLMProvider:
     if not _dotenv_loaded:
         try:
             from dotenv import load_dotenv
+
             load_dotenv()
         except ImportError:
             pass  # dotenv not installed, skip
@@ -52,9 +53,7 @@ def get_provider(name: str, model: str | None = None) -> LLMProvider:
 
     if name_lower not in _providers:
         available = list(_providers.keys())
-        raise ValueError(
-            f"Unknown LLM provider: {name}. Available: {available}"
-        )
+        raise ValueError(f"Unknown LLM provider: {name}. Available: {available}")
 
     return _providers[name_lower](model)
 
@@ -64,12 +63,14 @@ def _try_auto_register(name: str) -> None:
     if name == "anthropic":
         try:
             from zebra_tasks.llm.providers.anthropic import AnthropicProvider
+
             register_provider("anthropic", lambda m: AnthropicProvider(model=m))
         except ImportError:
             pass
     elif name == "openai":
         try:
             from zebra_tasks.llm.providers.openai import OpenAIProvider
+
             register_provider("openai", lambda m: OpenAIProvider(model=m))
         except ImportError:
             pass

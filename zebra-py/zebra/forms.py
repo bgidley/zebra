@@ -28,7 +28,8 @@ class FormField:
     """A renderable form field derived from JSON Schema."""
 
     name: str
-    widget: str  # "text", "textarea", "number", "select", "checkbox", "date", "email", "url", "markdown"
+    # text, textarea, number, select, checkbox, date, email, url, markdown
+    widget: str
     title: str
     description: str | None = None
     required: bool = False

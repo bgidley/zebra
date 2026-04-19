@@ -10,8 +10,7 @@ load_dotenv()
 
 # Skip all tests if no API key
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("ANTHROPIC_API_KEY"),
-    reason="ANTHROPIC_API_KEY not set"
+    not os.environ.get("ANTHROPIC_API_KEY"), reason="ANTHROPIC_API_KEY not set"
 )
 
 
@@ -25,9 +24,9 @@ class TestAnthropicIntegration:
         from zebra_tasks.llm.providers import get_provider
 
         provider = get_provider("anthropic")
-        response = await provider.complete([
-            Message.user("Say 'hello' and nothing else.")
-        ], max_tokens=50)
+        response = await provider.complete(
+            [Message.user("Say 'hello' and nothing else.")], max_tokens=50
+        )
 
         assert response.content is not None
         assert "hello" in response.content.lower()
@@ -41,10 +40,13 @@ class TestAnthropicIntegration:
         from zebra_tasks.llm.providers import get_provider
 
         provider = get_provider("anthropic")
-        response = await provider.complete([
-            Message.system("You are a helpful assistant. Always respond in exactly 3 words."),
-            Message.user("What is 2+2?"),
-        ], max_tokens=50)
+        response = await provider.complete(
+            [
+                Message.system("You are a helpful assistant. Always respond in exactly 3 words."),
+                Message.user("What is 2+2?"),
+            ],
+            max_tokens=50,
+        )
 
         assert response.content is not None
         # Should be a short response due to system prompt
@@ -59,9 +61,7 @@ class TestAnthropicIntegration:
         provider = get_provider("anthropic")
         chunks = []
 
-        async for chunk in provider.stream([
-            Message.user("Count from 1 to 5.")
-        ], max_tokens=50):
+        async for chunk in provider.stream([Message.user("Count from 1 to 5.")], max_tokens=50):
             chunks.append(chunk)
 
         full_response = "".join(chunks)

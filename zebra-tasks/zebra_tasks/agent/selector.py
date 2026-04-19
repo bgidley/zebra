@@ -233,7 +233,8 @@ DECISION MATRIX:
 - No fit at all → create_new (workflow_name = null)
 
 EXAMPLES of when NOT to create a variant:
-- "Select a bike for a 10-year-old" → use_existing "Brainstorm Ideas" (same pattern, just different topic)
+- "Select a bike for a 10-year-old" → use_existing "Brainstorm Ideas"
+  (same pattern, just different topic)
 - "What is the capital of France?" → use_existing "Answer Question" (same pattern)
 - Any factual/creative/reasoning goal → use an existing general-purpose workflow
 

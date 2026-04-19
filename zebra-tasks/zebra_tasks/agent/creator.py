@@ -124,9 +124,11 @@ Properties: system_prompt, prompt, output_key, temperature, max_tokens, model
 Use {{variable}} to reference process properties or previous task outputs.
 
 The optional `model` property selects a specific Anthropic model for that task:
-- "haiku" (claude-haiku-4-20250414) — fastest and cheapest, good for simple extraction or classification
+- "haiku" (claude-haiku-4-20250414) — fastest and cheapest, good for simple
+  extraction or classification
 - "sonnet" (claude-sonnet-4-20250514) — balanced quality and speed (default if omitted)
-- "opus" (claude-opus-4-20250514) — highest quality, use for complex reasoning or creative writing
+- "opus" (claude-opus-4-20250514) — highest quality, use for complex reasoning or
+  creative writing
 Only set `model` when a task has clearly different requirements from the default.
 Most workflows should omit it and let the caller choose at run time.
 

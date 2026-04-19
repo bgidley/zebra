@@ -654,6 +654,7 @@ async def budget_status(request):
 
     # Add queue depth
     from zebra.core.models import ProcessState
+
     from zebra_agent_web.api.engine import get_engine
 
     wf_engine = get_engine()
@@ -695,6 +696,7 @@ async def processes_list(request):
 @api_view(["GET"])
 def process_detail(request, process_id):
     """Get details of a specific process."""
+
     async def _get():
         await engine.ensure_initialized()
         store = engine.get_store()
@@ -722,7 +724,7 @@ def process_detail(request, process_id):
 
         serializer = ProcessInstanceDetailSerializer(data)
         return Response(serializer.data)
-    
+
     return async_to_sync(_get)()
 
 
@@ -750,6 +752,7 @@ def process_pending_tasks(request, process_id):
     Returns tasks in READY state with auto=False, including their task definition
     properties and JSON Schema form definition for rendering UI forms.
     """
+
     async def _get():
         await engine.ensure_initialized()
         store = engine.get_store()

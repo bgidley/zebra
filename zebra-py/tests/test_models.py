@@ -1,6 +1,5 @@
 """Tests for core data models."""
 
-
 import pytest
 
 from zebra.core.models import (

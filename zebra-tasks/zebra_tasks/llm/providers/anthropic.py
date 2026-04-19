@@ -52,9 +52,7 @@ class AnthropicProvider(LLMProvider):
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
 
         if not self._api_key:
-            raise ValueError(
-                "Anthropic API key required. Set ANTHROPIC_API_KEY or pass api_key."
-            )
+            raise ValueError("Anthropic API key required. Set ANTHROPIC_API_KEY or pass api_key.")
 
         self._client = anthropic.AsyncAnthropic(
             api_key=self._api_key,
@@ -135,9 +133,7 @@ class AnthropicProvider(LLMProvider):
             async for text in stream.text_stream:
                 yield text
 
-    def _convert_messages(
-        self, messages: list[Message]
-    ) -> tuple[list[dict], str | None]:
+    def _convert_messages(self, messages: list[Message]) -> tuple[list[dict], str | None]:
         """Convert messages to Anthropic format."""
         anthropic_messages = []
         system = None
@@ -146,35 +142,45 @@ class AnthropicProvider(LLMProvider):
             if msg.role == MessageRole.SYSTEM:
                 system = msg.content
             elif msg.role == MessageRole.USER:
-                anthropic_messages.append({
-                    "role": "user",
-                    "content": msg.content,
-                })
+                anthropic_messages.append(
+                    {
+                        "role": "user",
+                        "content": msg.content,
+                    }
+                )
             elif msg.role == MessageRole.ASSISTANT:
                 content = []
                 if msg.content:
                     content.append({"type": "text", "text": msg.content})
                 if msg.tool_calls:
                     for tc in msg.tool_calls:
-                        content.append({
-                            "type": "tool_use",
-                            "id": tc.id,
-                            "name": tc.name,
-                            "input": tc.arguments,
-                        })
-                anthropic_messages.append({
-                    "role": "assistant",
-                    "content": content if content else msg.content,
-                })
+                        content.append(
+                            {
+                                "type": "tool_use",
+                                "id": tc.id,
+                                "name": tc.name,
+                                "input": tc.arguments,
+                            }
+                        )
+                anthropic_messages.append(
+                    {
+                        "role": "assistant",
+                        "content": content if content else msg.content,
+                    }
+                )
             elif msg.role == MessageRole.TOOL:
-                anthropic_messages.append({
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": msg.tool_call_id,
-                        "content": msg.content,
-                    }],
-                })
+                anthropic_messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": msg.tool_call_id,
+                                "content": msg.content,
+                            }
+                        ],
+                    }
+                )
 
         return anthropic_messages, system
 
@@ -200,11 +206,13 @@ class AnthropicProvider(LLMProvider):
             elif block.type == "tool_use":
                 if tool_calls is None:
                     tool_calls = []
-                tool_calls.append(ToolCall(
-                    id=block.id,
-                    name=block.name,
-                    arguments=block.input,
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        id=block.id,
+                        name=block.name,
+                        arguments=block.input,
+                    )
+                )
 
         # Concatenate all text blocks
         content = "".join(text_parts) if text_parts else None

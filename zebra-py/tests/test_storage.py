@@ -1,6 +1,5 @@
 """Tests for storage implementations."""
 
-
 import pytest
 
 from zebra.core.models import (

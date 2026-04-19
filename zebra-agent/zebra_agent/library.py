@@ -271,8 +271,9 @@ class WorkflowLibrary:
 
         Returns:
             Tuple of (count_copied_or_updated, list_of_upgraded_workflow_names).
-            Upgraded names are workflows that already existed but were replaced with a newer version —
-            callers should evict any stale cached definitions for those names.
+            Upgraded names are workflows that already existed but were replaced with a
+            newer version — callers should evict any stale cached definitions for those
+            names.
         """
         self.ensure_initialized()
 

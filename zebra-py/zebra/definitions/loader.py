@@ -241,9 +241,7 @@ def validate_definition(definition: ProcessDefinition) -> list[str]:
         if task_def.synchronized:
             incoming = definition.get_routings_to(task_id)
             if len(incoming) < 2:
-                errors.append(
-                    f"Synchronized task '{task_id}' should have multiple incoming routes"
-                )
+                errors.append(f"Synchronized task '{task_id}' should have multiple incoming routes")
 
     return errors
 

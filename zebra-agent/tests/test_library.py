@@ -594,8 +594,10 @@ routings: []
         # Create one existing file in library with same version (should not be overwritten)
         (library.library_path / "workflow_1.yaml").write_text(
             'name: "Workflow 1"\ndescription: "Test"\ntags: []\nversion: 1\n'
-            'first_task: task1\ntasks:\n  task1:\n    name: "Task"\n    action: llm_call\n'
-            '    auto: true\n    properties:\n      prompt: "test"\n      output_key: result\nroutings: []\n'
+            "first_task: task1\ntasks:\n  task1:\n"
+            '    name: "Task"\n    action: llm_call\n'
+            "    auto: true\n    properties:\n"
+            '      prompt: "test"\n      output_key: result\nroutings: []\n'
         )
 
         copied, upgraded = library.copy_builtin_workflows(builtin_path)

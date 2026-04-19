@@ -1,8 +1,9 @@
 import asyncio
+
 import pytest
-from django.urls import reverse
 
 pytestmark = pytest.mark.e2e
+
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
@@ -69,7 +70,7 @@ routings:
     complete_res = await async_client.post(
         f"/api/tasks/{task_id}/complete/",
         {"result": {"favorite_color": "blue"}},
-        content_type="application/json"
+        content_type="application/json",
     )
     assert complete_res.status_code == 200
     complete_data = complete_res.json()
@@ -95,5 +96,7 @@ routings:
 
     assert proc_data["state"] == "complete"
 
-    # Verify the output property was set by the finish task    assert proc_data["properties"]["__task_output_ask_user"]["favorite_color"] == "blue"
+    # Verify the output property was set by the finish task
+    ask_user_output = proc_data["properties"]["__task_output_ask_user"]
+    assert ask_user_output["favorite_color"] == "blue"
     assert proc_data["properties"]["python_out"] == {"color": "blue"}

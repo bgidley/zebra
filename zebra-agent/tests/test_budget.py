@@ -1,7 +1,6 @@
 """Tests for BudgetManager."""
 
-from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -123,9 +122,18 @@ class TestBudgetManagerWarning:
         import logging
 
         mock_metrics.get_total_cost_since.return_value = 0.0
-        with caplog.at_level(logging.WARNING):
-            await budget.check_and_warn(current_run_cost=6.0)
-        assert any("warning threshold" in r.message.lower() for r in caplog.records)
+        # Django settings set propagate=False on the zebra_agent logger, which
+        # blocks caplog from capturing child records. Force propagation for the
+        # scope of this test.
+        parent = logging.getLogger("zebra_agent")
+        original_propagate = parent.propagate
+        parent.propagate = True
+        try:
+            with caplog.at_level(logging.WARNING, logger="zebra_agent.budget"):
+                await budget.check_and_warn(current_run_cost=6.0)
+        finally:
+            parent.propagate = original_propagate
+        assert "warning threshold" in caplog.text.lower()
 
 
 class TestBudgetManagerStatus:

@@ -400,15 +400,18 @@ async def run_goal_queue(request):
     # Return a success partial
     html = (
         f'<div class="bg-green-900/30 border border-green-700 rounded-lg p-6 text-center">'
-        f'<svg class="mx-auto h-10 w-10 text-green-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">'
-        f'<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />'
+        f'<svg class="mx-auto h-10 w-10 text-green-400 mb-3" fill="none"'
+        f' viewBox="0 0 24 24" stroke="currentColor">'
+        f'<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"'
+        f' d="M5 13l4 4L19 7" />'
         f"</svg>"
         f'<h3 class="text-lg font-semibold text-green-300">Goal Queued</h3>'
         f'<p class="text-sm text-gray-400 mt-1">Priority {priority}'
         f"{' | Deadline: ' + deadline if deadline else ''}</p>"
         f'<p class="text-xs text-gray-500 mt-2">Process ID: {process.id[:12]}... '
         f"The budget daemon will start this goal when budget allows.</p>"
-        f'<a href="/activity/" class="inline-block mt-3 text-indigo-400 hover:text-indigo-300 text-sm">View Activity</a>'
+        f'<a href="/activity/" class="inline-block mt-3 text-indigo-400'
+        f' hover:text-indigo-300 text-sm">View Activity</a>'
         f"</div>"
     )
     return HttpResponse(html)
@@ -583,7 +586,7 @@ async def _build_parent_flow_context(
     completed_task_ids = set()
     for key in parent_props:
         if key.startswith("__task_output_"):
-            task_id = key[len("__task_output_"):]
+            task_id = key[len("__task_output_") :]
             if task_id in parent_def.tasks:
                 completed_task_ids.add(task_id)
 
@@ -644,12 +647,16 @@ async def _build_parent_flow_context(
                         if routing.source_task_id not in completed_task_ids:
                             predecessors_complete = False
                             break
-                if predecessors_complete and task_id == parent_def.first_task_id or (
+                if (
                     predecessors_complete
-                    and any(
-                        r.source_task_id in completed_task_ids
-                        for r in parent_def.routings
-                        if r.dest_task_id == task_id
+                    and task_id == parent_def.first_task_id
+                    or (
+                        predecessors_complete
+                        and any(
+                            r.source_task_id in completed_task_ids
+                            for r in parent_def.routings
+                            if r.dest_task_id == task_id
+                        )
                     )
                 ):
                     task_def = parent_def.tasks[task_id]
@@ -668,9 +675,7 @@ async def _build_parent_flow_context(
     # Generate SVG with prefix
     from zebra_agent_web.diagram import generate_workflow_svg
 
-    parent_svg = generate_workflow_svg(
-        parent_def, synthetic_executions, task_id_prefix="parent-"
-    )
+    parent_svg = generate_workflow_svg(parent_def, synthetic_executions, task_id_prefix="parent-")
 
     # Build task panels with resolved inputs and outputs
     task_panels = []
@@ -691,9 +696,7 @@ async def _build_parent_flow_context(
         )
 
     # Sort panels by execution order (completed first, then unexecuted)
-    task_panels.sort(
-        key=lambda p: (p["execution_order"] or 999, p["task_id"])
-    )
+    task_panels.sort(key=lambda p: (p["execution_order"] or 999, p["task_id"]))
 
     return {
         "workflow_name": parent_def.name,
@@ -734,10 +737,7 @@ async def _run_detail_pending_fallback(request, run_id: str):
     ):
         processes = await wf_engine.store.get_processes_by_state(state)
         for proc in processes:
-            if (
-                (proc.properties or {}).get("run_id") == run_id
-                and not proc.parent_process_id
-            ):
+            if (proc.properties or {}).get("run_id") == run_id and not proc.parent_process_id:
                 process_match = proc
                 match_state = state
                 break
@@ -786,9 +786,7 @@ async def _run_detail_pending_fallback(request, run_id: str):
     library = agent_engine.get_library()
     parent_flow = None
     try:
-        parent_flow = await _build_parent_flow_context(
-            run_id, wf_engine.store, library
-        )
+        parent_flow = await _build_parent_flow_context(run_id, wf_engine.store, library)
     except Exception:
         logger.debug("Could not build parent flow for run %s", run_id, exc_info=True)
 
@@ -1354,7 +1352,10 @@ async def activity(request):
             return "older"
 
         _date_order = {
-            "today": 0, "yesterday": 1, "this_week": 2, "older": 3,
+            "today": 0,
+            "yesterday": 1,
+            "this_week": 2,
+            "older": 3,
         }
 
         for group in activity_groups:
@@ -1376,9 +1377,7 @@ async def activity(request):
                 return (1, -ts)
             if g.get("is_queued"):
                 return (2, -ts)
-            completed_ts = (
-                g.get("completed_at") or g.get("started_at") or now
-            ).timestamp()
+            completed_ts = (g.get("completed_at") or g.get("started_at") or now).timestamp()
             return (3, -completed_ts)
 
         activity_groups.sort(key=_sort_key)

@@ -94,23 +94,19 @@ class Command(BaseCommand):
         # Display what we found
         self.stdout.write(
             self.style.MIGRATE_HEADING(
-                f"Found {len(stale)} stale process(es) "
-                f"(out of {len(running)} running):"
+                f"Found {len(stale)} stale process(es) (out of {len(running)} running):"
             )
         )
         for p in stale:
             goal = (p.properties or {}).get("goal", "—")
             self.stdout.write(
-                f"  {p.id[:12]}...  updated={p.updated_at:%Y-%m-%d %H:%M}  "
-                f'goal="{goal[:60]}"'
+                f'  {p.id[:12]}...  updated={p.updated_at:%Y-%m-%d %H:%M}  goal="{goal[:60]}"'
             )
 
         # Dry-run by default
         if not options["cancel"] and not options["delete"]:
             self.stdout.write(
-                self.style.WARNING(
-                    "\nDry-run mode. Use --cancel or --delete to act."
-                )
+                self.style.WARNING("\nDry-run mode. Use --cancel or --delete to act.")
             )
             return
 
@@ -133,7 +129,5 @@ class Command(BaseCommand):
                 self.stdout.write(f"  {self.style.ERROR('FAIL')}  {p.id[:12]}... — {e}")
 
         self.stdout.write(
-            self.style.SUCCESS(
-                f"\nDone: {cancelled} {action}led, {errors} error(s)."
-            )
+            self.style.SUCCESS(f"\nDone: {cancelled} {action}led, {errors} error(s).")
         )

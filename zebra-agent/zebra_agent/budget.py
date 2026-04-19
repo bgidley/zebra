@@ -26,7 +26,7 @@ class BudgetManager:
     def __init__(
         self,
         daily_budget_usd: float,
-        metrics_store: "MetricsStore",
+        metrics_store: MetricsStore,
         reset_hour: int = 0,
         warning_threshold_usd: float = 5.00,
     ) -> None:

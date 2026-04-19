@@ -168,9 +168,7 @@ class RecordMetricsAction(TaskAction):
                 started_at = datetime.fromisoformat(started_at_str)
             else:
                 # Use process property if available, otherwise now
-                started_at = context.process.properties.get(
-                    "__started_at__", datetime.now(UTC)
-                )
+                started_at = context.process.properties.get("__started_at__", datetime.now(UTC))
                 if isinstance(started_at, str):
                     started_at = datetime.fromisoformat(started_at)
 

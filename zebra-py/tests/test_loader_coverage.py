@@ -134,55 +134,65 @@ class TestLoadDefinitionFromDict:
     def test_routing_missing_from(self):
         """Test error when routing is missing 'from'."""
         with pytest.raises(ValidationError, match="missing 'from' field"):
-            load_definition_from_dict({
-                "name": "Test",
-                "tasks": {"t1": {"name": "T1"}},
-                "routings": [{"to": "t1"}],
-            })
+            load_definition_from_dict(
+                {
+                    "name": "Test",
+                    "tasks": {"t1": {"name": "T1"}},
+                    "routings": [{"to": "t1"}],
+                }
+            )
 
     def test_routing_missing_to(self):
         """Test error when routing is missing 'to'."""
         with pytest.raises(ValidationError, match="missing 'to' field"):
-            load_definition_from_dict({
-                "name": "Test",
-                "tasks": {"t1": {"name": "T1"}},
-                "routings": [{"from": "t1"}],
-            })
+            load_definition_from_dict(
+                {
+                    "name": "Test",
+                    "tasks": {"t1": {"name": "T1"}},
+                    "routings": [{"from": "t1"}],
+                }
+            )
 
     def test_routing_invalid_dest(self):
         """Test error when routing destination task doesn't exist."""
         with pytest.raises(ValidationError, match="destination task 'nonexistent' not found"):
-            load_definition_from_dict({
-                "name": "Test",
-                "tasks": {"t1": {"name": "T1"}},
-                "routings": [{"from": "t1", "to": "nonexistent"}],
-            })
+            load_definition_from_dict(
+                {
+                    "name": "Test",
+                    "tasks": {"t1": {"name": "T1"}},
+                    "routings": [{"from": "t1", "to": "nonexistent"}],
+                }
+            )
 
     def test_invalid_first_task(self):
         """Test error when first_task doesn't exist."""
         with pytest.raises(ValidationError, match="First task 'nonexistent' not found"):
-            load_definition_from_dict({
-                "name": "Test",
-                "tasks": {"t1": {"name": "T1"}},
-                "first_task": "nonexistent",
-            })
+            load_definition_from_dict(
+                {
+                    "name": "Test",
+                    "tasks": {"t1": {"name": "T1"}},
+                    "first_task": "nonexistent",
+                }
+            )
 
     def test_task_with_all_properties(self):
         """Test loading task with all properties."""
-        definition = load_definition_from_dict({
-            "name": "Test",
-            "tasks": {
-                "t1": {
-                    "name": "Task 1",
-                    "auto": False,
-                    "synchronized": True,
-                    "action": "shell",
-                    "construct_action": "setup",
-                    "destruct_action": "cleanup",
-                    "properties": {"cmd": "echo test"},
-                }
-            },
-        })
+        definition = load_definition_from_dict(
+            {
+                "name": "Test",
+                "tasks": {
+                    "t1": {
+                        "name": "Task 1",
+                        "auto": False,
+                        "synchronized": True,
+                        "action": "shell",
+                        "construct_action": "setup",
+                        "destruct_action": "cleanup",
+                        "properties": {"cmd": "echo test"},
+                    }
+                },
+            }
+        )
 
         task = definition.tasks["t1"]
         assert task.name == "Task 1"
@@ -195,13 +205,15 @@ class TestLoadDefinitionFromDict:
 
     def test_definition_with_actions(self):
         """Test loading definition with construct/destruct actions."""
-        definition = load_definition_from_dict({
-            "name": "Test",
-            "tasks": {"t1": {"name": "T1"}},
-            "construct_action": "init",
-            "destruct_action": "cleanup",
-            "properties": {"global": "value"},
-        })
+        definition = load_definition_from_dict(
+            {
+                "name": "Test",
+                "tasks": {"t1": {"name": "T1"}},
+                "construct_action": "init",
+                "destruct_action": "cleanup",
+                "properties": {"global": "value"},
+            }
+        )
 
         assert definition.construct_action == "init"
         assert definition.destruct_action == "cleanup"
@@ -209,20 +221,24 @@ class TestLoadDefinitionFromDict:
 
     def test_routing_with_condition_and_name(self):
         """Test routing with condition and name."""
-        definition = load_definition_from_dict({
-            "name": "Test",
-            "tasks": {
-                "t1": {"name": "T1"},
-                "t2": {"name": "T2"},
-            },
-            "routings": [{
-                "from": "t1",
-                "to": "t2",
-                "parallel": True,
-                "condition": "route_name",
-                "name": "approved",
-            }],
-        })
+        definition = load_definition_from_dict(
+            {
+                "name": "Test",
+                "tasks": {
+                    "t1": {"name": "T1"},
+                    "t2": {"name": "T2"},
+                },
+                "routings": [
+                    {
+                        "from": "t1",
+                        "to": "t2",
+                        "parallel": True,
+                        "condition": "route_name",
+                        "name": "approved",
+                    }
+                ],
+            }
+        )
 
         routing = definition.routings[0]
         assert routing.parallel is True

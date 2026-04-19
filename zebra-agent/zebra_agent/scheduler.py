@@ -27,10 +27,10 @@ _AGE_WEIGHT = 0.5  # per minute of age
 class GoalScheduler:
     """Select the best CREATED process to start next."""
 
-    def __init__(self, store: "StateStore") -> None:
+    def __init__(self, store: StateStore) -> None:
         self._store = store
 
-    async def get_pending_goals(self) -> list["ProcessInstance"]:
+    async def get_pending_goals(self) -> list[ProcessInstance]:
         """Return CREATED top-level processes, sorted by score descending."""
         from zebra.core.models import ProcessState
 
@@ -41,7 +41,7 @@ class GoalScheduler:
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [p for _, p in scored]
 
-    def score_process(self, process: "ProcessInstance") -> float:
+    def score_process(self, process: ProcessInstance) -> float:
         """Compute a scheduling score for *process*.
 
         Higher scores are picked first.
@@ -81,7 +81,7 @@ class GoalScheduler:
 
         return score
 
-    async def pick_next(self) -> "ProcessInstance | None":
+    async def pick_next(self) -> ProcessInstance | None:
         """Return the highest-scored CREATED process, or None if the queue is empty."""
         pending = await self.get_pending_goals()
         if not pending:

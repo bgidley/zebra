@@ -40,9 +40,7 @@ class TestMessage:
         assert msg.content == "Hi there"
 
     def test_assistant_with_tool_calls(self):
-        tool_calls = [
-            ToolCall(id="tc1", name="search", arguments={"query": "test"})
-        ]
+        tool_calls = [ToolCall(id="tc1", name="search", arguments={"query": "test"})]
         msg = Message.assistant("Let me search", tool_calls=tool_calls)
         assert msg.tool_calls == tool_calls
 
@@ -98,6 +96,7 @@ class TestProviderRegistry:
 
     def test_register_and_get_provider(self):
         """Test registering and retrieving a provider."""
+
         class TestProvider(LLMProvider):
             def __init__(self, model=None):
                 self._model = model or "test"
@@ -135,6 +134,7 @@ class TestProviderRegistry:
 
     def test_list_providers(self):
         """Test listing available providers."""
+
         class DummyProvider(LLMProvider):
             async def complete(self, messages, **kwargs):
                 pass
@@ -163,6 +163,7 @@ class TestProviderRegistry:
 
     def test_case_insensitive_provider_name(self):
         """Test that provider names are case insensitive."""
+
         class TestProvider(LLMProvider):
             async def complete(self, messages, **kwargs):
                 pass
@@ -222,6 +223,7 @@ class TestAnthropicProvider:
                 import importlib
 
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
                 importlib.reload(anthropic_provider)
 
                 provider = anthropic_provider.AnthropicProvider()
@@ -243,6 +245,7 @@ class TestAnthropicProvider:
                 import importlib
 
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
                 importlib.reload(anthropic_provider)
 
                 provider = anthropic_provider.AnthropicProvider()
@@ -268,6 +271,7 @@ class TestAnthropicProvider:
                 import importlib
 
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
                 importlib.reload(anthropic_provider)
 
                 with pytest.raises(ValueError, match="API key required"):
@@ -317,6 +321,7 @@ class TestOpenAIProvider:
                 import importlib
 
                 import zebra_tasks.llm.providers.openai as openai_provider
+
                 importlib.reload(openai_provider)
 
                 provider = openai_provider.OpenAIProvider()
@@ -348,6 +353,7 @@ class TestOpenAIProvider:
                 import importlib
 
                 import zebra_tasks.llm.providers.openai as openai_provider
+
                 importlib.reload(openai_provider)
 
                 provider = openai_provider.OpenAIProvider()
@@ -369,6 +375,7 @@ class TestOpenAIProvider:
                 import importlib
 
                 import zebra_tasks.llm.providers.openai as openai_provider
+
                 importlib.reload(openai_provider)
 
                 with pytest.raises(ValueError, match="API key required"):

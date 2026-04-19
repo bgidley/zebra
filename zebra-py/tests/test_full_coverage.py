@@ -120,9 +120,7 @@ class TestActionNotFoundInRun:
         process = await engine.create_process(definition)
         await engine.start_process(process.id)
 
-        # Task should have failed
-        tasks = await engine.store.load_tasks_for_process(process.id)
-        # It may be deleted after completion, check process state
+        # Task should have failed; check process state
         process = await engine.store.load_process(process.id)
         # Process should complete (task failed with no routing)
         assert process.state in {ProcessState.COMPLETE, ProcessState.FAILED, ProcessState.RUNNING}
@@ -186,9 +184,7 @@ class TestConditionNotFound:
         process = await engine.create_process(definition)
         await engine.start_process(process.id)
 
-        # task2 should be created even though condition doesn't exist
-        tasks = await engine.store.load_tasks_for_process(process.id)
-        # Process should have progressed
+        # Process should have progressed even when condition doesn't exist
         assert process is not None
 
 
@@ -454,8 +450,12 @@ class TestSyncTaskPaths:
                 "join": TaskDefinition(id="join", name="Join", synchronized=True),
             },
             routings=[
-                RoutingDefinition(id="r1", source_task_id="start", dest_task_id="branch_a", parallel=True),
-                RoutingDefinition(id="r2", source_task_id="start", dest_task_id="branch_b", parallel=True),
+                RoutingDefinition(
+                    id="r1", source_task_id="start", dest_task_id="branch_a", parallel=True
+                ),
+                RoutingDefinition(
+                    id="r2", source_task_id="start", dest_task_id="branch_b", parallel=True
+                ),
                 RoutingDefinition(id="r3", source_task_id="branch_a", dest_task_id="join"),
                 RoutingDefinition(id="r4", source_task_id="branch_b", dest_task_id="join"),
             ],
@@ -518,7 +518,9 @@ class TestTaskSyncMethods:
             foe_id="foe-1",
         )
 
-        blocking = sync.get_blocking_tasks(join_task, join_def, process_def, [branch_task, join_task])
+        blocking = sync.get_blocking_tasks(
+            join_task, join_def, process_def, [branch_task, join_task]
+        )
         assert len(blocking) == 1
         assert blocking[0].id == "branch-inst"
 
@@ -557,7 +559,9 @@ class TestTaskSyncMethods:
             foe_id="foe-1",
         )
 
-        blocking = sync.get_blocking_tasks(join_task, join_def, process_def, [completed_task, join_task])
+        blocking = sync.get_blocking_tasks(
+            join_task, join_def, process_def, [completed_task, join_task]
+        )
         assert len(blocking) == 0
 
 
@@ -773,11 +777,13 @@ class TestStorageBaseMethods:
 
         async with store.transaction():
             # Transaction is a no-op for InMemoryStore
-            await store.save_process(ProcessInstance(
-                id="proc-1",
-                definition_id="def-1",
-                state=ProcessState.RUNNING,
-            ))
+            await store.save_process(
+                ProcessInstance(
+                    id="proc-1",
+                    definition_id="def-1",
+                    state=ProcessState.RUNNING,
+                )
+            )
 
         # Verify data was saved
         process = await store.load_process("proc-1")

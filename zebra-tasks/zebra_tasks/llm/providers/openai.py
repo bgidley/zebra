@@ -46,17 +46,13 @@ class OpenAIProvider(LLMProvider):
         try:
             import openai
         except ImportError:
-            raise ImportError(
-                "openai package not installed. Install with: pip install openai"
-            )
+            raise ImportError("openai package not installed. Install with: pip install openai")
 
         self._model = model or self.DEFAULT_MODEL
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
 
         if not self._api_key:
-            raise ValueError(
-                "OpenAI API key required. Set OPENAI_API_KEY or pass api_key."
-            )
+            raise ValueError("OpenAI API key required. Set OPENAI_API_KEY or pass api_key.")
 
         self._client = openai.AsyncOpenAI(
             api_key=self._api_key,
@@ -143,15 +139,19 @@ class OpenAIProvider(LLMProvider):
 
         for msg in messages:
             if msg.role == MessageRole.SYSTEM:
-                openai_messages.append({
-                    "role": "system",
-                    "content": msg.content,
-                })
+                openai_messages.append(
+                    {
+                        "role": "system",
+                        "content": msg.content,
+                    }
+                )
             elif msg.role == MessageRole.USER:
-                openai_messages.append({
-                    "role": "user",
-                    "content": msg.content,
-                })
+                openai_messages.append(
+                    {
+                        "role": "user",
+                        "content": msg.content,
+                    }
+                )
             elif msg.role == MessageRole.ASSISTANT:
                 message = {
                     "role": "assistant",
@@ -171,11 +171,13 @@ class OpenAIProvider(LLMProvider):
                     ]
                 openai_messages.append(message)
             elif msg.role == MessageRole.TOOL:
-                openai_messages.append({
-                    "role": "tool",
-                    "tool_call_id": msg.tool_call_id,
-                    "content": msg.content,
-                })
+                openai_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.tool_call_id,
+                        "content": msg.content,
+                    }
+                )
 
         return openai_messages
 
@@ -209,11 +211,13 @@ class OpenAIProvider(LLMProvider):
                 except json.JSONDecodeError:
                     # If JSON parsing fails, use empty dict
                     arguments = {}
-                tool_calls.append(ToolCall(
-                    id=tc.id,
-                    name=tc.function.name,
-                    arguments=arguments,
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        id=tc.id,
+                        name=tc.function.name,
+                        arguments=arguments,
+                    )
+                )
 
         return LLMResponse(
             content=content,

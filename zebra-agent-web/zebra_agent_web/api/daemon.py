@@ -81,7 +81,7 @@ async def run_daemon_loop(
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=poll_interval)
             break  # stop_event was set
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass  # normal — just continue the loop
 
     logger.info("Budget daemon stopped.")
@@ -137,7 +137,7 @@ async def _tick(
     logger.info("[daemon:start] Starting %s...", process.id[:12])
     try:
         await engine.start_process(process.id)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to start process %s", process.id[:12])
         return
 

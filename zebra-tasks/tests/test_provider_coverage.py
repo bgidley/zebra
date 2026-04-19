@@ -61,6 +61,7 @@ class TestAnthropicProviderCoverage:
                 import importlib
 
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
                 importlib.reload(anthropic_provider)
 
                 provider = anthropic_provider.AnthropicProvider()
@@ -88,6 +89,7 @@ class TestAnthropicProviderCoverage:
                 import importlib
 
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
                 importlib.reload(anthropic_provider)
 
                 provider = anthropic_provider.AnthropicProvider()
@@ -108,6 +110,7 @@ class TestAnthropicProviderCoverage:
                 import importlib
 
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
                 importlib.reload(anthropic_provider)
 
                 provider = anthropic_provider.AnthropicProvider()
@@ -138,6 +141,7 @@ class TestAnthropicProviderCoverage:
                 import importlib
 
                 import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
                 importlib.reload(anthropic_provider)
 
                 provider = anthropic_provider.AnthropicProvider(model="claude-3-opus-20240229")
@@ -190,6 +194,7 @@ class TestOpenAIProviderCoverage:
                 import importlib
 
                 import zebra_tasks.llm.providers.openai as openai_provider
+
                 importlib.reload(openai_provider)
 
                 provider = openai_provider.OpenAIProvider()
@@ -217,6 +222,7 @@ class TestOpenAIProviderCoverage:
                 import importlib
 
                 import zebra_tasks.llm.providers.openai as openai_provider
+
                 importlib.reload(openai_provider)
 
                 provider = openai_provider.OpenAIProvider()
@@ -244,6 +250,7 @@ class TestOpenAIProviderCoverage:
                 import importlib
 
                 import zebra_tasks.llm.providers.openai as openai_provider
+
                 importlib.reload(openai_provider)
 
                 provider = openai_provider.OpenAIProvider(model="gpt-4-turbo")
@@ -262,6 +269,7 @@ class TestProviderRegistryCoverage:
 
     def test_register_provider_overwrites(self):
         """Test that registering a provider overwrites existing."""
+
         class Provider1(LLMProvider):
             async def complete(self, messages, **kwargs):
                 pass

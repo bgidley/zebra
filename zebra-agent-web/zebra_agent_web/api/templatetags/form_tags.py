@@ -98,7 +98,10 @@ def _render_field(field: FormField, errors: list[str], value: Any = _UNSET) -> s
 def _render_label(field: FormField) -> str:
     """Render a field label."""
     required = REQUIRED_MARKER if field.required else ""
-    return f'<label for="field_{escape(field.name)}" class="{LABEL_CLASS}">{escape(field.title)}{required}</label>'
+    return (
+        f'<label for="field_{escape(field.name)}" class="{LABEL_CLASS}">'
+        f"{escape(field.title)}{required}</label>"
+    )
 
 
 def _render_description(field: FormField) -> str:
@@ -257,7 +260,8 @@ def _render_markdown(field: FormField, value: Any = _UNSET) -> str:
     return f"""<div class="mb-4">
     <label class="{LABEL_CLASS}">{escape(field.title)}</label>
     <div id="{field_id}"
-         class="prose prose-invert prose-sm max-w-none rounded-md bg-gray-750 border border-gray-600 px-4 py-3 text-gray-100 overflow-auto max-h-96">
+         class="prose prose-invert prose-sm max-w-none rounded-md bg-gray-750
+                border border-gray-600 px-4 py-3 text-gray-100 overflow-auto max-h-96">
     </div>
     <input type="hidden" name="{escape(field.name)}" value="{escape(content)}" />
     <script>
@@ -287,7 +291,9 @@ def _render_checkbox(field: FormField, errors: list[str], value: Any = _UNSET) -
     <div class="flex items-center gap-2">
         <input type="checkbox" id="field_{escape(field.name)}" name="{escape(field.name)}"
                class="{CHECKBOX_CLASS}" value="true"{checked} />
-        <label for="field_{escape(field.name)}" class="text-sm text-gray-300">{escape(field.title)}</label>
+        <label for="field_{escape(field.name)}" class="text-sm text-gray-300">
+            {escape(field.title)}
+        </label>
     </div>
     {_render_description(field)}
     {_render_errors(errors)}

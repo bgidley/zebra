@@ -58,17 +58,52 @@ async def populated_metrics_db(metrics_db):
         # Add some test runs
         runs = [
             ("run-1", "Answer Question", "What is 2+2?", day1, day1, 1, 5, 100, None),
-            ("run-2", "Answer Question", "What is the capital of France?", day1, day1, 1, 4, 80, None),
-            ("run-3", "Answer Question", "Explain quantum physics", day2, day2, 0, None, 200, "Timeout"),
+            (
+                "run-2",
+                "Answer Question",
+                "What is the capital of France?",
+                day1,
+                day1,
+                1,
+                4,
+                80,
+                None,
+            ),
+            (
+                "run-3",
+                "Answer Question",
+                "Explain quantum physics",
+                day2,
+                day2,
+                0,
+                None,
+                200,
+                "Timeout",
+            ),
             ("run-4", "Brainstorm Ideas", "Birthday party ideas", day2, day2, 1, 5, 150, None),
             ("run-5", "Brainstorm Ideas", "Business name ideas", day3, day3, 1, 3, 120, None),
-            ("run-6", "Summarize Text", "Summarize this article", day3, day3, 0, None, 90, "Invalid input"),
+            (
+                "run-6",
+                "Summarize Text",
+                "Summarize this article",
+                day3,
+                day3,
+                0,
+                None,
+                90,
+                "Invalid input",
+            ),
         ]
         for run in runs:
-            await db.execute("""
-                INSERT INTO workflow_runs (id, workflow_name, goal, started_at, completed_at, success, user_rating, tokens_used, error)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, run)
+            await db.execute(
+                """
+                INSERT INTO workflow_runs (
+                    id, workflow_name, goal, started_at, completed_at, success,
+                    user_rating, tokens_used, error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                run,
+            )
         await db.commit()
 
     return metrics_db
@@ -89,8 +124,12 @@ def mock_context():
     context.process = MagicMock()
     context.process.properties = {}
     context.extras = {}
-    context.get_process_property = MagicMock(side_effect=lambda k, d=None: context.process.properties.get(k, d))
-    context.set_process_property = MagicMock(side_effect=lambda k, v: context.process.properties.__setitem__(k, v))
+    context.get_process_property = MagicMock(
+        side_effect=lambda k, d=None: context.process.properties.get(k, d)
+    )
+    context.set_process_property = MagicMock(
+        side_effect=lambda k, v: context.process.properties.__setitem__(k, v)
+    )
     context.resolve_template = MagicMock(side_effect=lambda x: x)
     return context
 
@@ -122,18 +161,66 @@ class TestMetricsAnalyzerAction:
         day3 = now - timedelta(days=3)
 
         runs = [
-            WorkflowRun(id="run-1", workflow_name="Answer Question", goal="What is 2+2?",
-                        started_at=day1, completed_at=day1, success=True, user_rating=5, tokens_used=100),
-            WorkflowRun(id="run-2", workflow_name="Answer Question", goal="What is the capital of France?",
-                        started_at=day1, completed_at=day1, success=True, user_rating=4, tokens_used=80),
-            WorkflowRun(id="run-3", workflow_name="Answer Question", goal="Explain quantum physics",
-                        started_at=day2, completed_at=day2, success=False, tokens_used=200, error="Timeout"),
-            WorkflowRun(id="run-4", workflow_name="Brainstorm Ideas", goal="Birthday party ideas",
-                        started_at=day2, completed_at=day2, success=True, user_rating=5, tokens_used=150),
-            WorkflowRun(id="run-5", workflow_name="Brainstorm Ideas", goal="Business name ideas",
-                        started_at=day3, completed_at=day3, success=True, user_rating=3, tokens_used=120),
-            WorkflowRun(id="run-6", workflow_name="Summarize Text", goal="Summarize this article",
-                        started_at=day3, completed_at=day3, success=False, tokens_used=90, error="Invalid input"),
+            WorkflowRun(
+                id="run-1",
+                workflow_name="Answer Question",
+                goal="What is 2+2?",
+                started_at=day1,
+                completed_at=day1,
+                success=True,
+                user_rating=5,
+                tokens_used=100,
+            ),
+            WorkflowRun(
+                id="run-2",
+                workflow_name="Answer Question",
+                goal="What is the capital of France?",
+                started_at=day1,
+                completed_at=day1,
+                success=True,
+                user_rating=4,
+                tokens_used=80,
+            ),
+            WorkflowRun(
+                id="run-3",
+                workflow_name="Answer Question",
+                goal="Explain quantum physics",
+                started_at=day2,
+                completed_at=day2,
+                success=False,
+                tokens_used=200,
+                error="Timeout",
+            ),
+            WorkflowRun(
+                id="run-4",
+                workflow_name="Brainstorm Ideas",
+                goal="Birthday party ideas",
+                started_at=day2,
+                completed_at=day2,
+                success=True,
+                user_rating=5,
+                tokens_used=150,
+            ),
+            WorkflowRun(
+                id="run-5",
+                workflow_name="Brainstorm Ideas",
+                goal="Business name ideas",
+                started_at=day3,
+                completed_at=day3,
+                success=True,
+                user_rating=3,
+                tokens_used=120,
+            ),
+            WorkflowRun(
+                id="run-6",
+                workflow_name="Summarize Text",
+                goal="Summarize this article",
+                started_at=day3,
+                completed_at=day3,
+                success=False,
+                tokens_used=90,
+                error="Invalid input",
+            ),
         ]
         for run in runs:
             await store.record_run(run)
@@ -177,7 +264,9 @@ class TestMetricsAnalyzerAction:
         assert "Answer Question" in workflow_names
         assert "Brainstorm Ideas" in workflow_names
 
-    async def test_analyze_identifies_low_performers(self, populated_metrics_store, mock_task, mock_context):
+    async def test_analyze_identifies_low_performers(
+        self, populated_metrics_store, mock_task, mock_context
+    ):
         """Test that low performers are identified."""
         from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
 
@@ -209,7 +298,9 @@ class TestMetricsAnalyzerAction:
         # Should have patterns for workflows with failures
         assert len(failure_patterns) > 0
 
-    async def test_analyze_generates_recommendations(self, populated_metrics_store, mock_task, mock_context):
+    async def test_analyze_generates_recommendations(
+        self, populated_metrics_store, mock_task, mock_context
+    ):
         """Test that recommendations are generated."""
         from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
 
@@ -290,16 +381,18 @@ class TestWorkflowEvaluatorAction:
 
         # Mock the LLM response
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "overall_assessment": {
-                "health_score": 80,
-                "summary": "System is healthy",
-                "key_issues": [],
-            },
-            "workflow_evaluations": [],
-            "improvement_priorities": [],
-            "new_workflow_suggestions": [],
-        })
+        mock_response.content = json.dumps(
+            {
+                "overall_assessment": {
+                    "health_score": 80,
+                    "summary": "System is healthy",
+                    "key_issues": [],
+                },
+                "workflow_evaluations": [],
+                "improvement_priorities": [],
+                "new_workflow_suggestions": [],
+            }
+        )
         mock_response.usage = MagicMock(total_tokens=100)
 
         mock_provider = MagicMock()
@@ -473,9 +566,24 @@ routings: []"""
         evaluation = {
             "improvement_priorities": [],
             "new_workflow_suggestions": [
-                {"name": "Workflow 1", "description": "First", "use_case": "Test", "rationale": "Test"},
-                {"name": "Workflow 2", "description": "Second", "use_case": "Test", "rationale": "Test"},
-                {"name": "Workflow 3", "description": "Third", "use_case": "Test", "rationale": "Test"},
+                {
+                    "name": "Workflow 1",
+                    "description": "First",
+                    "use_case": "Test",
+                    "rationale": "Test",
+                },
+                {
+                    "name": "Workflow 2",
+                    "description": "Second",
+                    "use_case": "Test",
+                    "rationale": "Test",
+                },
+                {
+                    "name": "Workflow 3",
+                    "description": "Third",
+                    "use_case": "Test",
+                    "rationale": "Test",
+                },
             ],
         }
 

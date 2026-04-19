@@ -1,6 +1,5 @@
 """Additional tests for workflow engine coverage."""
 
-
 import pytest
 
 from zebra.core.engine import WorkflowEngine
@@ -166,8 +165,7 @@ class TestProcessProperties:
     async def test_create_process_with_properties(self, engine, simple_definition):
         """Test creating process with initial properties."""
         process = await engine.create_process(
-            simple_definition,
-            properties={"key1": "value1", "key2": 123}
+            simple_definition, properties={"key1": "value1", "key2": 123}
         )
 
         assert process.properties["key1"] == "value1"
@@ -180,9 +178,7 @@ class TestProcessProperties:
 
         # Create child process
         child = await engine.create_process(
-            simple_definition,
-            parent_process_id=parent.id,
-            parent_task_id="some-task"
+            simple_definition, parent_process_id=parent.id, parent_task_id="some-task"
         )
 
         assert child.parent_process_id == parent.id
@@ -242,14 +238,14 @@ class TestCompleteTask:
                     source_task_id="decision",
                     dest_task_id="path_a",
                     condition="route_name",
-                    name="a"
+                    name="a",
                 ),
                 RoutingDefinition(
                     id="r2",
                     source_task_id="decision",
                     dest_task_id="path_b",
                     condition="route_name",
-                    name="b"
+                    name="b",
                 ),
             ],
         )
@@ -288,16 +284,10 @@ class TestParallelExecution:
             },
             routings=[
                 RoutingDefinition(
-                    id="r1",
-                    source_task_id="start",
-                    dest_task_id="branch_a",
-                    parallel=True
+                    id="r1", source_task_id="start", dest_task_id="branch_a", parallel=True
                 ),
                 RoutingDefinition(
-                    id="r2",
-                    source_task_id="start",
-                    dest_task_id="branch_b",
-                    parallel=True
+                    id="r2", source_task_id="start", dest_task_id="branch_b", parallel=True
                 ),
             ],
         )

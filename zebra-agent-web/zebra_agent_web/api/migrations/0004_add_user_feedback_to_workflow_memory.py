@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('api', '0003_replace_memory_with_workflow_memory'),
+        ("api", "0003_replace_memory_with_workflow_memory"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='workflowmemorymodel',
-            name='user_feedback',
-            field=models.TextField(blank=True, default='', help_text='Free-text user feedback for next run'),
+            model_name="workflowmemorymodel",
+            name="user_feedback",
+            field=models.TextField(
+                blank=True, default="", help_text="Free-text user feedback for next run"
+            ),
         ),
     ]

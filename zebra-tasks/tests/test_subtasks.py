@@ -50,9 +50,7 @@ class TestSubworkflowAction:
         assert len(mock_context.engine.started_processes) == 1
 
     @pytest.mark.asyncio
-    async def test_spawn_subworkflow_inherits_parent_properties(
-        self, mock_context, mock_task
-    ):
+    async def test_spawn_subworkflow_inherits_parent_properties(self, mock_context, mock_task):
         """Test that sub-workflow inherits special properties from parent."""
         # Setup parent with special properties
         mock_context.process.properties["__llm_provider__"] = "test_provider"
@@ -80,9 +78,7 @@ class TestSubworkflowAction:
         assert created.properties.get("__parent_task_id__") == mock_task.id
 
     @pytest.mark.asyncio
-    async def test_spawn_subworkflow_with_custom_properties(
-        self, mock_context, mock_task
-    ):
+    async def test_spawn_subworkflow_with_custom_properties(self, mock_context, mock_task):
         """Test passing custom properties to sub-workflow."""
         mock_task.properties = {
             "workflow": {
@@ -107,9 +103,7 @@ class TestSubworkflowAction:
         assert created.properties.get("config") == {"key": "value"}
 
     @pytest.mark.asyncio
-    async def test_spawn_subworkflow_wait_for_completion(
-        self, mock_context, mock_task, mock_store
-    ):
+    async def test_spawn_subworkflow_wait_for_completion(self, mock_context, mock_task, mock_store):
         """Test waiting for sub-workflow completion."""
         mock_task.properties = {
             "workflow": {

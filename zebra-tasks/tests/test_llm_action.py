@@ -1,6 +1,5 @@
 """Tests for LLM call action."""
 
-
 import pytest
 
 from zebra_tasks.llm.action import LLMCallAction
@@ -28,11 +27,13 @@ class MockLLMProvider(LLMProvider):
         max_tokens: int = 4096,
         stop_sequences=None,
     ) -> LLMResponse:
-        self.calls.append({
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        })
+        self.calls.append(
+            {
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+        )
         return LLMResponse(
             content=self.response_content,
             tool_calls=None,
@@ -155,11 +156,11 @@ class TestLLMCallAction:
     async def test_json_in_markdown_code_block(self, llm_context, mock_task):
         """Test JSON extraction from markdown code block."""
         provider = llm_context.process.properties["__llm_provider__"]
-        provider.response_content = '''Here's the analysis:
+        provider.response_content = """Here's the analysis:
 ```json
 {"result": "success", "value": 42}
 ```
-That's the result.'''
+That's the result."""
 
         mock_task.properties = {
             "prompt": "Analyze",

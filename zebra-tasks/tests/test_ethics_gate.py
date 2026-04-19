@@ -81,9 +81,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch(
-            "zebra_tasks.agent.ethics_gate.get_provider", return_value=provider
-        ):
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -101,9 +99,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch(
-            "zebra_tasks.agent.ethics_gate.get_provider", return_value=provider
-        ):
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -121,9 +117,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch(
-            "zebra_tasks.agent.ethics_gate.get_provider", return_value=provider
-        ):
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             await action.run(mock_task, mock_context)
 
         # Verify the prompt sent to the LLM
@@ -144,9 +138,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch(
-            "zebra_tasks.agent.ethics_gate.get_provider", return_value=provider
-        ):
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             await action.run(mock_task, mock_context)
 
         call_args = provider.complete.call_args
@@ -173,9 +165,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch(
-            "zebra_tasks.agent.ethics_gate.get_provider", return_value=provider
-        ):
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         # Should fail open — proceed with warning
@@ -219,9 +209,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch(
-            "zebra_tasks.agent.ethics_gate.get_provider", return_value=provider
-        ):
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             await action.run(mock_task, mock_context)
 
         mock_context.set_process_property.assert_called_with(
@@ -246,9 +234,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch(
-            "zebra_tasks.agent.ethics_gate.get_provider", return_value=provider
-        ):
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -270,9 +256,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch(
-            "zebra_tasks.agent.ethics_gate.get_provider", return_value=provider
-        ):
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True

@@ -168,9 +168,7 @@ class TaskSync:
                 continue
 
             # Check if this task's definition can reach the sync task
-            if self._check_def_in_path(
-                {active_task.task_definition_id}, task_def.id, process_def
-            ):
+            if self._check_def_in_path({active_task.task_definition_id}, task_def.id, process_def):
                 blocking.append(active_task)
 
         return blocking

@@ -4,15 +4,20 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('api', '0004_add_user_feedback_to_workflow_memory'),
+        ("api", "0004_add_user_feedback_to_workflow_memory"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='workflowmemorymodel',
-            name='run_id',
-            field=models.CharField(blank=True, db_index=True, default='', help_text='Link to the workflow run for post-hoc updates', max_length=255),
+            model_name="workflowmemorymodel",
+            name="run_id",
+            field=models.CharField(
+                blank=True,
+                db_index=True,
+                default="",
+                help_text="Link to the workflow run for post-hoc updates",
+                max_length=255,
+            ),
         ),
     ]

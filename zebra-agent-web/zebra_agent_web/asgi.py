@@ -20,8 +20,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "zebra_agent_web.settings")
 # is populated before importing code that may import ORM models.
 django_asgi_app = get_asgi_application()
 
-# Import routing after Django setup
-from zebra_agent_web.api.routing import websocket_urlpatterns
+# Routing must be imported after Django setup so the AppRegistry is populated.
+from zebra_agent_web.api.routing import websocket_urlpatterns  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,6 @@ async def _start_daemon_if_needed() -> None:
 
     if not _should_auto_start():
         return
-
-    from zebra_agent_web.api.daemon import run_daemon_loop
 
     _daemon_stop = asyncio.Event()
     _daemon_task = asyncio.create_task(_guarded_daemon_loop(_daemon_stop), name="budget-daemon")

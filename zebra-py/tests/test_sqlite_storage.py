@@ -476,7 +476,9 @@ class TestSQLiteLocking:
         assert acquired1 is True
 
         # Owner2 cannot get the lock (short timeout)
-        acquired2 = await sqlite_store.acquire_lock(sample_process.id, "owner2", timeout_seconds=0.2)
+        acquired2 = await sqlite_store.acquire_lock(
+            sample_process.id, "owner2", timeout_seconds=0.2
+        )
         assert acquired2 is False
 
         # Owner1 releases
@@ -528,10 +530,8 @@ class TestSQLiteTransaction:
         except ValueError:
             pass
 
-        # Definition should not be saved due to rollback
-        loaded = await sqlite_store.load_definition(sample_definition.id)
-        # Note: This might still be saved depending on auto-commit behavior
         # The key is that the transaction context manager handles exceptions
+        # (rollback assertion omitted — auto-commit behavior is storage-specific)
 
 
 class TestSQLiteNotInitialized:
@@ -543,14 +543,16 @@ class TestSQLiteNotInitialized:
         # Don't call initialize()
 
         with pytest.raises(RuntimeError, match="not initialized"):
-            await store.save_definition(ProcessDefinition(
-                id="test",
-                name="Test",
-                version=1,
-                first_task_id="t1",
-                tasks={"t1": TaskDefinition(id="t1", name="T1")},
-                routings=[],
-            ))
+            await store.save_definition(
+                ProcessDefinition(
+                    id="test",
+                    name="Test",
+                    version=1,
+                    first_task_id="t1",
+                    tasks={"t1": TaskDefinition(id="t1", name="T1")},
+                    routings=[],
+                )
+            )
 
 
 class TestSQLiteClose:

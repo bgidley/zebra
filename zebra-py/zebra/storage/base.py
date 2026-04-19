@@ -12,6 +12,7 @@ from zebra.core.models import (
     FlowOfExecution,
     ProcessDefinition,
     ProcessInstance,
+    ProcessState,
     TaskInstance,
 )
 
@@ -82,7 +83,7 @@ class StateStore(ABC):
 
     async def get_processes_by_state(
         self,
-        state: "ProcessState",
+        state: ProcessState,
         exclude_children: bool = False,
     ) -> list[ProcessInstance]:
         """Get processes in a specific state, ordered by created_at ascending.

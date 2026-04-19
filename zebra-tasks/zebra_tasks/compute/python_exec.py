@@ -148,7 +148,6 @@ class PythonExecAction(TaskAction):
         # Resolve templates in code
         code = context.resolve_template(code)
 
-        timeout = task.properties.get("timeout", 30)
         output_key = task.properties.get("output_key", "result")
         capture_prints = task.properties.get("capture_prints", True)
 

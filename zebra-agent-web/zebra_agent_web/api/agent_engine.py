@@ -104,9 +104,9 @@ async def _async_init() -> None:
         # Evict stale DB-cached definitions for any upgraded workflows so the
         # engine will reload them from the updated YAML files on next use.
         if upgraded_names:
-            from zebra_agent_web.api.models import ProcessDefinitionModel
-
             from asgiref.sync import sync_to_async
+
+            from zebra_agent_web.api.models import ProcessDefinitionModel
 
             @sync_to_async
             def _evict_stale(names: list[str]) -> int:

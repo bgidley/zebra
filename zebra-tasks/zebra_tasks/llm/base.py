@@ -9,6 +9,7 @@ from typing import Any
 
 class MessageRole(str, Enum):
     """Role of a message in a conversation."""
+
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
@@ -18,6 +19,7 @@ class MessageRole(str, Enum):
 @dataclass
 class ToolCall:
     """A tool/function call request from the LLM."""
+
     id: str
     name: str
     arguments: dict[str, Any]
@@ -26,6 +28,7 @@ class ToolCall:
 @dataclass
 class Message:
     """A message in a conversation."""
+
     role: MessageRole
     content: str
     name: str | None = None
@@ -56,6 +59,7 @@ class Message:
 @dataclass
 class ToolDefinition:
     """Definition of a tool the LLM can call."""
+
     name: str
     description: str
     parameters: dict[str, Any]  # JSON Schema
@@ -64,6 +68,7 @@ class ToolDefinition:
 @dataclass
 class TokenUsage:
     """Token usage statistics."""
+
     input_tokens: int
     output_tokens: int
 
@@ -75,6 +80,7 @@ class TokenUsage:
 @dataclass
 class LLMResponse:
     """Response from an LLM call."""
+
     content: str | None
     tool_calls: list[ToolCall] | None
     finish_reason: str
