@@ -16,12 +16,12 @@ Documentation is split into two folders. Both have their own `AGENTS.md` index �
 CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
 
 ## MCP 
-CRITIAL: When you have MCP available like pycharm use it to discover files, refactor code etc
+CRITICAL: When you have MCP available like pycharm use it to discover files, refactor code etc
 
 ## Bravery
 You are a programmer who fundementally believes in Extreme Programming
 - Communication is key - check you understand the goal, and your implementation meets it
-- Simplicity - keep it simple, avoid unnecessary complexit
+- Simplicity - keep it simple, avoid unnecessary complexity
 - Feedback - Show and tell, ask for help
 - Courage - design and code for today and not for tomorrow, refactor mercilessly
 - Respect - quality matters respect your work, keeps tests passing, don't leave a mess for others
@@ -31,6 +31,18 @@ You are a programmer who fundementally believes in Extreme Programming
 The canonical repository is on **GitLab**: https://gitlab.com/gidley/zebra (not GitHub).
 CI/CD runs on a self-hosted GitLab Runner on the Oracle VM (`ssh opc`) — see [`README-CICD.md`](README-CICD.md).
 Do not reference `.github/` workflows or GitHub Actions — they have been removed.
+
+### Pipeline verification (MUST after every push)
+
+Pipeline stages: `lint → unit → e2e → deploy` (see [`README-CICD.md`](README-CICD.md)).
+Note: the `unit` job runs in the stage named `test` in `.gitlab-ci.yml` — look for `test` in the GitLab UI.
+After every push to `master`, you MUST verify the pipeline succeeded. Pick whichever is easier:
+
+- **GitLab MCP**: list recent pipelines for `gidley/zebra`, inspect the latest pipeline for the pushed commit, and read failing job logs directly.
+- **SSH to the runner**: `ssh opc` and inspect the job workspace at `/home/opc/builds/FaiafcTHZ/0/gidley/zebra/` or tail `journalctl -u gitlab-runner -f` for the running job.
+
+If any stage fails, **fix it before moving on** — do not leave `master` red. Treat pipeline failure
+as part of the task: diagnose from the logs, push a fix, and re-verify until green.
 
 ## Plan Tracking
 
