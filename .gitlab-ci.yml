@@ -32,8 +32,11 @@ e2e:
     ORACLE_USERNAME: "$E2E_ORACLE_USERNAME"
     ORACLE_PASSWORD: "$E2E_ORACLE_PASSWORD"
   script:
-    - uv run python zebra-agent-web/manage.py migrate --noinput
-    - uv run python zebra-agent-web/manage.py flush --noinput
+    - |
+      if [ -n "$ORACLE_DSN" ]; then
+        uv run python zebra-agent-web/manage.py migrate --noinput
+        uv run python zebra-agent-web/manage.py flush --noinput
+      fi
     - uv run pytest zebra-agent-web/tests/e2e/ -m e2e
 
 e2e-live:

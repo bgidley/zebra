@@ -10,19 +10,26 @@ import pytest
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "zebra_agent_web.settings")
 django.setup()
 
-# We don't override django_db_setup here so that we use the standard test DB behavior
-# (pytest-django will create a test database for us).
-
-
 @pytest.fixture(scope="session")
-def django_db_setup():
-    """Use the dedicated e2e Oracle schema directly.
+def django_db_setup(django_test_environment, django_db_blocker):
+    """Set up the test database.
 
-    Skips pytest-django's automatic test DB creation (which requires CREATE
-    TABLESPACE privilege). The schema is pre-created and kept up to date by
-    `manage.py migrate` in CI before tests run.
+    - Oracle (ORACLE_DSN set): use the pre-existing test schema directly;
+      skip pytest-django's CREATE TABLESPACE (requires elevated privileges).
+      The schema is kept up to date by `manage.py migrate` in CI before tests.
+    - SQLite (no ORACLE_DSN): let pytest-django create a temporary test DB
+      and run migrations automatically.
     """
-    pass
+    if os.environ.get("ORACLE_DSN"):
+        yield  # Oracle: schema already exists, use it directly
+    else:
+        from django.test.utils import setup_databases, teardown_databases
+
+        with django_db_blocker.unblock():
+            old_config = setup_databases(verbosity=0, interactive=False)
+        yield
+        with django_db_blocker.unblock():
+            teardown_databases(old_config, verbosity=0)
 
 
 @pytest.fixture(scope="function")
