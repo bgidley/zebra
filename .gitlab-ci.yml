@@ -23,7 +23,7 @@ lint:
 unit:
   stage: test
   script:
-    - uv run pytest -m "not e2e" --ignore=zebra-agent-web/tests/e2e_live
+    - uv run pytest -m "not e2e" --ignore=zebra-agent-web/tests/e2e_live --ds=zebra_agent_web.test_settings
 
 e2e:
   stage: e2e
