@@ -27,11 +27,14 @@ unit:
 
 e2e:
   stage: e2e
-  # Per specs/testing-strategy.md: SQLite + cassette LLM for the PR gate.
-  # CI variables supply ANTHROPIC_API_KEY; override ORACLE_DSN to empty so
-  # Django falls through to SQLite (no CREATE TABLESPACE privilege needed).
+  variables:
+    ORACLE_DSN: "$E2E_ORACLE_DSN"
+    ORACLE_USERNAME: "$E2E_ORACLE_USERNAME"
+    ORACLE_PASSWORD: "$E2E_ORACLE_PASSWORD"
   script:
-    - ORACLE_DSN= uv run pytest zebra-agent-web/tests/e2e/ -m e2e
+    - uv run python zebra-agent-web/manage.py migrate --noinput
+    - uv run python zebra-agent-web/manage.py flush --noinput
+    - uv run pytest zebra-agent-web/tests/e2e/ -m e2e
 
 e2e-live:
   stage: e2e

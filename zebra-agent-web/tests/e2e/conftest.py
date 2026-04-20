@@ -14,6 +14,17 @@ django.setup()
 # (pytest-django will create a test database for us).
 
 
+@pytest.fixture(scope="session")
+def django_db_setup():
+    """Use the dedicated e2e Oracle schema directly.
+
+    Skips pytest-django's automatic test DB creation (which requires CREATE
+    TABLESPACE privilege). The schema is pre-created and kept up to date by
+    `manage.py migrate` in CI before tests run.
+    """
+    pass
+
+
 @pytest.fixture(scope="function")
 def django_stores(db):
     """Initialize Django-backed stores for workflow engine and agent."""
