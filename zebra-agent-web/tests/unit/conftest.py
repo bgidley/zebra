@@ -11,5 +11,7 @@ import os
 
 import django
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "zebra_agent_web.test_settings")
+# Force override — CI sets DJANGO_SETTINGS_MODULE=zebra_agent_web.settings globally,
+# but unit tests must use SQLite. setdefault() would be a no-op in that environment.
+os.environ["DJANGO_SETTINGS_MODULE"] = "zebra_agent_web.test_settings"
 django.setup()
