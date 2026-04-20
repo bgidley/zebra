@@ -10,6 +10,7 @@ import pytest
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "zebra_agent_web.settings")
 django.setup()
 
+
 @pytest.fixture(scope="session")
 def django_db_setup(django_test_environment, django_db_blocker):
     """Set up the test database.
