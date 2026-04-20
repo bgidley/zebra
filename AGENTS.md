@@ -32,6 +32,15 @@ The canonical repository is on **GitLab**: https://gitlab.com/gidley/zebra (not 
 CI/CD runs on a self-hosted GitLab Runner on the Oracle VM (`ssh opc`) — see [`README-CICD.md`](README-CICD.md).
 Do not reference `.github/` workflows or GitHub Actions — they have been removed.
 
+### Linting (MUST before every commit)
+
+Always run both checks before committing — the `lint` CI stage runs these and will fail the pipeline if skipped:
+
+```bash
+uv run ruff check --fix .   # fix lint errors
+uv run ruff format .        # fix formatting
+```
+
 ### Pipeline verification (MUST after every push)
 
 Pipeline stages: `lint → unit → e2e → deploy` (see [`README-CICD.md`](README-CICD.md)).
