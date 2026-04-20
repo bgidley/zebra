@@ -9,6 +9,7 @@ __pycache__/
 htmlcov/
 .pytest_cache/
 .env
-.env.local
+.env.*
+!.env.example
 tmp
 .air/mcp.json
