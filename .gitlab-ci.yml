@@ -33,7 +33,7 @@ e2e:
       if [ -n "$E2E_ORACLE_DSN" ]; then
         # Use dedicated e2e Oracle schema
         export ORACLE_DSN="$E2E_ORACLE_DSN" ORACLE_USERNAME="$E2E_ORACLE_USERNAME" ORACLE_PASSWORD="$E2E_ORACLE_PASSWORD"
-        uv run python zebra-agent-web/manage.py migrate --noinput
+        uv run python zebra-agent-web/manage.py migrate --noinput --fake-initial
         uv run python zebra-agent-web/manage.py flush --noinput
         uv run pytest zebra-agent-web/tests/e2e/ -m e2e
       else
