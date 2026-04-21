@@ -11,6 +11,21 @@ Documentation is split into two folders. Both have their own `AGENTS.md` index �
 
 **Note on location**: when adding a new document, decide by audience — product/requirements content goes in `docs/`, anything that describes code, architecture, data structures, or implementation decisions goes in `specs/`. If unsure, default to `specs/`.
 
+**Keep [specs/zebra-as-is.md](specs/zebra-as-is.md) current**: it is the living snapshot of the implementation. As work progresses — new subsystems, changed interfaces, removed capabilities, shifted gaps — update it in the same change that alters the code. A stale as-is is worse than none.
+
+**Complex features get their own sub-file**: do not bloat [specs/zebra-as-is.md](specs/zebra-as-is.md) with deep detail for a large new feature. Create a dedicated file under `specs/` (e.g. `specs/<feature>-design.md`), reference it from `zebra-as-is.md`, and add it to [specs/AGENTS.md](specs/AGENTS.md).
+
+Each feature sub-file should cover, at minimum:
+
+1. **Goal & scope** — what the feature does, what it explicitly does not do, linked GitLab issue(s).
+2. **Data model changes** — new/changed tables, store interfaces, process/task property keys, migration notes.
+3. **API / interface changes** — new endpoints, task actions, CLI commands, YAML schema additions, or engine hooks.
+4. **Control flow** — key state transitions, routing/synchronization, daemon or background-task interactions.
+5. **Configuration** — new settings, env vars, defaults.
+6. **Open questions / risks** — anything unresolved or deferred.
+
+Keep it terse: a half-page design beats a ten-page one nobody reads.
+
 ## External File Loading
 
 CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
