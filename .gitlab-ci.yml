@@ -31,15 +31,17 @@ e2e:
     - cp /home/opc/projects/zebra/.env .env
     - |
       if [ -n "$E2E_ORACLE_DSN" ]; then
-        export ORACLE_DSN="$E2E_ORACLE_DSN"
-        export ORACLE_USERNAME="$E2E_ORACLE_USERNAME"
-        export ORACLE_PASSWORD="$E2E_ORACLE_PASSWORD"
+        # Use dedicated e2e Oracle schema — patch .env so pytest-dotenv picks it up
+        sed -i "s|^ORACLE_DSN=.*|ORACLE_DSN=$E2E_ORACLE_DSN|" .env
+        sed -i "s|^ORACLE_USERNAME=.*|ORACLE_USERNAME=$E2E_ORACLE_USERNAME|" .env
+        sed -i "s|^ORACLE_PASSWORD=.*|ORACLE_PASSWORD=$E2E_ORACLE_PASSWORD|" .env
         uv run python zebra-agent-web/manage.py migrate --noinput
         uv run python zebra-agent-web/manage.py flush --noinput
       else
-        export ORACLE_DSN=""
-        export ORACLE_USERNAME=""
-        export ORACLE_PASSWORD=""
+        # No e2e Oracle schema — clear Oracle creds so Django falls back to SQLite
+        sed -i "s|^ORACLE_DSN=.*|ORACLE_DSN=|" .env
+        sed -i "s|^ORACLE_USERNAME=.*|ORACLE_USERNAME=|" .env
+        sed -i "s|^ORACLE_PASSWORD=.*|ORACLE_PASSWORD=|" .env
       fi
     - uv run pytest zebra-agent-web/tests/e2e/ -m e2e
 
