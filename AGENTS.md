@@ -32,6 +32,22 @@ The canonical repository is on **GitLab**: https://gitlab.com/gidley/zebra (not 
 CI/CD runs on a self-hosted GitLab Runner on the Oracle VM (`ssh opc`) — see [`README-CICD.md`](README-CICD.md).
 Do not reference `.github/` workflows or GitHub Actions — they have been removed.
 
+### Workflow: GitLab first, then GitHub
+
+**Always commit to GitLab first.** GitHub (`https://github.com/bgidley/zebra`) is a secondary mirror — push there after the GitLab pipeline is green.
+
+**Every commit must reference its GitLab issue** so the work can be collected into a GitHub PR later:
+
+```
+feat: add kill switch endpoint
+
+Implements the one-click halt mechanism for the daemon.
+
+Closes #2
+```
+
+Use `Closes #N`, `Refs #N`, or `Part of #N` in the commit body. When a feature is complete and the pipeline is green, push the branch/commits to GitHub and open a PR there for review/visibility.
+
 ### Linting (MUST before every commit)
 
 Always run both checks before committing — the `lint` CI stage runs these and will fail the pipeline if skipped:
