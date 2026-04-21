@@ -31,19 +31,15 @@ e2e:
     - cp /home/opc/projects/zebra/.env .env
     - |
       if [ -n "$E2E_ORACLE_DSN" ]; then
-        # Use dedicated e2e Oracle schema — patch .env so pytest-dotenv picks it up
-        sed -i "s|^ORACLE_DSN=.*|ORACLE_DSN=$E2E_ORACLE_DSN|" .env
-        sed -i "s|^ORACLE_USERNAME=.*|ORACLE_USERNAME=$E2E_ORACLE_USERNAME|" .env
-        sed -i "s|^ORACLE_PASSWORD=.*|ORACLE_PASSWORD=$E2E_ORACLE_PASSWORD|" .env
+        # Use dedicated e2e Oracle schema
+        export ORACLE_DSN="$E2E_ORACLE_DSN" ORACLE_USERNAME="$E2E_ORACLE_USERNAME" ORACLE_PASSWORD="$E2E_ORACLE_PASSWORD"
         uv run python zebra-agent-web/manage.py migrate --noinput
         uv run python zebra-agent-web/manage.py flush --noinput
+        uv run pytest zebra-agent-web/tests/e2e/ -m e2e
       else
-        # No e2e Oracle schema — clear Oracle creds so Django falls back to SQLite
-        sed -i "s|^ORACLE_DSN=.*|ORACLE_DSN=|" .env
-        sed -i "s|^ORACLE_USERNAME=.*|ORACLE_USERNAME=|" .env
-        sed -i "s|^ORACLE_PASSWORD=.*|ORACLE_PASSWORD=|" .env
+        # No e2e Oracle schema: force SQLite via --ds so Django never sees Oracle DSN
+        uv run pytest zebra-agent-web/tests/e2e/ -m e2e --ds=zebra_agent_web.e2e_settings
       fi
-    - uv run pytest zebra-agent-web/tests/e2e/ -m e2e
 
 e2e-live:
   stage: e2e

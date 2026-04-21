@@ -21,7 +21,9 @@ def django_db_setup(django_test_environment, django_db_blocker):
     - SQLite (no ORACLE_DSN): let pytest-django create a temporary test DB
       and run migrations automatically.
     """
-    if os.environ.get("ORACLE_DSN"):
+    from django.conf import settings
+
+    if settings.DATABASES["default"]["ENGINE"] == "django.db.backends.oracle":
         yield  # Oracle: schema already exists, use it directly
     else:
         from django.test.utils import setup_databases, teardown_databases
