@@ -19,6 +19,8 @@ dependencies = [
     "oracledb>=2.0",
     "django-cors-headers>=4.3",
     "python-dotenv>=1.0",
+    "prometheus-client>=0.21",
+    "structlog>=24.0",
     "zebra-workflow",
     "zebra-agent",
 ]

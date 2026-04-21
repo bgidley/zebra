@@ -24,6 +24,11 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+# Configure structured logging (JSON in production, dev renderer locally)
+from zebra_agent_web.logging_config import configure_logging  # noqa: E402
+
+configure_logging(json_logs=not DEBUG)
+
 # In DEBUG mode, allow all hosts for easier development (e.g., Tailscale access)
 if DEBUG:
     ALLOWED_HOSTS = ["*"]

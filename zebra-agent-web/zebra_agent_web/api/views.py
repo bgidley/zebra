@@ -63,15 +63,80 @@ def pydantic_to_dict(obj):
 
 
 @api_view(["GET"])
-async def health_check(request):
-    """Health check endpoint."""
-    try:
+def health_check(request):
+    """Health check endpoint.
+
+    Returns system status including daemon state and queue depth.
+    """
+    from zebra.core.models import ProcessState
+
+    from zebra_agent_web import asgi as _asgi
+
+    async def _check():
         await agent_engine.ensure_initialized()
-        return Response({"status": "healthy", "agent": "initialized"})
+        wf_engine = engine.get_engine()
+        depth = await wf_engine.store.count_processes_by_state(ProcessState.CREATED)
+        daemon_status = (
+            "running" if _asgi._daemon_task and not _asgi._daemon_task.done() else "not_started"
+        )
+        return depth, daemon_status
+
+    try:
+        queue_depth, daemon_status = async_to_sync(_check)()
+        return Response(
+            {
+                "status": "healthy",
+                "agent": "initialized",
+                "daemon": daemon_status,
+                "queue_depth": queue_depth,
+            }
+        )
     except Exception as e:
         return Response(
             {"status": "unhealthy", "error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
+
+
+# =============================================================================
+# Metrics (Prometheus)
+# =============================================================================
+
+
+@api_view(["GET"])
+def metrics_view(request):
+    """Prometheus metrics endpoint.
+
+    Refreshes gauges from live system state on each scrape, then returns
+    metrics in Prometheus text exposition format.
+    """
+    from django.http import HttpResponse
+    from zebra.core.models import ProcessState
+
+    from zebra_agent_web.api.metrics import (
+        CONTENT_TYPE_LATEST,
+        REGISTRY,
+        budget_remaining_usd,
+        budget_spent_usd,
+        generate_latest,
+        queue_depth,
+    )
+
+    try:
+        bm = agent_engine.get_budget_manager()
+        budget_status = async_to_sync(bm.get_status)()
+        budget_spent_usd.set(budget_status.get("spent_today", 0.0))
+        budget_remaining_usd.set(max(0.0, budget_status.get("available", 0.0)))
+    except Exception:
+        pass
+
+    try:
+        store = engine.get_store()
+        depth = async_to_sync(store.count_processes_by_state)(ProcessState.CREATED)
+        queue_depth.set(depth)
+    except Exception:
+        pass
+
+    return HttpResponse(generate_latest(REGISTRY), content_type=CONTENT_TYPE_LATEST)
 
 
 # =============================================================================
@@ -319,6 +384,10 @@ def execute_goal(request):
     except Exception as e:
         logger.exception("Failed to start goal execution")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    from zebra_agent_web.api.metrics import goals_submitted
+
+    goals_submitted.inc()
 
     serializer = GoalAcceptedSerializer(
         {

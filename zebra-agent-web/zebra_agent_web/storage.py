@@ -208,6 +208,15 @@ class DjangoStore(StateStore):
 
         return await _delete()
 
+    async def count_processes_by_state(self, state: ProcessState) -> int:
+        """Return the number of processes in a given state."""
+
+        @sync_to_async
+        def _count():
+            return ProcessInstanceModel.objects.filter(state=state.value).count()
+
+        return await _count()
+
     async def get_running_processes(self) -> list[ProcessInstance]:
         """Get all processes in RUNNING state."""
 

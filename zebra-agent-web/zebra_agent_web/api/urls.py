@@ -10,8 +10,9 @@ from django.urls import path
 from zebra_agent_web.api import views
 
 urlpatterns = [
-    # Health check
+    # Health check and metrics
     path("health/", views.health_check, name="api_health_check"),
+    path("metrics/", views.metrics_view, name="api_metrics"),
     # Workflow endpoints
     path("workflows/", views.workflows_list, name="api_workflows_list"),
     path("workflows/<str:workflow_name>/", views.workflow_detail, name="api_workflow_detail"),

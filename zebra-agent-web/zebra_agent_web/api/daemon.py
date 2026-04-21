@@ -113,10 +113,12 @@ async def _tick(
     goal = props.get("goal", "(no goal)")[:80]
     priority = props.get("priority", 3)
     deadline = props.get("deadline", "none")
+    run_id = props.get("run_id", "-")
 
     logger.info(
-        "[daemon:pick] %s  pri=%s  deadline=%s  goal=%s",
+        "[daemon:pick] %s  run_id=%s  pri=%s  deadline=%s  goal=%s",
         process.id[:12],
+        run_id,
         priority,
         deadline,
         goal,
@@ -141,7 +143,7 @@ async def _tick(
         return
 
     # 3. Start the process
-    logger.info("[daemon:start] Starting %s...", process.id[:12])
+    logger.info("[daemon:start] Starting %s  run_id=%s...", process.id[:12], run_id)
     try:
         await engine.start_process(process.id)
     except Exception:
@@ -169,23 +171,30 @@ async def _tick(
         await asyncio.sleep(poll_sec)
         waited += poll_sec
 
-    # 5. Log outcome
+    # 5. Log outcome and update metrics
+    from zebra_agent_web.api.metrics import goals_completed
+
     if process.state == ProcessState.COMPLETE:
         cost = (process.properties or {}).get("__total_cost__", 0.0)
         tokens = (process.properties or {}).get("__total_tokens__", 0)
         logger.info(
-            "[daemon:done] %s completed  cost=$%.6f  tokens=%s",
+            "[daemon:done] %s  run_id=%s  completed  cost=$%.6f  tokens=%s",
             process.id[:12],
+            run_id,
             cost,
             tokens,
         )
+        goals_completed.labels(status="success").inc()
     elif process.state == ProcessState.FAILED:
         error = (process.properties or {}).get("__error__", "unknown")
-        logger.error("[daemon:fail] %s failed: %s", process.id[:12], error)
+        logger.error("[daemon:fail] %s  run_id=%s  failed: %s", process.id[:12], run_id, error)
+        goals_completed.labels(status="failed").inc()
     else:
         logger.warning(
-            "[daemon:timeout] %s still %s after %ss — will check again next tick",
+            "[daemon:timeout] %s  run_id=%s  still %s after %ss — will check again next tick",
             process.id[:12],
+            run_id,
             process.state.value,
             max_wait,
         )
+        goals_completed.labels(status="timeout").inc()
