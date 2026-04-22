@@ -1609,6 +1609,21 @@ wheels = [
 ]
 
 [[package]]
+name = "webauthn"
+version = "2.7.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cbor2" },
+    { name = "cryptography" },
+    { name = "pyasn1" },
+    { name = "pyopenssl" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6c/f4/9529bcf85ef46c76842b84c66ffa8ec31f18e3aacd1330b62f440077b45b/webauthn-2.7.1.tar.gz", hash = "sha256:2a1ebbfffc4a83e31d3db5d69113944bc49d05fae77770c2d4e388386cb9656e", size = 124256, upload-time = "2026-02-11T23:36:02.302Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/90/5b/f73513367a9d34b199de916b44306acfa4027b57f7e22200421212b1f763/webauthn-2.7.1-py3-none-any.whl", hash = "sha256:d57e9613c65e0c6a4db7ee715fb49ebdf3c4a6eb3979729eeb497c99105e8181", size = 71684, upload-time = "2026-02-11T23:36:00.864Z" },
+]
+
+[[package]]
 name = "zebra-agent"
 version = "0.1.0"
 source = { editable = "zebra-agent" }
@@ -1654,6 +1669,7 @@ dependencies = [
     { name = "prometheus-client" },
     { name = "python-dotenv" },
     { name = "structlog" },
+    { name = "webauthn" },
     { name = "zebra-agent" },
     { name = "zebra-workflow" },
 ]
@@ -1685,6 +1701,7 @@ requires-dist = [
     { name = "pytest-django", marker = "extra == 'dev'", specifier = ">=4.5" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "structlog", specifier = ">=24.0" },
+    { name = "webauthn", specifier = ">=2.0" },
     { name = "zebra-agent", editable = "zebra-agent" },
     { name = "zebra-workflow", editable = "zebra-py" },
 ]

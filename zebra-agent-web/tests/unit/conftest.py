@@ -12,4 +12,6 @@ import os
 import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "zebra_agent_web.test_settings")
+# Allow sync ORM calls from async test contexts (pytest-asyncio runs an event loop)
+os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 django.setup()

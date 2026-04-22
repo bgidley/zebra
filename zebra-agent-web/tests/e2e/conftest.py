@@ -138,3 +138,19 @@ def agent_loop(workflow_library, workflow_engine, django_stores, cassette_provid
     )
 
     return loop
+
+
+@pytest.fixture
+def test_user(db):
+    """Create a test user for authentication."""
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    return User.objects.create_user(username="testuser")
+
+
+@pytest.fixture
+def authenticated_async_client(async_client, test_user):
+    """Return an async client authenticated as test_user."""
+    async_client.force_login(test_user)
+    return async_client

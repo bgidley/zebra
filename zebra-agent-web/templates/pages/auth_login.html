@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In - Zebra Agent{% endblock %}
+{% block page_title %}Sign In{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto">
+    <div class="bg-gray-800 rounded-lg shadow-lg p-8 border border-gray-700">
+        <div class="text-center mb-8">
+            <svg class="mx-auto h-12 w-12 text-indigo-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+            </svg>
+            <h1 class="text-2xl font-bold text-white">Sign In</h1>
+            <p class="text-gray-400 mt-2">Use your passkey to sign in to Zebra Agent.</p>
+        </div>
+
+        <div id="login-form">
+            <button id="signin-btn"
+                    class="w-full flex items-center justify-center px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">
+                <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                Sign in with Passkey
+            </button>
+        </div>
+
+        <div id="login-success" class="hidden text-center">
+            <svg class="mx-auto h-12 w-12 text-green-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <h2 class="text-xl font-bold text-white mb-2">Signed In!</h2>
+            <p class="text-gray-400">Redirecting to dashboard...</p>
+        </div>
+
+        <div id="login-error" class="hidden mt-4 p-4 bg-red-900/30 border border-red-700 rounded-lg">
+            <p class="text-red-400 text-sm" id="error-message"></p>
+        </div>
+
+        <div class="mt-6 text-center">
+            <p class="text-xs text-gray-500">
+                Don't have a passkey? Make sure you've completed setup first.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/webauthn.js"></script>
+<script>
+document.getElementById('signin-btn').addEventListener('click', async function() {
+    const result = await authenticateWithPasskey();
+    if (result.success) {
+        document.getElementById('login-form').classList.add('hidden');
+        document.getElementById('login-success').classList.remove('hidden');
+        setTimeout(() => window.location.href = '/', 1500);
+    } else {
+        showError(result.error || 'Authentication failed. Please try again.');
+    }
+});
+
+function showError(message) {
+    const errorDiv = document.getElementById('login-error');
+    document.getElementById('error-message').textContent = message;
+    errorDiv.classList.remove('hidden');
+}
+</script>
+{% endblock %}

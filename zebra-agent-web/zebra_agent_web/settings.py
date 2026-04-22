@@ -38,6 +38,8 @@ INSTALLED_APPS = [
     "daphne",  # ASGI server, must be first for channels
     "django.contrib.auth",
     "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
@@ -48,7 +50,13 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.contrib.auth.middleware.LoginRequiredMiddleware",
+    "zebra_agent_web.middleware.SetupRedirectMiddleware",
 ]
 
 ROOT_URLCONF = "zebra_agent_web.urls"
@@ -160,6 +168,9 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.JSONParser",
         "rest_framework.parsers.MultiPartParser",
     ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
     "EXCEPTION_HANDLER": "zebra_agent_web.api.exceptions.custom_exception_handler",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
@@ -171,6 +182,26 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Vite dev server
     "http://127.0.0.1:3000",
 ]
+
+# Authentication
+LOGIN_URL = "/auth/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/auth/login/"
+
+# Sessions
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
+SESSION_COOKIE_AGE = 1209600  # 2 weeks
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SAMESITE = "Lax"
+
+# Messages
+MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"
+
+# WebAuthn (passkey) settings
+WEBAUTHN_RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "Zebra Agent")
+WEBAUTHN_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
+WEBAUTHN_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "http://localhost:8000")
 
 # Zebra Agent settings
 # Storage is handled by Django ORM (see DATABASES config above)

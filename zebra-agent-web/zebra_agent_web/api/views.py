@@ -11,8 +11,10 @@ import threading
 import uuid
 
 from asgiref.sync import async_to_sync, sync_to_async
+from django.contrib.auth.decorators import login_not_required
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from zebra.core.models import TaskResult
 
@@ -63,6 +65,8 @@ def pydantic_to_dict(obj):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
+@login_not_required
 def health_check(request):
     """Health check endpoint.
 
@@ -103,6 +107,8 @@ def health_check(request):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
+@login_not_required
 def metrics_view(request):
     """Prometheus metrics endpoint.
 

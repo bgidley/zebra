@@ -7,10 +7,12 @@ pytestmark = pytest.mark.e2e
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_golden_path_goal(async_client, agent_loop):
+async def test_golden_path_goal(authenticated_async_client, agent_loop):
     """
     Test the golden path: submit a goal, poll until complete, check output.
     """
+    async_client = authenticated_async_client
+
     # 1. Submit goal
     response = await async_client.post(
         "/api/goals/", {"goal": "What is the capital of France?"}, content_type="application/json"

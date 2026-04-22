@@ -21,6 +21,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "prometheus-client>=0.21",
     "structlog>=24.0",
+    "webauthn>=2.0",
     "zebra-workflow",
     "zebra-agent",
 ]

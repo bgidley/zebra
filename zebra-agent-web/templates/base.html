@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}Zebra Agent{% endblock %}</title>
     
     <!-- Tailwind CSS -->
@@ -81,6 +82,25 @@
                     {% include "partials/nav_item.html" with url="/workflows/" icon="library" label="Workflows" %}
                 </div>
             </nav>
+
+            <!-- User -->
+            {% if user.is_authenticated %}
+            <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-medium">
+                            {{ user.username|first|upper }}
+                        </div>
+                        <span class="text-sm text-gray-300">{{ user.username }}</span>
+                    </div>
+                    <a href="/auth/logout/" class="text-gray-400 hover:text-white" title="Sign out">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </a>
+                </div>
+            </div>
+            {% endif %}
         </aside>
         
         <!-- Main content -->

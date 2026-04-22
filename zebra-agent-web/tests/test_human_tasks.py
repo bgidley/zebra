@@ -240,11 +240,16 @@ class _StubLibrary:
 
 
 @pytest.fixture
-def client():
-    """Django async test client."""
+def client(db):
+    """Django async test client, authenticated as a test user."""
+    from django.contrib.auth import get_user_model
     from django.test import AsyncClient
 
-    return AsyncClient()
+    User = get_user_model()
+    user = User.objects.create_user(username="testuser")
+    c = AsyncClient()
+    c.force_login(user)
+    return c
 
 
 async def _start_workflow(wf_engine, definition):

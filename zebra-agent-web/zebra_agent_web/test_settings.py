@@ -9,5 +9,12 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": ":memory:",
+        "OPTIONS": {
+            "timeout": 20,
+        },
     }
 }
+
+# Disable secure cookies for tests
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
