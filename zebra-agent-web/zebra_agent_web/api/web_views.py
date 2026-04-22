@@ -30,6 +30,39 @@ logger = logging.getLogger(__name__)
 _active_tasks: dict[str, asyncio.Task] = {}
 
 
+def _identity_context() -> dict:
+    """Return identity fields for template context (sync, safe to call from any view)."""
+    try:
+        from zebra_agent_web.api.identity import get_identity_sync
+
+        identity = get_identity_sync()
+        return {
+            "user_display_name": identity["display_name"],
+            "user_identity_id": identity["identity_id"],
+        }
+    except Exception:
+        return {"user_display_name": "", "user_identity_id": ""}
+
+
+# =============================================================================
+# First-run setup
+# =============================================================================
+
+
+def setup_view(request):
+    """First-run setup page — capture user display name."""
+    from zebra_agent_web.api.identity import set_identity_sync
+
+    if request.method == "POST":
+        display_name = request.POST.get("display_name", "").strip()
+        if display_name:
+            set_identity_sync(display_name)
+            return redirect("/")
+        return render(request, "pages/setup.html", {"error": "Please enter a display name."})
+
+    return render(request, "pages/setup.html", {})
+
+
 # =============================================================================
 # Dashboard
 # =============================================================================
@@ -70,6 +103,7 @@ async def dashboard(request):
         pass  # Budget manager not initialized
 
     context = {
+        **_identity_context(),
         "workflows_count": len(workflows),
         "total_runs": total_runs,
         "success_rate": f"{success_rate:.0%}",
@@ -373,6 +407,7 @@ async def run_goal_queue(request):
     from datetime import UTC, datetime
 
     run_id = str(_uuid.uuid4())
+    identity = _identity_context()
     properties = {
         "goal": goal,
         "run_id": run_id,
@@ -381,6 +416,8 @@ async def run_goal_queue(request):
         "__llm_provider_name__": "anthropic",
         "__llm_model__": resolved_model,
         "__started_at__": datetime.now(UTC).isoformat(),
+        "__user_display_name__": identity["user_display_name"],
+        "__user_identity_id__": identity["user_identity_id"],
     }
     if deadline:
         properties["deadline"] = deadline

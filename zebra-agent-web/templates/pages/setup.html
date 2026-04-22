@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup - Zebra Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-full flex items-center justify-center">
+    <div class="w-full max-w-sm px-6">
+        <!-- Logo -->
+        <div class="flex items-center justify-center gap-3 mb-8">
+            <svg class="h-10 w-10 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span class="text-2xl font-bold text-white">Zebra Agent</span>
+        </div>
+
+        <div class="bg-gray-800 rounded-xl shadow-lg p-8">
+            <h1 class="text-xl font-semibold text-white mb-1">Welcome</h1>
+            <p class="text-gray-400 text-sm mb-6">Enter your display name to get started.</p>
+
+            {% if error %}
+            <div class="mb-4 p-3 rounded-lg bg-red-900/50 border border-red-700 text-red-300 text-sm">
+                {{ error }}
+            </div>
+            {% endif %}
+
+            <form method="post" action="/setup/">
+                {% csrf_token %}
+                <div class="mb-5">
+                    <label for="display_name" class="block text-sm font-medium text-gray-300 mb-1">
+                        Display name
+                    </label>
+                    <input
+                        type="text"
+                        id="display_name"
+                        name="display_name"
+                        autofocus
+                        required
+                        maxlength="255"
+                        placeholder="e.g. Ben"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white
+                               placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500
+                               focus:border-transparent text-sm"
+                    >
+                </div>
+                <button
+                    type="submit"
+                    class="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium
+                           rounded-lg text-sm transition-colors focus:outline-none focus:ring-2
+                           focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-800"
+                >
+                    Get started
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
