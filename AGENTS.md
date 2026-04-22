@@ -47,21 +47,56 @@ The canonical repository is on **GitLab**: https://gitlab.com/gidley/zebra (not 
 CI/CD runs on a self-hosted GitLab Runner on the Oracle VM (`ssh opc`) — see [`README-CICD.md`](README-CICD.md).
 Do not reference `.github/` workflows or GitHub Actions — they have been removed.
 
-### Workflow: GitLab first, then GitHub
+### Workflow: feature branch → GitLab CI → GitHub PR
 
-**Always commit to GitLab first.** GitHub (`https://github.com/bgidley/zebra`) is a secondary mirror — push there after the GitLab pipeline is green.
+All feature work happens on a named branch — **never commit directly to `master`**.
 
-**Every commit must reference its GitLab issue** so the work can be collected into a GitHub PR later:
-
-```
-feat: add kill switch endpoint
-
-Implements the one-click halt mechanism for the daemon.
-
-Closes #2
+**1. Create a branch**
+```bash
+git checkout master && git pull origin master
+git checkout -b fN/short-description   # e.g. f4/ethics-gate
 ```
 
-Use `Closes #N`, `Refs #N`, or `Part of #N` in the commit body. When a feature is complete and the pipeline is green, push the branch/commits to GitHub and open a PR there for review/visibility.
+**2. Work and commit** — every commit must reference its GitLab issue:
+```
+feat: add ethics gate action
+
+Part of #4
+```
+Use `Closes #N` on the final commit, `Part of #N` / `Refs #N` on interim ones.
+
+**3. Push to GitLab and watch CI**
+```bash
+git push origin fN/short-description
+```
+Pipeline runs `lint → unit → e2e` (`deploy` is skipped on branches automatically).
+Watch via `glab`:
+```bash
+glab ci list --repo gidley/zebra --per-page 1
+glab ci trace --repo gidley/zebra <job-name>   # stream a failing job's log
+```
+Fix any failures before proceeding.
+
+**4. Push branch to GitHub and open a PR** (once GitLab pipeline is green)
+```bash
+git push github fN/short-description
+gh pr create \
+  --repo bgidley/zebra \
+  --base master \
+  --head fN/short-description \
+  --title "F<N>: <short description>" \
+  --body "Implements #<N> (GitLab). GitLab pipeline: <pipeline URL>."
+```
+
+**5. Merge to master**
+```bash
+git checkout master
+git merge --no-ff fN/short-description -m "Merge fN/short-description — Closes #N"
+git push origin master          # triggers deploy on GitLab
+git push github master          # closes the GitHub PR
+git branch -d fN/short-description
+git push origin --delete fN/short-description
+```
 
 ### Linting (MUST before every commit)
 
