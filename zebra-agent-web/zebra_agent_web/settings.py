@@ -48,6 +48,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "zebra_agent_web.api.middleware.SetupRequiredMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
 

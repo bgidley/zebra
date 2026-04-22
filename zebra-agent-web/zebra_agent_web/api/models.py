@@ -289,9 +289,14 @@ class SystemStateModel(models.Model):
     halted_at = models.DateTimeField(null=True, blank=True)
     halted_reason = models.CharField(max_length=500, blank=True, default="")
 
+    # Single-user identity (F4)
+    user_display_name = models.CharField(max_length=255, blank=True, default="")
+    user_identity_id = models.CharField(max_length=255, blank=True, default="")
+    setup_completed = models.BooleanField(default=False)
+
     class Meta:
         db_table = "zebra_system_state"
         verbose_name = "System State"
 
     def __str__(self):
-        return f"SystemState halted={self.halted}"
+        return f"SystemState halted={self.halted} user={self.user_display_name!r}"

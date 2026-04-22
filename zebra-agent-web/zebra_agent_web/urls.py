@@ -15,6 +15,8 @@ from zebra_agent_web.api import web_views
 urlpatterns = [
     # API endpoints (JSON)
     path("api/", include("zebra_agent_web.api.urls")),
+    # First-run setup
+    path("setup/", web_views.setup_view, name="setup"),
     # Web UI (HTML + HTMX) - Agent focused
     path("", web_views.dashboard, name="dashboard"),
     # Run Goal
