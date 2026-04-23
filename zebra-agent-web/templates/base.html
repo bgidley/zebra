@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}Zebra Agent{% endblock %}</title>
     
     <!-- Tailwind CSS -->
@@ -82,14 +83,33 @@
                 </div>
             </nav>
 
-            {% if user_display_name %}
-            <!-- User identity badge -->
-            <div class="absolute bottom-0 left-0 right-0 px-6 py-4 border-t border-gray-700">
-                <div class="flex items-center gap-2">
-                    <div class="h-7 w-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">
-                        {{ user_display_name|slice:":1"|upper }}
+            <!-- User -->
+            {% if user.is_authenticated or user_display_name %}
+            <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-medium">
+                            {% if user_display_name %}
+                                {{ user_display_name|slice:":1"|upper }}
+                            {% else %}
+                                {{ user.username|first|upper }}
+                            {% endif %}
+                        </div>
+                        <span class="text-sm text-gray-300 truncate">
+                            {% if user_display_name %}
+                                {{ user_display_name }}
+                            {% else %}
+                                {{ user.username }}
+                            {% endif %}
+                        </span>
                     </div>
-                    <span class="text-sm text-gray-300 truncate">{{ user_display_name }}</span>
+                    {% if user.is_authenticated %}
+                    <a href="/auth/logout/" class="text-gray-400 hover:text-white" title="Sign out">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </a>
+                    {% endif %}
                 </div>
             </div>
             {% endif %}

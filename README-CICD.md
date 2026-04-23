@@ -17,7 +17,7 @@ lint  →  unit  →  e2e  →  deploy
 |---|---|---|---|
 | **lint** | `ruff check .` + `ruff format --check .` | — | ~3s |
 | **unit** | `pytest -m "not e2e"` (all packages) | SQLite | ~25s |
-| **e2e** | `pytest zebra-agent-web/tests/e2e/ -m e2e` | SQLite + cassette LLM | ~30s |
+| **e2e** | `pytest zebra-agent-web/tests/e2e/ -m e2e` | Oracle E2E schema + cassette LLM | ~30s |
 | **deploy** | `podman-compose up -d --build` | Oracle (prod) | ~15-70s |
 
 The `e2e-live` job (real Anthropic API + Oracle DB) only runs on a scheduled pipeline
@@ -83,12 +83,19 @@ Runs against SQLite (no `ORACLE_DSN` injected). Covers all four packages.
 ### e2e
 ```bash
 uv sync --all-packages --frozen
-ORACLE_DSN= uv run pytest zebra-agent-web/tests/e2e/ -m e2e
+cp /home/opc/projects/zebra/.env .env
+export ORACLE_DSN="$E2E_ORACLE_DSN" ORACLE_USERNAME="$E2E_ORACLE_USERNAME" ORACLE_PASSWORD="$E2E_ORACLE_PASSWORD"
+uv run python zebra-agent-web/manage.py migrate --noinput --fake-initial
+uv run python zebra-agent-web/manage.py flush --noinput
+uv run pytest zebra-agent-web/tests/e2e/ -m e2e
 ```
 
-`ORACLE_DSN=` overrides the injected variable so Django falls through to SQLite.
-`ANTHROPIC_API_KEY` is still injected by the runner — the cassette recorder
-needs it when recording new LLM interactions (`VCR_RECORD_MODE=once`).
+Uses the dedicated `ZEBRA_TEST` Oracle E2E schema. `ANTHROPIC_API_KEY` is still
+injected by the runner — the cassette recorder needs it when recording new LLM
+interactions (`VCR_RECORD_MODE=once`).
+
+If `E2E_ORACLE_DSN` is not set (e.g. local development without Oracle), the job
+falls back to file-based SQLite with WAL mode (`--ds=zebra_agent_web.e2e_settings`).
 
 LLM responses are replayed from cassettes in `zebra-agent-web/tests/e2e/cassettes/`.
 To re-record, run with `VCR_RECORD_MODE=rewrite` (requires real API key).

@@ -395,6 +395,21 @@ uv run pytest zebra-agent-web/tests/test_agent_loop_integration.py -v
 DJANGO_SETTINGS_MODULE=zebra_agent_web.settings uv run pytest -v
 ```
 
+#### Async E2E Tests — SQLite Lock Warning
+
+E2E tests that use `AsyncClient` + SQLite are prone to `database table is locked` failures because `AsyncClient` runs requests in an async event loop while `sync_to_async` opens separate SQLite connections. Two rules:
+
+1. **Always use `transaction=True`** on async django_db tests that rely on fixture-created records (e.g., `test_user`):
+   ```python
+   @pytest.mark.django_db(transaction=True)
+   @pytest.mark.asyncio
+   async def test_something(authenticated_async_client):
+       ...
+   ```
+   Without `transaction=True`, the async request handler may not see uncommitted fixture data and return `403 Forbidden`.
+
+2. **In CI, use Oracle for e2e tests**. The `e2e` job in `.gitlab-ci.yml` automatically uses the `E2E_ORACLE_*` schema when those variables are available. Ensure they are **unprotected** in GitLab CI/CD variables so they are injected into feature-branch pipelines.
+
 ### Integration Tests
 
 The `test_agent_loop_integration.py` tests run the complete agent workflow against a real Oracle database and make actual LLM API calls. These tests:

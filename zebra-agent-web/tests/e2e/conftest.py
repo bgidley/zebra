@@ -138,3 +138,25 @@ def agent_loop(workflow_library, workflow_engine, django_stores, cassette_provid
     )
 
     return loop
+
+
+@pytest.fixture
+def test_user(db):
+    """Create a test user for authentication."""
+    from django.conf import settings
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    user = User.objects.create_user(username="testuser")
+
+    # Avoid SQLite lock contention in SetupRedirectMiddleware during async tests
+    settings._USERS_EXIST_CACHE = True
+
+    return user
+
+
+@pytest.fixture
+def authenticated_async_client(async_client, test_user):
+    """Return an async client authenticated as test_user."""
+    async_client.force_login(test_user)
+    return async_client

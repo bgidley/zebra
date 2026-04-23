@@ -8,6 +8,8 @@ client, which opens new connections that must see the same DB as the test.
 
 from pathlib import Path
 
+from django.db.backends.signals import connection_created
+
 from zebra_agent_web.settings import *  # noqa: F401, F403
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -16,5 +18,26 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        "OPTIONS": {
+            "timeout": 30,
+        },
     }
 }
+
+
+# Turn on WAL mode for SQLite
+def configure_sqlite_pragmas(sender, connection, **kwargs):
+    if connection.vendor == "sqlite":
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA journal_mode = WAL;")
+        cursor.execute("PRAGMA synchronous = NORMAL;")
+
+
+connection_created.connect(configure_sqlite_pragmas)
+
+# Use memory cache for sessions to avoid SQLite lock contention
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+
+# Disable secure cookies for tests
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False

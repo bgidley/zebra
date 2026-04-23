@@ -473,6 +473,20 @@ async def test_simple_workflow(engine, simple_definition):
     assert process.state == ProcessState.COMPLETE
 ```
 
+### Async Django Tests with SQLite — Known Lock Issues
+
+Using Django's `AsyncClient` with **SQLite** in pytest-django tests is a known source of `database table is locked` failures. The stack involves:
+
+- `AsyncClient` runs requests in an async event loop
+- DRF `SessionAuthentication` queries `auth_user` on every request
+- Our async store implementations wrap ORM calls with `sync_to_async`, which spawns thread-pool workers with **separate SQLite connections**
+- SQLite's single-writer model causes writer starvation under concurrent access
+
+**Mitigations applied:**
+1. **Unit tests**: Use `:memory:` SQLite + remove `SetupRedirectMiddleware` + cache-based sessions + WAL mode for file-based tests. See `zebra_agent_web/test_settings.py` and `e2e_settings.py`.
+2. **E2E tests in CI**: Use the dedicated **Oracle E2E schema** (`E2E_ORACLE_DSN`) instead of SQLite. Oracle handles concurrent readers/writers natively. The `e2e` job in `.gitlab-ci.yml` already supports this — the only requirement is that the `E2E_ORACLE_*` CI variables are **unprotected** (or the branch is protected), otherwise they are not injected into feature-branch pipelines and the job silently falls back to SQLite.
+3. **`transaction=True` for async fixtures**: When `AsyncClient` tests rely on fixtures that create DB records (e.g., `test_user`), use `@pytest.mark.django_db(transaction=True)` so fixture data is committed and visible across connections/threads. Without it, the async request handler may not see uncommitted fixture data and return `403 Forbidden`.
+
 ### Test Coverage
 
 Coverage is configured to:

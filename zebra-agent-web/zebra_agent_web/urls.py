@@ -13,6 +13,8 @@ from django.urls import include, path
 from zebra_agent_web.api import web_views
 
 urlpatterns = [
+    # Auth endpoints (passkey)
+    path("auth/", include("zebra_agent_web.api.auth_urls")),
     # API endpoints (JSON)
     path("api/", include("zebra_agent_web.api.urls")),
     # First-run setup

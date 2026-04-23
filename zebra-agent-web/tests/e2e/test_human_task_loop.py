@@ -5,9 +5,9 @@ import pytest
 pytestmark = pytest.mark.e2e
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_human_task_loop(async_client, workflow_engine, workflow_library):
+async def test_human_task_loop(authenticated_async_client, workflow_engine, workflow_library):
     """
     Test the human task loop:
     1. Start a workflow that has an auto:false task
@@ -15,6 +15,7 @@ async def test_human_task_loop(async_client, workflow_engine, workflow_library):
     3. Submit the form completion
     4. Ensure the workflow resumes and completes
     """
+    async_client = authenticated_async_client
     # 1. Create a custom workflow with an auto:false task
     yaml_content = """
 name: "Test Human Task"

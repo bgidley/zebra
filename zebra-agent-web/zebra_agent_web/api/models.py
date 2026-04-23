@@ -300,3 +300,26 @@ class SystemStateModel(models.Model):
 
     def __str__(self):
         return f"SystemState halted={self.halted} user={self.user_display_name!r}"
+
+
+class WebAuthnCredential(models.Model):
+    """Stores a WebAuthn credential (passkey) for a Django user."""
+
+    user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.CASCADE,
+        related_name="webauthn_credentials",
+    )
+    # Store credential ID as a base64url-encoded string (Oracle doesn't allow UNIQUE on BLOB)
+    credential_id = models.CharField(max_length=1500, db_index=True, unique=True)
+    public_key = models.BinaryField()
+    sign_count = models.PositiveIntegerField(default=0)
+    transports = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "zebra_webauthn_credentials"
+
+    def __str__(self):
+        return f"Credential for {self.user.username}"
