@@ -35,17 +35,8 @@ e2e:
       if [ -n "$E2E_ORACLE_DSN" ]; then
         # Use dedicated e2e Oracle schema
         export ORACLE_DSN="$E2E_ORACLE_DSN" ORACLE_USERNAME="$E2E_ORACLE_USERNAME" ORACLE_PASSWORD="$E2E_ORACLE_PASSWORD"
-        # Drop stale column that predates the current migration set
-        uv run python -c "
-import django
-django.setup()
-from django.db import connection
-with connection.cursor() as cursor:
-    try:
-        cursor.execute('ALTER TABLE zebra_system_state DROP COLUMN setup_completed')
-    except Exception as e:
-        print('setup_completed column drop skipped:', e)
-"
+        # Drop stale column that predates the current migration set (ignore error if absent)
+        uv run python -c "import django; django.setup(); from django.db import connection; cursor=connection.cursor(); cursor.execute('ALTER TABLE zebra_system_state DROP COLUMN setup_completed')" || true
         uv run python zebra-agent-web/manage.py migrate --noinput --fake-initial
         uv run python zebra-agent-web/manage.py flush --noinput
         uv run pytest zebra-agent-web/tests/e2e/ -m e2e
