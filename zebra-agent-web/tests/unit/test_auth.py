@@ -9,30 +9,37 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
+
 from zebra_agent_web.api.models import WebAuthnCredential
 
 User = get_user_model()
 
-pytestmark = [pytest.mark.django_db(transaction=True)]
+_TEST_MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.contrib.auth.middleware.LoginRequiredMiddleware",
+    "zebra_agent_web.middleware.SetupRedirectMiddleware",
+]
 
+pytestmark = [
+    pytest.mark.django_db(transaction=True),
+    pytest.mark.override_settings(MIDDLEWARE=_TEST_MIDDLEWARE),
+]
 
 # ===========================================================================
 # Fixtures
 # ===========================================================================
 
-
 @pytest.fixture(autouse=True)
 def clear_challenge_store():
     """Clear the in-memory challenge store before each test."""
     from zebra_agent_web.api.auth_views import _challenge_store
-
     _challenge_store.clear()
-
-
-@pytest.fixture
-def test_user(db):
-    """Create a test user."""
-    return User.objects.create_user(username="testuser")
 
 
 @pytest.fixture
@@ -52,14 +59,6 @@ def client():
     from django.test import AsyncClient
 
     return AsyncClient()
-
-
-@pytest.fixture
-def authenticated_client(client, test_user):
-    """Return an async client logged in as test_user."""
-    client.force_login(test_user)
-    return client
-
 
 # ===========================================================================
 # Setup Redirect Middleware

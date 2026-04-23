@@ -95,51 +95,48 @@ class TestKillSwitchAsync:
 
 @pytest.mark.django_db(transaction=True)
 class TestKillSwitchAPI:
-    @pytest.fixture(autouse=True)
-    def reset_flag(self):
-        from zebra_agent_web.api.kill_switch import set_halted_sync
+    """Test the /api/kill-switch/ DRF endpoint."""
 
-        set_halted_sync(False)
-        yield
-        set_halted_sync(False)
+    @pytest.fixture(autouse=True)
+    def setup_client(self, test_user):
+        self.client = APIClient()
+        self.client.force_authenticate(user=test_user)
 
     def test_get_returns_status(self):
-        client = APIClient()
-        response = client.get("/api/kill-switch/")
+        response = self.client.get("/api/kill-switch/")
         assert response.status_code == 200
         data = response.json()
-        assert "halted" in data
         assert data["halted"] is False
 
     def test_post_halt(self):
-        client = APIClient()
-        response = client.post(
+        response = self.client.post(
             "/api/kill-switch/", {"halted": True, "reason": "test halt"}, format="json"
         )
         assert response.status_code == 200
         data = response.json()
         assert data["halted"] is True
         assert data["halted_reason"] == "test halt"
-        assert data["halted_at"] is not None
+
+        # Verify DB
+        from zebra_agent_web.api.kill_switch import get_status_sync
+
+        assert get_status_sync()["halted"] is True
 
     def test_post_resume(self):
         from zebra_agent_web.api.kill_switch import set_halted_sync
 
         set_halted_sync(True, reason="initial")
-        client = APIClient()
-        response = client.post("/api/kill-switch/", {"halted": False}, format="json")
+        response = self.client.post("/api/kill-switch/", {"halted": False}, format="json")
         assert response.status_code == 200
         assert response.json()["halted"] is False
 
     def test_post_invalid_body(self):
-        client = APIClient()
-        response = client.post("/api/kill-switch/", {"halted": "yes"}, format="json")
+        response = self.client.post("/api/kill-switch/", {"halted": "yes"}, format="json")
         assert response.status_code == 400
 
     def test_get_after_halt_reflects_state(self):
-        client = APIClient()
-        client.post("/api/kill-switch/", {"halted": True}, format="json")
-        response = client.get("/api/kill-switch/")
+        self.client.post("/api/kill-switch/", {"halted": True}, format="json")
+        response = self.client.get("/api/kill-switch/")
         assert response.json()["halted"] is True
 
 

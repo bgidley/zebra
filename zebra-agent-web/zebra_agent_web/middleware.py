@@ -6,6 +6,7 @@ setup page so the first admin can register a passkey.
 
 import asyncio
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
 from django.utils.decorators import sync_and_async_middleware
@@ -50,20 +51,31 @@ def SetupRedirectMiddleware(get_response):
     middleware is a no-op.
     """
     if asyncio.iscoroutinefunction(get_response):
-
         async def middleware(request):
             if _is_exempt(request.path_info):
                 return await get_response(request)
+            
+            # Fast check: skip DB if we already know users exist in this process
+            if getattr(settings, "_USERS_EXIST_CACHE", False):
+                return await get_response(request)
+
             if not await User.objects.aexists():
                 return HttpResponseRedirect(_SETUP_URL)
+            
+            # Cache the fact that users exist to avoid DB checks on every request
+            settings._USERS_EXIST_CACHE = True
             return await get_response(request)
     else:
-
         def middleware(request):
             if _is_exempt(request.path_info):
                 return get_response(request)
+                
+            if getattr(settings, "_USERS_EXIST_CACHE", False):
+                return get_response(request)
+
             if not User.objects.exists():
                 return HttpResponseRedirect(_SETUP_URL)
+                
+            settings._USERS_EXIST_CACHE = True
             return get_response(request)
-
     return middleware

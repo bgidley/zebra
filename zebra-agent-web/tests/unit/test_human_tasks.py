@@ -12,6 +12,8 @@ from zebra.core.models import ProcessDefinition, RoutingDefinition, TaskDefiniti
 from zebra.storage.memory import InMemoryStore
 from zebra.tasks.registry import ActionRegistry
 
+pytestmark = [pytest.mark.django_db(transaction=True)]
+
 # ---------------------------------------------------------------------------
 # Workflow definitions for testing
 # ---------------------------------------------------------------------------
