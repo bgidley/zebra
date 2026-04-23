@@ -27,13 +27,16 @@ _TEST_MIDDLEWARE = [
 
 pytestmark = [
     pytest.mark.django_db(transaction=True),
-    pytest.mark.override_settings(MIDDLEWARE=_TEST_MIDDLEWARE),
 ]
 
 # ===========================================================================
 # Fixtures
 # ===========================================================================
 
+@pytest.fixture(autouse=True)
+def setup_middleware(settings):
+    """Re-add SetupRedirectMiddleware since test_settings.py removes it to avoid SQLite locking."""
+    settings.MIDDLEWARE = _TEST_MIDDLEWARE
 
 @pytest.fixture(autouse=True)
 def clear_challenge_store():
