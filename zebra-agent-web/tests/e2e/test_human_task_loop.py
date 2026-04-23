@@ -5,7 +5,7 @@ import pytest
 pytestmark = pytest.mark.e2e
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_human_task_loop(authenticated_async_client, workflow_engine, workflow_library):
     """
