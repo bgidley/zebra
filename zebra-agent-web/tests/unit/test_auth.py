@@ -33,10 +33,12 @@ pytestmark = [
 # Fixtures
 # ===========================================================================
 
+
 @pytest.fixture(autouse=True)
 def setup_middleware(settings):
     """Re-add SetupRedirectMiddleware since test_settings.py removes it to avoid SQLite locking."""
     settings.MIDDLEWARE = _TEST_MIDDLEWARE
+
 
 @pytest.fixture(autouse=True)
 def clear_challenge_store():
