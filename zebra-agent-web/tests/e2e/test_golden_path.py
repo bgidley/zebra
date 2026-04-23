@@ -5,7 +5,7 @@ import pytest
 pytestmark = pytest.mark.e2e
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_golden_path_goal(authenticated_async_client, agent_loop):
     """
