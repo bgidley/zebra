@@ -14,6 +14,15 @@ from zebra.tasks.registry import ActionRegistry
 
 pytestmark = [pytest.mark.django_db(transaction=True)]
 
+
+@pytest.fixture(autouse=True)
+def _ensure_setup_complete(db):
+    """Mark first-run setup as complete so SetupRequiredMiddleware doesn't redirect."""
+    from zebra_agent_web.api.identity import set_identity_sync
+
+    set_identity_sync("Test User")
+
+
 # ---------------------------------------------------------------------------
 # Workflow definitions for testing
 # ---------------------------------------------------------------------------
