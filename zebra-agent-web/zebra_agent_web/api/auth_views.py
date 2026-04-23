@@ -96,9 +96,7 @@ def begin_register(request):
         user_display_name=username,
         challenge=challenge,
         exclude_credentials=[
-            PublicKeyCredentialDescriptor(
-                id=base64url_to_bytes(cred.credential_id)
-            )
+            PublicKeyCredentialDescriptor(id=base64url_to_bytes(cred.credential_id))
             for cred in WebAuthnCredential.objects.filter(user__username=username)
         ],
         authenticator_selection=AuthenticatorSelectionCriteria(
@@ -216,7 +214,7 @@ def complete_authenticate(request):
 
     # Find credential by ID
     credential_id_b64 = credential_json.get("id", "")
-    
+
     # ensure padding is removed to match stored version
     stored_cred_id = credential_id_b64.rstrip("=")
 

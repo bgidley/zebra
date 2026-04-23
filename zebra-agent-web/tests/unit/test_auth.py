@@ -52,6 +52,7 @@ def clear_challenge_store():
 def test_credential(db, test_user):
     """Create a test WebAuthn credential."""
     import base64
+
     return WebAuthnCredential.objects.create(
         user=test_user,
         credential_id=base64.urlsafe_b64encode(b"test-credential-id").decode("ascii").rstrip("="),
@@ -277,6 +278,7 @@ class TestCompleteRegister:
         user = User.objects.get(username="newuser")
         assert user.webauthn_credentials.count() == 1
         import base64
+
         expected_id = base64.urlsafe_b64encode(b"cred-id").decode("ascii").rstrip("=")
         assert user.webauthn_credentials.first().credential_id == expected_id
 

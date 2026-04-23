@@ -148,10 +148,10 @@ def test_user(db):
 
     User = get_user_model()
     user = User.objects.create_user(username="testuser")
-    
+
     # Avoid SQLite lock contention in SetupRedirectMiddleware during async tests
     settings._USERS_EXIST_CACHE = True
-    
+
     return user
 
 
