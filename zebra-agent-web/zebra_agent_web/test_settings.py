@@ -23,6 +23,11 @@ SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 if "zebra_agent_web.middleware.SetupRedirectMiddleware" in MIDDLEWARE:  # noqa: F405
     MIDDLEWARE.remove("zebra_agent_web.middleware.SetupRedirectMiddleware")  # noqa: F405
 
+# Remove LoginRequiredMiddleware in tests so anonymous clients can access all views.
+# Individual views that require auth are still protected by @login_required.
+if "django.contrib.auth.middleware.LoginRequiredMiddleware" in MIDDLEWARE:  # noqa: F405
+    MIDDLEWARE.remove("django.contrib.auth.middleware.LoginRequiredMiddleware")  # noqa: F405
+
 # Disable secure cookies for tests
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
