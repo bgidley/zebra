@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
-
 from zebra_agent_web.api.models import WebAuthnCredential
 
 User = get_user_model()
@@ -35,10 +34,12 @@ pytestmark = [
 # Fixtures
 # ===========================================================================
 
+
 @pytest.fixture(autouse=True)
 def clear_challenge_store():
     """Clear the in-memory challenge store before each test."""
     from zebra_agent_web.api.auth_views import _challenge_store
+
     _challenge_store.clear()
 
 
@@ -59,6 +60,7 @@ def client():
     from django.test import AsyncClient
 
     return AsyncClient()
+
 
 # ===========================================================================
 # Setup Redirect Middleware

@@ -17,8 +17,8 @@ DATABASES = {
 
 # Remove SetupRedirectMiddleware in tests to avoid SQLite lock contention
 # on User.objects.exists() across hundreds of concurrent test requests.
-if "zebra_agent_web.middleware.SetupRedirectMiddleware" in MIDDLEWARE:
-    MIDDLEWARE.remove("zebra_agent_web.middleware.SetupRedirectMiddleware")
+if "zebra_agent_web.middleware.SetupRedirectMiddleware" in MIDDLEWARE:  # noqa: F405
+    MIDDLEWARE.remove("zebra_agent_web.middleware.SetupRedirectMiddleware")  # noqa: F405
 
 # Disable secure cookies for tests
 SESSION_COOKIE_SECURE = False
