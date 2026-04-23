@@ -16,14 +16,14 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='WebAuthnCredential',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),  # noqa: E501
                 ('credential_id', models.CharField(db_index=True, max_length=1500, unique=True)),
                 ('public_key', models.BinaryField()),
                 ('sign_count', models.PositiveIntegerField(default=0)),
-                ('transports', models.JSONField(default=list)),
+                ('transports', models.JSONField(blank=True, default=list)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('last_used_at', models.DateTimeField(blank=True, null=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='webauthn_credentials', to=settings.AUTH_USER_MODEL)),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='webauthn_credentials', to=settings.AUTH_USER_MODEL)),  # noqa: E501
             ],
             options={
                 'db_table': 'zebra_webauthn_credentials',
