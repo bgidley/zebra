@@ -3,6 +3,7 @@
 Provides passkey-only registration and authentication. No passwords.
 """
 
+import base64
 import json
 import logging
 import secrets
@@ -95,7 +96,9 @@ def begin_register(request):
         user_display_name=username,
         challenge=challenge,
         exclude_credentials=[
-            PublicKeyCredentialDescriptor(id=cred.credential_id)
+            PublicKeyCredentialDescriptor(
+                id=base64url_to_bytes(cred.credential_id)
+            )
             for cred in WebAuthnCredential.objects.filter(user__username=username)
         ],
         authenticator_selection=AuthenticatorSelectionCriteria(
@@ -152,7 +155,7 @@ def complete_register(request):
     # Store credential
     WebAuthnCredential.objects.create(
         user=user,
-        credential_id=result.credential_id,
+        credential_id=base64.urlsafe_b64encode(result.credential_id).decode("ascii").rstrip("="),
         public_key=result.credential_public_key,
         sign_count=result.sign_count,
         transports=[],
@@ -213,10 +216,12 @@ def complete_authenticate(request):
 
     # Find credential by ID
     credential_id_b64 = credential_json.get("id", "")
-    credential_id = base64url_to_bytes(credential_id_b64)
+    
+    # ensure padding is removed to match stored version
+    stored_cred_id = credential_id_b64.rstrip("=")
 
     try:
-        cred = WebAuthnCredential.objects.get(credential_id=credential_id)
+        cred = WebAuthnCredential.objects.get(credential_id=stored_cred_id)
     except WebAuthnCredential.DoesNotExist:
         return JsonResponse({"error": "Unknown credential"}, status=400)
 

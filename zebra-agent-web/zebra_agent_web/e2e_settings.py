@@ -16,8 +16,14 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        "OPTIONS": {
+            "timeout": 20,
+        },
     }
 }
+
+# Use memory cache for sessions to avoid SQLite lock contention
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 
 # Disable secure cookies for tests
 SESSION_COOKIE_SECURE = False

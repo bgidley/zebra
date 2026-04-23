@@ -51,9 +51,10 @@ def clear_challenge_store():
 @pytest.fixture
 def test_credential(db, test_user):
     """Create a test WebAuthn credential."""
+    import base64
     return WebAuthnCredential.objects.create(
         user=test_user,
-        credential_id=b"test-credential-id",
+        credential_id=base64.urlsafe_b64encode(b"test-credential-id").decode("ascii").rstrip("="),
         public_key=b"test-public-key",
         sign_count=0,
     )
@@ -275,7 +276,9 @@ class TestCompleteRegister:
         # Verify user and credential were created
         user = User.objects.get(username="newuser")
         assert user.webauthn_credentials.count() == 1
-        assert user.webauthn_credentials.first().credential_id == b"cred-id"
+        import base64
+        expected_id = base64.urlsafe_b64encode(b"cred-id").decode("ascii").rstrip("=")
+        assert user.webauthn_credentials.first().credential_id == expected_id
 
 
 # ===========================================================================

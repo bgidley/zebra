@@ -15,6 +15,9 @@ DATABASES = {
     }
 }
 
+# Use memory cache for sessions to avoid SQLite lock contention
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+
 # Remove SetupRedirectMiddleware in tests to avoid SQLite lock contention
 # on User.objects.exists() across hundreds of concurrent test requests.
 if "zebra_agent_web.middleware.SetupRedirectMiddleware" in MIDDLEWARE:  # noqa: F405

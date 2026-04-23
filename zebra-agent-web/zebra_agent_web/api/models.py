@@ -305,7 +305,8 @@ class WebAuthnCredential(models.Model):
         on_delete=models.CASCADE,
         related_name="webauthn_credentials",
     )
-    credential_id = models.BinaryField(db_index=True, unique=True)
+    # Store credential ID as a base64url-encoded string (Oracle doesn't allow UNIQUE on BLOB)
+    credential_id = models.CharField(max_length=1500, db_index=True, unique=True)
     public_key = models.BinaryField()
     sign_count = models.PositiveIntegerField(default=0)
     transports = models.JSONField(default=list)
