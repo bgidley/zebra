@@ -16,7 +16,9 @@ from django.db.models import Avg, Count, Max, Sum
 from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
 from zebra_agent.storage.interfaces import MetricsStore
 
-from .api.models import TaskExecutionModel, WorkflowRunModel
+from zebra_agent_web.middleware import get_current_user_id
+
+from .api.models import ProcessInstanceModel, TaskExecutionModel, WorkflowRunModel
 
 if TYPE_CHECKING:
     pass
@@ -60,6 +62,19 @@ class DjangoMetricsStore(MetricsStore):
                 else:
                     output_str = json.dumps(run.output, ensure_ascii=False, default=str)
 
+            # Resolve user_id: current request context first, then look up from process
+            user_id = get_current_user_id()
+            if user_id is None:
+                proc = (
+                    ProcessInstanceModel.objects.filter(
+                        properties__contains=f'"run_id": "{run.id}"'
+                    )
+                    .values("user_id")
+                    .first()
+                )
+                if proc:
+                    user_id = proc["user_id"]
+
             WorkflowRunModel.objects.update_or_create(
                 id=run.id,
                 defaults={
@@ -76,6 +91,7 @@ class DjangoMetricsStore(MetricsStore):
                     "error": run.error,
                     "output": output_str,
                     "model": run.model or "",
+                    "user_id": user_id,
                 },
             )
 
@@ -106,11 +122,14 @@ class DjangoMetricsStore(MetricsStore):
         return await _get()
 
     async def get_stats(self, workflow_name: str) -> WorkflowStats:
-        """Get aggregated stats for a workflow."""
+        """Get aggregated stats for a workflow, scoped to current user."""
 
         @sync_to_async
         def _get():
             queryset = WorkflowRunModel.objects.filter(workflow_name=workflow_name)
+            uid = get_current_user_id()
+            if uid is not None:
+                queryset = queryset.filter(user_id=uid)
             total = queryset.count()
 
             if total > 0:
@@ -132,12 +151,16 @@ class DjangoMetricsStore(MetricsStore):
         return await _get()
 
     async def get_all_stats(self) -> list[WorkflowStats]:
-        """Get stats for all workflows."""
+        """Get stats for all workflows, scoped to current user."""
 
         @sync_to_async
         def _get():
+            qs = WorkflowRunModel.objects.all()
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
             results = (
-                WorkflowRunModel.objects.values("workflow_name")
+                qs.values("workflow_name")
                 .annotate(
                     total_runs=Count("id"),
                     successful_runs=Sum("success"),
@@ -164,36 +187,41 @@ class DjangoMetricsStore(MetricsStore):
         return await _get()
 
     async def get_recent_runs(self, limit: int = 10) -> list[WorkflowRun]:
-        """Get the most recent workflow runs."""
+        """Get the most recent workflow runs, scoped to current user."""
 
         @sync_to_async
         def _get():
-            models = WorkflowRunModel.objects.all().order_by("-started_at")[:limit]
-            return [self._model_to_run(m) for m in models]
+            qs = WorkflowRunModel.objects.all()
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            return [self._model_to_run(m) for m in qs.order_by("-started_at")[:limit]]
 
         return await _get()
 
     async def get_in_progress_runs(self) -> list[WorkflowRun]:
-        """Get all runs that are currently in progress (not completed)."""
+        """Get all runs currently in progress, scoped to current user."""
 
         @sync_to_async
         def _get():
-            models = WorkflowRunModel.objects.filter(completed_at__isnull=True).order_by(
-                "-started_at"
-            )
-            return [self._model_to_run(m) for m in models]
+            qs = WorkflowRunModel.objects.filter(completed_at__isnull=True)
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            return [self._model_to_run(m) for m in qs.order_by("-started_at")]
 
         return await _get()
 
     async def get_completed_runs(self, limit: int = 20) -> list[WorkflowRun]:
-        """Get completed workflow runs, ordered by most recently completed."""
+        """Get completed workflow runs, scoped to current user."""
 
         @sync_to_async
         def _get():
-            models = WorkflowRunModel.objects.filter(completed_at__isnull=False).order_by(
-                "-completed_at"
-            )[:limit]
-            return [self._model_to_run(m) for m in models]
+            qs = WorkflowRunModel.objects.filter(completed_at__isnull=False)
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            return [self._model_to_run(m) for m in qs.order_by("-completed_at")[:limit]]
 
         return await _get()
 
@@ -202,22 +230,24 @@ class DjangoMetricsStore(MetricsStore):
 
         @sync_to_async
         def _get():
-            models = WorkflowRunModel.objects.filter(started_at__gte=cutoff).order_by(
-                "-started_at"
-            )[:limit]
-            return [self._model_to_run(m) for m in models]
+            qs = WorkflowRunModel.objects.filter(started_at__gte=cutoff)
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            return [self._model_to_run(m) for m in qs.order_by("-started_at")[:limit]]
 
         return await _get()
 
     async def get_runs_for_workflow(self, workflow_name: str, limit: int = 10) -> list[WorkflowRun]:
-        """Get recent runs for a specific workflow."""
+        """Get recent runs for a specific workflow, scoped to current user."""
 
         @sync_to_async
         def _get():
-            models = WorkflowRunModel.objects.filter(workflow_name=workflow_name).order_by(
-                "-started_at"
-            )[:limit]
-            return [self._model_to_run(m) for m in models]
+            qs = WorkflowRunModel.objects.filter(workflow_name=workflow_name)
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            return [self._model_to_run(m) for m in qs.order_by("-started_at")[:limit]]
 
         return await _get()
 
@@ -226,6 +256,7 @@ class DjangoMetricsStore(MetricsStore):
 
         @sync_to_async
         def _get():
+            # Budget is system-wide (not user-scoped) — no filtering by user_id
             result = WorkflowRunModel.objects.filter(completed_at__gte=since).aggregate(
                 total=Sum("cost")
             )
@@ -276,6 +307,13 @@ class DjangoMetricsStore(MetricsStore):
                 else:
                     output_str = json.dumps(execution.output, ensure_ascii=False, default=str)
 
+            # Inherit user_id from parent run
+            try:
+                run_model = WorkflowRunModel.objects.get(id=execution.run_id)
+                user_id = run_model.user_id
+            except WorkflowRunModel.DoesNotExist:
+                user_id = get_current_user_id()
+
             TaskExecutionModel.objects.update_or_create(
                 id=execution.id,
                 defaults={
@@ -288,6 +326,7 @@ class DjangoMetricsStore(MetricsStore):
                     "completed_at": execution.completed_at,
                     "output": output_str,
                     "error": execution.error,
+                    "user_id": user_id,
                 },
             )
 

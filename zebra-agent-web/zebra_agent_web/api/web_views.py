@@ -333,8 +333,12 @@ async def run_goal_execute(request):
     # Generate run ID upfront so client can connect to WebSocket
     run_id = str(uuid.uuid4())
 
+    user_id = request.user.id if request.user.is_authenticated else None
+
     # Start background task for goal execution
-    task = asyncio.create_task(_execute_goal_background(run_id, goal, model=resolved_model))
+    task = asyncio.create_task(
+        _execute_goal_background(run_id, goal, model=resolved_model, user_id=user_id)
+    )
     _active_tasks[run_id] = task
 
     # Add cleanup callback
@@ -418,6 +422,7 @@ async def run_goal_queue(request):
         "__started_at__": datetime.now(UTC).isoformat(),
         "__user_display_name__": identity["user_display_name"],
         "__user_identity_id__": identity["user_identity_id"],
+        "__user_id__": request.user.id if request.user.is_authenticated else None,
     }
     if deadline:
         properties["deadline"] = deadline
@@ -454,7 +459,9 @@ async def run_goal_queue(request):
     return HttpResponse(html)
 
 
-async def _execute_goal_background(run_id: str, goal: str, model: str | None = None) -> None:
+async def _execute_goal_background(
+    run_id: str, goal: str, model: str | None = None, user_id: int | None = None
+) -> None:
     """Execute goal in background, sending progress via WebSocket channel layer.
 
     This function runs as an asyncio task, independent of the HTTP request.
@@ -483,6 +490,7 @@ async def _execute_goal_background(run_id: str, goal: str, model: str | None = N
             progress_callback=progress_callback,
             run_id=run_id,
             model=model,
+            user_id=user_id,
         )
 
         # Send completion event

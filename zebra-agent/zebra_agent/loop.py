@@ -94,6 +94,7 @@ class AgentLoop:
         progress_callback: ProgressCallback | None = None,
         run_id: str | None = None,
         model: str | None = None,
+        user_id: int | None = None,
     ) -> AgentResult:
         """
         Process a user goal through the agent loop workflow.
@@ -153,6 +154,7 @@ class AgentLoop:
             "__llm_provider_name__": self.provider_name,
             "__llm_model__": model or self.model,
             "__started_at__": datetime.now(UTC).isoformat(),
+            "__user_id__": user_id,
         }
 
         await emit("started", {"run_id": run_id, "goal": goal})

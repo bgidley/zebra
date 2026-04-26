@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 from asgiref.sync import sync_to_async
 from zebra_agent.storage.interfaces import MemoryStore
 
+from zebra_agent_web.middleware import get_current_user_id
+
 if TYPE_CHECKING:
     from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
 
@@ -54,7 +56,16 @@ class DjangoMemoryStore(MemoryStore):
 
         @sync_to_async
         def _add():
-            from zebra_agent_web.api.models import WorkflowMemoryModel
+            from zebra_agent_web.api.models import WorkflowMemoryModel, WorkflowRunModel
+
+            # Resolve user_id: request context first, then look up from run record
+            user_id = get_current_user_id()
+            if user_id is None and entry.run_id:
+                try:
+                    run_model = WorkflowRunModel.objects.get(id=entry.run_id)
+                    user_id = run_model.user_id
+                except WorkflowRunModel.DoesNotExist:
+                    pass
 
             WorkflowMemoryModel.objects.update_or_create(
                 id=entry.id,
@@ -71,6 +82,7 @@ class DjangoMemoryStore(MemoryStore):
                     "user_feedback": entry.user_feedback,
                     "run_id": entry.run_id,
                     "model": entry.model,
+                    "user_id": user_id,
                 },
             )
 
@@ -88,9 +100,11 @@ class DjangoMemoryStore(MemoryStore):
         def _get():
             from zebra_agent_web.api.models import WorkflowMemoryModel
 
-            qs = WorkflowMemoryModel.objects.filter(workflow_name=workflow_name).order_by(
-                "-timestamp"
-            )[:limit]
+            qs = WorkflowMemoryModel.objects.filter(workflow_name=workflow_name)
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            qs = qs.order_by("-timestamp")[:limit]
             return [
                 Entry(
                     id=m.id,
@@ -122,7 +136,11 @@ class DjangoMemoryStore(MemoryStore):
         def _get():
             from zebra_agent_web.api.models import WorkflowMemoryModel
 
-            qs = WorkflowMemoryModel.objects.order_by("-timestamp")[:limit]
+            qs = WorkflowMemoryModel.objects.all()
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            qs = qs.order_by("-timestamp")[:limit]
             return [
                 Entry(
                     id=m.id,
@@ -173,7 +191,11 @@ class DjangoMemoryStore(MemoryStore):
         def _get():
             from zebra_agent_web.api.models import ConceptualMemoryModel
 
-            qs = ConceptualMemoryModel.objects.order_by("-last_updated")[:limit]
+            qs = ConceptualMemoryModel.objects.all()
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            qs = qs.order_by("-last_updated")[:limit]
             return [
                 Entry(
                     id=m.id,
@@ -204,6 +226,7 @@ class DjangoMemoryStore(MemoryStore):
                     "anti_patterns": entry.anti_patterns,
                     "last_updated": entry.last_updated,
                     "tokens": entry.tokens,
+                    "user_id": get_current_user_id(),
                 },
             )
 
