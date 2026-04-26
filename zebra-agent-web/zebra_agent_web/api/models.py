@@ -42,6 +42,7 @@ class ProcessInstanceModel(models.Model):
     id = models.CharField(max_length=255, primary_key=True)
     definition_id = models.CharField(max_length=255, db_index=True)
     state = models.CharField(max_length=50, db_index=True)
+    user_id = models.IntegerField(null=True, blank=True, db_index=True)
     properties = models.TextField(
         blank=True, default="{}", help_text="JSON serialized properties dict"
     )
@@ -69,6 +70,7 @@ class TaskInstanceModel(models.Model):
     id = models.CharField(max_length=255, primary_key=True)
     process_id = models.CharField(max_length=255, db_index=True)
     task_definition_id = models.CharField(max_length=255)
+    user_id = models.IntegerField(null=True, blank=True, db_index=True)
     state = models.CharField(max_length=50, db_index=True)
     foe_id = models.CharField(max_length=255, db_index=True)
     properties = models.TextField(
@@ -137,6 +139,7 @@ class WorkflowRunModel(models.Model):
 
     id = models.CharField(max_length=255, primary_key=True)
     workflow_name = models.CharField(max_length=255, db_index=True)
+    user_id = models.IntegerField(null=True, blank=True, db_index=True)
     goal = models.TextField(help_text="User's goal/request")
     started_at = models.DateTimeField(db_index=True)
     completed_at = models.DateTimeField(blank=True, null=True)
@@ -174,6 +177,7 @@ class TaskExecutionModel(models.Model):
     """Record of a single task execution within a workflow run."""
 
     id = models.CharField(max_length=255, primary_key=True)
+    user_id = models.IntegerField(null=True, blank=True, db_index=True)
     run = models.ForeignKey(
         WorkflowRunModel,
         on_delete=models.CASCADE,
@@ -210,6 +214,7 @@ class WorkflowMemoryModel(models.Model):
     """Detailed record of a single workflow run's behaviour and effectiveness."""
 
     id = models.CharField(max_length=255, primary_key=True)
+    user_id = models.IntegerField(null=True, blank=True, db_index=True)
     timestamp = models.DateTimeField(db_index=True)
     workflow_name = models.CharField(max_length=255, db_index=True)
     goal = models.TextField(help_text="User's goal/request")
@@ -253,6 +258,7 @@ class ConceptualMemoryModel(models.Model):
     """Compact index entry mapping a goal pattern to recommended workflows."""
 
     id = models.CharField(max_length=255, primary_key=True)
+    user_id = models.IntegerField(null=True, blank=True, db_index=True)
     concept = models.CharField(max_length=500, db_index=True, help_text="Goal pattern / category")
     recommended_workflows = models.JSONField(
         default=list,

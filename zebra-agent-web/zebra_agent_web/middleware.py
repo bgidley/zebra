@@ -1,15 +1,30 @@
 """Custom middleware for Zebra Agent Web.
 
-Provides setup redirect: if no users exist, all requests redirect to the
-setup page so the first admin can register a passkey.
+Provides:
+- SetupRedirectMiddleware: if no users exist redirect to setup page.
+- CurrentUserMiddleware: sets _current_user_id contextvars so storage
+  layers can scope queries to the authenticated user without needing an
+  explicit parameter through every call stack.
 """
 
 import asyncio
+from contextvars import ContextVar
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
 from django.utils.decorators import sync_and_async_middleware
+
+# Module-level ContextVar: populated by CurrentUserMiddleware on each request.
+# Storage layers read this to scope queries. Daemon code paths leave it unset
+# (returns None) and perform unfiltered (system-wide) queries.
+_current_user_id_var: ContextVar[int | None] = ContextVar("current_user_id", default=None)
+
+
+def get_current_user_id() -> int | None:
+    """Return the authenticated user's PK for the current request, or None."""
+    return _current_user_id_var.get()
+
 
 User = get_user_model()
 
@@ -80,5 +95,38 @@ def SetupRedirectMiddleware(get_response):
 
             settings._USERS_EXIST_CACHE = True
             return get_response(request)
+
+    return middleware
+
+
+@sync_and_async_middleware
+def CurrentUserMiddleware(get_response):
+    """Populate _current_user_id_var from request.user for the duration of each request.
+
+    Must be placed after AuthenticationMiddleware in settings.MIDDLEWARE so that
+    request.user is already resolved.
+    """
+    if asyncio.iscoroutinefunction(get_response):
+
+        async def middleware(request):
+            # Use request.auser() in async path to avoid synchronous session access
+            # (accessing request.user directly triggers a sync session load which
+            # raises SynchronousOnlyOperation in Django's async ASGI handler).
+            user = await request.auser()
+            uid = user.id if user.is_authenticated else None
+            token = _current_user_id_var.set(uid)
+            try:
+                return await get_response(request)
+            finally:
+                _current_user_id_var.reset(token)
+    else:
+
+        def middleware(request):
+            uid = request.user.id if request.user.is_authenticated else None
+            token = _current_user_id_var.set(uid)
+            try:
+                return get_response(request)
+            finally:
+                _current_user_id_var.reset(token)
 
     return middleware

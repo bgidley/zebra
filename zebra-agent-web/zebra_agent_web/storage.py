@@ -26,6 +26,8 @@ from zebra.core.models import (
 )
 from zebra.storage.base import StateStore
 
+from zebra_agent_web.middleware import get_current_user_id
+
 from .api.models import (
     FlowOfExecutionModel,
     ProcessDefinitionModel,
@@ -140,6 +142,9 @@ class DjangoStore(StateStore):
 
         @sync_to_async
         def _save():
+            props = process.properties or {}
+            # Stamp user_id from process properties; fall back to current request user.
+            user_id = props.get("__user_id__") or get_current_user_id()
             ProcessInstanceModel.objects.update_or_create(
                 id=process.id,
                 defaults={
@@ -153,6 +158,7 @@ class DjangoStore(StateStore):
                     "created_at": process.created_at,
                     "updated_at": process.updated_at,
                     "completed_at": process.completed_at,
+                    "user_id": user_id,
                 },
             )
 
@@ -174,11 +180,15 @@ class DjangoStore(StateStore):
     async def list_processes(
         self, definition_id: str | None = None, include_completed: bool = False
     ) -> list[ProcessInstance]:
-        """List process instances."""
+        """List process instances scoped to the current user."""
 
         @sync_to_async
         def _list():
             queryset = ProcessInstanceModel.objects.all()
+
+            uid = get_current_user_id()
+            if uid is not None:
+                queryset = queryset.filter(user_id=uid)
 
             if definition_id:
                 queryset = queryset.filter(definition_id=definition_id)
@@ -209,23 +219,29 @@ class DjangoStore(StateStore):
         return await _delete()
 
     async def count_processes_by_state(self, state: ProcessState) -> int:
-        """Return the number of processes in a given state."""
+        """Return the number of processes in a given state, scoped to current user."""
 
         @sync_to_async
         def _count():
-            return ProcessInstanceModel.objects.filter(state=state.value).count()
+            qs = ProcessInstanceModel.objects.filter(state=state.value)
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            return qs.count()
 
         return await _count()
 
     async def get_running_processes(self) -> list[ProcessInstance]:
-        """Get all processes in RUNNING state."""
+        """Get all processes in RUNNING state, scoped to current user."""
 
         @sync_to_async
         def _get():
-            models = ProcessInstanceModel.objects.filter(state=ProcessState.RUNNING.value).order_by(
-                "-created_at"
-            )
-            return [self._model_to_process(m) for m in models]
+            qs = ProcessInstanceModel.objects.filter(state=ProcessState.RUNNING.value)
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            qs = qs.order_by("-created_at")
+            return [self._model_to_process(m) for m in qs]
 
         return await _get()
 
@@ -234,11 +250,14 @@ class DjangoStore(StateStore):
         state: ProcessState,
         exclude_children: bool = False,
     ) -> list[ProcessInstance]:
-        """Get processes in a specific state, ordered by created_at ascending."""
+        """Get processes in a specific state, scoped to current user."""
 
         @sync_to_async
         def _get():
             qs = ProcessInstanceModel.objects.filter(state=state.value)
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
             if exclude_children:
                 qs = qs.filter(parent_process_id__isnull=True)
             qs = qs.order_by("created_at")
@@ -276,6 +295,13 @@ class DjangoStore(StateStore):
                 else None
             )
 
+            # Inherit user_id from parent process
+            try:
+                parent = ProcessInstanceModel.objects.get(id=task.process_id)
+                user_id = parent.user_id
+            except ProcessInstanceModel.DoesNotExist:
+                user_id = get_current_user_id()
+
             TaskInstanceModel.objects.update_or_create(
                 id=task.id,
                 defaults={
@@ -290,6 +316,7 @@ class DjangoStore(StateStore):
                     "created_at": task.created_at,
                     "updated_at": task.updated_at,
                     "completed_at": task.completed_at,
+                    "user_id": user_id,
                 },
             )
 
