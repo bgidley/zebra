@@ -109,7 +109,11 @@ def CurrentUserMiddleware(get_response):
     if asyncio.iscoroutinefunction(get_response):
 
         async def middleware(request):
-            uid = request.user.id if request.user.is_authenticated else None
+            # Use request.auser() in async path to avoid synchronous session access
+            # (accessing request.user directly triggers a sync session load which
+            # raises SynchronousOnlyOperation in Django's async ASGI handler).
+            user = await request.auser()
+            uid = user.id if user.is_authenticated else None
             token = _current_user_id_var.set(uid)
             try:
                 return await get_response(request)
