@@ -62,18 +62,19 @@ class DjangoMetricsStore(MetricsStore):
                 else:
                     output_str = json.dumps(run.output, ensure_ascii=False, default=str)
 
-            # Resolve user_id: current request context first, then look up from process
+            # Resolve user_id: current request context first, then scan recent processes.
+            # Avoid properties__contains which triggers Oracle lazy cursor init in async.
             user_id = get_current_user_id()
             if user_id is None:
-                proc = (
-                    ProcessInstanceModel.objects.filter(
-                        properties__contains=f'"run_id": "{run.id}"'
-                    )
-                    .values("user_id")
-                    .first()
-                )
-                if proc:
-                    user_id = proc["user_id"]
+                target = f'"run_id": "{run.id}"'
+                for proc in (
+                    ProcessInstanceModel.objects.exclude(user_id__isnull=True)
+                    .values("user_id", "properties")
+                    .order_by("-created_at")[:50]
+                ):
+                    if target in (proc["properties"] or ""):
+                        user_id = proc["user_id"]
+                        break
 
             WorkflowRunModel.objects.update_or_create(
                 id=run.id,
