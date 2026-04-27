@@ -11,10 +11,10 @@
 
 ## 3. Django models and migrations
 
-- [ ] 3.1 Add `ValuesProfile`, `ValuesProfileVersion`, `Tag` models to `zebra-agent-web/zebra_agent_web/api/models.py` (with `user_id` indexed and `Tag.(field, slug)` unique)
-- [ ] 3.2 Generate the Django migration via `python manage.py makemigrations api` and inspect it for correctness
-- [ ] 3.3 Write model-level tests in `zebra-agent-web/tests/test_values_profile_models.py` covering creation, version monotonicity, FK constraints, and `(field, slug)` uniqueness
-- [ ] 3.4 Run `uv run ruff check --fix . && uv run ruff format .`
+- [x] 3.1 Add `ValuesProfile`, `ValuesProfileVersion`, `Tag` models to `zebra-agent-web/zebra_agent_web/api/models.py` (with `user_id` indexed and `Tag.(field, slug)` unique)
+- [x] 3.2 Generate the Django migration via `python manage.py makemigrations api` and inspect it for correctness
+- [x] 3.3 Write model-level tests in `zebra-agent-web/tests/test_values_profile_models.py` covering creation, version monotonicity, FK constraints, and `(field, slug)` uniqueness
+- [x] 3.4 Run `uv run ruff check --fix . && uv run ruff format .`
 
 ## 4. DjangoProfileStore
 

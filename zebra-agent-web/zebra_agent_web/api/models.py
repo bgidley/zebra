@@ -308,6 +308,141 @@ class SystemStateModel(models.Model):
         return f"SystemState halted={self.halted} user={self.user_display_name!r}"
 
 
+# =============================================================================
+# ProfileStore Models (Values Profile - F18 / REQ-ETH-002)
+# =============================================================================
+
+
+class ValuesProfileModel(models.Model):
+    """Per-user pointer to the current values-profile version.
+
+    Exactly one row per user. ``current_version`` is null until the user
+    completes the wizard for the first time.
+    """
+
+    id = models.CharField(max_length=255, primary_key=True)
+    user_id = models.IntegerField(unique=True)
+    current_version = models.ForeignKey(
+        "api.ValuesProfileVersionModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "zebra_values_profiles"
+        verbose_name = "Values Profile"
+        verbose_name_plural = "Values Profiles"
+
+    def __str__(self):
+        return f"ValuesProfile(user_id={self.user_id})"
+
+
+class ValuesProfileVersionModel(models.Model):
+    """Immutable snapshot of a values profile.
+
+    Each save creates a new row with monotonically increasing
+    ``version_number`` per parent profile. Rows are never mutated or deleted.
+    """
+
+    id = models.CharField(max_length=255, primary_key=True)
+    profile = models.ForeignKey(
+        ValuesProfileModel,
+        on_delete=models.CASCADE,
+        related_name="versions",
+    )
+    version_number = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_via = models.CharField(max_length=20, default="wizard")
+
+    core_values_text = models.TextField(blank=True, default="")
+    core_values_tags = models.JSONField(default=list)
+    ethical_positions_text = models.TextField(blank=True, default="")
+    ethical_positions_tags = models.JSONField(default=list)
+    priorities_text = models.TextField(blank=True, default="")
+    priorities_tags = models.JSONField(default=list)
+    deal_breakers_text = models.TextField(blank=True, default="")
+    deal_breakers_tags = models.JSONField(default=list)
+
+    tags_extracted_at = models.DateTimeField(blank=True, null=True)
+    tags_extraction_model = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        db_table = "zebra_values_profile_versions"
+        verbose_name = "Values Profile Version"
+        verbose_name_plural = "Values Profile Versions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile", "version_number"],
+                name="zebra_vpv_profile_version_unique",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["profile", "-version_number"]),
+        ]
+
+    def __str__(self):
+        return f"ValuesProfileVersion(profile={self.profile_id}, v={self.version_number})"
+
+
+class ValuesTagModel(models.Model):
+    """A field-scoped values-taxonomy tag.
+
+    The hybrid taxonomy supports learning over time via the candidate→promoted
+    lifecycle. ``seeded`` tags come from the bootstrap fixture; ``candidate``
+    tags are accumulated as users confirm new tags in the wizard's review
+    step; ``promoted`` tags have been curated up to first-class status.
+    """
+
+    FIELD_CHOICES = [
+        ("core_values", "Core values"),
+        ("ethical_positions", "Ethical positions"),
+        ("priorities", "Priorities"),
+        ("deal_breakers", "Deal-breakers"),
+    ]
+    STATUS_CHOICES = [
+        ("seeded", "Seeded"),
+        ("promoted", "Promoted"),
+        ("candidate", "Candidate"),
+    ]
+
+    id = models.CharField(max_length=255, primary_key=True)
+    field = models.CharField(max_length=50, choices=FIELD_CHOICES, db_index=True)
+    slug = models.CharField(max_length=100)
+    label = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="candidate")
+    usage_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    promoted_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        db_table = "zebra_values_tags"
+        verbose_name = "Values Tag"
+        verbose_name_plural = "Values Tags"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["field", "slug"],
+                name="zebra_values_tag_field_slug_unique",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["field", "status"]),
+            models.Index(fields=["status", "-usage_count"]),
+        ]
+
+    def __str__(self):
+        return f"{self.field}:{self.slug} ({self.status})"
+
+
+# =============================================================================
+# WebAuthn (Passkeys)
+# =============================================================================
+
+
 class WebAuthnCredential(models.Model):
     """Stores a WebAuthn credential (passkey) for a Django user."""
 
