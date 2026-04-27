@@ -18,10 +18,10 @@
 
 ## 4. DjangoProfileStore
 
-- [ ] 4.1 Implement `DjangoProfileStore` in `zebra-agent-web/zebra_agent_web/api/stores.py` against the `ProfileStore` ABC
-- [ ] 4.2 Inject `engine.extras["__profile_store__"]` in `AgentLoop.__init__` (in-memory backend for CLI) and the web/daemon engine construction path
-- [ ] 4.3 Write integration tests against a real DB confirming `DjangoProfileStore` satisfies the same contract as `InMemoryProfileStore`
-- [ ] 4.4 Run `uv run ruff check --fix . && uv run ruff format .`
+- [x] 4.1 Implement `DjangoProfileStore` in `zebra-agent-web/zebra_agent_web/profile_store.py` against the `ProfileStore` ABC (placed alongside existing `memory_store.py` / `metrics_store.py` rather than under `api/`)
+- [x] 4.2 Inject `engine.extras["__profile_store__"]` in `AgentLoop.__init__` (new `profile` param) and the web engine construction path (`api/agent_engine.py`)
+- [x] 4.3 Write integration tests against the test DB confirming `DjangoProfileStore` satisfies the same contract as `InMemoryProfileStore` (uses `transaction=True` per project rules for async + sync_to_async tests)
+- [x] 4.4 Run `uv run ruff check --fix . && uv run ruff format .`
 
 ## 5. Task actions
 

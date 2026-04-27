@@ -21,7 +21,7 @@ from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState
 
 from zebra_agent.library import WorkflowLibrary
-from zebra_agent.storage.interfaces import MemoryStore, MetricsStore
+from zebra_agent.storage.interfaces import MemoryStore, MetricsStore, ProfileStore
 
 # Type for progress callback: receives event name and data dict
 ProgressCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
@@ -61,6 +61,7 @@ class AgentLoop:
         engine: WorkflowEngine,
         metrics: MetricsStore,
         memory: MemoryStore | None = None,
+        profile: ProfileStore | None = None,
         provider: str = "anthropic",
         model: str | None = None,
     ):
@@ -72,6 +73,7 @@ class AgentLoop:
             engine: Zebra workflow engine for execution
             metrics: Metrics store for recording run history
             memory: Agent memory store for context (optional)
+            profile: Values-profile store (optional, F18)
             provider: LLM provider name
             model: LLM model name (optional)
         """
@@ -79,6 +81,7 @@ class AgentLoop:
         self.engine = engine
         self.metrics = metrics
         self.memory = memory
+        self.profile = profile
         self.provider_name = provider
         self.model = model
 
@@ -86,6 +89,7 @@ class AgentLoop:
         # These are non-serializable objects that can't go in process properties
         self.engine.extras["__memory_store__"] = memory
         self.engine.extras["__metrics_store__"] = metrics
+        self.engine.extras["__profile_store__"] = profile
         self.engine.extras["__workflow_library__"] = library
 
     async def process_goal(
