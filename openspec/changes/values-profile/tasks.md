@@ -4,10 +4,10 @@
 
 ## 2. ProfileStore interface
 
-- [ ] 2.1 Add `ProfileStore` ABC to `zebra-agent/zebra_agent/storage/interfaces.py` with `get_current(user_id)`, `get_version(version_id)`, `save_version(user_id, version_data)`
-- [ ] 2.2 Implement `InMemoryProfileStore` in `zebra-agent/zebra_agent/storage/profile.py`
-- [ ] 2.3 Write unit tests for `InMemoryProfileStore` covering round-trip save/get, monotonic version numbers, and isolation by `user_id`
-- [ ] 2.4 Run `uv run ruff check --fix . && uv run ruff format .`
+- [x] 2.1 Add `ProfileStore` ABC to `zebra-agent/zebra_agent/storage/interfaces.py` with `get_current(user_id)`, `get_version(version_id)`, `save_version(user_id, version_data)`
+- [x] 2.2 Implement `InMemoryProfileStore` in `zebra-agent/zebra_agent/storage/profile.py`
+- [x] 2.3 Write unit tests for `InMemoryProfileStore` covering round-trip save/get, monotonic version numbers, and isolation by `user_id`
+- [x] 2.4 Run `uv run ruff check --fix . && uv run ruff format .`
 
 ## 3. Django models and migrations
 

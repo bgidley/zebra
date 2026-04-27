@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
     from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
+    from zebra_agent.profile import ValuesProfileVersion
 
 
 class MemoryStore(ABC):
@@ -211,4 +212,50 @@ class MetricsStore(ABC):
     @abstractmethod
     async def get_task_executions(self, run_id: str) -> list[TaskExecution]:
         """Get all task executions for a workflow run, ordered by execution_order."""
+        ...
+
+
+class ProfileStore(ABC):
+    """Abstract interface for the per-user values-profile store.
+
+    The values profile (REQ-ETH-002 / F18) is identity/preference data, not a
+    record of past actions, so it lives in its own store alongside MemoryStore
+    and MetricsStore. Each save produces a new immutable ``ValuesProfileVersion``
+    with a monotonically increasing ``version_number``; the store retains the
+    full history per user and tracks which version is current.
+    """
+
+    @abstractmethod
+    async def initialize(self) -> None:
+        """Initialize the profile store."""
+        ...
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Close the profile store and release resources."""
+        ...
+
+    @abstractmethod
+    async def get_current(self, user_id: int) -> ValuesProfileVersion | None:
+        """Return the user's current (most recent) values-profile version.
+
+        Returns None if the user has no profile yet.
+        """
+        ...
+
+    @abstractmethod
+    async def get_version(self, version_id: str) -> ValuesProfileVersion | None:
+        """Return a specific version by id, or None if not found."""
+        ...
+
+    @abstractmethod
+    async def save_version(
+        self, user_id: int, version: ValuesProfileVersion
+    ) -> ValuesProfileVersion:
+        """Persist a new version for the user.
+
+        The store assigns ``id``, ``version_number`` (= previous max + 1), and
+        ``created_at``. The returned instance has those fields populated.
+        Existing versions are never mutated or deleted.
+        """
         ...
