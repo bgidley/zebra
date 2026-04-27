@@ -27,6 +27,8 @@ class InMemoryProfileStore(ProfileStore):
     def __init__(self) -> None:
         self._versions_by_user: dict[int, list[ValuesProfileVersion]] = {}
         self._versions_by_id: dict[str, ValuesProfileVersion] = {}
+        # field -> slug -> {slug, label, description, status, usage_count}
+        self._tags: dict[str, dict[str, dict]] = {}
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -64,3 +66,58 @@ class InMemoryProfileStore(ProfileStore):
         existing.append(persisted)
         self._versions_by_id[persisted.id] = persisted
         return persisted
+
+    async def get_approved_tags(self, field: str) -> list[dict]:
+        await self._ensure_initialized()
+        field_tags = self._tags.get(field, {})
+        return [
+            {
+                "slug": tag["slug"],
+                "label": tag["label"],
+                "description": tag.get("description", ""),
+            }
+            for tag in field_tags.values()
+            if tag["status"] in {"seeded", "promoted"}
+        ]
+
+    async def record_confirmed_tags(self, field_to_tags: dict[str, list[dict[str, str]]]) -> None:
+        await self._ensure_initialized()
+        for field, tag_list in field_to_tags.items():
+            field_tags = self._tags.setdefault(field, {})
+            for tag in tag_list:
+                slug = tag["slug"]
+                label = tag.get("label", slug)
+                description = tag.get("description", "")
+                if slug in field_tags:
+                    field_tags[slug]["usage_count"] += 1
+                    # Refresh label/description if caller provided them
+                    if label:
+                        field_tags[slug]["label"] = label
+                    if description:
+                        field_tags[slug]["description"] = description
+                else:
+                    field_tags[slug] = {
+                        "slug": slug,
+                        "label": label,
+                        "description": description,
+                        "status": "candidate",
+                        "usage_count": 1,
+                    }
+
+    def seed_tag(
+        self,
+        field: str,
+        slug: str,
+        label: str,
+        description: str = "",
+        status: str = "seeded",
+    ) -> None:
+        """Test helper: insert a tag without going through the candidate path."""
+        field_tags = self._tags.setdefault(field, {})
+        field_tags[slug] = {
+            "slug": slug,
+            "label": label,
+            "description": description,
+            "status": status,
+            "usage_count": 0,
+        }

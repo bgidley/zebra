@@ -259,3 +259,26 @@ class ProfileStore(ABC):
         Existing versions are never mutated or deleted.
         """
         ...
+
+    @abstractmethod
+    async def get_approved_tags(self, field: str) -> list[dict]:
+        """Return approved tags (``status in {seeded, promoted}``) for a field.
+
+        Each returned dict has at least ``slug``, ``label``, ``description``.
+        Used by ``extract_values_tags`` to anchor the LLM prompt.
+        """
+        ...
+
+    @abstractmethod
+    async def record_confirmed_tags(self, field_to_tags: dict[str, list[dict[str, str]]]) -> None:
+        """Record tags that the user confirmed on the wizard's review step.
+
+        For each ``(field, slug)`` pair: upsert a Tag row, incrementing
+        ``usage_count``. New tags are created with ``status="candidate"``;
+        existing tags retain their current status.
+
+        Args:
+            field_to_tags: Mapping of field name to list of ``{slug, label}``
+                (and optional ``description``) dicts.
+        """
+        ...

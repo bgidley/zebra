@@ -147,3 +147,52 @@ class DjangoProfileStore(ProfileStore):
                 return _to_dataclass(row)
 
         return await _save()
+
+    async def get_approved_tags(self, field: str) -> list[dict]:
+        await self._ensure_initialized()
+
+        @sync_to_async
+        def _fetch() -> list[dict]:
+            from zebra_agent_web.api.models import ValuesTagModel
+
+            rows = ValuesTagModel.objects.filter(
+                field=field, status__in=["seeded", "promoted"]
+            ).values("slug", "label", "description")
+            return list(rows)
+
+        return await _fetch()
+
+    async def record_confirmed_tags(self, field_to_tags: dict[str, list[dict[str, str]]]) -> None:
+        await self._ensure_initialized()
+
+        @sync_to_async
+        def _record() -> None:
+            from django.db.models import F
+
+            from zebra_agent_web.api.models import ValuesTagModel
+
+            with transaction.atomic():
+                for field, tag_list in field_to_tags.items():
+                    for tag in tag_list:
+                        slug = tag["slug"]
+                        label = tag.get("label", slug)
+                        description = tag.get("description", "")
+
+                        existing = ValuesTagModel.objects.filter(field=field, slug=slug).first()
+                        if existing is None:
+                            ValuesTagModel.objects.create(
+                                id=str(uuid.uuid4()),
+                                field=field,
+                                slug=slug,
+                                label=label,
+                                description=description,
+                                status="candidate",
+                                usage_count=1,
+                            )
+                        else:
+                            ValuesTagModel.objects.filter(pk=existing.pk).update(
+                                usage_count=F("usage_count") + 1,
+                                **({"label": label} if label and label != existing.label else {}),
+                            )
+
+        await _record()

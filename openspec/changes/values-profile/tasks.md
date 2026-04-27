@@ -25,13 +25,15 @@
 
 ## 5. Task actions
 
-- [ ] 5.1 Implement `LoadValuesProfileAction` in `zebra-tasks/zebra_tasks/agent/load_values_profile.py` (reads `ProfileStore`, writes `existing_profile.*` into process properties, outputs `{found: bool}`)
-- [ ] 5.2 Implement `ExtractValuesTagsAction` in `zebra-tasks/zebra_tasks/agent/extract_values_tags.py` (LLM call; passes approved-tag set per field; returns `{<field>: {approved_tags, candidate_tags}}`; returns success with empty sets on any failure)
-- [ ] 5.3 Implement `SaveValuesProfileAction` in `zebra-tasks/zebra_tasks/agent/save_values_profile.py` (writes new `Version`, bumps `current_version`, upserts `Tag` rows + increments `usage_count`, all in one transaction)
-- [ ] 5.4 Register all three actions as `zebra.tasks` entry points in `zebra-tasks/pyproject.toml`
-- [ ] 5.5 Run `uv sync --all-packages` to refresh entry points
-- [ ] 5.6 Write unit tests for each action with mocked stores and a mocked LLM in `zebra-tasks/tests/test_values_profile_actions.py` (covering happy path, LLM failure → empty tags, candidate→`usage_count` upsert)
-- [ ] 5.7 Run `uv run ruff check --fix . && uv run ruff format .`
+- [x] 5.1 Implement `LoadValuesProfileAction` in `zebra-tasks/zebra_tasks/agent/load_values_profile.py` (reads `ProfileStore`, writes `existing_profile.*` into process properties, outputs `{found, mode}`)
+- [x] 5.2 Implement `ExtractValuesTagsAction` in `zebra-tasks/zebra_tasks/agent/extract_values_tags.py` (LLM call; passes approved-tag set per field; returns `{<field>: {approved_tags, candidate_tags}}`; returns success with empty sets on any failure; caps candidates at 5 per field; drops hallucinated approved tags)
+- [x] 5.3 Implement `SaveValuesProfileAction` in `zebra-tasks/zebra_tasks/agent/save_values_profile.py` (writes new `Version` via `ProfileStore.save_version`, then `record_confirmed_tags` upserts `Tag` rows + increments `usage_count`)
+- [x] 5.4 Register all three actions as `zebra.tasks` entry points in `zebra-tasks/pyproject.toml`
+- [x] 5.5 Run `uv sync --all-packages` to refresh entry points
+- [x] 5.6 Write unit tests for each action with mocked stores and a mocked LLM in `zebra-tasks/tests/test_values_profile_actions.py` (covering happy path, LLM failure → empty tags, candidate→`usage_count` upsert, capping, hallucination drop)
+- [x] 5.7 Run `uv run ruff check --fix . && uv run ruff format .`
+
+Note: extended `ProfileStore` (and both implementations) with `get_approved_tags(field)` and `record_confirmed_tags(field_to_tags)` so the actions don't need direct ORM access (per the storage-abstraction rule in CLAUDE.md).
 
 ## 6. Wizard workflow YAML
 
