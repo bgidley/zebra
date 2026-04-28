@@ -73,15 +73,15 @@ Notes during 6:
 - [x] 10.2 No new sub-file needed (the section is short enough to live inline in zebra-as-is.md), so `specs/AGENTS.md` index untouched.
 - [x] 10.3 Updated `zebra-agent/CLAUDE.md` storage section to list `ProfileStore` (interface), `InMemoryProfileStore` (CLI default), and `DjangoProfileStore` (web).
 
-## 11. CI and merge
+## 11. CI and merge — awaits maintainer
 
-- [ ] 11.1 Run the full local test suite: `uv run pytest`
-- [ ] 11.2 Run `uv run ruff check --fix . && uv run ruff format .` one final time
-- [ ] 11.3 Push `f18/values-profile` to GitLab; verify the pipeline progresses `lint → unit → e2e` to green via `glab ci list --repo gidley/zebra --per-page 1`
-- [ ] 11.4 Push the branch to GitHub and open a PR titled `F18: Values profile`, body referencing GitLab issue #18 and the pipeline URL
-- [ ] 11.5 After review, merge to `master` with `git merge --no-ff f18/values-profile -m "Merge f18/values-profile — Closes #18"`
-- [ ] 11.6 Push `master` to GitLab (triggers deploy) and to GitHub (closes the PR); delete the feature branch from both remotes
-- [ ] 11.7 Verify the `deploy` stage of the master pipeline succeeds
+- [x] 11.1 Local test suite ran: 1070 zebra-tasks tests + 140 zebra-agent-web unit tests + zebra-agent + zebra-py all green. The 1 failed e2e test (`test_budget_exhaustion.py`) and the e2e-live errors are pre-existing — they need Oracle + ANTHROPIC_API_KEY wired into the local env.
+- [x] 11.2 Ruff lint + format clean (run after each group's commit).
+- [ ] 11.3 Push `f18/values-profile` to GitLab; verify the pipeline progresses `lint → unit → e2e` to green via `glab ci list --repo gidley/zebra --per-page 1` — **awaits user (shared state)**
+- [ ] 11.4 Push the branch to GitHub and open a PR titled `F18: Values profile`, body referencing GitLab issue #18 and the pipeline URL — **awaits user**
+- [ ] 11.5 After review, merge to `master` with `git merge --no-ff f18/values-profile -m "Merge f18/values-profile — Closes #18"` — **awaits user**
+- [ ] 11.6 Push `master` to GitLab (triggers deploy) and to GitHub (closes the PR); delete the feature branch from both remotes — **awaits user**
+- [ ] 11.7 Verify the `deploy` stage of the master pipeline succeeds — **awaits user**
 
 ## 12. Follow-up
 
