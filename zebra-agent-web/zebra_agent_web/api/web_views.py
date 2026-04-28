@@ -352,6 +352,64 @@ async def run_goal_execute(request):
     return render(request, "pages/goal_processing.html", context)
 
 
+async def values_profile_wizard(request):
+    """Start the values-profile wizard for the current user.
+
+    Auth-required. Looks up the user's existing values profile (if any) and
+    starts a new process running the values_profile_wizard.yaml workflow,
+    in either capture mode (no profile yet) or edit mode (existing profile,
+    pre-populated). Redirects to the first pending human task.
+
+    F18 / REQ-ETH-002.
+    """
+    if not request.user.is_authenticated:
+        return redirect("setup")
+
+    await agent_engine.ensure_initialized()
+    await engine.ensure_initialized()
+
+    from zebra_agent_web.api.engine import get_engine
+
+    library = agent_engine.get_library()
+    profile_store = agent_engine.get_profile()
+    wf_engine = get_engine()
+
+    try:
+        definition = library.get_workflow("Values Profile Wizard")
+    except ValueError as e:
+        return HttpResponse(f"Cannot load Values Profile Wizard workflow: {e}", status=500)
+
+    user_id = request.user.id
+    current = await profile_store.get_current(user_id=user_id)
+
+    properties: dict[str, Any] = {
+        "user_id": user_id,
+        "__user_id__": user_id,
+        "__started_at__": datetime.now(UTC).isoformat(),
+    }
+    if current is not None:
+        properties["existing_profile_version_id"] = current.id
+
+    try:
+        process = await wf_engine.create_process(definition, properties=properties)
+        await wf_engine.start_process(process.id)
+    except Exception as e:
+        logger.exception("Failed to start values-profile wizard")
+        return HttpResponse(f"Failed to start values-profile wizard: {e}", status=500)
+
+    # Redirect to the first pending human task.
+    pending = await wf_engine.get_pending_tasks(process.id)
+    if pending:
+        return redirect("human_task_form", task_id=pending[0].id)
+
+    # No pending task — wizard already finished (shouldn't happen on fresh start,
+    # but if it does, send the user back to the dashboard).
+    logger.warning(
+        "Values-profile wizard completed without a pending task (process %s)", process.id
+    )
+    return redirect("dashboard")
+
+
 @require_http_methods(["POST"])
 async def run_goal_queue(request):
     """Queue a goal for budget-managed execution via the daemon.

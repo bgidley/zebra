@@ -50,6 +50,8 @@ urlpatterns = [
     # Human Tasks (form pages still accessible directly)
     path("tasks/<str:task_id>/", web_views.human_task_form, name="human_task_form"),
     path("tasks/<str:task_id>/submit/", web_views.human_task_submit, name="human_task_submit"),
+    # Values Profile (F18) — starts the wizard for capture or edit
+    path("profile/values/", web_views.values_profile_wizard, name="values_profile_wizard"),
     # Run detail pages
     path("runs/<str:run_id>/", web_views.run_detail, name="run_detail"),
     path("runs/<str:run_id>/rate/", web_views.run_rate, name="run_rate"),
