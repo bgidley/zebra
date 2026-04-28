@@ -37,15 +37,19 @@ Note: extended `ProfileStore` (and both implementations) with `get_approved_tags
 
 ## 6. Wizard workflow YAML
 
-- [ ] 6.1 Create `zebra-agent/workflows/values_profile_wizard.yaml` with eight steps (load, four free-form forms, extract, review, save) and the routing chain
-- [ ] 6.2 Define each human-task step's JSON schema, using `default: "{{existing_profile.<field>_text}}"` for pre-population in edit mode
-- [ ] 6.3 Write an end-to-end workflow test that runs the wizard with an in-memory engine + `InMemoryProfileStore`, in both capture mode and edit mode
-- [ ] 6.4 Run `uv run ruff check --fix . && uv run ruff format .`
+- [x] 6.1 Create `zebra-agent/workflows/values_profile_wizard.yaml` with eight steps (load, four free-form forms, extract, review, save) and the routing chain
+- [x] 6.2 Define each human-task step's JSON schema with `default: "{{existing_profile.<field>_text}}"` for pre-population in edit mode (LoadValuesProfileAction also sets `existing_profile.mode = capture|edit`)
+- [x] 6.3 Write an end-to-end workflow test that runs the wizard with an in-memory engine + `InMemoryProfileStore`, in both capture and edit modes
+- [x] 6.4 Run `uv run ruff check --fix . && uv run ruff format .`
+
+Notes during 6:
+- The engine's `resolve_template` only supports `{{task_id.output}}` (whole output, stringified) — it does NOT chain `.output.<key>`. Workaround: forms reference each other via `{{__task_output_<task_def_id>.<key>}}` (the underlying process property the engine writes), which DOES support nested dict navigation.
+- For lists, even that path stringifies the value. So `save_values_profile` got a new `from_task_id` property: when set, the action reads the upstream human task's output dict directly via `context.get_task_output(...)`, bypassing template stringification.
 
 ## 7. System-workflow allowlist
 
-- [ ] 7.1 Add `"Values Profile Wizard"` to `_is_system_workflow` in `zebra-agent/zebra_agent/loop.py`
-- [ ] 7.2 Add a unit test confirming the wizard is filtered out of the LLM-selectable workflow list
+- [x] 7.1 Add `"Values Profile Wizard"` to `_is_system_workflow` in `zebra-agent/zebra_agent/loop.py`
+- [x] 7.2 Add a unit test confirming the wizard is excluded
 
 ## 8. Web entrypoint
 

@@ -40,10 +40,21 @@ class SaveValuesProfileAction(TaskAction):
             name="confirmed",
             type="dict",
             description=(
-                "Per-field confirmed payload: "
+                "Per-field confirmed payload (alternative to flat <field>_text / "
+                "<field>_tags properties or from_task_id): "
                 "{<field>: {text: str, tags: [{slug, label}, ...]}, ...}"
             ),
-            required=True,
+            required=False,
+        ),
+        ParameterDef(
+            name="from_task_id",
+            type="string",
+            description=(
+                "Definition id of an upstream human task whose output supplies "
+                "<field>_text / <field>_tags directly (bypasses template "
+                "resolution, which stringifies list values)."
+            ),
+            required=False,
         ),
         ParameterDef(
             name="extraction_model",
@@ -97,11 +108,38 @@ class SaveValuesProfileAction(TaskAction):
         confirmed = task.properties.get("confirmed")
         if isinstance(confirmed, str) and "{{" in confirmed:
             confirmed = context.resolve_template(confirmed)
+        from_task_id = task.properties.get("from_task_id")
+        if confirmed is None and from_task_id:
+            # Read the upstream human task's output directly — keeps lists as lists.
+            output = context.get_task_output(from_task_id) or {}
+            if isinstance(output, dict):
+                confirmed = {
+                    field: {
+                        "text": output.get(f"{field}_text", "") or "",
+                        "tags": output.get(f"{field}_tags", []) or [],
+                    }
+                    for field in _FIELDS
+                }
+        if confirmed is None:
+            # Fall back to flat per-field properties (templates resolve to strings).
+            confirmed = {
+                field: {
+                    "text": _resolve_str(task, context, f"{field}_text"),
+                    "tags": _resolve_list(task, context, f"{field}_tags"),
+                }
+                for field in _FIELDS
+            }
         if not isinstance(confirmed, dict):
             return TaskResult.fail("'confirmed' must be a dict of per-field payloads")
 
         extraction_model = task.properties.get("extraction_model") or ""
+        if isinstance(extraction_model, str) and "{{" in extraction_model:
+            extraction_model = context.resolve_template(extraction_model)
         created_via = task.properties.get("created_via", "wizard") or "wizard"
+        if isinstance(created_via, str) and "{{" in created_via:
+            created_via = context.resolve_template(created_via)
+        if not created_via:
+            created_via = "wizard"
         output_key = task.properties.get("output_key", "saved_profile")
 
         profile_store = context.extras.get("__profile_store__")
@@ -151,6 +189,23 @@ class SaveValuesProfileAction(TaskAction):
         }
         context.set_process_property(output_key, result)
         return TaskResult.ok(output=result)
+
+
+def _resolve_str(task: TaskInstance, context: ExecutionContext, key: str) -> str:
+    value = task.properties.get(key, "")
+    if isinstance(value, str) and "{{" in value:
+        value = context.resolve_template(value)
+    return value or ""
+
+
+def _resolve_list(task: TaskInstance, context: ExecutionContext, key: str) -> list:
+    value = task.properties.get(key, [])
+    if isinstance(value, str) and "{{" in value:
+        value = context.resolve_template(value)
+    if isinstance(value, str):
+        # CSV fallback for HTML form output
+        return [s.strip() for s in value.split(",") if s.strip()]
+    return value or []
 
 
 def _tag_slug(tag) -> str:  # type: ignore[no-untyped-def]

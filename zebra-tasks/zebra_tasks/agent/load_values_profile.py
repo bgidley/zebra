@@ -84,10 +84,14 @@ class LoadValuesProfileAction(TaskAction):
 
         version = await profile_store.get_current(user_id=user_id)
         if version is None:
-            context.set_process_property(output_key, _empty_profile_dict())
+            saved = _empty_profile_dict()
+            saved["mode"] = "capture"
+            context.set_process_property(output_key, saved)
             return TaskResult.ok(output={"found": False, "mode": "capture"})
 
-        context.set_process_property(output_key, version.to_dict())
+        saved = version.to_dict()
+        saved["mode"] = "edit"
+        context.set_process_property(output_key, saved)
         return TaskResult.ok(output={"found": True, "mode": "edit"})
 
 

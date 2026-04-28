@@ -351,5 +351,6 @@ class AgentLoop:
             "Agent Main Loop",
             "Dream Cycle",
             "Create Goal",
+            "Values Profile Wizard",
         }
         return name in system_workflows
