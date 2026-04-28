@@ -69,9 +69,9 @@ Notes during 6:
 
 ## 10. Documentation
 
-- [ ] 10.1 Add a "Values Profile" section to `specs/zebra-as-is.md` covering data model, wizard workflow, `ProfileStore`, and taxonomy bootstrap
-- [ ] 10.2 Update `specs/AGENTS.md` index if a new sub-file is created
-- [ ] 10.3 Update `zebra-agent/AGENTS.md` storage section to list `ProfileStore` alongside `MemoryStore` and `MetricsStore`
+- [x] 10.1 Add a "Values profile (F18 / REQ-ETH-002)" section to `specs/zebra-as-is.md` (under § 5 Agent Library, after Ethics gates) covering data model, hybrid taxonomy with status lifecycle, wizard workflow, bootstrap command, web entrypoint, and the explicit non-goal of gate consumption (deferred to REQ-ETH-003). Also struck through two now-resolved weaknesses in § 5.
+- [x] 10.2 No new sub-file needed (the section is short enough to live inline in zebra-as-is.md), so `specs/AGENTS.md` index untouched.
+- [x] 10.3 Updated `zebra-agent/CLAUDE.md` storage section to list `ProfileStore` (interface), `InMemoryProfileStore` (CLI default), and `DjangoProfileStore` (web).
 
 ## 11. CI and merge
 
