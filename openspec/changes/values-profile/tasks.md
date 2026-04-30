@@ -53,19 +53,24 @@ Notes during 6:
 
 ## 8. Web entrypoint
 
-- [ ] 8.1 Implement `ValuesProfileWizardStartView` in `zebra-agent-web/zebra_agent_web/api/views.py` (auth-required; checks for existing profile; starts a wizard process; redirects to the first pending task)
-- [ ] 8.2 Wire `path("profile/values/", ValuesProfileWizardStartView.as_view(), name="values_profile_wizard")` in `zebra-agent-web/zebra_agent_web/urls.py`
-- [ ] 8.3 Write Django integration tests covering anonymous (auth-required behaviour), user with no profile (capture mode), and user with existing profile (edit mode with `existing_profile_version_id` set)
-- [ ] 8.4 Run `uv run ruff check --fix . && uv run ruff format .`
+- [x] 8.1 Implement `values_profile_wizard` async view in `zebra-agent-web/zebra_agent_web/api/web_views.py` — auth-required (anonymous → setup redirect), checks `ProfileStore.get_current` for an existing profile, creates + starts a wizard process with `user_id` (and `existing_profile_version_id` if found), redirects to the first pending human task
+- [x] 8.2 Wire `path("profile/values/", web_views.values_profile_wizard, name="values_profile_wizard")` in `zebra-agent-web/zebra_agent_web/urls.py`
+- [x] 8.3 Three integration tests: anonymous redirect, capture mode (no existing profile), edit mode (`existing_profile_version_id` stamped + `existing_profile.mode == "edit"`)
+- [x] 8.4 Run `uv run ruff check --fix . && uv run ruff format .`
 
 ## 9. Taxonomy bootstrap
 
-- [ ] 9.1 Implement `zebra-agent-web/zebra_agent_web/api/management/commands/bootstrap_values_taxonomy.py` (calls LLM; writes YAML fixture; refuses to overwrite existing fixture without `--force`)
-- [ ] 9.2 Run the command locally and hand-review the produced YAML
-- [ ] 9.3 Commit the reviewed fixture at `zebra-agent-web/fixtures/values_taxonomy_seed.yaml`
-- [ ] 9.4 Add a Django data migration that loads the fixture into `Tag` rows with `status="seeded"`
-- [ ] 9.5 Write a unit test for the command's idempotency behaviour (no-overwrite by default; overwrite with `--force`)
-- [ ] 9.6 Run `uv run ruff check --fix . && uv run ruff format .`
+- [x] 9.1 Implement `zebra-agent-web/zebra_agent_web/api/management/commands/bootstrap_values_taxonomy.py` (calls LLM via `zebra_tasks.llm.get_provider`, resolving model alias via `resolve_model_name`; validates per-field shape; writes YAML fixture; refuses to overwrite without `--force`)
+- [x] 9.2 Ran the command locally and hand-reviewed the produced YAML (39 tags across 4 fields)
+- [x] 9.3 Committed the reviewed fixture at `zebra-agent-web/fixtures/values_taxonomy_seed.yaml`
+- [x] 9.4 Added Django data migration `0013_seed_values_taxonomy` that loads the fixture into `ValuesTagModel` rows with `status="seeded"`. Idempotent (`get_or_create`); reverse migration removes only seeded rows matching the fixture (candidate/promoted preserved); falls back to no-op if fixture is absent.
+- [x] 9.5 Write a unit test for the command's idempotency behaviour (no-overwrite by default; overwrite with `--force`; validation rejects malformed payload)
+- [x] 9.6 Run `uv run ruff check --fix . && uv run ruff format .`
+
+Notes during 9:
+- Initial run failed because the bootstrap passed the friendly model alias (`sonnet`) to the Anthropic API directly. Aliases are resolved at the boundary by callers (web views do this); the bootstrap now uses `resolve_model_name(model)` before constructing the provider.
+- Default fixture path was off by one `.parent` walk (landed in inner `zebra_agent_web/fixtures/` instead of outer `zebra-agent-web/fixtures/`). Fixed.
+- Three model tests collided with seeded slugs (`honesty`, `family`); they now use deliberately-non-colliding `test-*` slugs.
 
 ## 10. Documentation
 
