@@ -29,7 +29,7 @@ from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.models import resolve_model_name
 
 _DEFAULT_OUTPUT = (
-    Path(__file__).parent.parent.parent.parent / "fixtures" / "values_taxonomy_seed.yaml"
+    Path(__file__).parent.parent.parent.parent.parent / "fixtures" / "values_taxonomy_seed.yaml"
 )
 
 
