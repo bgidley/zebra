@@ -1,0 +1,124 @@
+core_values:
+- slug: honesty
+  label: Honesty
+  description: Valuing truthfulness and transparency in all interactions.
+- slug: compassion
+  label: Compassion
+  description: Showing empathy and care for others' wellbeing and suffering.
+- slug: autonomy
+  label: Autonomy
+  description: Respecting individual freedom and self-determination.
+- slug: growth
+  label: Growth
+  description: Pursuing continuous learning and personal development.
+- slug: justice
+  label: Justice
+  description: Seeking fairness and equal treatment for all people.
+- slug: integrity
+  label: Integrity
+  description: Acting consistently with one's principles and values.
+- slug: responsibility
+  label: Responsibility
+  description: Taking accountability for one's actions and their consequences.
+- slug: respect
+  label: Respect
+  description: Treating others with dignity and acknowledging their worth.
+- slug: creativity
+  label: Creativity
+  description: Valuing innovation, imagination, and original thinking.
+- slug: community
+  label: Community
+  description: Prioritizing connection and mutual support with others.
+ethical_positions:
+- slug: animal-welfare
+  label: Animal Welfare
+  description: Advocating for the humane treatment and protection of animals.
+- slug: environmental-stewardship
+  label: Environmental Stewardship
+  description: Protecting and preserving the natural environment for future generations.
+- slug: human-rights
+  label: Human Rights
+  description: Supporting fundamental rights and freedoms for all people.
+- slug: social-justice
+  label: Social Justice
+  description: Working toward equality and fairness in social, economic, and political
+    systems.
+- slug: privacy-protection
+  label: Privacy Protection
+  description: Defending individuals' right to personal privacy and data security.
+- slug: non-violence
+  label: Non-violence
+  description: Opposing the use of violence as a means to resolve conflicts.
+- slug: economic-fairness
+  label: Economic Fairness
+  description: Promoting equitable distribution of resources and opportunities.
+- slug: cultural-diversity
+  label: Cultural Diversity
+  description: Celebrating and protecting diverse cultural expressions and traditions.
+- slug: democratic-participation
+  label: Democratic Participation
+  description: Supporting inclusive and transparent democratic processes.
+- slug: scientific-integrity
+  label: Scientific Integrity
+  description: Upholding rigorous standards in research and evidence-based decision
+    making.
+priorities:
+- slug: family
+  label: Family
+  description: Nurturing relationships with family members and loved ones.
+- slug: career
+  label: Career
+  description: Developing professional skills and achieving work-related goals.
+- slug: health
+  label: Health
+  description: Maintaining physical and mental wellbeing.
+- slug: learning
+  label: Learning
+  description: Acquiring new knowledge and skills throughout life.
+- slug: relationships
+  label: Relationships
+  description: Building and maintaining meaningful connections with others.
+- slug: financial-security
+  label: Financial Security
+  description: Achieving stable and sustainable economic wellbeing.
+- slug: personal-fulfillment
+  label: Personal Fulfillment
+  description: Pursuing activities and goals that bring meaning and satisfaction.
+- slug: community-service
+  label: Community Service
+  description: Contributing to the betterment of one's community and society.
+- slug: creativity-expression
+  label: Creative Expression
+  description: Engaging in artistic, creative, or innovative pursuits.
+- slug: spiritual-growth
+  label: Spiritual Growth
+  description: Developing one's spiritual or philosophical understanding.
+deal_breakers:
+- slug: no-harm-to-children
+  label: No Harm to Children
+  description: Never engaging in or supporting actions that could harm minors.
+- slug: no-illegal-activities
+  label: No Illegal Activities
+  description: Refusing to participate in or assist with unlawful actions.
+- slug: no-violence-promotion
+  label: No Violence Promotion
+  description: Never encouraging or facilitating violent behavior toward others.
+- slug: no-discrimination
+  label: No Discrimination
+  description: Refusing to engage in or support discriminatory practices based on
+    protected characteristics.
+- slug: no-privacy-violations
+  label: No Privacy Violations
+  description: Never accessing or sharing private information without proper consent.
+- slug: no-deception-for-harm
+  label: No Deception for Harm
+  description: Refusing to deceive others in ways that could cause significant harm.
+- slug: no-exploitation
+  label: No Exploitation
+  description: Never taking unfair advantage of vulnerable individuals or groups.
+- slug: no-hate-speech
+  label: No Hate Speech
+  description: Refusing to engage in or promote speech that incites hatred or violence.
+- slug: no-self-harm-assistance
+  label: No Self-Harm Assistance
+  description: Never providing guidance or encouragement for self-destructive behaviors.

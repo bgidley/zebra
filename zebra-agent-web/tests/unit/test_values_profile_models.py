@@ -97,11 +97,12 @@ def test_versions_related_name():
 
 @pytest.mark.django_db
 def test_tag_creation_defaults():
+    # Use a slug that won't collide with the seed fixture.
     tag = ValuesTagModel.objects.create(
         id=_new_id(),
         field="core_values",
-        slug="honesty",
-        label="Honesty",
+        slug="test-tag-defaults",
+        label="Test Tag Defaults",
     )
     assert tag.status == "candidate"
     assert tag.usage_count == 0
@@ -112,22 +113,26 @@ def test_tag_creation_defaults():
 @pytest.mark.django_db
 def test_tag_field_slug_unique():
     ValuesTagModel.objects.create(
-        id=_new_id(), field="core_values", slug="honesty", label="Honesty"
+        id=_new_id(), field="core_values", slug="test-tag-uniq", label="Test"
     )
     with pytest.raises(IntegrityError):
         ValuesTagModel.objects.create(
-            id=_new_id(), field="core_values", slug="honesty", label="Honesty (dupe)"
+            id=_new_id(), field="core_values", slug="test-tag-uniq", label="Test (dupe)"
         )
 
 
 @pytest.mark.django_db
 def test_same_slug_allowed_across_fields():
-    """Same slug in different fields is allowed (e.g. 'family' as core value and priority)."""
-    ValuesTagModel.objects.create(id=_new_id(), field="core_values", slug="family", label="Family")
+    """Same slug in different fields is allowed."""
+    ValuesTagModel.objects.create(
+        id=_new_id(), field="core_values", slug="test-cross-field", label="Cross"
+    )
     # Same slug in a different field is fine.
-    ValuesTagModel.objects.create(id=_new_id(), field="priorities", slug="family", label="Family")
+    ValuesTagModel.objects.create(
+        id=_new_id(), field="priorities", slug="test-cross-field", label="Cross"
+    )
 
-    assert ValuesTagModel.objects.filter(slug="family").count() == 2
+    assert ValuesTagModel.objects.filter(slug="test-cross-field").count() == 2
 
 
 @pytest.mark.django_db
@@ -135,8 +140,8 @@ def test_tag_status_choices_persisted():
     tag = ValuesTagModel.objects.create(
         id=_new_id(),
         field="deal_breakers",
-        slug="harm-children",
-        label="No harm to children",
+        slug="test-status-choices",
+        label="Test status choices",
         status="seeded",
     )
     assert tag.status == "seeded"
