@@ -26,6 +26,7 @@ import yaml
 from django.core.management.base import BaseCommand, CommandError
 from zebra_tasks.llm import get_provider
 from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.models import resolve_model_name
 
 _DEFAULT_OUTPUT = (
     Path(__file__).parent.parent.parent.parent / "fixtures" / "values_taxonomy_seed.yaml"
@@ -138,7 +139,8 @@ class Command(BaseCommand):
 
 
 async def _call_llm(provider_name: str, model: str) -> dict:
-    provider = get_provider(provider_name, model=model)
+    resolved = resolve_model_name(model)
+    provider = get_provider(provider_name, model=resolved)
     response = await provider.complete(
         messages=[
             Message(role="system", content=_SYSTEM_PROMPT),
