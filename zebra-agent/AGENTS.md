@@ -41,6 +41,7 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 zebra-agent uses pluggable storage interfaces defined in `zebra_agent/storage/interfaces.py`:
 - `MemoryStore`: Interface for agent memory (short-term/long-term)
 - `MetricsStore`: Interface for workflow metrics tracking
+- `ProfileStore`: Interface for the per-user values profile (F18 / REQ-ETH-002)
 
 ### Standalone Usage (In-Memory - Default)
 When used directly via the CLI, in-memory implementations are used:
@@ -50,11 +51,13 @@ When used directly via the CLI, in-memory implementations are used:
 | Workflows | File-based (`~/.zebra-agent/workflows/`) | Persistent (YAML files) |
 | Memory | `InMemoryMemoryStore` | Transient (lost on exit) |
 | Metrics | `InMemoryMetricsStore` | Transient (lost on exit) |
+| Profile | `InMemoryProfileStore` | Transient (lost on exit) |
 
 ### Web Usage (Django ORM)
 When used through `zebra-agent-web`, Django ORM implementations are used:
 - `DjangoMemoryStore` implements `MemoryStore`
 - `DjangoMetricsStore` implements `MetricsStore`
+- `DjangoProfileStore` implements `ProfileStore`
 - Database backend configured via Django's `DATABASES` setting
 
 ## Module-Specific Commands

@@ -1,0 +1,40 @@
+schema: spec-driven
+
+context: |
+  Project: Zebra — a multi-language workflow orchestration engine for AI-assisted development.
+
+  Monorepo (UV workspaces), 4 Python packages:
+  - zebra-py: core engine, MCP server, process/task state machine
+  - zebra-tasks: reusable task actions (LLM, subtasks, compute)
+  - zebra-agent: self-improving agent library + Django REST API
+  - zebra-agent-web: Django web UI + budget daemon
+
+  Tech stack: Python 3.11+, Django, DRF, Pydantic, pytest, Ruff, UV.
+  Database: Oracle (production), SQLite (tests). Async throughout (asyncio).
+  LLM: Anthropic Claude via `anthropic` SDK. MCP integration for tool access.
+
+  Conventions:
+  - Feature branches: fN/short-description; commits reference GitLab issue (#N)
+  - Conventional commits: feat/fix/ci/docs/refactor
+  - Line length 100, Ruff for lint + format, no relative imports
+  - All engine ops are async; properties must be JSON-serialisable
+  - New task actions: inherit TaskAction, register as entry-point in pyproject.toml
+  - Tests: pytest-asyncio (auto mode), real DB for integration, no mocking the DB
+
+  Version control: GitLab (canonical) + GitHub mirror. CI: lint → unit → e2e → deploy.
+  Issue tracker: GitLab issues at https://gitlab.com/gidley/zebra/-/issues.
+
+rules:
+  proposal:
+    - Reference the GitLab issue number (e.g. "Closes #N") in the overview
+    - Include a Non-goals section
+    - Keep under 400 words
+  design:
+    - Call out data model changes (new tables, store interface changes, migrations)
+    - Call out API/interface changes (new endpoints, task actions, YAML schema additions)
+    - Note which specs/zebra-as-is.md sections need updating
+  tasks:
+    - Each task should be implementable in under 2 hours
+    - Include a "write tests" task for every non-trivial feature
+    - Include a "run lint + format" step before any commit task
+    - Reference the branch naming convention (fN/short-description)

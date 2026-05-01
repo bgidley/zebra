@@ -1,0 +1,200 @@
+# Values Profile Wizard (F18 / REQ-ETH-002)
+#
+# Per-user wizard for capturing or editing the values profile. The same
+# workflow runs in both modes: edit mode is signalled by passing
+# `existing_profile_version_id` in the initial process properties (the
+# load_values_profile action then writes existing_profile.* into properties
+# for use as form defaults).
+#
+# Steps:
+#   1. load_profile        (auto)   load existing version if any (capture/edit)
+#   2..5 free-form text forms       (human) one per field
+#   6. extract_tags        (auto)   LLM-extract approved + candidate tags
+#   7. review              (human)  show extracted tags, allow edits
+#   8. save_profile        (auto)   persist the new version + tag rows
+#
+# This workflow is a system workflow — see _is_system_workflow in
+# zebra_agent/loop.py.
+
+name: "Values Profile Wizard"
+version: 1
+description: "Capture or edit the user's per-user values profile."
+tags: ["profile", "system", "values"]
+use_when: "INTERNAL USE ONLY — invoked from /profile/values/ to capture or edit the values profile"
+first_task: load_profile
+
+tasks:
+  load_profile:
+    name: "Load Existing Profile"
+    action: load_values_profile
+    auto: true
+    properties:
+      user_id: "{{user_id}}"
+      output_key: existing_profile
+
+  core_values_form:
+    name: "Core Values"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Core Values"
+        description: "Tell us about your core values — the things that matter most to you. Free-form, in your own words."
+        required: [core_values_text]
+        properties:
+          core_values_text:
+            type: string
+            title: "What are your core values?"
+            description: "E.g. honesty, curiosity, kindness, growth — describe what these mean to you."
+            format: multiline
+            default: "{{existing_profile.core_values_text}}"
+
+  ethical_positions_form:
+    name: "Ethical Positions"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Ethical Positions"
+        description: "Where do you stand on ethical questions that matter to you? (Animal welfare, environment, work ethics, etc.)"
+        required: [ethical_positions_text]
+        properties:
+          ethical_positions_text:
+            type: string
+            title: "Your ethical positions"
+            description: "Be specific — e.g. 'I'm vegetarian for animal welfare reasons', 'I prioritise environmental impact in purchasing decisions'."
+            format: multiline
+            default: "{{existing_profile.ethical_positions_text}}"
+
+  priorities_form:
+    name: "Priorities"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Priorities"
+        description: "What life domains do you prioritise, and in what order?"
+        required: [priorities_text]
+        properties:
+          priorities_text:
+            type: string
+            title: "Your priorities"
+            description: "E.g. 'Family first, then career, then personal projects'. Order matters."
+            format: multiline
+            default: "{{existing_profile.priorities_text}}"
+
+  deal_breakers_form:
+    name: "Deal-Breakers"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Deal-Breakers"
+        description: "Absolute constraints — things you would never want an AI to do on your behalf, regardless of context."
+        required: [deal_breakers_text]
+        properties:
+          deal_breakers_text:
+            type: string
+            title: "Your deal-breakers"
+            description: "E.g. 'No deception', 'No actions that harm vulnerable people', 'No surveillance of family members'."
+            format: multiline
+            default: "{{existing_profile.deal_breakers_text}}"
+
+  extract_tags:
+    name: "Extract Tags"
+    action: extract_values_tags
+    auto: true
+    properties:
+      core_values_text: "{{__task_output_core_values_form.core_values_text}}"
+      ethical_positions_text: "{{__task_output_ethical_positions_form.ethical_positions_text}}"
+      priorities_text: "{{__task_output_priorities_form.priorities_text}}"
+      deal_breakers_text: "{{__task_output_deal_breakers_form.deal_breakers_text}}"
+      output_key: extracted_tags
+
+  review_form:
+    name: "Review"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Review your values profile"
+        description: "We've extracted tags from your text. Review and edit before saving — your tags can be added to / removed as needed."
+        required:
+          - core_values_text
+          - ethical_positions_text
+          - priorities_text
+          - deal_breakers_text
+        properties:
+          core_values_text:
+            type: string
+            title: "Core values (text)"
+            format: multiline
+            default: "{{__task_output_core_values_form.core_values_text}}"
+          core_values_tags:
+            type: array
+            title: "Core values (tags)"
+            description: "Comma-separated. We've pre-filled with what we extracted; edit freely."
+            items:
+              type: string
+          ethical_positions_text:
+            type: string
+            title: "Ethical positions (text)"
+            format: multiline
+            default: "{{__task_output_ethical_positions_form.ethical_positions_text}}"
+          ethical_positions_tags:
+            type: array
+            title: "Ethical positions (tags)"
+            items:
+              type: string
+          priorities_text:
+            type: string
+            title: "Priorities (text)"
+            format: multiline
+            default: "{{__task_output_priorities_form.priorities_text}}"
+          priorities_tags:
+            type: array
+            title: "Priorities (tags)"
+            items:
+              type: string
+          deal_breakers_text:
+            type: string
+            title: "Deal-breakers (text)"
+            format: multiline
+            default: "{{__task_output_deal_breakers_form.deal_breakers_text}}"
+          deal_breakers_tags:
+            type: array
+            title: "Deal-breakers (tags)"
+            items:
+              type: string
+
+  save_profile:
+    name: "Save Profile"
+    action: save_values_profile
+    auto: true
+    properties:
+      user_id: "{{user_id}}"
+      created_via: "{{existing_profile.mode}}"
+      from_task_id: review_form
+      output_key: saved_profile
+
+routings:
+  - from: load_profile
+    to: core_values_form
+
+  - from: core_values_form
+    to: ethical_positions_form
+
+  - from: ethical_positions_form
+    to: priorities_form
+
+  - from: priorities_form
+    to: deal_breakers_form
+
+  - from: deal_breakers_form
+    to: extract_tags
+
+  - from: extract_tags
+    to: review_form
+
+  - from: review_form
+    to: save_profile

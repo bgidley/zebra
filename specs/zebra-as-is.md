@@ -199,6 +199,17 @@ Minimal: `/list`, `/stats`, `/help`, `/quit`. Launch with `zebra-agent` / `pytho
 
 Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, post-execution review. Implementation is LLM-prompt-based Kantian reasoning (universalizability, rational beings as ends, autonomy). Human confirmation task waits for acknowledgement before completion.
 
+### Values profile (F18 / REQ-ETH-002)
+
+Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_breakers` — free-form text plus structured tags. The data lives behind a new `ProfileStore` interface (`zebra_agent/storage/interfaces.py`) with `InMemoryProfileStore` and `DjangoProfileStore` backends.
+
+- **Versioning.** Every save creates an immutable `ValuesProfileVersion` with a monotonic `version_number`; `ValuesProfileModel.current_version` points to the latest. Old versions are retained for audit.
+- **Hybrid taxonomy.** Tags are field-scoped with `status ∈ {seeded, promoted, candidate}`. The wizard's extract step asks an LLM to pick from the approved set (`seeded + promoted`) and propose new candidates from free-form text. User-confirmed candidates are persisted as `candidate` rows with incremented `usage_count`. Promotion of candidates → `promoted` is deferred to a follow-up issue (out of F18 scope).
+- **Wizard.** `zebra-agent/workflows/values_profile_wizard.yaml` is a system workflow with eight steps: load existing profile (auto), four free-form text forms (human tasks), extract tags via LLM (auto), review (human task), save (auto). Used for both first-time capture and edit mode (signalled by `existing_profile_version_id` in the initial process properties; load step pre-populates form defaults).
+- **Bootstrap.** `manage.py bootstrap_values_taxonomy` calls an LLM to draft a starter taxonomy and writes a reviewable YAML fixture; the maintainer reviews and commits it, and a data migration loads it as `status="seeded"` on first `migrate`.
+- **Web entry-point.** `/profile/values/` (`web_views.values_profile_wizard`) creates a wizard process for the authenticated user and redirects to the first pending task.
+- **Not yet wired into the ethics gate.** F18 ships data + UI only. Consumption by the gate is REQ-ETH-003, a follow-up change.
+
 ### Strengths
 
 - Declarative agent behaviour — YAML is editable, inspectable, version-controllable.
@@ -211,10 +222,10 @@ Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, po
 - **Standalone CLI loses all state on exit** — no SQLite default; only in-memory stores.
 - **Dream cycle is experimentally powerful but unvalidated** — LLM-driven mutations aren't gated by tests.
 - **No trust model exists.** Requirements describe SUPERVISED / SEMI-AUTONOMOUS / AUTONOMOUS; implementation has none of this.
-- **No values profile** — ethics is generic Kantian, not personalised.
+- ~~**No values profile** — ethics is generic Kantian, not personalised.~~ Resolved by F18 (data + UI). Ethics-gate consumption is still pending (REQ-ETH-003).
 - **No personal knowledge store** — only the three workflow-focused tiers.
 - **Only a goal scheduler, not a time/event scheduler** — `GoalScheduler` (`zebra-agent/zebra_agent/scheduler.py`) picks the next CREATED process by priority, deadline, and age for the budget daemon to run. There is **no time-based polling scheduler** (REQ-PRIN-008) and **no event-driven trigger bus** (REQ-PRIN-009).
-- **Single-user implicit** — no `user_id` namespacing anywhere in stores or schemas.
+- ~~**Single-user implicit** — no `user_id` namespacing anywhere in stores or schemas.~~ Resolved by F6 (REQ-USR-002).
 - **Agent main loop YAML is 258 lines** — hard to unit-test sub-branches.
 - **Conceptual memory scan is O(n)** — no indexing; fine for hundreds of entries, degrades thereafter.
 

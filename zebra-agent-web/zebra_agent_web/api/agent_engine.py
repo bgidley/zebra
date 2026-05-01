@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
     from zebra_agent_web.memory_store import DjangoMemoryStore
     from zebra_agent_web.metrics_store import DjangoMetricsStore
+    from zebra_agent_web.profile_store import DjangoProfileStore
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 _library: "WorkflowLibrary | None" = None
 _metrics: "DjangoMetricsStore | None" = None
 _memory: "DjangoMemoryStore | None" = None
+_profile: "DjangoProfileStore | None" = None
 _agent_loop: "AgentLoop | None" = None
 _budget_manager: "BudgetManager | None" = None
 _initialized = False
@@ -57,7 +59,7 @@ def initialize() -> None:
 
 async def _async_init() -> None:
     """Async initialization of agent components."""
-    global _library, _metrics, _memory, _agent_loop
+    global _library, _metrics, _memory, _profile, _agent_loop
 
     if _library is not None:
         return
@@ -70,6 +72,7 @@ async def _async_init() -> None:
     from zebra_agent_web.api.engine import get_engine
     from zebra_agent_web.memory_store import DjangoMemoryStore
     from zebra_agent_web.metrics_store import DjangoMetricsStore
+    from zebra_agent_web.profile_store import DjangoProfileStore
 
     agent_settings = _get_agent_settings()
 
@@ -82,6 +85,11 @@ async def _async_init() -> None:
     logger.info("Initializing memory store (Django)")
     _memory = DjangoMemoryStore()
     await _memory.initialize()
+
+    # Initialize values-profile store (Django ORM, F18)
+    logger.info("Initializing profile store (Django)")
+    _profile = DjangoProfileStore()
+    await _profile.initialize()
 
     # Initialize workflow library
     library_path = Path(agent_settings["LIBRARY_PATH"]).expanduser()
@@ -144,6 +152,7 @@ async def _async_init() -> None:
         engine=engine,
         metrics=_metrics,
         memory=_memory,
+        profile=_profile,
         provider=agent_settings.get("LLM_PROVIDER", "anthropic"),
         model=agent_settings.get("LLM_MODEL"),
     )
@@ -182,6 +191,17 @@ def get_memory() -> "DjangoMemoryStore":
     if _memory is None:
         raise RuntimeError("Memory not initialized. Call ensure_initialized() first.")
     return _memory
+
+
+def get_profile() -> "DjangoProfileStore":
+    """Get the DjangoProfileStore instance.
+
+    Raises:
+        RuntimeError: If the profile store hasn't been initialized.
+    """
+    if _profile is None:
+        raise RuntimeError("Profile store not initialized. Call ensure_initialized() first.")
+    return _profile
 
 
 def get_agent_loop() -> "AgentLoop":

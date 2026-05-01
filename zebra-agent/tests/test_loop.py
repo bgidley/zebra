@@ -238,6 +238,16 @@ class TestIsSystemWorkflow:
         assert loop._is_system_workflow("Test Workflow") is False
         assert loop._is_system_workflow("Code Review") is False
 
+    def test_values_profile_wizard_is_system(self, library, mock_engine, metrics):
+        """The F18 values-profile wizard is internal — never a candidate for goals."""
+        loop = AgentLoop(
+            library=library,
+            engine=mock_engine,
+            metrics=metrics,
+            provider="anthropic",
+        )
+        assert loop._is_system_workflow("Values Profile Wizard") is True
+
 
 class TestRecordRating:
     """Tests for recording ratings."""
