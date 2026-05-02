@@ -3,7 +3,7 @@ name = "zebra-tasks"
 version = "0.1.0"
 description = "Reusable task actions for the Zebra workflow engine"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Zebra Contributors" }]
 keywords = ["workflow", "tasks", "llm", "agents"]

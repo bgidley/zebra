@@ -3,7 +3,7 @@ name = "zebra-agent"
 version = "0.1.0"
 description = "Self-improving agent library that uses zebra workflows"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Zebra Contributors" }]
 keywords = ["workflow", "agent", "llm", "ai"]
