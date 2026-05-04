@@ -78,14 +78,14 @@ class TestLoadYamlDir:
 
     def test_missing_name_skipped(self, registry, routines_dir, caplog):
         write_yaml(routines_dir, "bad.yaml", {"schedule": {"every": "5m"}})
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger="zebra_agent.scheduler.registry"):
             registry.load_yaml_dir(routines_dir)
         assert registry.all() == []
         assert "missing required fields" in caplog.text
 
     def test_missing_schedule_skipped(self, registry, routines_dir, caplog):
         write_yaml(routines_dir, "bad.yaml", {"name": "incomplete"})
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger="zebra_agent.scheduler.registry"):
             registry.load_yaml_dir(routines_dir)
         assert registry.all() == []
 
