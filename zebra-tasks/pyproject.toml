@@ -20,7 +20,7 @@ dependencies = [
     "zebra-workflow",
     "pydantic>=2.0",
     "httpx>=0.25",
-    "python-dotenv>=1.0",
+    "python-dotenv>=1.2.2",
     "aiofiles>=23.0",
 ]
 
@@ -32,7 +32,7 @@ anthropic = ["anthropic>=0.18"]
 openai = ["openai>=1.0"]
 all = ["anthropic>=0.18", "openai>=1.0"]
 dev = [
-    "pytest>=7.0",
+    "pytest>=9.0.3",
     "pytest-asyncio>=0.21",
     "pytest-cov>=4.0",
 ]

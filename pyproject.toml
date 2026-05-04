@@ -4,9 +4,13 @@ version = "0.1.0"
 description = "Zebra workflow engine workspace"
 requires-python = ">=3.12"
 dependencies = [
+    "cbor2>=5.9.0",
     "cryptography>=46.0.7",
     "django>=5.2.10",
     "djangorestframework-stubs>=3.16.7",
+    "pyasn1>=0.6.3",
+    "pygments>=2.20.0",
+    "ujson>=5.12.0",
 ]
 
 [tool.uv.workspace]
@@ -20,7 +24,7 @@ zebra-agent-web = { workspace = true }
 
 [dependency-groups]
 dev = [
-    "pytest>=7.0",
+    "pytest>=9.0.3",
     "pytest-asyncio>=0.21",
     "pytest-cov>=4.0",
     "pytest-dotenv>=0.5.2",
