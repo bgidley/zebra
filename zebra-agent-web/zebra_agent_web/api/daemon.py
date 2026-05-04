@@ -1,19 +1,25 @@
-"""Reusable budget daemon loop for queued goal execution.
+"""Budget daemon — goal-queue execution and polling scheduler.
 
 This module contains the core daemon logic shared by:
 - The ``run_daemon`` management command (standalone process)
 - The ASGI auto-start middleware (in-process background task)
 
-The daemon continuously picks the highest-priority CREATED process,
-checks the daily budget, starts it, waits for completion, and repeats.
+``run_daemon_loop`` starts a ``SchedulerLoop`` that:
+  1. Fires ``goal_queue_tick`` on every poll interval (picks the highest-priority
+     CREATED process, budget-checks it, starts it, waits for completion, logs cost).
+  2. Fires any other routines discovered from ``fixtures/routines/*.yaml`` when due.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Path to the built-in routine definitions relative to this file
+_ROUTINES_DIR = Path(__file__).parent.parent.parent / "fixtures" / "routines"
 
 
 async def run_daemon_loop(
@@ -22,7 +28,7 @@ async def run_daemon_loop(
     daily_budget: float | None = None,
     poll_interval: int | None = None,
 ) -> None:
-    """Run the budget daemon loop until *stop_event* is set.
+    """Run the scheduler+daemon loop until *stop_event* is set.
 
     Parameters
     ----------
@@ -55,36 +61,51 @@ async def run_daemon_loop(
     if poll_interval is None:
         poll_interval = agent_settings.get("DAEMON_POLL_INTERVAL", 30)
 
+    wf_engine = get_engine()
+
+    from zebra_agent.scheduler.loop import SchedulerLoop
+    from zebra_agent.scheduler.registry import RoutineRegistry
+
+    from zebra_agent_web.routine_run_store import DjangoRoutineRunStore
+
+    registry = RoutineRegistry()
+    store = DjangoRoutineRunStore()
+
+    # The goal_queue_tick_fn wraps the full _tick logic (budget check, wait,
+    # metrics) so the SchedulerLoop doesn't need to know about it.
     from zebra_agent.scheduler import GoalScheduler
 
-    wf_engine = get_engine()
-    scheduler = GoalScheduler(wf_engine.store)
+    goal_scheduler = GoalScheduler(wf_engine.store)
 
-    logger.info(
-        "Budget daemon started  budget=$%.2f/day  poll=%ds",
-        budget_manager.daily_budget_usd,
-        poll_interval,
+    async def _goal_queue_tick_fn() -> None:
+        await _tick(
+            scheduler=goal_scheduler,
+            budget_manager=budget_manager,
+            engine=wf_engine,
+            dry_run=False,
+        )
+
+    scheduler_loop = SchedulerLoop(
+        registry=registry,
+        store=store,
+        engine=wf_engine,
+        budget_manager=budget_manager,
+        stop_event=stop_event,
+        poll_interval=poll_interval,
+        routines_dir=str(_ROUTINES_DIR),
+        goal_queue_tick_fn=_goal_queue_tick_fn,
     )
 
-    while not stop_event.is_set():
-        try:
-            await _tick(
-                scheduler=scheduler,
-                budget_manager=budget_manager,
-                engine=wf_engine,
-                dry_run=False,
-            )
-        except Exception:
-            logger.exception("Error in daemon tick")
+    logger.info(
+        "Daemon started via SchedulerLoop  budget=$%.2f/day  poll=%ds  routines_dir=%s",
+        budget_manager.daily_budget_usd,
+        poll_interval,
+        _ROUTINES_DIR,
+    )
 
-        # Sleep (interruptible by stop_event)
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=poll_interval)
-            break  # stop_event was set
-        except TimeoutError:
-            pass  # normal — just continue the loop
+    await scheduler_loop.run()
 
-    logger.info("Budget daemon stopped.")
+    logger.info("Daemon stopped.")
 
 
 async def _tick(
@@ -94,7 +115,7 @@ async def _tick(
     engine,
     dry_run: bool,
 ) -> None:
-    """One iteration: pick a goal, check budget, execute, log cost."""
+    """One goal-queue iteration: pick a goal, check budget, execute, log cost."""
     from zebra.core.models import ProcessState
 
     from zebra_agent_web.api.kill_switch import is_halted

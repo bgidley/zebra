@@ -1,0 +1,9 @@
+name: dream_cycle
+description: >
+  Daily self-improvement cycle: analyze metrics, evaluate workflows, optimize.
+  Runs at 03:00 UTC every day.
+schedule: "0 3 * * *"
+workflow: Dream Cycle   # references the existing dream_cycle.yaml workflow
+budget_aware: false
+quiet_hours_ok: false   # explicitly allowed to run in quiet hours
+on_missed: skip

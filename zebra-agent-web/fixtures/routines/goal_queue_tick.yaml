@@ -1,0 +1,10 @@
+name: goal_queue_tick
+description: >
+  Pick the highest-priority queued goal (CREATED process) and start it.
+  This replaces the previous raw daemon loop tick.
+schedule:
+  every: 30s
+workflow: null        # null = goal_queue_tick built-in behaviour (no new process created)
+budget_aware: true
+quiet_hours_ok: true
+on_missed: skip

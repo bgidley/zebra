@@ -22,6 +22,7 @@ dependencies = [
     "pyyaml>=6.0",
     "dependency-injector>=4.44.0",
     "pydantic-settings>=2.0",
+    "cronsim>=2.6",
 ]
 
 [tool.uv.sources]
@@ -33,6 +34,10 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.21",
 ]
+
+[project.entry-points."zebra.schedules"]
+# Built-in routine factories are registered here.
+# Third-party packages can add their own routines via this group.
 
 [build-system]
 requires = ["hatchling"]

@@ -224,7 +224,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 - **No trust model exists.** Requirements describe SUPERVISED / SEMI-AUTONOMOUS / AUTONOMOUS; implementation has none of this.
 - ~~**No values profile** — ethics is generic Kantian, not personalised.~~ Resolved by F18 (data + UI). Ethics-gate consumption is still pending (REQ-ETH-003).
 - **No personal knowledge store** — only the three workflow-focused tiers.
-- **Only a goal scheduler, not a time/event scheduler** — `GoalScheduler` (`zebra-agent/zebra_agent/scheduler.py`) picks the next CREATED process by priority, deadline, and age for the budget daemon to run. There is **no time-based polling scheduler** (REQ-PRIN-008) and **no event-driven trigger bus** (REQ-PRIN-009).
+- ~~**Only a goal scheduler, not a time/event scheduler**~~ — `GoalScheduler` (`zebra-agent/zebra_agent/scheduler/goal_queue.py`) picks the next CREATED process for the budget daemon. A cron/interval `SchedulerLoop` now fires built-in and user-defined routines (F27 / REQ-PRIN-008). There is **no event-driven trigger bus** (REQ-PRIN-009).
 - ~~**Single-user implicit** — no `user_id` namespacing anywhere in stores or schemas.~~ Resolved by F6 (REQ-USR-002).
 - **Agent main loop YAML is 258 lines** — hard to unit-test sub-branches.
 - **Conceptual memory scan is O(n)** — no indexing; fine for hundreds of entries, degrades thereafter.
@@ -304,7 +304,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 2. **MCP story is incomplete** — advertised in docs and requirements, but no live server in `zebra-py/zebra/mcp/`.
 3. **No user namespace** — every store assumes a single tenant. Multi-user (REQ-USR-002..005) will touch every storage interface.
 4. **No trust model or values profile** — the policy layer required by REQ-TRUST-* and REQ-ETH-002/003 does not exist. Ethics gates are generic and advisory.
-5. **No time scheduler or event bus** — a `GoalScheduler` exists (priority/deadline/age ranking of queued goals for the budget daemon), but proactivity (REQ-PRIN-006/008/009) is blocked: there are no cron-like routines, no external webhook intake, no trigger subscriptions.
+5. ~~**No time scheduler or event bus**~~ — `SchedulerLoop` (F27) adds cron/interval routine scheduling. `GoalScheduler` ranks queued goals. No event-driven trigger bus (REQ-PRIN-009), no webhook intake, no trigger subscriptions.
 6. **CLI surface is thin** — four commands; no way to manage memory, workflows, trust, or budget from the terminal.
 7. **Standalone agent is ephemeral** — no persistent store outside the Django UI; CLI users lose memory on exit.
 8. **Error recovery is minimal** — timeouts, but no retry/backoff, no hung-call detection.
@@ -340,7 +340,9 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | Workflow library | `zebra-agent/zebra_agent/library.py` |
 | IoC container & registry | `zebra-agent/zebra_agent/ioc/` |
 | Budget manager | `zebra-agent/zebra_agent/budget.py` |
-| Goal scheduler (priority / deadline / age) | `zebra-agent/zebra_agent/scheduler.py` |
+| Goal scheduler (priority / deadline / age) | `zebra-agent/zebra_agent/scheduler/goal_queue.py` |
+| Polling scheduler (SchedulerLoop, RoutineRegistry, FakeClock) | `zebra-agent/zebra_agent/scheduler/` |
+| Routine run persistence | `zebra-agent-web/zebra_agent_web/routine_run_store.py` |
 | Web views & templates | `zebra-agent-web/zebra_agent_web/` |
 | Daemon loop | `zebra-agent-web/zebra_agent_web/api/daemon.py` |
 | ASGI middleware (auto-start) | `zebra-agent-web/zebra_agent_web/asgi.py` |
@@ -359,7 +361,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | Values profile & values-informed ethics | **Missing** | REQ-ETH-002/003 |
 | Personal knowledge store | **Missing** | REQ-MEM-004..006 |
 | Proactive goal generation | **Missing** | REQ-PEER-001, REQ-PRIN-006 |
-| Polling scheduler (beyond budget daemon) | **Partial** | REQ-PRIN-008 |
+| Polling scheduler (SchedulerLoop + RoutineRegistry) | **Implemented** (F27) | REQ-PRIN-008 |
 | Event-driven trigger bus | **Missing** | REQ-PRIN-009 |
 | Notification system | **Missing** | REQ-UI-004 |
 | Chat interface | **Missing** | REQ-UI-002 |
