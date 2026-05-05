@@ -59,6 +59,6 @@
 - [x] 10.1 Update `specs/zebra-as-is.md`: change polling-scheduler gap to "Implemented", add `scheduler/` package description
 - [x] 10.2 Run `uv run ruff check --fix . && uv run ruff format .`
 - [x] 10.3 Run full test suite `uv run pytest` — all passing
-- [ ] 10.4 Commit with `feat: add polling scheduler (SchedulerLoop + RoutineRegistry)\n\nCloses #27`
-- [ ] 10.5 Push to GitLab, verify CI pipeline green (`lint → unit → e2e`)
-- [ ] 10.6 Push branch to GitHub, open PR targeting master
+- [x] 10.4 Commit with `feat: add polling scheduler (SchedulerLoop + RoutineRegistry)\n\nCloses #27`
+- [x] 10.5 Push to GitLab, verify CI pipeline green (`lint → unit → e2e`)
+- [x] 10.6 Push branch to GitHub, open PR targeting master
