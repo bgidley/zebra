@@ -464,3 +464,28 @@ class WebAuthnCredential(models.Model):
 
     def __str__(self):
         return f"Credential for {self.user.username}"
+
+
+# =============================================================================
+# Scheduler Models (Polling Scheduler - F27 / REQ-PRIN-008)
+# =============================================================================
+
+
+class RoutineRunModel(models.Model):
+    """Persisted last/next run state for each scheduled routine.
+
+    One row per routine name. Updated atomically after every dispatch.
+    """
+
+    routine_name = models.CharField(max_length=255, primary_key=True)
+    last_run = models.DateTimeField(null=True, blank=True)
+    next_run = models.DateTimeField()
+    last_status = models.CharField(max_length=50, default="pending")
+
+    class Meta:
+        db_table = "zebra_routine_runs"
+        verbose_name = "Routine Run"
+        verbose_name_plural = "Routine Runs"
+
+    def __str__(self):
+        return f"RoutineRun({self.routine_name}, next={self.next_run})"
