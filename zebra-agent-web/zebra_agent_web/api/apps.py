@@ -12,7 +12,7 @@ class ApiConfig(AppConfig):
 
     def ready(self):
         """Initialize the Zebra agent when Django starts."""
-        from zebra_agent_web.api import agent_engine, engine
+        from zebra_agent_web.api import agent_engine, engine, version  # noqa: F401
 
         # Mark engines for lazy initialization
         engine.initialize()

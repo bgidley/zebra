@@ -50,6 +50,9 @@ COPY --from=builder /app/zebra-agent zebra-agent/
 COPY --from=builder /app/zebra-agent-web zebra-agent-web/
 COPY --from=builder /app/pyproject.toml pyproject.toml
 
+# Copy version metadata baked by CI (falls back to absent if not present in build context)
+COPY version.json /app/version.json
+
 # Copy entrypoint
 COPY docker/entrypoint.sh /app/docker/entrypoint.sh
 
