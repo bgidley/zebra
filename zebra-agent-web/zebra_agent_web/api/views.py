@@ -12,6 +12,7 @@ import uuid
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.contrib.auth.decorators import login_not_required
+from django.http import JsonResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -33,6 +34,7 @@ from zebra_agent_web.api.serializers import (
     WorkflowRunSerializer,
     WorkflowStatsSerializer,
 )
+from zebra_agent_web.api.version import _VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -1085,3 +1087,9 @@ def process_delete(request, process_id):
             status=status.HTTP_404_NOT_FOUND,
         )
     return Response({"deleted": True, "process_id": process_id})
+
+
+@login_not_required
+def version_info(request):
+    """Return git version metadata baked into the image at build time."""
+    return JsonResponse(_VERSION)

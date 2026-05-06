@@ -154,5 +154,37 @@
     </div>
     
     {% block extra_js %}{% endblock %}
+
+    <!-- Version footer -->
+    <div x-data="{
+            open: false,
+            version: {short_hash: '...', date: '', commits: []},
+            async init() {
+                try {
+                    const r = await fetch('/api/version/');
+                    this.version = await r.json();
+                } catch(e) {}
+            }
+         }"
+         class="fixed bottom-0 left-0 right-0 lg:left-64 z-40 bg-gray-900 border-t border-gray-800">
+        <button @click="open = !open"
+                class="w-full px-4 py-1 text-left text-xs text-gray-500 hover:text-gray-400 font-mono flex items-center gap-2">
+            <span x-text="version.short_hash"></span>
+            <span x-show="version.date" x-text="'· ' + version.date"></span>
+            <span class="ml-auto" x-text="open ? '▾' : '▸'"></span>
+        </button>
+        <div x-show="open" x-cloak class="border-t border-gray-800 max-h-48 overflow-y-auto">
+            <template x-if="version.commits.length === 0">
+                <p class="px-4 py-2 text-xs text-gray-600 font-mono">No commit history available.</p>
+            </template>
+            <template x-for="c in version.commits" :key="c.hash">
+                <div class="flex gap-3 px-4 py-1 text-xs font-mono text-gray-500 hover:bg-gray-800">
+                    <span class="text-gray-600 shrink-0" x-text="c.hash"></span>
+                    <span class="text-gray-600 shrink-0" x-text="c.date"></span>
+                    <span class="text-gray-400 truncate" x-text="c.subject"></span>
+                </div>
+            </template>
+        </div>
+    </div>
 </body>
 </html>

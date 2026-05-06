@@ -12,4 +12,4 @@ htmlcov/
 .env.*
 !.env.example
 tmp
-.air/mcp.json
+.air/mcp.jsonversion.json
