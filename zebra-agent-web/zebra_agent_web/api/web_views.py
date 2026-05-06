@@ -17,6 +17,7 @@ from typing import Any
 
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
+from django.contrib.auth.decorators import login_not_required
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_exempt
@@ -49,6 +50,7 @@ def _identity_context() -> dict:
 # =============================================================================
 
 
+@login_not_required
 def setup_view(request):
     """First-run setup page — capture user display name."""
     from zebra_agent_web.api.identity import set_identity_sync
