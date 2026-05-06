@@ -45,8 +45,8 @@
 
 - [x] 8.1 Run `uv run ruff check --fix .` and `uv run ruff format .`
 - [x] 8.2 Run `uv run pytest zebra-agent-web/tests/ -v` — all tests pass
-- [ ] 8.3 Commit: `feat: add version footer baked from git at CI build time\n\nCloses #NN`
-- [ ] 8.4 Push branch and verify GitLab CI pipeline passes (`lint → unit → e2e`)
+- [x] 8.3 Commit: `feat: add version footer baked from git at CI build time\n\nCloses #NN`
+- [x] 8.4 Push branch and verify GitLab CI pipeline passes (`lint → unit → e2e`)
 
 ## 9. Merge
 
