@@ -5,6 +5,7 @@ from __future__ import annotations
 # URL prefixes that are always accessible even before first-run setup
 _SETUP_EXEMPT_PREFIXES = (
     "/api/",
+    "/auth/",  # auth pages (login, setup, passkey) must be reachable before setup
     "/setup",
     "/static/",
     "/admin/",

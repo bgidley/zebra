@@ -42,6 +42,7 @@ _ALWAYS_ALLOWED = {
     "/auth/complete-authenticate/",
     "/api/health/",
     "/api/metrics/",
+    "/api/version/",
 }
 
 
