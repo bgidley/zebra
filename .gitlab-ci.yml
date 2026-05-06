@@ -59,7 +59,7 @@ deploy:
     - cp /home/opc/projects/zebra/.env .env
     # Bake git version metadata into the image at build time (git not in container)
     - python scripts/gen_version.py > version.json
-    - podman-compose up -d --build
+    - podman-compose up -d --build --force-recreate
     - podman-compose ps
   rules:
     - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
