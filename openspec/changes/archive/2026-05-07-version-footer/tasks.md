@@ -50,5 +50,5 @@
 
 ## 9. Merge
 
-- [ ] 9.1 Push branch to GitHub and open a PR referencing the GitLab issue
-- [ ] 9.2 Merge to master, push to both remotes, verify deploy pipeline rebuilds image with `version.json` and footer is visible in production
+- [x] 9.1 Push branch to GitHub and open a PR referencing the GitLab issue
+- [x] 9.2 Merge to master, push to both remotes, verify deploy pipeline rebuilds image with `version.json` and footer is visible in production
