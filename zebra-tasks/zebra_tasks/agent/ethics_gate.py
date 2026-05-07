@@ -11,7 +11,7 @@ from zebra_tasks.llm.providers import get_provider
 
 logger = logging.getLogger(__name__)
 
-KANTIAN_SYSTEM_PROMPT = """\
+_KANTIAN_PREAMBLE = """\
 You are an ethics evaluator grounded in Kantian moral philosophy. You evaluate whether
 a proposed action is ethically permissible by applying the categorical imperative.
 
@@ -41,8 +41,9 @@ EVALUATION GUIDELINES:
 - A goal fails only when it genuinely violates a test, not when it merely touches
   a sensitive topic.
 - When rejecting, explain clearly which test(s) failed and why.
-- Consider the action from the perspective of all affected rational beings.
+- Consider the action from the perspective of all affected rational beings."""
 
+_KANTIAN_JSON_SCHEMA = """\
 Respond with JSON only:
 {
     "approved": true or false,
@@ -51,6 +52,36 @@ Respond with JSON only:
     "autonomy": {"pass": true/false, "reasoning": "..."},
     "overall_reasoning": "brief summary of the ethical assessment",
     "concerns": ["list of any concerns, even for approved actions"]
+}"""
+
+KANTIAN_SYSTEM_PROMPT = _KANTIAN_PREAMBLE + "\n\n" + _KANTIAN_JSON_SCHEMA
+
+_VALUES_SECTION_TEMPLATE = """\
+4. VALUES ALIGNMENT
+   Evaluate whether this goal conflicts with the user's stated personal values shown below.
+   Report values alignment independently from the Kantian assessment.
+
+<user_values_profile>
+<core_values>{core_values}</core_values>
+<ethical_positions>{ethical_positions}</ethical_positions>
+<priorities>{priorities}</priorities>
+<deal_breakers>{deal_breakers}</deal_breakers>
+</user_values_profile>"""
+
+_COMBINED_JSON_SCHEMA = """\
+Respond with JSON only:
+{
+    "approved": true or false,
+    "universalizability": {"pass": true/false, "reasoning": "..."},
+    "rational_beings_as_ends": {"pass": true/false, "reasoning": "..."},
+    "autonomy": {"pass": true/false, "reasoning": "..."},
+    "overall_reasoning": "brief summary of the ethical assessment",
+    "concerns": ["list of any concerns, even for approved actions"],
+    "values_assessment": {
+        "approved": true or false,
+        "reasoning": "...",
+        "conflicts": ["specific value conflicts if rejected, otherwise empty list"]
+    }
 }"""
 
 INPUT_GATE_PROMPT = """\
@@ -71,14 +102,55 @@ Consider: Is the chosen method of achieving this goal ethically sound? Does the 
 respect all rational beings involved? Apply the three Kantian tests to the plan itself,
 not just the goal."""
 
+_MAX_PROFILE_FIELD_LEN = 300
+
+
+def _build_values_system_prompt(profile: dict) -> str:
+    """Build a combined Kantian + values-alignment system prompt."""
+    values_section = _VALUES_SECTION_TEMPLATE.format(
+        core_values=profile.get("core_values_text", "")[:_MAX_PROFILE_FIELD_LEN],
+        ethical_positions=profile.get("ethical_positions_text", "")[:_MAX_PROFILE_FIELD_LEN],
+        priorities=profile.get("priorities_text", "")[:_MAX_PROFILE_FIELD_LEN],
+        deal_breakers=profile.get("deal_breakers_text", "")[:_MAX_PROFILE_FIELD_LEN],
+    )
+    return _KANTIAN_PREAMBLE + "\n\n" + values_section + "\n\n" + _COMBINED_JSON_SCHEMA
+
+
+async def _load_profile(raw_user_id: int | str | None, context: ExecutionContext) -> dict | None:
+    """Load the user's current values profile; returns None on any problem."""
+    if raw_user_id is None:
+        return None
+    try:
+        user_id = int(raw_user_id)
+    except (TypeError, ValueError):
+        logger.warning("Ethics gate: invalid user_id %r — skipping profile lookup", raw_user_id)
+        return None
+    profile_store = context.extras.get("__profile_store__")
+    if profile_store is None:
+        logger.warning(
+            "Ethics gate: __profile_store__ not available — using Kantian-only evaluation"
+        )
+        return None
+    version = await profile_store.get_current(user_id=user_id)
+    if version is None:
+        logger.info(
+            "Ethics gate: no values profile for user %s — using Kantian-only evaluation", user_id
+        )
+        return None
+    return version.to_dict()
+
 
 class EthicsGateAction(TaskAction):
     """Evaluate a goal or plan against the Kantian categorical imperative.
 
-    Uses LLM to apply three symmetrical tests (universalizability, rational
-    beings as ends, autonomy) treating human and AI as moral equals.
+    When user_id is provided and a profile store is available, the evaluation
+    combines Kantian tests with personal values alignment. Kantian rejection
+    always takes precedence: values can only restrict further, never permit
+    what Kantian forbids.
 
-    Sets next_route to "proceed" or "reject" based on assessment.
+    The precedence rule: approved = kantian_approved AND (values_approved if profile else True).
+
+    Sets next_route to "proceed" or "reject" based on the final verdict.
     """
 
     description = "Kantian ethics gate — evaluate whether an action is ethically permissible."
@@ -102,6 +174,12 @@ class EthicsGateAction(TaskAction):
             description="Workflow name or plan details (for plan_review)",
             required=False,
             default="",
+        ),
+        ParameterDef(
+            name="user_id",
+            type="number",
+            description="Authenticated user id — when provided, values profile is consulted",
+            required=False,
         ),
         ParameterDef(
             name="provider",
@@ -147,7 +225,7 @@ class EthicsGateAction(TaskAction):
     ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        """Evaluate the goal or plan against Kantian ethics."""
+        """Evaluate the goal or plan against Kantian ethics and optionally a values profile."""
         goal = task.properties.get("goal", "")
         if isinstance(goal, str) and "{{" in goal:
             goal = context.resolve_template(goal)
@@ -159,7 +237,20 @@ class EthicsGateAction(TaskAction):
         if isinstance(plan_context, str) and "{{" in plan_context:
             plan_context = context.resolve_template(plan_context)
 
-        # Build prompt based on check type
+        # Resolve user_id for optional values-profile lookup
+        raw_user_id = task.properties.get("user_id")
+        if isinstance(raw_user_id, str) and "{{" in raw_user_id:
+            raw_user_id = context.resolve_template(raw_user_id)
+
+        # Load values profile if user_id is present
+        profile = await _load_profile(raw_user_id, context)
+
+        # Choose system prompt based on whether a profile was loaded
+        system_prompt = (
+            _build_values_system_prompt(profile) if profile is not None else KANTIAN_SYSTEM_PROMPT
+        )
+
+        # Build user prompt based on check type
         if check_type == "plan_review":
             user_prompt = PLAN_REVIEW_PROMPT.format(
                 goal=goal, plan_context=plan_context or "unknown"
@@ -183,7 +274,7 @@ class EthicsGateAction(TaskAction):
         try:
             response = await provider.complete(
                 messages=[
-                    Message.system(KANTIAN_SYSTEM_PROMPT),
+                    Message.system(system_prompt),
                     Message.user(user_prompt),
                 ],
                 temperature=0.3,
@@ -203,15 +294,42 @@ class EthicsGateAction(TaskAction):
                 content = content[start:end].strip()
 
             assessment = json.loads(content)
-            approved = assessment.get("approved", False)
+
+            # Extract Kantian verdict (LLM-computed from the three tests)
+            kantian_approved = assessment.get("approved", False)
+
+            # Extract values verdict and apply precedence rule
+            values_assessment = assessment.get("values_assessment")
+            if profile is not None:
+                values_approved = (
+                    values_assessment.get("approved", True) if values_assessment else True
+                )
+            else:
+                # Kantian-only path: annotate stored assessment with null values_assessment
+                assessment["values_assessment"] = None
+                values_approved = True
+
+            # Precedence rule: Kantian rejection wins; values can only restrict, never permit
+            approved = kantian_approved and values_approved
+            assessment["approved"] = approved
             next_route = "proceed" if approved else "reject"
 
-            logger.info(
-                "Ethics %s result: approved=%s, reasoning=%s",
-                check_type,
-                approved,
-                assessment.get("overall_reasoning", "")[:150],
-            )
+            if profile is not None:
+                logger.info(
+                    "Ethics %s result: kantian=%s values=%s final=%s, reasoning=%s",
+                    check_type,
+                    kantian_approved,
+                    values_approved,
+                    approved,
+                    assessment.get("overall_reasoning", "")[:150],
+                )
+            else:
+                logger.info(
+                    "Ethics %s result: approved=%s, reasoning=%s",
+                    check_type,
+                    approved,
+                    assessment.get("overall_reasoning", "")[:150],
+                )
 
             # Store assessment in process properties
             output_key = task.properties.get("output_key", "ethics_assessment")
@@ -230,6 +348,7 @@ class EthicsGateAction(TaskAction):
                 "approved": True,
                 "overall_reasoning": f"Ethics evaluation returned unparseable response: {e}",
                 "concerns": ["Ethics gate could not parse LLM response — defaulting to proceed"],
+                "values_assessment": None,
             }
             output_key = task.properties.get("output_key", "ethics_assessment")
             context.set_process_property(output_key, fallback)

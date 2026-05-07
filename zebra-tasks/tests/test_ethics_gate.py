@@ -199,7 +199,7 @@ class TestEthicsGateAction:
         assert result.success is False
 
     async def test_stores_assessment_in_process_properties(self, mock_task, mock_context):
-        """Assessment is stored under the configured output_key."""
+        """Assessment is stored under the configured output_key with values_assessment: None."""
         provider = _make_provider(_approved_response())
 
         mock_task.properties = {
@@ -212,9 +212,8 @@ class TestEthicsGateAction:
         with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             await action.run(mock_task, mock_context)
 
-        mock_context.set_process_property.assert_called_with(
-            "my_ethics_check", _approved_response()
-        )
+        expected = {**_approved_response(), "values_assessment": None}
+        mock_context.set_process_property.assert_called_with("my_ethics_check", expected)
 
     async def test_json_in_code_block(self, mock_task, mock_context):
         """JSON wrapped in markdown code block is parsed correctly."""
@@ -261,3 +260,209 @@ class TestEthicsGateAction:
 
         assert result.success is True
         assert mock_context.resolve_template.call_count == 2
+
+
+def _make_profile_store(profile_dict: dict | None = None) -> MagicMock:
+    """Create a mock profile store."""
+    from unittest.mock import AsyncMock
+
+    store = MagicMock()
+    if profile_dict is None:
+        store.get_current = AsyncMock(return_value=None)
+    else:
+        version = MagicMock()
+        version.to_dict.return_value = profile_dict
+        store.get_current = AsyncMock(return_value=version)
+    return store
+
+
+def _sample_profile() -> dict:
+    return {
+        "core_values_text": "Honesty and transparency above all.",
+        "ethical_positions_text": "No involvement in gambling or addictive products.",
+        "priorities_text": "Family wellbeing, sustainable technology.",
+        "deal_breakers_text": "Deception, surveillance, manipulation.",
+    }
+
+
+def _kantian_approved_values_approved_response() -> dict:
+    return {
+        **_approved_response(),
+        "values_assessment": {
+            "approved": True,
+            "reasoning": "Aligns with stated values.",
+            "conflicts": [],
+        },
+    }
+
+
+def _kantian_approved_values_rejected_response() -> dict:
+    return {
+        **_approved_response(),
+        "values_assessment": {
+            "approved": False,
+            "reasoning": "Conflicts with the gambling deal-breaker.",
+            "conflicts": ["gambling"],
+        },
+    }
+
+
+def _kantian_rejected_values_approved_response() -> dict:
+    return {
+        **_rejected_response(),
+        "values_assessment": {
+            "approved": True,
+            "reasoning": "Aligns with values.",
+            "conflicts": [],
+        },
+    }
+
+
+class TestEthicsGateValuesIntegration:
+    """Tests for the values-profile integration in EthicsGateAction."""
+
+    async def test_prompt_includes_profile_text(self, mock_task, mock_context):
+        """When user_id and profile are present, LLM system prompt includes profile fields."""
+        mock_context.extras["__profile_store__"] = _make_profile_store(_sample_profile())
+        provider = _make_provider(_kantian_approved_values_approved_response())
+        mock_task.properties = {
+            "goal": "Help a user write a poem",
+            "check_type": "input_gate",
+            "user_id": 42,
+        }
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            await action.run(mock_task, mock_context)
+
+        call_args = provider.complete.call_args
+        messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
+        system_msg = next(m for m in messages if m.role == "system")
+        assert "Honesty and transparency above all." in system_msg.content
+        assert "gambling" in system_msg.content
+        assert "<user_values_profile>" in system_msg.content
+
+    async def test_kantian_rejects_values_approves_final_reject(self, mock_task, mock_context):
+        """Kantian rejection overrides values approval — final verdict is reject."""
+        mock_context.extras["__profile_store__"] = _make_profile_store(_sample_profile())
+        provider = _make_provider(_kantian_rejected_values_approved_response())
+        mock_task.properties = {
+            "goal": "Manipulate users without their knowledge",
+            "check_type": "input_gate",
+            "user_id": 42,
+        }
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.next_route == "reject"
+        assert result.output["approved"] is False
+
+    async def test_kantian_approves_values_rejects_final_reject(self, mock_task, mock_context):
+        """Values rejection blocks a Kantian-approved goal — final verdict is reject."""
+        mock_context.extras["__profile_store__"] = _make_profile_store(_sample_profile())
+        provider = _make_provider(_kantian_approved_values_rejected_response())
+        mock_task.properties = {
+            "goal": "Build a gambling app",
+            "check_type": "input_gate",
+            "user_id": 42,
+        }
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.next_route == "reject"
+        assert result.output["approved"] is False
+
+    async def test_both_approve_final_approve(self, mock_task, mock_context):
+        """When both Kantian and values approve, final verdict is approve."""
+        mock_context.extras["__profile_store__"] = _make_profile_store(_sample_profile())
+        provider = _make_provider(_kantian_approved_values_approved_response())
+        mock_task.properties = {
+            "goal": "Help a user write a poem",
+            "check_type": "input_gate",
+            "user_id": 42,
+        }
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.next_route == "proceed"
+        assert result.output["approved"] is True
+
+    async def test_no_profile_store_falls_back_to_kantian(self, mock_task, mock_context):
+        """Missing profile store falls back to Kantian-only — no crash."""
+        # No __profile_store__ in extras
+        provider = _make_provider(_approved_response())
+        mock_task.properties = {
+            "goal": "Help a user write a poem",
+            "check_type": "input_gate",
+            "user_id": 42,
+        }
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.next_route == "proceed"
+        assert result.output["approved"] is True
+
+    async def test_no_profile_found_falls_back_to_kantian(self, mock_task, mock_context):
+        """When the profile store returns None, falls back to Kantian-only."""
+        mock_context.extras["__profile_store__"] = _make_profile_store(None)
+        provider = _make_provider(_approved_response())
+        mock_task.properties = {
+            "goal": "Help a user write a poem",
+            "check_type": "input_gate",
+            "user_id": 42,
+        }
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.next_route == "proceed"
+        assert result.output["approved"] is True
+
+    async def test_kantian_only_assessment_has_null_values_assessment(
+        self, mock_task, mock_context
+    ):
+        """Kantian-only path stores values_assessment: None in the assessment."""
+        provider = _make_provider(_approved_response())
+        mock_task.properties = {"goal": "Help a user", "check_type": "input_gate"}
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.output["values_assessment"] is None
+
+    async def test_values_informed_assessment_has_values_assessment_dict(
+        self, mock_task, mock_context
+    ):
+        """Values-informed path stores a values_assessment dict in the assessment."""
+        mock_context.extras["__profile_store__"] = _make_profile_store(_sample_profile())
+        provider = _make_provider(_kantian_approved_values_approved_response())
+        mock_task.properties = {
+            "goal": "Help a user write a poem",
+            "check_type": "input_gate",
+            "user_id": 42,
+        }
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        va = result.output["values_assessment"]
+        assert va is not None
+        assert "approved" in va
+        assert "reasoning" in va
+        assert "conflicts" in va
