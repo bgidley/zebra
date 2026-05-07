@@ -1,5 +1,56 @@
 {
-  "short_hash": "unknown",
-  "date": "",
-  "commits": []
+  "short_hash": "5d1a255",
+  "date": "2026-05-07",
+  "commits": [
+    {
+      "hash": "5d1a255",
+      "date": "2026-05-07",
+      "subject": "fix: use uv run python to generate version.json in deploy stage"
+    },
+    {
+      "hash": "fe28f38",
+      "date": "2026-05-07",
+      "subject": "fix: don't require HTTPS for session cookie on HTTP deployments"
+    },
+    {
+      "hash": "3cb0529",
+      "date": "2026-05-06",
+      "subject": "fix: allow setup_view without login so post-registration flow completes"
+    },
+    {
+      "hash": "91fd849",
+      "date": "2026-05-06",
+      "subject": "fix: add WhiteNoise to serve static files in production"
+    },
+    {
+      "hash": "7254742",
+      "date": "2026-05-06",
+      "subject": "fix: break setup redirect loop \u2014 exempt /auth/ from SetupRequiredMiddleware"
+    },
+    {
+      "hash": "cdaf11b",
+      "date": "2026-05-06",
+      "subject": "fix: add --force-recreate to podman-compose deploy so container is restarted on every deploy"
+    },
+    {
+      "hash": "e5c8b10",
+      "date": "2026-05-06",
+      "subject": "Merge f107/version-footer \u2014 Closes #107"
+    },
+    {
+      "hash": "f267797",
+      "date": "2026-05-06",
+      "subject": "chore: mark all tasks complete in version-footer tasks.md"
+    },
+    {
+      "hash": "1d31023",
+      "date": "2026-05-06",
+      "subject": "feat: add version footer baked from git at CI build time"
+    },
+    {
+      "hash": "69b3b75",
+      "date": "2026-05-05",
+      "subject": "Merge f27/polling-scheduler \u2014 Closes #27"
+    }
+  ]
 }

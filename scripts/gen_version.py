@@ -19,7 +19,7 @@ def main() -> None:
         date = _git("log", "-1", "--pretty=format:%cd", "--date=short")
         log_lines = _git(
             "log",
-            "master",
+            "HEAD",
             "-10",
             "--pretty=format:%h\t%cd\t%s",
             "--date=short",
