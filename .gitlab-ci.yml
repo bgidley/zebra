@@ -58,7 +58,7 @@ deploy:
     # copy lives at /home/opc/projects/zebra/.env on the VM.
     - cp /home/opc/projects/zebra/.env .env
     # Bake git version metadata into the image at build time (git not in container)
-    - python scripts/gen_version.py > version.json
+    - uv run python scripts/gen_version.py > version.json
     - podman-compose up -d --build --force-recreate
     - podman-compose ps
   rules:
