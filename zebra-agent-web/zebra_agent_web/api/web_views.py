@@ -1874,3 +1874,207 @@ async def human_task_submit(request, task_id):
         "new_tasks": new_tasks_data,
     }
     return render(request, "partials/human_task_complete.html", context)
+
+
+# =============================================================================
+# Personal Knowledge Store (REQ-MEM-004 / F31)
+# =============================================================================
+
+
+async def knowledge_list(request):
+    """List all personal knowledge entries for the current user."""
+
+    @sync_to_async
+    def _fetch(user_id, category_filter):
+        from zebra_agent_web.api.models import KnowledgeEntryModel
+
+        qs = KnowledgeEntryModel.objects.filter(user_id=user_id)
+        if category_filter:
+            qs = qs.filter(category=category_filter)
+        return list(qs.order_by("-last_verified"))
+
+    from zebra_agent.knowledge import KNOWLEDGE_CATEGORIES
+
+    category_filter = request.GET.get("category", "")
+    entries = await _fetch(request.user.id, category_filter)
+    return render(
+        request,
+        "pages/knowledge_list.html",
+        {
+            "entries": entries,
+            "categories": KNOWLEDGE_CATEGORIES,
+            "selected_category": category_filter,
+        },
+    )
+
+
+async def knowledge_create(request):
+    """Create a new knowledge entry."""
+    from zebra_agent.knowledge import KNOWLEDGE_CATEGORIES, KnowledgeEntry
+
+    if request.method == "POST":
+        category = request.POST.get("category", "")
+        key = request.POST.get("key", "").strip()
+        value = request.POST.get("value", "").strip()
+        confidence_raw = request.POST.get("confidence", "1.0")
+
+        errors = {}
+        if category not in KNOWLEDGE_CATEGORIES:
+            errors["category"] = "Invalid category."
+        if not key:
+            errors["key"] = "Key is required."
+        if not value:
+            errors["value"] = "Value is required."
+        try:
+            confidence = float(confidence_raw)
+            if not 0.0 <= confidence <= 1.0:
+                raise ValueError
+        except (ValueError, TypeError):
+            errors["confidence"] = "Confidence must be a number between 0 and 1."
+            confidence = 1.0
+
+        if not errors:
+            entry = KnowledgeEntry.create(
+                user_id=request.user.id,
+                category=category,
+                key=key,
+                value=value[:2000],
+                confidence=confidence,
+            )
+
+            @sync_to_async
+            def _save(e):
+                from zebra_agent_web.api.models import KnowledgeEntryModel
+
+                KnowledgeEntryModel.objects.create(
+                    id=e.id,
+                    user_id=e.user_id,
+                    category=e.category,
+                    key=e.key,
+                    value=e.value,
+                    source=e.source,
+                    confidence=e.confidence,
+                    last_verified=e.last_verified,
+                )
+
+            await _save(entry)
+            return redirect("knowledge_list")
+
+        return render(
+            request,
+            "pages/knowledge_form.html",
+            {
+                "categories": KNOWLEDGE_CATEGORIES,
+                "errors": errors,
+                "form_data": request.POST,
+                "action": "Create",
+            },
+        )
+
+    return render(
+        request,
+        "pages/knowledge_form.html",
+        {"categories": KNOWLEDGE_CATEGORIES, "errors": {}, "form_data": {}, "action": "Create"},
+    )
+
+
+async def knowledge_edit(request, entry_id):
+    """Edit an existing knowledge entry."""
+    from zebra_agent.knowledge import KNOWLEDGE_CATEGORIES
+
+    @sync_to_async
+    def _fetch(eid, uid):
+        from zebra_agent_web.api.models import KnowledgeEntryModel
+
+        try:
+            return KnowledgeEntryModel.objects.get(id=eid, user_id=uid)
+        except KnowledgeEntryModel.DoesNotExist:
+            return None
+
+    entry = await _fetch(entry_id, request.user.id)
+    if entry is None:
+        from django.http import Http404
+
+        raise Http404
+
+    if request.method == "POST":
+        category = request.POST.get("category", "")
+        key = request.POST.get("key", "").strip()
+        value = request.POST.get("value", "").strip()
+        confidence_raw = request.POST.get("confidence", "1.0")
+
+        errors = {}
+        if category not in KNOWLEDGE_CATEGORIES:
+            errors["category"] = "Invalid category."
+        if not key:
+            errors["key"] = "Key is required."
+        if not value:
+            errors["value"] = "Value is required."
+        try:
+            confidence = float(confidence_raw)
+            if not 0.0 <= confidence <= 1.0:
+                raise ValueError
+        except (ValueError, TypeError):
+            errors["confidence"] = "Confidence must be a number between 0 and 1."
+            confidence = entry.confidence
+
+        if not errors:
+            now = datetime.now(UTC)
+
+            @sync_to_async
+            def _update(eid):
+                from zebra_agent_web.api.models import KnowledgeEntryModel
+
+                KnowledgeEntryModel.objects.filter(id=eid).update(
+                    category=category,
+                    key=key,
+                    value=value[:2000],
+                    confidence=confidence,
+                    last_verified=now,
+                )
+
+            await _update(entry_id)
+            return redirect("knowledge_list")
+
+        return render(
+            request,
+            "pages/knowledge_form.html",
+            {
+                "categories": KNOWLEDGE_CATEGORIES,
+                "errors": errors,
+                "form_data": request.POST,
+                "entry": entry,
+                "action": "Save",
+            },
+        )
+
+    return render(
+        request,
+        "pages/knowledge_form.html",
+        {
+            "categories": KNOWLEDGE_CATEGORIES,
+            "errors": {},
+            "form_data": entry,
+            "entry": entry,
+            "action": "Save",
+        },
+    )
+
+
+@require_POST
+async def knowledge_delete(request, entry_id):
+    """Delete a knowledge entry."""
+
+    @sync_to_async
+    def _delete(eid, uid):
+        from zebra_agent_web.api.models import KnowledgeEntryModel
+
+        deleted, _ = KnowledgeEntryModel.objects.filter(id=eid, user_id=uid).delete()
+        return deleted > 0
+
+    deleted = await _delete(entry_id, request.user.id)
+    if not deleted:
+        from django.http import Http404
+
+        raise Http404
+    return redirect("knowledge_list")

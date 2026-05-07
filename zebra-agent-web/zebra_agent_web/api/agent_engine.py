@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
     from zebra_agent.loop import AgentLoop
 
+    from zebra_agent_web.knowledge_store import DjangoPersonalKnowledgeStore
     from zebra_agent_web.memory_store import DjangoMemoryStore
     from zebra_agent_web.metrics_store import DjangoMetricsStore
     from zebra_agent_web.profile_store import DjangoProfileStore
@@ -26,6 +27,7 @@ _library: "WorkflowLibrary | None" = None
 _metrics: "DjangoMetricsStore | None" = None
 _memory: "DjangoMemoryStore | None" = None
 _profile: "DjangoProfileStore | None" = None
+_knowledge: "DjangoPersonalKnowledgeStore | None" = None
 _agent_loop: "AgentLoop | None" = None
 _budget_manager: "BudgetManager | None" = None
 _initialized = False
@@ -70,6 +72,7 @@ async def _async_init() -> None:
 
     from zebra_agent_web.api.engine import ensure_initialized as ensure_workflow_engine
     from zebra_agent_web.api.engine import get_engine
+    from zebra_agent_web.knowledge_store import DjangoPersonalKnowledgeStore
     from zebra_agent_web.memory_store import DjangoMemoryStore
     from zebra_agent_web.metrics_store import DjangoMetricsStore
     from zebra_agent_web.profile_store import DjangoProfileStore
@@ -90,6 +93,12 @@ async def _async_init() -> None:
     logger.info("Initializing profile store (Django)")
     _profile = DjangoProfileStore()
     await _profile.initialize()
+
+    # Initialize personal knowledge store (Django ORM, F31)
+    logger.info("Initializing knowledge store (Django)")
+    global _knowledge
+    _knowledge = DjangoPersonalKnowledgeStore()
+    await _knowledge.initialize()
 
     # Initialize workflow library
     library_path = Path(agent_settings["LIBRARY_PATH"]).expanduser()
@@ -146,13 +155,14 @@ async def _async_init() -> None:
     # Inject budget manager into engine extras for IoC access
     engine.extras["__budget_manager__"] = _budget_manager
 
-    # Initialize agent loop with memory
+    # Initialize agent loop with memory and personal knowledge store
     _agent_loop = AgentLoop(
         library=_library,
         engine=engine,
         metrics=_metrics,
         memory=_memory,
         profile=_profile,
+        knowledge=_knowledge,
         provider=agent_settings.get("LLM_PROVIDER", "anthropic"),
         model=agent_settings.get("LLM_MODEL"),
     )

@@ -58,6 +58,7 @@ directory_list = "zebra_tasks.filesystem.info:DirectoryListAction"
 python_exec = "zebra_tasks.compute.python_exec:PythonExecAction"
 # Agent - Core loop actions
 consult_memory = "zebra_tasks.agent.consult_memory:ConsultMemoryAction"
+consult_knowledge = "zebra_tasks.agent.consult_knowledge:ConsultKnowledgeAction"
 workflow_selector = "zebra_tasks.agent.selector:WorkflowSelectorAction"
 workflow_creator = "zebra_tasks.agent.creator:WorkflowCreatorAction"
 workflow_variant_creator = "zebra_tasks.agent.variant_creator:WorkflowVariantCreatorAction"

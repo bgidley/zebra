@@ -15,7 +15,16 @@ tasks:
       goal: "{{goal}}"
       output_key: memory_shortlist
 
-  # Step 2: Ethics input gate - should we act on this goal at all?
+  # Step 2: Consult personal knowledge store for user-specific context
+  consult_knowledge:
+    name: "Consult Knowledge Store"
+    action: consult_knowledge
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      output_key: knowledge_context
+
+  # Step 3: Ethics input gate - should we act on this goal at all?
   ethics_input_gate:
     name: "Ethics Input Gate"
     action: ethics_gate
@@ -25,7 +34,7 @@ tasks:
       check_type: "input_gate"
       output_key: ethics_input_assessment
 
-  # Step 3: Select best workflow (informed by memory shortlist)
+  # Step 4: Select best workflow (informed by memory shortlist and personal knowledge)
   select_workflow:
     name: "Select Workflow for Goal"
     action: workflow_selector
@@ -35,6 +44,7 @@ tasks:
       available_workflows: "{{available_workflows}}"
       memory_context: "{{memory_shortlist.memory_context}}"
       shortlist: "{{memory_shortlist.shortlist}}"
+      knowledge_context: "{{knowledge_context.knowledge}}"
       output_key: selection
 
   # Step 4a: Create brand-new workflow (no existing workflow fits)
@@ -195,8 +205,12 @@ tasks:
     auto: true
 
 routings:
-  # Memory consultation leads to ethics input gate
+  # Memory consultation leads to knowledge consultation
   - from: consult_memory
+    to: consult_knowledge
+
+  # Knowledge consultation leads to ethics input gate
+  - from: consult_knowledge
     to: ethics_input_gate
 
   # Ethics input gate routing
