@@ -199,6 +199,8 @@ Minimal: `/list`, `/stats`, `/help`, `/quit`. Launch with `zebra-agent` / `pytho
 
 Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, post-execution review. Implementation is LLM-prompt-based Kantian reasoning (universalizability, rational beings as ends, autonomy). Human confirmation task waits for acknowledgement before completion.
 
+`EthicsGateAction` accepts an optional `user_id` input. When provided and `__profile_store__` is available in `context.extras`, the gate loads the user's current `ValuesProfile` and incorporates it into a combined evaluation prompt. Kantian rejection always takes precedence (values can only restrict further). The stored assessment includes a `values_assessment` key (`null` for Kantian-only runs). Verdict log lines show both Kantian and values flags when a profile was consulted.
+
 ### Values profile (F18 / REQ-ETH-002)
 
 Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_breakers` — free-form text plus structured tags. The data lives behind a new `ProfileStore` interface (`zebra_agent/storage/interfaces.py`) with `InMemoryProfileStore` and `DjangoProfileStore` backends.
@@ -208,7 +210,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 - **Wizard.** `zebra-agent/workflows/values_profile_wizard.yaml` is a system workflow with eight steps: load existing profile (auto), four free-form text forms (human tasks), extract tags via LLM (auto), review (human task), save (auto). Used for both first-time capture and edit mode (signalled by `existing_profile_version_id` in the initial process properties; load step pre-populates form defaults).
 - **Bootstrap.** `manage.py bootstrap_values_taxonomy` calls an LLM to draft a starter taxonomy and writes a reviewable YAML fixture; the maintainer reviews and commits it, and a data migration loads it as `status="seeded"` on first `migrate`.
 - **Web entry-point.** `/profile/values/` (`web_views.values_profile_wizard`) creates a wizard process for the authenticated user and redirects to the first pending task.
-- **Not yet wired into the ethics gate.** F18 ships data + UI only. Consumption by the gate is REQ-ETH-003, a follow-up change.
+- **Wired into the ethics gate (F19).** `EthicsGateAction` reads the profile via `ProfileStore.get_current()` when `user_id` is supplied. Kantian precedence rule applied in Python.
 
 ### Strengths
 
@@ -222,7 +224,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 - **Standalone CLI loses all state on exit** — no SQLite default; only in-memory stores.
 - **Dream cycle is experimentally powerful but unvalidated** — LLM-driven mutations aren't gated by tests.
 - **No trust model exists.** Requirements describe SUPERVISED / SEMI-AUTONOMOUS / AUTONOMOUS; implementation has none of this.
-- ~~**No values profile** — ethics is generic Kantian, not personalised.~~ Resolved by F18 (data + UI). Ethics-gate consumption is still pending (REQ-ETH-003).
+- ~~**No values profile** — ethics is generic Kantian, not personalised.~~ Resolved by F18 (data + UI) and F19 (ethics-gate consumption, REQ-ETH-003).
 - **No personal knowledge store** — only the three workflow-focused tiers.
 - ~~**Only a goal scheduler, not a time/event scheduler**~~ — `GoalScheduler` (`zebra-agent/zebra_agent/scheduler/goal_queue.py`) picks the next CREATED process for the budget daemon. A cron/interval `SchedulerLoop` now fires built-in and user-defined routines (F27 / REQ-PRIN-008). There is **no event-driven trigger bus** (REQ-PRIN-009).
 - ~~**Single-user implicit** — no `user_id` namespacing anywhere in stores or schemas.~~ Resolved by F6 (REQ-USR-002).
@@ -303,7 +305,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 1. **Cross-package coupling leaks** — `zebra-tasks/agent/*` reaches into `zebra-agent` types. IoC softens but does not eliminate this.
 2. **MCP story is incomplete** — advertised in docs and requirements, but no live server in `zebra-py/zebra/mcp/`.
 3. **No user namespace** — every store assumes a single tenant. Multi-user (REQ-USR-002..005) will touch every storage interface.
-4. **No trust model or values profile** — the policy layer required by REQ-TRUST-* and REQ-ETH-002/003 does not exist. Ethics gates are generic and advisory.
+4. **No trust model** — the policy layer required by REQ-TRUST-* does not exist. Ethics gates are values-informed but advisory (no hard-block in the engine). REQ-ETH-002/003 resolved by F18/F19.
 5. ~~**No time scheduler or event bus**~~ — `SchedulerLoop` (F27) adds cron/interval routine scheduling. `GoalScheduler` ranks queued goals. No event-driven trigger bus (REQ-PRIN-009), no webhook intake, no trigger subscriptions.
 6. **CLI surface is thin** — four commands; no way to manage memory, workflows, trust, or budget from the terminal.
 7. **Standalone agent is ephemeral** — no persistent store outside the Django UI; CLI users lose memory on exit.
@@ -358,7 +360,8 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | MCP server | **Missing (advertised)** | REQ-INT-003 |
 | User namespace (`user_id`) | **Missing** | REQ-USR-001/002 |
 | Trust levels & trust gates | **Missing** | REQ-TRUST-001..007 |
-| Values profile & values-informed ethics | **Missing** | REQ-ETH-002/003 |
+| Values profile (data + UI) | **Implemented** | REQ-ETH-002 |
+| Values-informed ethics gate | **Implemented** | REQ-ETH-003 |
 | Personal knowledge store | **Missing** | REQ-MEM-004..006 |
 | Proactive goal generation | **Missing** | REQ-PEER-001, REQ-PRIN-006 |
 | Polling scheduler (SchedulerLoop + RoutineRegistry) | **Implemented** (F27) | REQ-PRIN-008 |
