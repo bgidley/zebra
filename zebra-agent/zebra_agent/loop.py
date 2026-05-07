@@ -21,7 +21,12 @@ from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState
 
 from zebra_agent.library import WorkflowLibrary
-from zebra_agent.storage.interfaces import MemoryStore, MetricsStore, PersonalKnowledgeStore, ProfileStore
+from zebra_agent.storage.interfaces import (
+    MemoryStore,
+    MetricsStore,
+    PersonalKnowledgeStore,
+    ProfileStore,
+)
 
 # Type for progress callback: receives event name and data dict
 ProgressCallback = Callable[[str, dict[str, Any]], Awaitable[None]]

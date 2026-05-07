@@ -5,7 +5,6 @@ import pytest
 from zebra_agent.knowledge import KNOWLEDGE_CATEGORIES, KnowledgeEntry
 from zebra_agent.storage.memory import InMemoryPersonalKnowledgeStore
 
-
 # ---------------------------------------------------------------------------
 # KnowledgeEntry tests
 # ---------------------------------------------------------------------------

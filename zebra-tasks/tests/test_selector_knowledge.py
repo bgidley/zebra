@@ -84,9 +84,7 @@ class TestWorkflowSelectorKnowledge:
             result = await action.run(mock_task, mock_context)
 
         assert result.success
-        user_content = next(
-            (m.content for m in captured_messages if m.role == "user"), ""
-        )
+        user_content = next((m.content for m in captured_messages if m.role == "user"), "")
         assert "## Personal Knowledge" in user_content
         assert "[preferences] language: Python" in user_content
 
@@ -112,9 +110,7 @@ class TestWorkflowSelectorKnowledge:
             result = await action.run(mock_task, mock_context)
 
         assert result.success
-        user_content = next(
-            (m.content for m in captured_messages if m.role == "user"), ""
-        )
+        user_content = next((m.content for m in captured_messages if m.role == "user"), "")
         assert "## Personal Knowledge" not in user_content
 
     async def test_missing_knowledge_context_property_omitted(
@@ -140,7 +136,5 @@ class TestWorkflowSelectorKnowledge:
             result = await action.run(mock_task, mock_context)
 
         assert result.success
-        user_content = next(
-            (m.content for m in captured_messages if m.role == "user"), ""
-        )
+        user_content = next((m.content for m in captured_messages if m.role == "user"), "")
         assert "## Personal Knowledge" not in user_content

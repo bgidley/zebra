@@ -40,7 +40,9 @@ def mock_knowledge_store():
 
 
 class TestConsultKnowledgeAction:
-    async def test_happy_path_returns_knowledge(self, mock_task, mock_context, mock_knowledge_store):
+    async def test_happy_path_returns_knowledge(
+        self, mock_task, mock_context, mock_knowledge_store
+    ):
         from zebra_tasks.agent.consult_knowledge import ConsultKnowledgeAction
 
         mock_context.extras["__knowledge_store__"] = mock_knowledge_store

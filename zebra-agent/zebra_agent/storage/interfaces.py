@@ -328,9 +328,7 @@ class PersonalKnowledgeStore(ABC):
         ...
 
     @abstractmethod
-    async def get_entries(
-        self, user_id: int, category: str | None = None
-    ) -> list[KnowledgeEntry]:
+    async def get_entries(self, user_id: int, category: str | None = None) -> list[KnowledgeEntry]:
         """Get all entries for a user, optionally filtered by category.
 
         Results are ordered by last_verified descending.

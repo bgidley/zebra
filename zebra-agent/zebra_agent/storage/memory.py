@@ -201,9 +201,7 @@ class InMemoryPersonalKnowledgeStore(PersonalKnowledgeStore):
         await self._ensure_initialized()
         return self._entries.get(entry_id)
 
-    async def get_entries(
-        self, user_id: int, category: str | None = None
-    ) -> list[KnowledgeEntry]:
+    async def get_entries(self, user_id: int, category: str | None = None) -> list[KnowledgeEntry]:
         await self._ensure_initialized()
         results = [e for e in self._entries.values() if e.user_id == user_id]
         if category is not None:
