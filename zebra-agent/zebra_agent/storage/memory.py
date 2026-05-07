@@ -1,7 +1,8 @@
-"""In-memory implementation of the MemoryStore interface.
+"""In-memory implementations of storage interfaces.
 
-This module provides a pure Python in-memory storage backend for agent memory.
-Data is lost when the process exits - suitable for testing and ephemeral use cases.
+Provides pure Python in-memory storage backends for agent memory and the
+personal knowledge store. Data is lost when the process exits — suitable
+for testing and ephemeral CLI use cases.
 """
 
 from __future__ import annotations
@@ -9,9 +10,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from zebra_agent.storage.interfaces import MemoryStore
+from zebra_agent.storage.interfaces import MemoryStore, PersonalKnowledgeStore
 
 if TYPE_CHECKING:
+    from zebra_agent.knowledge import KnowledgeEntry
     from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
 
 logger = logging.getLogger(__name__)
@@ -156,3 +158,62 @@ class InMemoryMemoryStore(MemoryStore):
             "workflow_memory_entries": len(self._workflow_memories),
             "conceptual_memory_entries": len(self._conceptual_memories),
         }
+
+
+class InMemoryPersonalKnowledgeStore(PersonalKnowledgeStore):
+    """In-memory implementation of the personal knowledge store.
+
+    Stores entries in a plain dict keyed by entry ID. Suitable for CLI
+    and test use cases where persistence is not required.
+    """
+
+    def __init__(self) -> None:
+        self._entries: dict[str, KnowledgeEntry] = {}
+        self._initialized = False
+
+    async def initialize(self) -> None:
+        self._initialized = True
+        logger.info("InMemoryPersonalKnowledgeStore initialized")
+
+    async def close(self) -> None:
+        pass
+
+    async def _ensure_initialized(self) -> None:
+        if not self._initialized:
+            await self.initialize()
+
+    async def add_entry(self, entry: KnowledgeEntry) -> None:
+        await self._ensure_initialized()
+        self._entries[entry.id] = entry
+
+    async def update_entry(self, entry: KnowledgeEntry) -> None:
+        await self._ensure_initialized()
+        self._entries[entry.id] = entry
+
+    async def delete_entry(self, entry_id: str) -> bool:
+        await self._ensure_initialized()
+        if entry_id in self._entries:
+            del self._entries[entry_id]
+            return True
+        return False
+
+    async def get_entry(self, entry_id: str) -> KnowledgeEntry | None:
+        await self._ensure_initialized()
+        return self._entries.get(entry_id)
+
+    async def get_entries(self, user_id: int, category: str | None = None) -> list[KnowledgeEntry]:
+        await self._ensure_initialized()
+        results = [e for e in self._entries.values() if e.user_id == user_id]
+        if category is not None:
+            results = [e for e in results if e.category == category]
+        results.sort(key=lambda e: e.last_verified, reverse=True)
+        return results
+
+    async def get_context_for_llm(self, user_id: int, limit: int = 50) -> str:
+        await self._ensure_initialized()
+        entries = await self.get_entries(user_id)
+        entries = entries[:limit]
+        if not entries:
+            return ""
+        lines = [f"[{e.category}] {e.key}: {e.value}" for e in entries]
+        return "\n".join(lines)

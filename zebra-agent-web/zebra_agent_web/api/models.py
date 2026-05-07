@@ -489,3 +489,47 @@ class RoutineRunModel(models.Model):
 
     def __str__(self):
         return f"RoutineRun({self.routine_name}, next={self.next_run})"
+
+
+# =============================================================================
+# Personal Knowledge Store (REQ-MEM-004 / F31)
+# =============================================================================
+
+KNOWLEDGE_CATEGORY_CHOICES = [
+    ("preferences", "Preferences"),
+    ("facts", "Facts"),
+    ("relationships", "Relationships"),
+    ("routines", "Routines"),
+    ("skills", "Skills"),
+    ("history", "History"),
+]
+
+
+class KnowledgeEntryModel(models.Model):
+    """A typed, user-scoped personal knowledge entry.
+
+    Stores facts, preferences, and structured knowledge about the user that
+    the agent reads during planning (REQ-MEM-004).
+    """
+
+    id = models.CharField(max_length=36, primary_key=True)
+    user_id = models.BigIntegerField(db_index=True)
+    category = models.CharField(max_length=50, choices=KNOWLEDGE_CATEGORY_CHOICES, db_index=True)
+    key = models.CharField(max_length=255)
+    value = models.TextField()
+    source = models.CharField(max_length=50, default="human")
+    confidence = models.FloatField(default=1.0)
+    last_verified = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "zebra_knowledge_entries"
+        verbose_name = "Knowledge Entry"
+        verbose_name_plural = "Knowledge Entries"
+        indexes = [
+            models.Index(fields=["user_id", "category"], name="zebra_know_user_cat_idx"),
+        ]
+
+    def __str__(self):
+        return f"[{self.category}] {self.key} (user={self.user_id})"

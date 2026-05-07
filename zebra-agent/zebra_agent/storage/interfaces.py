@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from zebra_agent.knowledge import KnowledgeEntry
     from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
     from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
     from zebra_agent.profile import ValuesProfileVersion
@@ -280,5 +281,66 @@ class ProfileStore(ABC):
         Args:
             field_to_tags: Mapping of field name to list of ``{slug, label}``
                 (and optional ``description``) dicts.
+        """
+        ...
+
+
+class PersonalKnowledgeStore(ABC):
+    """Abstract interface for the personal knowledge store.
+
+    Stores typed, user-scoped knowledge entries (facts, preferences, relationships,
+    routines, skills, history) that persist across sessions and are injected into
+    the agent's planning context at the start of each goal.
+    """
+
+    @abstractmethod
+    async def initialize(self) -> None:
+        """Initialize the store."""
+        ...
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Close the store and release resources."""
+        ...
+
+    @abstractmethod
+    async def add_entry(self, entry: KnowledgeEntry) -> None:
+        """Persist a new knowledge entry."""
+        ...
+
+    @abstractmethod
+    async def update_entry(self, entry: KnowledgeEntry) -> None:
+        """Update an existing knowledge entry."""
+        ...
+
+    @abstractmethod
+    async def delete_entry(self, entry_id: str) -> bool:
+        """Delete a knowledge entry by ID.
+
+        Returns:
+            True if the entry was found and deleted, False if not found.
+        """
+        ...
+
+    @abstractmethod
+    async def get_entry(self, entry_id: str) -> KnowledgeEntry | None:
+        """Get a single entry by ID, or None if not found."""
+        ...
+
+    @abstractmethod
+    async def get_entries(self, user_id: int, category: str | None = None) -> list[KnowledgeEntry]:
+        """Get all entries for a user, optionally filtered by category.
+
+        Results are ordered by last_verified descending.
+        """
+        ...
+
+    @abstractmethod
+    async def get_context_for_llm(self, user_id: int, limit: int = 50) -> str:
+        """Format knowledge entries as a context string for LLM injection.
+
+        Returns entries formatted as ``[category] key: value``, one per line,
+        ordered by last_verified descending. Returns an empty string when no
+        entries exist for the user.
         """
         ...

@@ -151,6 +151,13 @@ class WorkflowSelectorAction(TaskAction):
             default=[],
         ),
         ParameterDef(
+            name="knowledge_context",
+            type="string",
+            description="Personal knowledge context string from consult_knowledge step",
+            required=False,
+            default="",
+        ),
+        ParameterDef(
             name="provider",
             type="string",
             description="LLM provider name",
@@ -291,6 +298,11 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
             except (json.JSONDecodeError, ValueError):
                 shortlist = []
 
+        # Personal knowledge context from consult_knowledge step
+        knowledge_context = task.properties.get("knowledge_context", "")
+        if isinstance(knowledge_context, str) and "{{" in knowledge_context:
+            knowledge_context = context.resolve_template(knowledge_context)
+
         # Get LLM provider
         provider_name = task.properties.get("provider", "anthropic")
         model = task.properties.get("model")
@@ -314,6 +326,10 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
         # Inject memory context if available
         if memory_context:
             prompt += f"{memory_context}\n\n"
+
+        # Inject personal knowledge context if available
+        if knowledge_context:
+            prompt += f"## Personal Knowledge\n{knowledge_context}\n\n"
 
         # Highlight shortlisted workflows
         if shortlist:

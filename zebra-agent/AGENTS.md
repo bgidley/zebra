@@ -378,6 +378,16 @@ The agent loop is defined in `workflows/agent_main_loop.yaml`. To modify the flo
 1. Edit the YAML workflow definition
 2. Add/remove/reorder tasks
 3. Update routings for conditional flow
+4. **Register a stub in `tests/test_ethics_workflow.py`** — the ethics workflow tests load the real YAML but use a minimal stub registry. Any new action added to the YAML must have a corresponding stub registered in `_make_registry()`, otherwise the test fails with "action not found". Example:
+   ```python
+   class StubMyNewAction(TaskAction):
+       async def run(self, task, context):
+           return TaskResult.ok(output={"result": ""})
+
+   def _make_registry():
+       # ... existing registrations ...
+       registry.register_action("my_new_action", StubMyNewAction)
+   ```
 
 **Example: Adding a pre-execution validation step:**
 
