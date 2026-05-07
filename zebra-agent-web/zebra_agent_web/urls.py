@@ -52,6 +52,11 @@ urlpatterns = [
     path("tasks/<str:task_id>/submit/", web_views.human_task_submit, name="human_task_submit"),
     # Values Profile (F18) — starts the wizard for capture or edit
     path("profile/values/", web_views.values_profile_wizard, name="values_profile_wizard"),
+    # Personal Knowledge Store (F31)
+    path("knowledge/", web_views.knowledge_list, name="knowledge_list"),
+    path("knowledge/create/", web_views.knowledge_create, name="knowledge_create"),
+    path("knowledge/<str:entry_id>/edit/", web_views.knowledge_edit, name="knowledge_edit"),
+    path("knowledge/<str:entry_id>/delete/", web_views.knowledge_delete, name="knowledge_delete"),
     # Run detail pages
     path("runs/<str:run_id>/", web_views.run_detail, name="run_detail"),
     path("runs/<str:run_id>/rate/", web_views.run_rate, name="run_rate"),

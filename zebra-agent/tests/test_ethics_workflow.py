@@ -29,6 +29,14 @@ class StubConsultMemory(TaskAction):
         return TaskResult.ok(output=output)
 
 
+class StubConsultKnowledge(TaskAction):
+    async def run(self, task, context):
+        output = {"knowledge": "", "has_knowledge": False}
+        key = task.properties.get("output_key", "knowledge_context")
+        context.set_process_property(key, output)
+        return TaskResult.ok(output=output)
+
+
 class StubEthicsGateApprove(TaskAction):
     """Ethics gate that always approves."""
 
@@ -125,6 +133,7 @@ def _make_registry(ethics_gate_class):
     registry = ActionRegistry()
     registry.register_defaults()  # registers route_name condition
     registry.register_action("consult_memory", StubConsultMemory)
+    registry.register_action("consult_knowledge", StubConsultKnowledge)
     registry.register_action("ethics_gate", ethics_gate_class)
     registry.register_action("workflow_selector", StubWorkflowSelector)
     registry.register_action("workflow_creator", StubWorkflowSelector)  # not reached
