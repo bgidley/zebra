@@ -395,6 +395,17 @@ uv run pytest zebra-agent-web/tests/test_agent_loop_integration.py -v
 DJANGO_SETTINGS_MODULE=zebra_agent_web.settings uv run pytest -v
 ```
 
+#### Django Migrations and Ruff
+
+`python manage.py makemigrations` produces long lines that fail ruff's E501 check. Always run `uv run ruff check --fix . && uv run ruff format .` immediately after generating a migration, before committing. Treat it as one atomic step:
+
+```bash
+uv run python manage.py makemigrations
+uv run ruff check --fix .
+uv run ruff format .
+git add zebra_agent_web/api/migrations/
+```
+
 #### Async E2E Tests — SQLite Lock Warning
 
 E2E tests that use `AsyncClient` + SQLite are prone to `database table is locked` failures because `AsyncClient` runs requests in an async event loop while `sync_to_async` opens separate SQLite connections. Two rules:
