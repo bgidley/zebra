@@ -51,4 +51,4 @@
 
 - [x] 8.1 Update `specs/zebra-as-is.md` to reflect lifecycle fields and new task actions
 - [x] 8.2 Run `uv run ruff check --fix . && uv run ruff format .` and confirm `uv run pytest` is green
-- [ ] 8.3 Push branch to GitLab; verify CI pipeline (lint → unit → e2e) is green
+- [x] 8.3 Push branch to GitLab; verify CI pipeline (lint → unit → e2e) is green
