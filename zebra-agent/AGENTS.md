@@ -41,7 +41,7 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 zebra-agent uses pluggable storage interfaces defined in `zebra_agent/storage/interfaces.py`:
 - `MemoryStore`: Interface for agent memory (short-term/long-term)
 - `MetricsStore`: Interface for workflow metrics tracking
-- `ProfileStore`: Interface for the per-user values profile (F18 / REQ-ETH-002)
+- `ProfileStore`: Interface for the per-user values profile (F18/F19 / REQ-ETH-002/003) — also read by `EthicsGateAction` when `user_id` is supplied
 
 ### Standalone Usage (In-Memory - Default)
 When used directly via the CLI, in-memory implementations are used:
@@ -151,6 +151,7 @@ Stores are passed to task actions via `engine.extras` (engine-level dependency i
 self.engine.extras["__memory_store__"] = memory
 self.engine.extras["__metrics_store__"] = metrics
 self.engine.extras["__workflow_library__"] = library
+self.engine.extras["__profile_store__"] = profile   # optional; enables values-informed ethics gate
 ```
 
 This approach keeps non-serializable objects out of process properties (which must be JSON-serializable for persistence).

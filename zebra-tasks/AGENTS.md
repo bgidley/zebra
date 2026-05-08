@@ -37,6 +37,10 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/evaluator.py` | WorkflowEvaluatorAction - LLM workflow evaluation |
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
+| `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
+| `zebra_tasks/agent/load_values_profile.py` | LoadValuesProfileAction - load current values-profile version |
+| `zebra_tasks/agent/save_values_profile.py` | SaveValuesProfileAction - persist a values-profile version |
+| `zebra_tasks/agent/extract_values_tags.py` | ExtractValuesTagsAction - LLM tag extraction for profile wizard |
 | `zebra_tasks/llm/pricing.py` | Anthropic pricing table, `calculate_cost()`, `estimate_goal_cost()` |
 | `zebra_tasks/llm/models.py` | ANTHROPIC_MODELS, `resolve_model_name()` model aliases |
 | `tests/` | Test suite |
@@ -356,6 +360,37 @@ Queue a goal for deferred execution by the budget daemon. Creates an Agent Main 
 | `priority` | int | Assigned priority |
 
 **Store Access:** Uses `context.extras["__workflow_library__"]` and `context.extras["__state_store__"]` (engine store) to create the process.
+
+### EthicsGateAction
+
+Evaluate a goal or plan against Kantian ethics, optionally combined with the user's personal values profile.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `goal` | string | - | The goal or plan to evaluate (supports `{{var}}` templates) |
+| `check_type` | string | - | `"input_gate"` or `"plan_review"` |
+| `plan_context` | string | `""` | Workflow name or plan details (for `plan_review`) |
+| `user_id` | number | null | Authenticated user id — when provided, values profile is consulted |
+| `provider` | string | `"anthropic"` | LLM provider name |
+| `model` | string | null | Model name override (supports aliases) |
+| `output_key` | string | `"ethics_assessment"` | Process property key for the stored assessment |
+
+**Output:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `approved` | bool | Final verdict after applying the precedence rule |
+| `overall_reasoning` | string | LLM summary of the ethical assessment |
+| `concerns` | list | Any concerns raised (even for approved goals) |
+| `values_assessment` | dict\|null | Values-alignment result (`null` when no profile loaded) |
+
+**Routes:** `"proceed"` (approved) or `"reject"` (not approved)
+
+**Precedence rule:** `approved = kantian_approved AND (values_approved if profile_loaded else True)`. Kantian rejection always wins; values can only restrict, never permit what Kantian forbids.
+
+**Store Access:** When `user_id` is present, reads `context.extras["__profile_store__"]`. Gracefully falls back to Kantian-only if the store is absent or no profile exists for the user.
 
 ## Testing Task Actions
 
