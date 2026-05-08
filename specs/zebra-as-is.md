@@ -225,7 +225,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 - **Dream cycle is experimentally powerful but unvalidated** — LLM-driven mutations aren't gated by tests.
 - **No trust model exists.** Requirements describe SUPERVISED / SEMI-AUTONOMOUS / AUTONOMOUS; implementation has none of this.
 - ~~**No values profile** — ethics is generic Kantian, not personalised.~~ Resolved by F18 (data + UI) and F19 (ethics-gate consumption, REQ-ETH-003).
-- **No personal knowledge store** — only the three workflow-focused tiers.
+- ~~**No personal knowledge store** — only the three workflow-focused tiers.~~ Resolved by F31 (store, CRUD UI, agent loop integration) and F32 (lifecycle: decay, verification, contradiction detection, soft-delete).
 - ~~**Only a goal scheduler, not a time/event scheduler**~~ — `GoalScheduler` (`zebra-agent/zebra_agent/scheduler/goal_queue.py`) picks the next CREATED process for the budget daemon. A cron/interval `SchedulerLoop` now fires built-in and user-defined routines (F27 / REQ-PRIN-008). There is **no event-driven trigger bus** (REQ-PRIN-009).
 - ~~**Single-user implicit** — no `user_id` namespacing anywhere in stores or schemas.~~ Resolved by F6 (REQ-USR-002).
 - **Agent main loop YAML is 258 lines** — hard to unit-test sub-branches.
@@ -362,7 +362,9 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | Trust levels & trust gates | **Missing** | REQ-TRUST-001..007 |
 | Values profile (data + UI) | **Implemented** | REQ-ETH-002 |
 | Values-informed ethics gate | **Implemented** | REQ-ETH-003 |
-| Personal knowledge store | **Missing** | REQ-MEM-004..006 |
+| Personal knowledge store (CRUD, agent loop integration) | **Implemented** (F31) | REQ-MEM-004 |
+| Knowledge lifecycle (decay, verification, contradiction, soft-delete) | **Implemented** (F32) | REQ-MEM-005 |
+| Cross-domain knowledge access | **Missing** | REQ-MEM-006 |
 | Proactive goal generation | **Missing** | REQ-PEER-001, REQ-PRIN-006 |
 | Polling scheduler (SchedulerLoop + RoutineRegistry) | **Implemented** (F27) | REQ-PRIN-008 |
 | Event-driven trigger bus | **Missing** | REQ-PRIN-009 |

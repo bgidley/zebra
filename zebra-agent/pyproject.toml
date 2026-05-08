@@ -38,6 +38,8 @@ dev = [
 [project.entry-points."zebra.schedules"]
 # Built-in routine factories are registered here.
 # Third-party packages can add their own routines via this group.
+knowledge_decay_daily = "zebra_agent.schedules.knowledge_lifecycle:knowledge_decay_daily"
+knowledge_verification_weekly = "zebra_agent.schedules.knowledge_lifecycle:knowledge_verification_weekly"
 
 [build-system]
 requires = ["hatchling"]

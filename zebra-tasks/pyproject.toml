@@ -77,6 +77,10 @@ ethics_gate = "zebra_tasks.agent.ethics_gate:EthicsGateAction"
 load_values_profile = "zebra_tasks.agent.load_values_profile:LoadValuesProfileAction"
 extract_values_tags = "zebra_tasks.agent.extract_values_tags:ExtractValuesTagsAction"
 save_values_profile = "zebra_tasks.agent.save_values_profile:SaveValuesProfileAction"
+# Knowledge lifecycle (F32)
+decay_confidence = "zebra_tasks.knowledge.decay:DecayConfidenceAction"
+add_knowledge = "zebra_tasks.knowledge.add:AddKnowledgeAction"
+pick_entries_for_verification = "zebra_tasks.knowledge.verify:PickEntriesForVerificationAction"
 
 [build-system]
 requires = ["hatchling"]

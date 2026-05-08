@@ -1,0 +1,42 @@
+name: "Resolve Knowledge Contradiction"
+description: "Present a knowledge contradiction to the user and apply their resolution choice"
+tags: ["knowledge", "lifecycle", "system"]
+use_when: "INTERNAL USE ONLY - triggered when add_knowledge detects a contradicting entry"
+version: 1
+first_task: present_contradiction
+
+tasks:
+  present_contradiction:
+    name: "Resolve Contradiction"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Knowledge Contradiction Detected"
+        description: "A new value conflicts with what is already stored. Please choose how to resolve this."
+        required:
+          - resolution
+        properties:
+          existing_value:
+            type: string
+            title: "Current stored value"
+            readOnly: true
+            default: "{{existing_value}}"
+          proposed_value:
+            type: string
+            title: "New value"
+            readOnly: true
+            default: "{{proposed_value}}"
+          resolution:
+            type: string
+            title: "Resolution"
+            description: "How should this contradiction be resolved?"
+            enum:
+              - keep_existing
+              - use_new
+              - keep_both
+            default: keep_existing
+
+routings:
+  - from: present_contradiction
+    to: null

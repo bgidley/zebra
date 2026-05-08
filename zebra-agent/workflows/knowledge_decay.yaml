@@ -1,0 +1,16 @@
+name: "Knowledge Decay"
+description: "Apply confidence decay to time-sensitive personal knowledge entries"
+tags: ["knowledge", "lifecycle", "scheduled", "system"]
+use_when: "INTERNAL USE ONLY - scheduled daily to decay time-sensitive knowledge confidence"
+version: 1
+first_task: decay_confidence
+
+tasks:
+  decay_confidence:
+    name: "Decay Confidence"
+    action: decay_confidence
+    auto: true
+
+routings:
+  - from: decay_confidence
+    to: null

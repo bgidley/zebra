@@ -522,6 +522,8 @@ class KnowledgeEntryModel(models.Model):
     last_verified = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    time_sensitive = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True, default=None)
 
     class Meta:
         db_table = "zebra_knowledge_entries"
