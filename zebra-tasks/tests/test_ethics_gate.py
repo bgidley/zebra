@@ -466,3 +466,88 @@ class TestEthicsGateValuesIntegration:
         assert "approved" in va
         assert "reasoning" in va
         assert "conflicts" in va
+
+
+class TestEthicsGateAuditWrite:
+    """Tests for the audit write side-effect in EthicsGateAction."""
+
+    def _make_audit_store(self) -> MagicMock:
+        store = MagicMock()
+        store.append = AsyncMock()
+        return store
+
+    async def test_audit_store_called_on_approved(self, mock_task, mock_context):
+        """Audit store receives an entry when the evaluation approves."""
+        audit_store = self._make_audit_store()
+        mock_context.extras["__ethics_audit_store__"] = audit_store
+        mock_task.properties = {"goal": "Help a user", "check_type": "input_gate"}
+        mock_task.process_id = "proc-123"
+        provider = _make_provider(_approved_response())
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success
+        audit_store.append.assert_awaited_once()
+        entry = audit_store.append.call_args[0][0]
+        assert entry.approved is True
+        assert entry.process_id == "proc-123"
+        assert entry.check_type == "kantian"
+
+    async def test_audit_store_called_on_rejected(self, mock_task, mock_context):
+        """Audit store receives an entry when the evaluation rejects."""
+        audit_store = self._make_audit_store()
+        mock_context.extras["__ethics_audit_store__"] = audit_store
+        mock_task.properties = {"goal": "Manipulate users", "check_type": "input_gate"}
+        mock_task.process_id = "proc-456"
+        provider = _make_provider(_rejected_response())
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success
+        audit_store.append.assert_awaited_once()
+        entry = audit_store.append.call_args[0][0]
+        assert entry.approved is False
+
+    async def test_missing_audit_store_is_tolerated(self, mock_task, mock_context, caplog):
+        """When audit store is absent the action completes normally with a warning."""
+        import logging
+
+        mock_context.extras.pop("__ethics_audit_store__", None)
+        mock_task.properties = {"goal": "Help a user", "check_type": "input_gate"}
+        mock_task.process_id = "proc-789"
+        provider = _make_provider(_approved_response())
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            with caplog.at_level(logging.WARNING, logger="zebra_tasks.agent.ethics_gate"):
+                result = await action.run(mock_task, mock_context)
+
+        assert result.success
+        assert result.next_route == "proceed"
+        assert any("__ethics_audit_store__" in r.message for r in caplog.records)
+
+    async def test_audit_store_exception_does_not_fail_evaluation(
+        self, mock_task, mock_context, caplog
+    ):
+        """A store exception is logged as ERROR and the TaskResult is unchanged."""
+        import logging
+
+        audit_store = MagicMock()
+        audit_store.append = AsyncMock(side_effect=RuntimeError("DB unavailable"))
+        mock_context.extras["__ethics_audit_store__"] = audit_store
+        mock_task.properties = {"goal": "Help a user", "check_type": "input_gate"}
+        mock_task.process_id = "proc-error"
+        provider = _make_provider(_approved_response())
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            with caplog.at_level(logging.ERROR, logger="zebra_tasks.agent.ethics_gate"):
+                result = await action.run(mock_task, mock_context)
+
+        assert result.success
+        assert result.next_route == "proceed"
+        assert any("failed to write audit entry" in r.message for r in caplog.records)

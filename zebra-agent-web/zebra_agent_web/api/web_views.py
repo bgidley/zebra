@@ -2078,3 +2078,72 @@ async def knowledge_delete(request, entry_id):
 
         raise Http404
     return redirect("knowledge_list")
+
+
+# =============================================================================
+# Ethics Audit Log (REQ-ETH-006 / F20)
+# =============================================================================
+
+_ETHICS_AUDIT_PAGE_SIZE = 50
+
+
+async def ethics_audit(request):
+    """Display ethics audit log; staff/admin only."""
+    from django.http import HttpResponseForbidden
+
+    if not request.user or not request.user.is_staff:
+        return HttpResponseForbidden("Staff access only.")
+
+    filter_approved = request.GET.get("approved", "")
+    filter_from_date = request.GET.get("from_date", "")
+    filter_to_date = request.GET.get("to_date", "")
+    offset = int(request.GET.get("offset", 0))
+
+    approved = None
+    if filter_approved == "true":
+        approved = True
+    elif filter_approved == "false":
+        approved = False
+
+    from datetime import date, datetime
+
+    def _parse_date(s, end_of_day=False):
+        if not s:
+            return None
+        try:
+            d = date.fromisoformat(s)
+            if end_of_day:
+                return datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=UTC)
+            return datetime(d.year, d.month, d.day, tzinfo=UTC)
+        except ValueError:
+            return None
+
+    await agent_engine.ensure_initialized()
+    store = agent_engine.get_ethics_audit()
+    entries = await store.list_entries(
+        approved=approved,
+        from_date=_parse_date(filter_from_date),
+        to_date=_parse_date(filter_to_date, end_of_day=True),
+        limit=_ETHICS_AUDIT_PAGE_SIZE + 1,
+        offset=offset,
+    )
+
+    has_more = len(entries) > _ETHICS_AUDIT_PAGE_SIZE
+    if has_more:
+        entries = entries[:_ETHICS_AUDIT_PAGE_SIZE]
+
+    return render(
+        request,
+        "pages/ethics_audit.html",
+        {
+            "entries": entries,
+            "filter_approved": filter_approved,
+            "filter_from_date": filter_from_date,
+            "filter_to_date": filter_to_date,
+            "offset": offset,
+            "has_more": has_more,
+            "next_offset": offset + _ETHICS_AUDIT_PAGE_SIZE,
+            "prev_offset": max(0, offset - _ETHICS_AUDIT_PAGE_SIZE),
+            **_identity_context(),
+        },
+    )

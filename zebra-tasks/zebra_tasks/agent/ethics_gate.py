@@ -9,6 +9,8 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
+_MAX_GOAL_LEN = 500
+
 logger = logging.getLogger(__name__)
 
 _KANTIAN_PREAMBLE = """\
@@ -138,6 +140,36 @@ async def _load_profile(raw_user_id: int | str | None, context: ExecutionContext
         )
         return None
     return version.to_dict()
+
+
+async def _write_audit(
+    context: ExecutionContext,
+    process_id: str,
+    goal: str,
+    approved: bool,
+    overall_reasoning: str,
+    check_type: str,
+    user_id: int | None,
+) -> None:
+    """Best-effort write to the ethics audit store; errors are logged, never raised."""
+    audit_store = context.extras.get("__ethics_audit_store__")
+    if audit_store is None:
+        logger.warning("Ethics gate: __ethics_audit_store__ not available — audit entry skipped")
+        return
+    try:
+        from zebra_agent.storage.interfaces import EthicsAuditEntry
+
+        entry = EthicsAuditEntry(
+            process_id=process_id,
+            goal=goal[:_MAX_GOAL_LEN],
+            approved=approved,
+            overall_reasoning=overall_reasoning,
+            check_type=check_type,
+            user_id=user_id,
+        )
+        await audit_store.append(entry)
+    except Exception as exc:
+        logger.error("Ethics gate: failed to write audit entry: %s", exc)
 
 
 class EthicsGateAction(TaskAction):
@@ -335,6 +367,16 @@ class EthicsGateAction(TaskAction):
             output_key = task.properties.get("output_key", "ethics_assessment")
             context.set_process_property(output_key, assessment)
 
+            await _write_audit(
+                context=context,
+                process_id=task.process_id,
+                goal=goal,
+                approved=approved,
+                overall_reasoning=assessment.get("overall_reasoning", ""),
+                check_type="kantian+values" if profile is not None else "kantian",
+                user_id=int(raw_user_id) if raw_user_id is not None else None,
+            )
+
             return TaskResult(
                 success=True,
                 output=assessment,
@@ -352,6 +394,15 @@ class EthicsGateAction(TaskAction):
             }
             output_key = task.properties.get("output_key", "ethics_assessment")
             context.set_process_property(output_key, fallback)
+            await _write_audit(
+                context=context,
+                process_id=task.process_id,
+                goal=goal,
+                approved=True,
+                overall_reasoning=fallback["overall_reasoning"],
+                check_type="kantian",
+                user_id=None,
+            )
             return TaskResult(success=True, output=fallback, next_route="proceed")
 
         except Exception as e:

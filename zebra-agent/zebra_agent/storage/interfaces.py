@@ -6,8 +6,10 @@ implemented by different backends (in-memory, Django ORM, PostgreSQL, etc.).
 
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -15,6 +17,20 @@ if TYPE_CHECKING:
     from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
     from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
     from zebra_agent.profile import ValuesProfileVersion
+
+
+@dataclass
+class EthicsAuditEntry:
+    """A single immutable ethics evaluation record."""
+
+    process_id: str
+    goal: str
+    approved: bool
+    overall_reasoning: str
+    check_type: str
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: int | None = None
+    evaluated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class MemoryStore(ABC):
@@ -343,4 +359,58 @@ class PersonalKnowledgeStore(ABC):
         ordered by last_verified descending. Returns an empty string when no
         entries exist for the user.
         """
+        ...
+
+
+class EthicsAuditStore(ABC):
+    """Abstract interface for the append-only ethics evaluation audit log.
+
+    Every ethics gate evaluation is written here after the verdict is computed.
+    Entries are immutable once written — no update or delete operations exist.
+    """
+
+    @abstractmethod
+    async def initialize(self) -> None:
+        """Initialize the store."""
+        ...
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Close the store and release resources."""
+        ...
+
+    @abstractmethod
+    async def append(self, entry: EthicsAuditEntry) -> None:
+        """Append an audit entry to the log.
+
+        Args:
+            entry: The ethics evaluation result to persist.
+        """
+        ...
+
+    @abstractmethod
+    async def list_entries(
+        self,
+        approved: bool | None = None,
+        process_id: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[EthicsAuditEntry]:
+        """Return audit entries, newest first, with optional filters.
+
+        Args:
+            approved: Filter by verdict (None = all).
+            process_id: Filter by process id (None = all).
+            from_date: Include only entries with evaluated_at >= from_date.
+            to_date: Include only entries with evaluated_at <= to_date.
+            limit: Maximum number of entries to return.
+            offset: Number of entries to skip (for pagination).
+        """
+        ...
+
+    @abstractmethod
+    async def get(self, entry_id: str) -> EthicsAuditEntry | None:
+        """Return a single entry by id, or None if not found."""
         ...

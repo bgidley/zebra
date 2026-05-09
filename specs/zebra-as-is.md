@@ -212,6 +212,18 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 - **Web entry-point.** `/profile/values/` (`web_views.values_profile_wizard`) creates a wizard process for the authenticated user and redirects to the first pending task.
 - **Wired into the ethics gate (F19).** `EthicsGateAction` reads the profile via `ProfileStore.get_current()` when `user_id` is supplied. Kantian precedence rule applied in Python.
 
+### Ethics audit trail (F20 / REQ-ETH-006)
+
+Every ethics gate evaluation is appended to an immutable, queryable audit log after the verdict is computed.
+
+- **`EthicsAuditEntry` dataclass** in `zebra_agent/storage/interfaces.py` with fields: `id`, `process_id`, `goal` (first 500 chars), `approved`, `overall_reasoning`, `check_type` (`kantian` or `kantian+values`), `user_id` (nullable), `evaluated_at`.
+- **`EthicsAuditStore` interface** (`zebra_agent/storage/interfaces.py`) with `append()`, `list_entries()`, and `get()` abstract methods.
+- **`InMemoryEthicsAuditStore`** (`zebra_agent/storage/ethics_audit.py`) — for CLI and tests.
+- **`DjangoEthicsAuditStore`** (`zebra_agent_web/ethics_audit_store.py`) — Oracle-backed via Django ORM, wrapped with `sync_to_async`. Injected into engine extras as `__ethics_audit_store__` in `api/agent_engine.py`.
+- **Django model** `EthicsAuditEntryModel` in `api/models.py` with `db_table = "ethics_audit_entry"`. `save()` and `delete()` raise `NotImplementedError` on existing rows, enforcing immutability at the ORM layer.
+- **REST API** `GET /api/ethics-audit/` and `GET /api/ethics-audit/<id>/` — staff-only, supports filtering by `approved`, `process_id`, `from_date`, `to_date`; CSV export via `?export=csv`.
+- **Web UI** at `/ethics-audit/` — table of entries with verdict badge, truncated goal, check type, process id, and pagination. Linked from the sidebar nav (staff-only).
+
 ### Strengths
 
 - Declarative agent behaviour — YAML is editable, inspectable, version-controllable.
@@ -362,6 +374,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | Trust levels & trust gates | **Missing** | REQ-TRUST-001..007 |
 | Values profile (data + UI) | **Implemented** | REQ-ETH-002 |
 | Values-informed ethics gate | **Implemented** | REQ-ETH-003 |
+| Ethics audit trail (immutable log, REST API, UI) | **Implemented** (F20) | REQ-ETH-006 |
 | Personal knowledge store | **Missing** | REQ-MEM-004..006 |
 | Proactive goal generation | **Missing** | REQ-PEER-001, REQ-PRIN-006 |
 | Polling scheduler (SchedulerLoop + RoutineRegistry) | **Implemented** (F27) | REQ-PRIN-008 |
