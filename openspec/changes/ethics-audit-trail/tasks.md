@@ -45,5 +45,5 @@
 ## 8. Final Verification
 
 - [x] 8.1 Run `uv run pytest zebra-tasks/tests/ zebra-agent/tests/ zebra-agent-web/tests/ -v --ignore=zebra-agent-web/tests/e2e_live` and confirm all pass
-- [ ] 8.2 Push to GitLab and verify CI pipeline (lint → unit → e2e) is green
-- [ ] 8.3 Open GitHub PR referencing GitLab issue #20
+- [x] 8.2 Push to GitLab and verify CI pipeline (lint → unit → e2e) is green
+- [x] 8.3 Open GitHub PR referencing GitLab issue #20
