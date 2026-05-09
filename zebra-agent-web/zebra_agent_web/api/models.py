@@ -533,3 +533,46 @@ class KnowledgeEntryModel(models.Model):
 
     def __str__(self):
         return f"[{self.category}] {self.key} (user={self.user_id})"
+
+
+# =============================================================================
+# Ethics Audit Log (REQ-ETH-006 / F20)
+# =============================================================================
+
+
+class EthicsAuditEntryModel(models.Model):
+    """Immutable record of a single ethics gate evaluation.
+
+    Rows are append-only. save() and delete() raise NotImplementedError on
+    existing rows so immutability is enforced at the ORM layer.
+    """
+
+    id = models.CharField(max_length=36, primary_key=True)
+    process_id = models.CharField(max_length=255, db_index=True)
+    goal = models.TextField(help_text="First 500 chars of the evaluated goal")
+    approved = models.BooleanField(db_index=True)
+    overall_reasoning = models.TextField()
+    check_type = models.CharField(max_length=50, help_text="'kantian' or 'kantian+values'")
+    user_id = models.IntegerField(null=True, blank=True, db_index=True)
+    evaluated_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        db_table = "ethics_audit_entry"
+        verbose_name = "Ethics Audit Entry"
+        verbose_name_plural = "Ethics Audit Entries"
+        indexes = [
+            models.Index(fields=["-evaluated_at"]),
+            models.Index(fields=["approved", "-evaluated_at"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk and EthicsAuditEntryModel.objects.filter(pk=self.pk).exists():
+            raise NotImplementedError("EthicsAuditEntryModel rows are immutable")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise NotImplementedError("EthicsAuditEntryModel rows are immutable")
+
+    def __str__(self):
+        verdict = "approved" if self.approved else "rejected"
+        return f"EthicsAudit({verdict}, {self.evaluated_at.date()})"

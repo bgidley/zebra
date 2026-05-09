@@ -9,6 +9,7 @@ import asyncio
 import logging
 import threading
 import uuid
+from datetime import UTC
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.contrib.auth.decorators import login_not_required
@@ -23,6 +24,7 @@ from zebra_agent_web.api import agent_engine, engine
 from zebra_agent_web.api.serializers import (
     CompleteTaskRequestSerializer,
     CreateWorkflowRequestSerializer,
+    EthicsAuditEntrySerializer,
     ExecuteGoalRequestSerializer,
     GoalAcceptedSerializer,
     ProcessInstanceDetailSerializer,
@@ -1093,3 +1095,159 @@ def process_delete(request, process_id):
 def version_info(request):
     """Return git version metadata baked into the image at build time."""
     return JsonResponse(_VERSION)
+
+
+# =============================================================================
+# Ethics Audit Log (REQ-ETH-006 / F20)
+# =============================================================================
+
+
+def _parse_ethics_audit_filters(request):
+    """Extract and validate filter params from request.GET."""
+    from datetime import date
+
+    approved = None
+    approved_str = request.GET.get("approved")
+    if approved_str is not None:
+        if approved_str.lower() in ("true", "1"):
+            approved = True
+        elif approved_str.lower() in ("false", "0"):
+            approved = False
+
+    process_id = request.GET.get("process_id") or None
+
+    from_date = None
+    to_date = None
+    try:
+        if request.GET.get("from_date"):
+            from_date = date.fromisoformat(request.GET["from_date"])
+        if request.GET.get("to_date"):
+            to_date = date.fromisoformat(request.GET["to_date"])
+    except ValueError:
+        pass
+
+    return approved, process_id, from_date, to_date
+
+
+@api_view(["GET"])
+def ethics_audit_list(request):
+    """List ethics audit entries; staff/admin only.
+
+    Query params: approved (bool), process_id, from_date, to_date (ISO-8601 date),
+    limit (int, default 50), offset (int, default 0), format (csv or json).
+    """
+    import csv
+    import io
+    from datetime import datetime
+
+    from django.http import HttpResponse
+
+    if not request.user or not request.user.is_staff:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+    approved, process_id, from_date, to_date = _parse_ethics_audit_filters(request)
+    limit = min(int(request.GET.get("limit", 50)), 10_000)
+    offset = int(request.GET.get("offset", 0))
+
+    # Convert date → datetime for store interface
+    def _dt(d, end_of_day=False):
+        if d is None:
+            return None
+        if end_of_day:
+            return datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=UTC)
+        return datetime(d.year, d.month, d.day, tzinfo=UTC)
+
+    async def _fetch():
+        await agent_engine.ensure_initialized()
+        store = agent_engine.get_ethics_audit()
+        return await store.list_entries(
+            approved=approved,
+            process_id=process_id,
+            from_date=_dt(from_date),
+            to_date=_dt(to_date, end_of_day=True),
+            limit=limit,
+            offset=offset,
+        )
+
+    entries = async_to_sync(_fetch)()
+
+    if request.GET.get("export") == "csv":
+        buf = io.StringIO()
+        writer = csv.DictWriter(
+            buf,
+            fieldnames=[
+                "id",
+                "process_id",
+                "goal",
+                "approved",
+                "check_type",
+                "user_id",
+                "overall_reasoning",
+                "evaluated_at",
+            ],
+        )
+        writer.writeheader()
+        for e in entries:
+            writer.writerow(
+                {
+                    "id": e.id,
+                    "process_id": e.process_id,
+                    "goal": e.goal,
+                    "approved": e.approved,
+                    "check_type": e.check_type,
+                    "user_id": e.user_id,
+                    "overall_reasoning": e.overall_reasoning,
+                    "evaluated_at": e.evaluated_at.isoformat(),
+                }
+            )
+        response = HttpResponse(buf.getvalue(), content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="ethics-audit.csv"'
+        return response
+
+    serializer = EthicsAuditEntrySerializer(
+        [
+            {
+                "id": e.id,
+                "process_id": e.process_id,
+                "goal": e.goal,
+                "approved": e.approved,
+                "overall_reasoning": e.overall_reasoning,
+                "check_type": e.check_type,
+                "user_id": e.user_id,
+                "evaluated_at": e.evaluated_at,
+            }
+            for e in entries
+        ],
+        many=True,
+    )
+    return Response({"results": serializer.data, "count": len(entries), "offset": offset})
+
+
+@api_view(["GET"])
+def ethics_audit_detail(request, entry_id):
+    """Get a single ethics audit entry by id; staff/admin only."""
+    if not request.user or not request.user.is_staff:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+    async def _fetch():
+        await agent_engine.ensure_initialized()
+        store = agent_engine.get_ethics_audit()
+        return await store.get(entry_id)
+
+    entry = async_to_sync(_fetch)()
+    if entry is None:
+        return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = EthicsAuditEntrySerializer(
+        {
+            "id": entry.id,
+            "process_id": entry.process_id,
+            "goal": entry.goal,
+            "approved": entry.approved,
+            "overall_reasoning": entry.overall_reasoning,
+            "check_type": entry.check_type,
+            "user_id": entry.user_id,
+            "evaluated_at": entry.evaluated_at,
+        }
+    )
+    return Response(serializer.data)

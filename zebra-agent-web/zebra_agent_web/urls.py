@@ -61,6 +61,8 @@ urlpatterns = [
     path("runs/<str:run_id>/", web_views.run_detail, name="run_detail"),
     path("runs/<str:run_id>/rate/", web_views.run_rate, name="run_rate"),
     path("runs/<str:run_id>/feedback/", web_views.run_feedback, name="run_feedback"),
+    # Ethics Audit Log (F20 / REQ-ETH-006)
+    path("ethics-audit/", web_views.ethics_audit, name="ethics_audit"),
     # Legacy redirects (old URLs redirect to activity page)
     path("tasks/", web_views.pending_tasks, name="pending_tasks"),
     path("runs/in-progress/", web_views.in_progress_runs, name="in_progress_runs"),

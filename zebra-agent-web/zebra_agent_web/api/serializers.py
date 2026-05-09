@@ -198,3 +198,16 @@ class CompleteTaskRequestSerializer(serializers.Serializer):
 
     result = serializers.DictField(required=False, default=dict)
     next_route = serializers.CharField(required=False, allow_null=True)
+
+
+class EthicsAuditEntrySerializer(serializers.Serializer):
+    """Read-only serializer for ethics audit log entries."""
+
+    id = serializers.CharField()
+    process_id = serializers.CharField()
+    goal = serializers.CharField()
+    approved = serializers.BooleanField()
+    overall_reasoning = serializers.CharField()
+    check_type = serializers.CharField()
+    user_id = serializers.IntegerField(allow_null=True)
+    evaluated_at = serializers.DateTimeField()
