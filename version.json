@@ -1,56 +1,56 @@
 {
-  "short_hash": "5d1a255",
-  "date": "2026-05-07",
+  "short_hash": "86fafca",
+  "date": "2026-05-18",
   "commits": [
     {
-      "hash": "5d1a255",
+      "hash": "86fafca",
+      "date": "2026-05-18",
+      "subject": "fix: support seconds (Xs) in scheduler interval spec"
+    },
+    {
+      "hash": "c311d8f",
+      "date": "2026-05-10",
+      "subject": "fix: restore lost F32 migration and add merge migration"
+    },
+    {
+      "hash": "0d2a8ed",
+      "date": "2026-05-10",
+      "subject": "chore: archive ethics-audit-trail change (F20)"
+    },
+    {
+      "hash": "2d871d6",
+      "date": "2026-05-09",
+      "subject": "Merge f20/ethics-audit-trail \u2014 Closes #20"
+    },
+    {
+      "hash": "09c756c",
+      "date": "2026-05-09",
+      "subject": "docs: mark F20 tasks complete"
+    },
+    {
+      "hash": "862752f",
+      "date": "2026-05-09",
+      "subject": "feat: ethics audit trail \u2014 immutable log, REST API, UI (F20)"
+    },
+    {
+      "hash": "a6de987",
+      "date": "2026-05-08",
+      "subject": "docs: update AGENTS.md files for F19 ethics-gate values-profile integration"
+    },
+    {
+      "hash": "a6f2ace",
       "date": "2026-05-07",
-      "subject": "fix: use uv run python to generate version.json in deploy stage"
+      "subject": "Merge f19/ethics-gate-values-profile \u2014 Closes #19"
     },
     {
-      "hash": "fe28f38",
+      "hash": "943ce3c",
       "date": "2026-05-07",
-      "subject": "fix: don't require HTTPS for session cookie on HTTP deployments"
+      "subject": "feat: extend ethics gate with optional values-profile consultation"
     },
     {
-      "hash": "3cb0529",
-      "date": "2026-05-06",
-      "subject": "fix: allow setup_view without login so post-registration flow completes"
-    },
-    {
-      "hash": "91fd849",
-      "date": "2026-05-06",
-      "subject": "fix: add WhiteNoise to serve static files in production"
-    },
-    {
-      "hash": "7254742",
-      "date": "2026-05-06",
-      "subject": "fix: break setup redirect loop \u2014 exempt /auth/ from SetupRequiredMiddleware"
-    },
-    {
-      "hash": "cdaf11b",
-      "date": "2026-05-06",
-      "subject": "fix: add --force-recreate to podman-compose deploy so container is restarted on every deploy"
-    },
-    {
-      "hash": "e5c8b10",
-      "date": "2026-05-06",
-      "subject": "Merge f107/version-footer \u2014 Closes #107"
-    },
-    {
-      "hash": "f267797",
-      "date": "2026-05-06",
-      "subject": "chore: mark all tasks complete in version-footer tasks.md"
-    },
-    {
-      "hash": "1d31023",
-      "date": "2026-05-06",
-      "subject": "feat: add version footer baked from git at CI build time"
-    },
-    {
-      "hash": "69b3b75",
-      "date": "2026-05-05",
-      "subject": "Merge f27/polling-scheduler \u2014 Closes #27"
+      "hash": "da06523",
+      "date": "2026-05-07",
+      "subject": "Merge branch 'master' of https://github.com/bgidley/zebra"
     }
   ]
 }

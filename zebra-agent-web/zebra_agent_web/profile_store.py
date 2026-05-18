@@ -65,7 +65,7 @@ class DjangoProfileStore(ProfileStore):
     async def get_current(self, user_id: int) -> ValuesProfileVersion | None:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _fetch() -> ValuesProfileVersion | None:
             from zebra_agent_web.api.models import ValuesProfileModel
 
@@ -84,7 +84,7 @@ class DjangoProfileStore(ProfileStore):
     async def get_version(self, version_id: str) -> ValuesProfileVersion | None:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _fetch() -> ValuesProfileVersion | None:
             from zebra_agent_web.api.models import ValuesProfileVersionModel
 
@@ -101,7 +101,7 @@ class DjangoProfileStore(ProfileStore):
     ) -> ValuesProfileVersion:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _save() -> ValuesProfileVersion:
             from django.db.models import Max
 
@@ -151,7 +151,7 @@ class DjangoProfileStore(ProfileStore):
     async def get_approved_tags(self, field: str) -> list[dict]:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _fetch() -> list[dict]:
             from zebra_agent_web.api.models import ValuesTagModel
 
@@ -165,7 +165,7 @@ class DjangoProfileStore(ProfileStore):
     async def record_confirmed_tags(self, field_to_tags: dict[str, list[dict[str, str]]]) -> None:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _record() -> None:
             from django.db.models import F
 

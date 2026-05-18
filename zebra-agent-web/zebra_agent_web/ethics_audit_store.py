@@ -41,7 +41,7 @@ class DjangoEthicsAuditStore(EthicsAuditStore):
         pass
 
     async def append(self, entry: EthicsAuditEntry) -> None:
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _insert() -> None:
             from zebra_agent_web.api.models import EthicsAuditEntryModel
 
@@ -67,7 +67,7 @@ class DjangoEthicsAuditStore(EthicsAuditStore):
         limit: int = 50,
         offset: int = 0,
     ) -> list[EthicsAuditEntry]:
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _query() -> list[EthicsAuditEntry]:
             from zebra_agent_web.api.models import EthicsAuditEntryModel
 
@@ -85,7 +85,7 @@ class DjangoEthicsAuditStore(EthicsAuditStore):
         return await _query()
 
     async def get(self, entry_id: str) -> EthicsAuditEntry | None:
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get() -> EthicsAuditEntry | None:
             from zebra_agent_web.api.models import EthicsAuditEntryModel
 

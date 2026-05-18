@@ -53,7 +53,7 @@ class DjangoMetricsStore(MetricsStore):
     async def record_run(self, run: WorkflowRun) -> None:
         """Record a workflow run."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _record():
             output_str = None
             if run.output is not None:
@@ -103,7 +103,7 @@ class DjangoMetricsStore(MetricsStore):
         if not 1 <= rating <= 5:
             raise ValueError("Rating must be between 1 and 5")
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _update():
             WorkflowRunModel.objects.filter(id=run_id).update(user_rating=rating)
 
@@ -112,7 +112,7 @@ class DjangoMetricsStore(MetricsStore):
     async def get_run(self, run_id: str) -> WorkflowRun | None:
         """Get a specific run by ID."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             try:
                 model = WorkflowRunModel.objects.get(id=run_id)
@@ -125,7 +125,7 @@ class DjangoMetricsStore(MetricsStore):
     async def get_stats(self, workflow_name: str) -> WorkflowStats:
         """Get aggregated stats for a workflow, scoped to current user."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             queryset = WorkflowRunModel.objects.filter(workflow_name=workflow_name)
             uid = get_current_user_id()
@@ -154,7 +154,7 @@ class DjangoMetricsStore(MetricsStore):
     async def get_all_stats(self) -> list[WorkflowStats]:
         """Get stats for all workflows, scoped to current user."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             qs = WorkflowRunModel.objects.all()
             uid = get_current_user_id()
@@ -190,7 +190,7 @@ class DjangoMetricsStore(MetricsStore):
     async def get_recent_runs(self, limit: int = 10) -> list[WorkflowRun]:
         """Get the most recent workflow runs, scoped to current user."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             qs = WorkflowRunModel.objects.all()
             uid = get_current_user_id()
@@ -203,7 +203,7 @@ class DjangoMetricsStore(MetricsStore):
     async def get_in_progress_runs(self) -> list[WorkflowRun]:
         """Get all runs currently in progress, scoped to current user."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             qs = WorkflowRunModel.objects.filter(completed_at__isnull=True)
             uid = get_current_user_id()
@@ -216,7 +216,7 @@ class DjangoMetricsStore(MetricsStore):
     async def get_completed_runs(self, limit: int = 20) -> list[WorkflowRun]:
         """Get completed workflow runs, scoped to current user."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             qs = WorkflowRunModel.objects.filter(completed_at__isnull=False)
             uid = get_current_user_id()
@@ -229,7 +229,7 @@ class DjangoMetricsStore(MetricsStore):
     async def get_runs_since(self, cutoff: datetime, limit: int = 500) -> list[WorkflowRun]:
         """Get all workflow runs since the cutoff datetime, newest first."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             qs = WorkflowRunModel.objects.filter(started_at__gte=cutoff)
             uid = get_current_user_id()
@@ -242,7 +242,7 @@ class DjangoMetricsStore(MetricsStore):
     async def get_runs_for_workflow(self, workflow_name: str, limit: int = 10) -> list[WorkflowRun]:
         """Get recent runs for a specific workflow, scoped to current user."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             qs = WorkflowRunModel.objects.filter(workflow_name=workflow_name)
             uid = get_current_user_id()
@@ -255,7 +255,7 @@ class DjangoMetricsStore(MetricsStore):
     async def get_total_cost_since(self, since: datetime) -> float:
         """Return the total USD cost of all runs completed since *since*."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             # Budget is system-wide (not user-scoped) — no filtering by user_id
             result = WorkflowRunModel.objects.filter(completed_at__gte=since).aggregate(
@@ -299,7 +299,7 @@ class DjangoMetricsStore(MetricsStore):
     async def record_task_execution(self, execution: TaskExecution) -> None:
         """Record a task execution."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _record():
             output_str = None
             if execution.output is not None:
@@ -341,7 +341,7 @@ class DjangoMetricsStore(MetricsStore):
     async def get_task_executions(self, run_id: str) -> list[TaskExecution]:
         """Get all task executions for a workflow run."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             models = TaskExecutionModel.objects.filter(run_id=run_id).order_by("execution_order")
             return [self._model_to_task_execution(m) for m in models]

@@ -54,7 +54,7 @@ class DjangoMemoryStore(MemoryStore):
         """Add a detailed workflow run record to memory."""
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _add():
             from zebra_agent_web.api.models import WorkflowMemoryModel, WorkflowRunModel
 
@@ -96,7 +96,7 @@ class DjangoMemoryStore(MemoryStore):
 
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             from zebra_agent_web.api.models import WorkflowMemoryModel
 
@@ -132,7 +132,7 @@ class DjangoMemoryStore(MemoryStore):
 
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             from zebra_agent_web.api.models import WorkflowMemoryModel
 
@@ -166,7 +166,7 @@ class DjangoMemoryStore(MemoryStore):
         """Update user feedback on the workflow memory entry for a run."""
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _update():
             from zebra_agent_web.api.models import WorkflowMemoryModel
 
@@ -187,7 +187,7 @@ class DjangoMemoryStore(MemoryStore):
 
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             from zebra_agent_web.api.models import ConceptualMemoryModel
 
@@ -214,7 +214,7 @@ class DjangoMemoryStore(MemoryStore):
         """Save (insert or update) a conceptual memory entry."""
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _save():
             from zebra_agent_web.api.models import ConceptualMemoryModel
 
@@ -236,7 +236,7 @@ class DjangoMemoryStore(MemoryStore):
         """Remove all conceptual memory entries."""
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _clear():
             from zebra_agent_web.api.models import ConceptualMemoryModel
 
@@ -297,7 +297,7 @@ class DjangoMemoryStore(MemoryStore):
         """Return memory statistics."""
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get_counts():
             from zebra_agent_web.api.models import ConceptualMemoryModel, WorkflowMemoryModel
 

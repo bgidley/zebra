@@ -87,7 +87,7 @@ class DjangoStore(StateStore):
     async def save_definition(self, definition: ProcessDefinition) -> None:
         """Save or update a process definition."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _save():
             ProcessDefinitionModel.objects.update_or_create(
                 id=definition.id,
@@ -103,7 +103,7 @@ class DjangoStore(StateStore):
     async def load_definition(self, definition_id: str) -> ProcessDefinition | None:
         """Load a process definition by ID."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _load():
             try:
                 model = ProcessDefinitionModel.objects.get(id=definition_id)
@@ -116,7 +116,7 @@ class DjangoStore(StateStore):
     async def list_definitions(self) -> list[ProcessDefinition]:
         """List all available process definitions."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _list():
             models = ProcessDefinitionModel.objects.all().order_by("-updated_at")
             return [ProcessDefinition.model_validate_json(m.data) for m in models]
@@ -126,7 +126,7 @@ class DjangoStore(StateStore):
     async def delete_definition(self, definition_id: str) -> bool:
         """Delete a process definition."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _delete():
             deleted, _ = ProcessDefinitionModel.objects.filter(id=definition_id).delete()
             return deleted > 0
@@ -140,7 +140,7 @@ class DjangoStore(StateStore):
     async def save_process(self, process: ProcessInstance) -> None:
         """Save or update a process instance."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _save():
             props = process.properties or {}
             # Stamp user_id from process properties; fall back to current request user.
@@ -167,7 +167,7 @@ class DjangoStore(StateStore):
     async def load_process(self, process_id: str) -> ProcessInstance | None:
         """Load a process instance by ID."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _load():
             try:
                 model = ProcessInstanceModel.objects.get(id=process_id)
@@ -182,7 +182,7 @@ class DjangoStore(StateStore):
     ) -> list[ProcessInstance]:
         """List process instances scoped to the current user."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _list():
             queryset = ProcessInstanceModel.objects.all()
 
@@ -206,7 +206,7 @@ class DjangoStore(StateStore):
     async def delete_process(self, process_id: str) -> bool:
         """Delete a process instance and all related data."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _delete():
             with transaction.atomic():
                 # Delete related tasks and FOEs first
@@ -221,7 +221,7 @@ class DjangoStore(StateStore):
     async def count_processes_by_state(self, state: ProcessState) -> int:
         """Return the number of processes in a given state, scoped to current user."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _count():
             qs = ProcessInstanceModel.objects.filter(state=state.value)
             uid = get_current_user_id()
@@ -234,7 +234,7 @@ class DjangoStore(StateStore):
     async def get_running_processes(self) -> list[ProcessInstance]:
         """Get all processes in RUNNING state, scoped to current user."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             qs = ProcessInstanceModel.objects.filter(state=ProcessState.RUNNING.value)
             uid = get_current_user_id()
@@ -252,7 +252,7 @@ class DjangoStore(StateStore):
     ) -> list[ProcessInstance]:
         """Get processes in a specific state, scoped to current user."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             qs = ProcessInstanceModel.objects.filter(state=state.value)
             uid = get_current_user_id()
@@ -287,7 +287,7 @@ class DjangoStore(StateStore):
     async def save_task(self, task: TaskInstance) -> None:
         """Save or update a task instance."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _save():
             result_json = (
                 _serialize_json(task.result, f"task '{task.id}' result")
@@ -325,7 +325,7 @@ class DjangoStore(StateStore):
     async def load_task(self, task_id: str) -> TaskInstance | None:
         """Load a task instance by ID."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _load():
             try:
                 model = TaskInstanceModel.objects.get(id=task_id)
@@ -338,7 +338,7 @@ class DjangoStore(StateStore):
     async def load_tasks_for_process(self, process_id: str) -> list[TaskInstance]:
         """Load all task instances for a process."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _load():
             models = TaskInstanceModel.objects.filter(process_id=process_id).order_by("created_at")
             return [self._model_to_task(m) for m in models]
@@ -348,7 +348,7 @@ class DjangoStore(StateStore):
     async def delete_task(self, task_id: str) -> bool:
         """Delete a task instance."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _delete():
             deleted, _ = TaskInstanceModel.objects.filter(id=task_id).delete()
             return deleted > 0
@@ -358,7 +358,7 @@ class DjangoStore(StateStore):
     async def get_ready_tasks(self) -> list[TaskInstance]:
         """Get all tasks in READY state across all processes."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             queryset = TaskInstanceModel.objects.filter(state=TaskState.READY.value).order_by(
                 "created_at"
@@ -370,7 +370,7 @@ class DjangoStore(StateStore):
     async def get_running_tasks(self, process_id: str | None = None) -> list[TaskInstance]:
         """Get all tasks in RUNNING state."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _get():
             queryset = TaskInstanceModel.objects.filter(state=TaskState.RUNNING.value)
             if process_id:
@@ -407,7 +407,7 @@ class DjangoStore(StateStore):
     async def save_foe(self, foe: FlowOfExecution) -> None:
         """Save or update a flow of execution."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _save():
             FlowOfExecutionModel.objects.update_or_create(
                 id=foe.id,
@@ -423,7 +423,7 @@ class DjangoStore(StateStore):
     async def load_foe(self, foe_id: str) -> FlowOfExecution | None:
         """Load a flow of execution by ID."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _load():
             try:
                 model = FlowOfExecutionModel.objects.get(id=foe_id)
@@ -436,7 +436,7 @@ class DjangoStore(StateStore):
     async def load_foes_for_process(self, process_id: str) -> list[FlowOfExecution]:
         """Load all FOEs for a process."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _load():
             models = FlowOfExecutionModel.objects.filter(process_id=process_id).order_by(
                 "created_at"
@@ -448,7 +448,7 @@ class DjangoStore(StateStore):
     async def delete_foe(self, foe_id: str) -> bool:
         """Delete a flow of execution."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _delete():
             deleted, _ = FlowOfExecutionModel.objects.filter(id=foe_id).delete()
             return deleted > 0
@@ -473,7 +473,7 @@ class DjangoStore(StateStore):
     ) -> bool:
         """Acquire an exclusive lock on a process instance."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _acquire():
             now = django_timezone.now()
             expires_at = now + timedelta(seconds=timeout_seconds)
@@ -516,7 +516,7 @@ class DjangoStore(StateStore):
     async def release_lock(self, process_id: str, owner: str) -> bool:
         """Release a lock on a process instance."""
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _release():
             deleted, _ = ProcessLockModel.objects.filter(
                 process_id=process_id, owner=owner
@@ -546,15 +546,15 @@ class DjangoStore(StateStore):
         """Context manager for transactional operations."""
 
         # Django's transaction.atomic() is synchronous, wrap it
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _begin():
             return transaction.atomic().__enter__()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _commit(atomic):
             atomic.__exit__(None, None, None)
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _rollback(atomic, exc_type, exc_val, exc_tb):
             atomic.__exit__(exc_type, exc_val, exc_tb)
 

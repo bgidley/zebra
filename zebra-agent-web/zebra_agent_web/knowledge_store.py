@@ -61,7 +61,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def add_entry(self, entry: KnowledgeEntry) -> None:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _create() -> None:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -81,7 +81,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def update_entry(self, entry: KnowledgeEntry) -> None:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _update() -> None:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -100,7 +100,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def delete_entry(self, entry_id: str) -> bool:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _delete() -> bool:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -112,7 +112,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def get_entry(self, entry_id: str) -> KnowledgeEntry | None:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _fetch() -> KnowledgeEntry | None:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -127,7 +127,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def get_entries(self, user_id: int, category: str | None = None) -> list[KnowledgeEntry]:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _fetch() -> list[KnowledgeEntry]:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
