@@ -10,18 +10,20 @@ from cronsim import CronSim
 
 
 def _parse_interval(spec: str) -> timedelta:
-    """Parse an ``every: Xm/Xh/Xd`` interval spec into a timedelta.
+    """Parse an ``every: Xs/Xm/Xh/Xd`` interval spec into a timedelta.
 
     Raises ValueError for unrecognised formats.
     """
     spec = spec.strip()
+    if spec.endswith("s"):
+        return timedelta(seconds=int(spec[:-1]))
     if spec.endswith("m"):
         return timedelta(minutes=int(spec[:-1]))
     if spec.endswith("h"):
         return timedelta(hours=int(spec[:-1]))
     if spec.endswith("d"):
         return timedelta(days=int(spec[:-1]))
-    raise ValueError(f"Unrecognised interval spec: {spec!r}. Use Xm, Xh, or Xd.")
+    raise ValueError(f"Unrecognised interval spec: {spec!r}. Use Xs, Xm, Xh, or Xd.")
 
 
 def next_run_for(

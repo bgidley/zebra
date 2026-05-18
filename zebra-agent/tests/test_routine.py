@@ -17,9 +17,12 @@ class TestParseInterval:
     def test_days(self):
         assert _parse_interval("1d") == timedelta(days=1)
 
+    def test_seconds(self):
+        assert _parse_interval("30s") == timedelta(seconds=30)
+
     def test_invalid(self):
         with pytest.raises(ValueError):
-            _parse_interval("10s")
+            _parse_interval("10x")
 
 
 class TestNextRunFor:
