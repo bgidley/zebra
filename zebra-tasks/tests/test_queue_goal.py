@@ -136,7 +136,7 @@ class TestQueueGoalAction:
         """Copies LLM settings from parent process."""
         mock_context.process.properties = {
             "__llm_provider_name__": "anthropic",
-            "__llm_model__": "claude-haiku-4-20250414",
+            "__llm_model__": "claude-haiku-4-5-20251001",
         }
         mock_task.properties = {"goal": "Test goal"}
         action = QueueGoalAction()
@@ -149,7 +149,7 @@ class TestQueueGoalAction:
             "properties", call_args[0][1] if len(call_args[0]) > 1 else {}
         )
         assert created_props.get("__llm_provider_name__") == "anthropic"
-        assert created_props.get("__llm_model__") == "claude-haiku-4-20250414"
+        assert created_props.get("__llm_model__") == "claude-haiku-4-5-20251001"
 
     async def test_sets_output_key(self, mock_task, mock_context):
         """Result is stored under the specified output key."""

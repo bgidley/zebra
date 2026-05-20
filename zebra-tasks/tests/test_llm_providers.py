@@ -200,7 +200,7 @@ class TestAnthropicProvider:
         mock_response = MagicMock()
         mock_response.content = [MagicMock(type="text", text="Test response")]
         mock_response.stop_reason = "end_turn"
-        mock_response.model = "claude-sonnet-4-20250514"
+        mock_response.model = "claude-sonnet-4-6"
         mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
 
         mock_client = MagicMock()

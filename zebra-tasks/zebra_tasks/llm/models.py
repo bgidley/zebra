@@ -2,9 +2,9 @@
 
 # Mapping of friendly names to Anthropic API model IDs.
 ANTHROPIC_MODELS: dict[str, str] = {
-    "haiku": "claude-haiku-4-20250414",
-    "sonnet": "claude-sonnet-4-20250514",
-    "opus": "claude-opus-4-20250514",
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-6",
+    "opus": "claude-opus-4-7",
 }
 
 # Ordered list of friendly names for UI dropdowns / API validation.

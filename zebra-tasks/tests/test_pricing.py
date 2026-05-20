@@ -14,19 +14,19 @@ class TestGetPricing:
 
     def test_known_model(self):
         """Known model IDs return their pricing entry."""
-        pricing = get_pricing("claude-sonnet-4-20250514")
+        pricing = get_pricing("claude-sonnet-4-6")
         assert pricing["input"] == 3.00
         assert pricing["output"] == 15.00
 
     def test_haiku_pricing(self):
         """Haiku has lower pricing."""
-        pricing = get_pricing("claude-haiku-4-20250414")
+        pricing = get_pricing("claude-haiku-4-5-20251001")
         assert pricing["input"] == 0.80
         assert pricing["output"] == 4.00
 
     def test_opus_pricing(self):
         """Opus has higher pricing."""
-        pricing = get_pricing("claude-opus-4-20250514")
+        pricing = get_pricing("claude-opus-4-7")
         assert pricing["input"] == 15.00
         assert pricing["output"] == 75.00
 
@@ -54,24 +54,24 @@ class TestCalculateCost:
 
     def test_zero_tokens(self):
         """Zero tokens costs zero."""
-        assert calculate_cost("claude-sonnet-4-20250514", 0, 0) == 0.0
+        assert calculate_cost("claude-sonnet-4-6", 0, 0) == 0.0
 
     def test_sonnet_cost(self):
         """Sonnet: 1000 input + 500 output tokens."""
-        cost = calculate_cost("claude-sonnet-4-20250514", 1000, 500)
+        cost = calculate_cost("claude-sonnet-4-6", 1000, 500)
         # (1000 * 3.00 + 500 * 15.00) / 1_000_000
         expected = (3000 + 7500) / 1_000_000
         assert abs(cost - expected) < 1e-10
 
     def test_haiku_cost(self):
         """Haiku is cheapest."""
-        cost = calculate_cost("claude-haiku-4-20250414", 10000, 5000)
+        cost = calculate_cost("claude-haiku-4-5-20251001", 10000, 5000)
         expected = (10000 * 0.80 + 5000 * 4.00) / 1_000_000
         assert abs(cost - expected) < 1e-10
 
     def test_opus_cost(self):
         """Opus is most expensive."""
-        cost = calculate_cost("claude-opus-4-20250514", 10000, 5000)
+        cost = calculate_cost("claude-opus-4-7", 10000, 5000)
         expected = (10000 * 15.00 + 5000 * 75.00) / 1_000_000
         assert abs(cost - expected) < 1e-10
 
@@ -83,7 +83,7 @@ class TestCalculateCost:
 
     def test_large_token_counts(self):
         """Handles large token counts (1M+)."""
-        cost = calculate_cost("claude-sonnet-4-20250514", 1_000_000, 500_000)
+        cost = calculate_cost("claude-sonnet-4-6", 1_000_000, 500_000)
         expected = (1_000_000 * 3.00 + 500_000 * 15.00) / 1_000_000
         assert abs(cost - expected) < 1e-10
 
@@ -93,17 +93,17 @@ class TestEstimateGoalCost:
 
     def test_zero_tokens(self):
         """Zero total tokens = zero cost."""
-        assert estimate_goal_cost("claude-sonnet-4-20250514", 0) == 0.0
+        assert estimate_goal_cost("claude-sonnet-4-6", 0) == 0.0
 
     def test_split_40_60(self):
         """Uses 40/60 input/output split."""
-        cost = estimate_goal_cost("claude-sonnet-4-20250514", 10000)
+        cost = estimate_goal_cost("claude-sonnet-4-6", 10000)
         # 4000 input, 6000 output
-        expected = calculate_cost("claude-sonnet-4-20250514", 4000, 6000)
+        expected = calculate_cost("claude-sonnet-4-6", 4000, 6000)
         assert abs(cost - expected) < 1e-10
 
     def test_estimate_higher_than_pure_input(self):
         """Estimate should be higher than all-input (since output is pricier)."""
-        all_input = calculate_cost("claude-sonnet-4-20250514", 10000, 0)
-        estimated = estimate_goal_cost("claude-sonnet-4-20250514", 10000)
+        all_input = calculate_cost("claude-sonnet-4-6", 10000, 0)
+        estimated = estimate_goal_cost("claude-sonnet-4-6", 10000)
         assert estimated > all_input

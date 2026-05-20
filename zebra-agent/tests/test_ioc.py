@@ -68,13 +68,13 @@ class TestZebraContainer:
         container = ZebraContainer()
         container.config.from_dict(
             {
-                "llm": {"provider_name": "anthropic", "model": "claude-sonnet-4-20250514"},
+                "llm": {"provider_name": "anthropic", "model": "claude-sonnet-4-6"},
                 "debug": True,
             }
         )
 
         assert container.config.llm.provider_name() == "anthropic"
-        assert container.config.llm.model() == "claude-sonnet-4-20250514"
+        assert container.config.llm.model() == "claude-sonnet-4-6"
         assert container.config.debug() is True
 
     def test_store_dependency(self):
