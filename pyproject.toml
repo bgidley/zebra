@@ -39,6 +39,7 @@ addopts = "--import-mode=importlib"
 env_files = [".env"]
 markers = [
     "e2e: End-to-end tests through the Django UI",
+    "smoke: Live smoke tests against the deployed server (localhost:8000)",
 ]
 
 [tool.coverage.run]

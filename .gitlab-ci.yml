@@ -3,6 +3,7 @@ stages:
   - test
   - e2e
   - deploy
+  - smoke
 
 default:
   tags:
@@ -23,7 +24,7 @@ lint:
 unit:
   stage: test
   script:
-    - uv run pytest -m "not e2e" --ignore=zebra-agent-web/tests/e2e_live --ds=zebra_agent_web.test_settings
+    - uv run pytest -m "not e2e and not smoke" --ignore=zebra-agent-web/tests/e2e_live --ignore=zebra-agent-web/tests/smoke --ds=zebra_agent_web.test_settings
 
 e2e:
   stage: e2e
@@ -61,6 +62,22 @@ deploy:
     - uv run python scripts/gen_version.py > version.json
     - podman-compose up -d --build --force-recreate
     - podman-compose ps
+    # Wait for the container to accept requests, then provision the smoke user
+    - timeout 60 sh -c 'until curl -sf http://localhost:8000/api/health/ > /dev/null; do sleep 2; done'
+    - |
+      if [ -n "$SMOKE_PASSWORD" ]; then
+        podman-compose exec -T web python manage.py ensure_smoke_user "$SMOKE_PASSWORD"
+      fi
   rules:
     - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
   resource_group: zebra-prod
+
+smoke:
+  stage: smoke
+  script:
+    - uv run pytest zebra-agent-web/tests/smoke/ -v -m smoke
+  variables:
+    SMOKE_BASE_URL: "http://localhost:8000"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
+      when: on_success
