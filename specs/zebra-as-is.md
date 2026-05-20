@@ -125,6 +125,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 ### LLM integration
 
 - Provider abstraction supports **Anthropic Claude** (primary) and **OpenAI**, registered lazily via a factory registry.
+- Model aliases (`haiku`, `sonnet`, `opus`) resolve via `zebra_tasks/llm/models.py` → current IDs: `claude-haiku-4-5-20251001`, `claude-sonnet-4-6`, `claude-opus-4-7`.
 - Pricing table hardcoded in `pricing.py` (per-1M-token Anthropic rates); Sonnet defaults for unknowns.
 - Every call updates process properties: `__total_cost__`, `__total_tokens__`, `__token_history__`.
 - Soft budget warnings via an injected `__budget_manager__` (non-blocking).
@@ -277,6 +278,7 @@ Every ethics gate evaluation is appended to an immutable, queryable audit log af
 - `DjangoStore` (workflow state — `ProcessInstanceModel`, `TaskInstanceModel`, `FlowOfExecutionModel`)
 - `DjangoMemoryStore`, `DjangoMetricsStore`
 - Works against SQLite, PostgreSQL, Oracle (Oracle is the integration-test target).
+- All `@sync_to_async` decorators use `thread_sensitive=False` so ORM calls run in the regular thread-pool rather than the request thread's `CurrentThreadExecutor` — required for correctness when goals execute inside `asyncio.create_task()` or `asyncio.run()` in a detached thread.
 
 ### Forms
 
@@ -355,12 +357,26 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | IoC container & registry | `zebra-agent/zebra_agent/ioc/` |
 | Budget manager | `zebra-agent/zebra_agent/budget.py` |
 | Goal scheduler (priority / deadline / age) | `zebra-agent/zebra_agent/scheduler/goal_queue.py` |
-| Polling scheduler (SchedulerLoop, RoutineRegistry, FakeClock) | `zebra-agent/zebra_agent/scheduler/` |
+| Polling scheduler (SchedulerLoop, RoutineRegistry, FakeClock) | `zebra-agent/zebra_agent/scheduler/` | interval spec supports `Xs`/`Xm`/`Xh`/`Xd` |
 | Routine run persistence | `zebra-agent-web/zebra_agent_web/routine_run_store.py` |
 | Web views & templates | `zebra-agent-web/zebra_agent_web/` |
 | Daemon loop | `zebra-agent-web/zebra_agent_web/api/daemon.py` |
 | ASGI middleware (auto-start) | `zebra-agent-web/zebra_agent_web/asgi.py` |
 | Django ORM storage | `zebra-agent-web/zebra_agent_web/storage.py`, `memory_store.py`, `metrics_store.py` |
+
+### CI/CD pipeline
+
+Stages: `lint → test → e2e → deploy → smoke`
+
+| Stage | What runs |
+|---|---|
+| `lint` | `ruff check` + `ruff format --check` |
+| `test` | `pytest -m "not e2e and not smoke"` against SQLite test settings |
+| `e2e` | Cassette-backed e2e tests; uses Oracle E2E schema when `E2E_ORACLE_*` vars present |
+| `deploy` | `podman-compose build --no-cache && podman-compose up -d --force-recreate`; provisions `smoke` Basic-auth user via `SMOKE_PASSWORD` CI variable |
+| `smoke` | `pytest -m smoke` hits live `http://localhost:8000` — submits "Count from 1 to 100" via `POST /api/goals/`, polls until complete, asserts `100` in output |
+
+`deploy` and `smoke` run only on `master` pushes. Podman build uses `--no-cache` to prevent stale layer cache.
 
 ---
 
