@@ -66,7 +66,7 @@ deploy:
     - timeout 60 sh -c 'until curl -sf http://localhost:8000/api/health/ > /dev/null; do sleep 2; done'
     - |
       if [ -n "$SMOKE_PASSWORD" ]; then
-        podman-compose exec -T web python manage.py ensure_smoke_user "$SMOKE_PASSWORD"
+        podman-compose exec -T web python zebra-agent-web/manage.py ensure_smoke_user "$SMOKE_PASSWORD"
       fi
   rules:
     - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
