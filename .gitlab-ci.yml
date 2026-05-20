@@ -60,7 +60,8 @@ deploy:
     - cp /home/opc/projects/zebra/.env .env
     # Bake git version metadata into the image at build time (git not in container)
     - uv run python scripts/gen_version.py > version.json
-    - podman-compose up -d --build --force-recreate
+    - podman-compose build --no-cache
+    - podman-compose up -d --force-recreate
     - podman-compose ps
     # Wait for the container to accept requests, then provision the smoke user
     - timeout 60 sh -c 'until curl -sf http://localhost:8000/api/health/ > /dev/null; do sleep 2; done'

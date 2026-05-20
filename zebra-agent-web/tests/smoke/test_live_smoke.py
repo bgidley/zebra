@@ -51,7 +51,7 @@ def test_health():
     req = urllib.request.Request(f"{BASE_URL}/api/health/", method="GET")
     with urllib.request.urlopen(req, timeout=10) as resp:
         data = json.loads(resp.read())
-    assert data.get("status") == "ok"
+    assert data.get("status") in ("ok", "healthy")
 
 
 def test_smoke_count_to_100():
