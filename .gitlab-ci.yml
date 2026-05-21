@@ -104,7 +104,7 @@ pre-prod:
       s[HASH_SESSION_KEY] = user.get_session_auth_hash()
       s.create()
       print(s.session_key)
-      ")
+      " | tail -1)
     # Run smoke tests against the live container, injecting the session cookie
     - ZEBRA_SMOKE_URL=http://localhost:8001 ZEBRA_SMOKE_SESSION=$SMOKE_SESSION uv run pytest zebra-agent-web/tests/smoke/ -m smoke -v
   after_script:
