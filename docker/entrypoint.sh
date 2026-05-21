@@ -16,5 +16,5 @@ python manage.py migrate --noinput
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
-echo "Starting Daphne on 0.0.0.0:8000..."
-exec daphne -b 0.0.0.0 -p 8000 zebra_agent_web.asgi:application
+echo "Starting Daphne on 0.0.0.0:${APP_PORT:-8000}..."
+exec daphne -b 0.0.0.0 -p "${APP_PORT:-8000}" zebra_agent_web.asgi:application
