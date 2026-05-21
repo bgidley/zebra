@@ -74,29 +74,39 @@ pre-prod:
         -e ORACLE_PASSWORD="$E2E_ORACLE_PASSWORD" \
         -e DJANGO_ALLOWED_HOSTS='*' \
         zebra-preprod:$CI_COMMIT_SHORT_SHA
-    # Wait up to 60 s for the login page to respond
+    # Wait up to 60 s for the health endpoint to respond
     - |
       for i in $(seq 1 30); do
-        if curl -sf -o /dev/null http://localhost:8001/accounts/login/; then
+        if curl -sf -o /dev/null http://localhost:8001/api/health/; then
           echo "Container ready after ${i} attempts"; break
         fi
         [ $i -eq 30 ] && { echo "Timeout waiting for container"; podman logs zebra-preprod; exit 1; }
         sleep 2
       done
-    # Create smoke user and complete first-run setup (idempotent)
+    # Create smoke user, complete first-run setup, and create a session (all idempotent)
     - |
-      podman exec zebra-preprod python /app/zebra-agent-web/manage.py shell -c "
-      from django.contrib.auth import get_user_model
+      SMOKE_SESSION=$(podman exec zebra-preprod python /app/zebra-agent-web/manage.py shell -c "
+      from django.contrib.auth import get_user_model, SESSION_KEY, BACKEND_SESSION_KEY, HASH_SESSION_KEY
+      from django.contrib.sessions.backends.db import SessionStore
       from zebra_agent_web.api.models import SystemStateModel
       U = get_user_model()
-      U.objects.filter(username='smoke').exists() or U.objects.create_user('smoke', password='smokepass123')
+      user, _ = U.objects.get_or_create(username='smoke')
+      if not user.has_usable_password():
+          user.set_password('smokepass123')
+          user.save()
       obj, _ = SystemStateModel.objects.get_or_create(pk=1)
       obj.setup_completed = True
       obj.user_display_name = 'smoke'
       obj.save()
-      "
-    # Run smoke tests against the live container
-    - ZEBRA_SMOKE_URL=http://localhost:8001 uv run pytest zebra-agent-web/tests/smoke/ -m smoke -v
+      s = SessionStore()
+      s[SESSION_KEY] = str(user.pk)
+      s[BACKEND_SESSION_KEY] = 'django.contrib.auth.backends.ModelBackend'
+      s[HASH_SESSION_KEY] = user.get_session_auth_hash()
+      s.create()
+      print(s.session_key)
+      ")
+    # Run smoke tests against the live container, injecting the session cookie
+    - ZEBRA_SMOKE_URL=http://localhost:8001 ZEBRA_SMOKE_SESSION=$SMOKE_SESSION uv run pytest zebra-agent-web/tests/smoke/ -m smoke -v
   after_script:
     - podman stop zebra-preprod 2>/dev/null || true
     - podman rm   zebra-preprod 2>/dev/null || true

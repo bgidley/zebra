@@ -11,7 +11,7 @@ pytestmark = pytest.mark.smoke
 
 async def test_login_page_loads(client):
     """Container is reachable and serving the login page."""
-    r = await client.get("/accounts/login/")
+    r = await client.get("/auth/login/")
     assert r.status_code == 200
     assert "login" in r.text.lower()
 
@@ -22,9 +22,9 @@ async def test_dashboard_accessible(logged_in_client):
     assert r.status_code == 200
 
 
-async def test_health_api(logged_in_client):
+async def test_health_api(client):
     """Health endpoint reports the container as healthy."""
-    r = await logged_in_client.get("/api/health/")
+    r = await client.get("/api/health/")
     assert r.status_code == 200
     data = r.json()
     assert data.get("status") == "healthy", f"Unexpected health response: {data}"
