@@ -83,12 +83,17 @@ pre-prod:
         [ $i -eq 30 ] && { echo "Timeout waiting for container"; podman logs zebra-preprod; exit 1; }
         sleep 2
       done
-    # Create smoke user (idempotent)
+    # Create smoke user and complete first-run setup (idempotent)
     - |
       podman exec zebra-preprod python /app/zebra-agent-web/manage.py shell -c "
       from django.contrib.auth import get_user_model
+      from zebra_agent_web.api.models import SystemStateModel
       U = get_user_model()
       U.objects.filter(username='smoke').exists() or U.objects.create_user('smoke', password='smokepass123')
+      obj, _ = SystemStateModel.objects.get_or_create(pk=1)
+      obj.setup_completed = True
+      obj.user_display_name = 'smoke'
+      obj.save()
       "
     # Run smoke tests against the live container
     - ZEBRA_SMOKE_URL=http://localhost:8001 uv run pytest zebra-agent-web/tests/smoke/ -m smoke -v
