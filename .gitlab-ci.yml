@@ -2,6 +2,7 @@ stages:
   - lint
   - test
   - e2e
+  - pre-prod
   - deploy
 
 default:
@@ -50,6 +51,51 @@ e2e-live:
     - VCR_RECORD_MODE=none uv run pytest zebra-agent-web/tests/e2e_live/
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+
+pre-prod:
+  stage: pre-prod
+  script:
+    # Hard fail if E2E Oracle credentials are not injected — no SQLite fallback
+    - '[ -z "$E2E_ORACLE_DSN" ] && { echo "ERROR: E2E_ORACLE_DSN not set. Ensure E2E_ORACLE_* CI variables are unprotected."; exit 1; }'
+    - uv run python scripts/gen_version.py > version.json
+    # Clean up any container left by a previous failed run
+    - podman stop zebra-preprod 2>/dev/null || true
+    - podman rm   zebra-preprod 2>/dev/null || true
+    # Build image — no --env-file, no .env mount; production credentials never enter this container
+    - podman build --no-cache -t zebra-preprod:$CI_COMMIT_SHORT_SHA .
+    # Start container on port 8001 with E2E Oracle credentials only
+    - |
+      podman run -d \
+        --name zebra-preprod \
+        -p 8001:8000 \
+        -e ORACLE_DSN="$E2E_ORACLE_DSN" \
+        -e ORACLE_USERNAME="$E2E_ORACLE_USERNAME" \
+        -e ORACLE_PASSWORD="$E2E_ORACLE_PASSWORD" \
+        -e DJANGO_ALLOWED_HOSTS='*' \
+        zebra-preprod:$CI_COMMIT_SHORT_SHA
+    # Wait up to 60 s for the login page to respond
+    - |
+      for i in $(seq 1 30); do
+        if curl -sf -o /dev/null http://localhost:8001/accounts/login/; then
+          echo "Container ready after ${i} attempts"; break
+        fi
+        [ $i -eq 30 ] && { echo "Timeout waiting for container"; podman logs zebra-preprod; exit 1; }
+        sleep 2
+      done
+    # Create smoke user (idempotent)
+    - |
+      podman exec zebra-preprod python /app/zebra-agent-web/manage.py shell -c "
+      from django.contrib.auth import get_user_model
+      U = get_user_model()
+      U.objects.filter(username='smoke').exists() or U.objects.create_user('smoke', password='smokepass123')
+      "
+    # Run smoke tests against the live container
+    - ZEBRA_SMOKE_URL=http://localhost:8001 uv run pytest zebra-agent-web/tests/smoke/ -m smoke -v
+  after_script:
+    - podman stop zebra-preprod 2>/dev/null || true
+    - podman rm   zebra-preprod 2>/dev/null || true
+    - podman rmi  zebra-preprod:$CI_COMMIT_SHORT_SHA 2>/dev/null || true
+  resource_group: zebra-preprod
 
 deploy:
   stage: deploy
