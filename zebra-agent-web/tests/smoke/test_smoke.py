@@ -35,4 +35,4 @@ async def test_budget_api(logged_in_client):
     r = await logged_in_client.get("/api/budget/")
     assert r.status_code == 200
     data = r.json()
-    assert "daily_budget_usd" in data
+    assert "daily_budget" in data

@@ -106,7 +106,7 @@ pre-prod:
       print(s.session_key)
       " | tail -1)
     # Run smoke tests against the live container, injecting the session cookie
-    - ZEBRA_SMOKE_URL=http://localhost:8001 ZEBRA_SMOKE_SESSION=$SMOKE_SESSION uv run pytest zebra-agent-web/tests/smoke/ -m smoke -v
+    - ZEBRA_SMOKE_URL=http://localhost:8001 ZEBRA_SMOKE_SESSION=$SMOKE_SESSION uv run pytest zebra-agent-web/tests/smoke/ -m smoke -v || (echo "=== Container logs on failure ===" && podman logs zebra-preprod && exit 1)
   after_script:
     - podman stop zebra-preprod 2>/dev/null || true
     - podman rm   zebra-preprod 2>/dev/null || true
