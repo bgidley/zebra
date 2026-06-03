@@ -32,6 +32,6 @@
 - [x] 5.1 Run `uv run ruff check --fix . && uv run ruff format .`
 - [x] 5.2 Run `uv run pytest zebra-tasks/tests/test_ethics_gate.py -v` — all tests green
 - [x] 5.3 Run `uv run pytest` — full suite green
-- [ ] 5.4 Commit: `feat: extend ethics gate with optional values-profile consultation — Closes #19`
-- [ ] 5.5 Push to GitLab, watch CI pipeline (`lint → unit → e2e` green)
-- [ ] 5.6 Push branch to GitHub and open PR against master
+- [x] 5.4 Commit: `feat: extend ethics gate with optional values-profile consultation — Closes #19`
+- [x] 5.5 Push to GitLab, watch CI pipeline (`lint → unit → e2e` green)
+- [x] 5.6 Push branch to GitHub and open PR against master
