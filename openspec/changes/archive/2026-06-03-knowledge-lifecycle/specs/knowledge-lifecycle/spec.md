@@ -1,3 +1,5 @@
+## ADDED Requirements
+
 ### Requirement: Confidence decay for time-sensitive entries
 The system SHALL provide a `decay_confidence` task action that, for each `time_sensitive=True` knowledge entry belonging to a given user, reduces `confidence` according to the exponential half-life formula `new_confidence = confidence * 0.5 ^ (days_since_verified / half_life_days)`, floored at `0.1`. Only entries with `time_sensitive=True` are processed. The half-life in days is looked up from `CATEGORY_DECAY_HALF_LIFE_DAYS`; if the category has `None` as its half-life (e.g., `history`), the entry is skipped.
 

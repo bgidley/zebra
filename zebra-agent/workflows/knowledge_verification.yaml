@@ -1,0 +1,60 @@
+name: "Knowledge Verification"
+description: "Surface low-confidence or stale knowledge entries for human verification"
+tags: ["knowledge", "lifecycle", "scheduled", "system"]
+use_when: "INTERNAL USE ONLY - scheduled weekly to verify personal knowledge accuracy"
+version: 1
+first_task: pick_entries
+
+tasks:
+  pick_entries:
+    name: "Pick Entries for Verification"
+    action: pick_entries_for_verification
+    auto: true
+    properties:
+      low_confidence_threshold: 0.6
+      max_age_days: 90
+      max_entries: 5
+      output_key: entries_to_verify
+
+  verify_entries:
+    name: "Verify Knowledge Entries"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Knowledge Verification"
+        description: "Please review the following knowledge entries and confirm whether they are still accurate."
+        properties:
+          entries_summary:
+            type: string
+            title: "Entries to Review"
+            format: multiline
+            readOnly: true
+            default: "{{entries_to_verify.entries}}"
+          action:
+            type: string
+            title: "Action"
+            description: "What would you like to do with these entries?"
+            enum:
+              - still_correct
+              - skip
+            default: still_correct
+
+  apply_verification_result:
+    name: "Apply Verification Result"
+    action: apply_verification_result
+    auto: true
+
+routings:
+  - from: pick_entries
+    to: verify_entries
+    condition: route_name
+    name: "has_entries"
+  - from: pick_entries
+    to: null
+    condition: route_name
+    name: "no_entries"
+  - from: verify_entries
+    to: apply_verification_result
+  - from: apply_verification_result
+    to: null

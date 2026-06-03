@@ -2063,20 +2063,16 @@ async def knowledge_edit(request, entry_id):
 
 @require_POST
 async def knowledge_delete(request, entry_id):
-    """Delete a knowledge entry."""
+    """Soft-delete a knowledge entry."""
+    from zebra_agent_web.knowledge_store import DjangoPersonalKnowledgeStore
 
-    @sync_to_async
-    def _delete(eid, uid):
-        from zebra_agent_web.api.models import KnowledgeEntryModel
-
-        deleted, _ = KnowledgeEntryModel.objects.filter(id=eid, user_id=uid).delete()
-        return deleted > 0
-
-    deleted = await _delete(entry_id, request.user.id)
-    if not deleted:
+    store = DjangoPersonalKnowledgeStore()
+    entry = await store.get_entry(entry_id)
+    if entry is None or entry.user_id != request.user.id:
         from django.http import Http404
 
         raise Http404
+    await store.soft_delete_entry(entry_id)
     return redirect("knowledge_list")
 
 

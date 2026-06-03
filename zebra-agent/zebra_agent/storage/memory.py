@@ -190,20 +190,30 @@ class InMemoryPersonalKnowledgeStore(PersonalKnowledgeStore):
         await self._ensure_initialized()
         self._entries[entry.id] = entry
 
-    async def delete_entry(self, entry_id: str) -> bool:
+    async def soft_delete_entry(self, entry_id: str) -> bool:
         await self._ensure_initialized()
-        if entry_id in self._entries:
-            del self._entries[entry_id]
-            return True
-        return False
+        entry = self._entries.get(entry_id)
+        if entry is None:
+            return False
+        from datetime import UTC, datetime
+
+        entry.deleted_at = datetime.now(UTC)
+        return True
 
     async def get_entry(self, entry_id: str) -> KnowledgeEntry | None:
         await self._ensure_initialized()
         return self._entries.get(entry_id)
 
-    async def get_entries(self, user_id: int, category: str | None = None) -> list[KnowledgeEntry]:
+    async def get_entries(
+        self,
+        user_id: int,
+        category: str | None = None,
+        include_deleted: bool = False,
+    ) -> list[KnowledgeEntry]:
         await self._ensure_initialized()
         results = [e for e in self._entries.values() if e.user_id == user_id]
+        if not include_deleted:
+            results = [e for e in results if e.deleted_at is None]
         if category is not None:
             results = [e for e in results if e.category == category]
         results.sort(key=lambda e: e.last_verified, reverse=True)
@@ -217,3 +227,38 @@ class InMemoryPersonalKnowledgeStore(PersonalKnowledgeStore):
             return ""
         lines = [f"[{e.category}] {e.key}: {e.value}" for e in entries]
         return "\n".join(lines)
+
+    async def get_entries_for_verification(
+        self,
+        user_id: int,
+        low_confidence_threshold: float = 0.6,
+        max_age_days: int = 90,
+        max_entries: int = 5,
+    ) -> list[KnowledgeEntry]:
+        await self._ensure_initialized()
+        from datetime import UTC, datetime, timedelta
+
+        cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+        results = [
+            e
+            for e in self._entries.values()
+            if e.user_id == user_id
+            and e.deleted_at is None
+            and (e.confidence < low_confidence_threshold or e.last_verified < cutoff)
+        ]
+        results.sort(key=lambda e: e.confidence)
+        return results[:max_entries]
+
+    async def find_contradicting_entry(
+        self, user_id: int, category: str, key: str
+    ) -> KnowledgeEntry | None:
+        await self._ensure_initialized()
+        for entry in self._entries.values():
+            if (
+                entry.user_id == user_id
+                and entry.category == category
+                and entry.key == key
+                and entry.deleted_at is None
+            ):
+                return entry
+        return None

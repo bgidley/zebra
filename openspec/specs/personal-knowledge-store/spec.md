@@ -26,17 +26,13 @@ The `delete_entry(entry_id) -> bool` method is **REMOVED** and replaced by `soft
 - **WHEN** `get_entries(user_id=42, include_deleted=True)` is called
 - **THEN** all entries including soft-deleted ones are returned
 
-#### Scenario: List entries filtered by category
-- **WHEN** `get_entries(user_id=42, category="preferences")` is called
-- **THEN** only entries with `category="preferences"` and `user_id=42` are returned
+#### Scenario: LLM context excludes soft-deleted entries
+- **WHEN** `get_context_for_llm(user_id=42)` is called and one entry is soft-deleted
+- **THEN** the soft-deleted entry does not appear in the returned string
 
 #### Scenario: LLM context formatted correctly
 - **WHEN** `get_context_for_llm(user_id=42)` is called with two entries
 - **THEN** the returned string contains each entry formatted as `[category] key: value` and is non-empty
-
-#### Scenario: LLM context excludes soft-deleted entries
-- **WHEN** `get_context_for_llm(user_id=42)` is called and one entry is soft-deleted
-- **THEN** the soft-deleted entry does not appear in the returned string
 
 #### Scenario: Empty store returns empty context
 - **WHEN** `get_context_for_llm(user_id=42)` is called and no entries exist
@@ -75,21 +71,14 @@ The system SHALL provide `InMemoryPersonalKnowledgeStore` implementing `Personal
 
 #### Scenario: Soft-delete entry
 - **WHEN** `soft_delete_entry(entry_id)` is called for an existing entry
-- **THEN** `True` is returned and the entry no longer appears in `get_entries`
+- **THEN** `True` is returned and the entry no longer appears in `get_entries` (default `include_deleted=False`)
 
 #### Scenario: Soft-delete non-existent entry
 - **WHEN** `soft_delete_entry(entry_id)` is called for an unknown ID
 - **THEN** `False` is returned
 
-### Requirement: CATEGORY_DECAY_HALF_LIFE_DAYS constant
-The system SHALL export a `CATEGORY_DECAY_HALF_LIFE_DAYS: dict[str, int | None]` constant from `zebra_agent.knowledge` mapping each category to its decay half-life in days (`history` maps to `None` meaning no decay).
-
-#### Scenario: All categories have a half-life entry
-- **WHEN** `CATEGORY_DECAY_HALF_LIFE_DAYS` is imported
-- **THEN** every value in `KNOWLEDGE_CATEGORIES` has a corresponding key in the dict
-
 ### Requirement: Django ORM store implementation
-The system SHALL provide `DjangoPersonalKnowledgeStore` implementing `PersonalKnowledgeStore` backed by `KnowledgeEntryModel`. All ORM calls SHALL be wrapped with `sync_to_async`. The `KnowledgeEntryModel` SHALL have `time_sensitive` (BooleanField, default False) and `deleted_at` (DateTimeField, null=True) columns.
+The system SHALL provide `DjangoPersonalKnowledgeStore` implementing `PersonalKnowledgeStore` backed by `KnowledgeEntryModel`. All ORM calls SHALL be wrapped with `sync_to_async`. The `KnowledgeEntryModel` SHALL gain `time_sensitive` (BooleanField, default False) and `deleted_at` (DateTimeField, null=True) columns via a new Django migration.
 
 #### Scenario: Persisted entries survive reinitialization
 - **WHEN** an entry is added via `DjangoPersonalKnowledgeStore` and a new instance is created
@@ -153,7 +142,7 @@ The system SHALL provide web pages at `/knowledge/` for listing, creating, editi
 
 #### Scenario: Delete entry
 - **WHEN** an authenticated user POSTs to `/knowledge/<id>/delete/`
-- **THEN** the entry is soft-deleted (sets `deleted_at`) and the user is redirected to the list page
+- **THEN** the entry is hard-deleted and the user is redirected to the list page
 
 #### Scenario: User cannot access another user's entries
 - **WHEN** an authenticated user attempts to edit or delete an entry belonging to a different user
@@ -165,3 +154,10 @@ The system SHALL inject `DjangoPersonalKnowledgeStore` into `engine.extras["__kn
 #### Scenario: Knowledge store available to task actions
 - **WHEN** the web app is running and a goal is processed
 - **THEN** `context.extras.get("__knowledge_store__")` returns a `DjangoPersonalKnowledgeStore` instance inside any task action
+
+### Requirement: CATEGORY_DECAY_HALF_LIFE_DAYS constant
+The system SHALL export a `CATEGORY_DECAY_HALF_LIFE_DAYS: dict[str, int | None]` constant from `zebra_agent.knowledge` mapping each category to its decay half-life in days (`history` maps to `None` meaning no decay).
+
+#### Scenario: All categories have a half-life entry
+- **WHEN** `CATEGORY_DECAY_HALF_LIFE_DAYS` is imported
+- **THEN** every value in `KNOWLEDGE_CATEGORIES` has a corresponding key in the dict

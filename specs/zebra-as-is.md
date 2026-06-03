@@ -125,7 +125,6 @@ A legacy Java implementation sits in `legacy/` and is archived.
 ### LLM integration
 
 - Provider abstraction supports **Anthropic Claude** (primary) and **OpenAI**, registered lazily via a factory registry.
-- Model aliases (`haiku`, `sonnet`, `opus`) resolve via `zebra_tasks/llm/models.py` → current IDs: `claude-haiku-4-5-20251001`, `claude-sonnet-4-6`, `claude-opus-4-7`.
 - Pricing table hardcoded in `pricing.py` (per-1M-token Anthropic rates); Sonnet defaults for unknowns.
 - Every call updates process properties: `__total_cost__`, `__total_tokens__`, `__token_history__`.
 - Soft budget warnings via an injected `__budget_manager__` (non-blocking).
@@ -213,18 +212,6 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 - **Web entry-point.** `/profile/values/` (`web_views.values_profile_wizard`) creates a wizard process for the authenticated user and redirects to the first pending task.
 - **Wired into the ethics gate (F19).** `EthicsGateAction` reads the profile via `ProfileStore.get_current()` when `user_id` is supplied. Kantian precedence rule applied in Python.
 
-### Ethics audit trail (F20 / REQ-ETH-006)
-
-Every ethics gate evaluation is appended to an immutable, queryable audit log after the verdict is computed.
-
-- **`EthicsAuditEntry` dataclass** in `zebra_agent/storage/interfaces.py` with fields: `id`, `process_id`, `goal` (first 500 chars), `approved`, `overall_reasoning`, `check_type` (`kantian` or `kantian+values`), `user_id` (nullable), `evaluated_at`.
-- **`EthicsAuditStore` interface** (`zebra_agent/storage/interfaces.py`) with `append()`, `list_entries()`, and `get()` abstract methods.
-- **`InMemoryEthicsAuditStore`** (`zebra_agent/storage/ethics_audit.py`) — for CLI and tests.
-- **`DjangoEthicsAuditStore`** (`zebra_agent_web/ethics_audit_store.py`) — Oracle-backed via Django ORM, wrapped with `sync_to_async`. Injected into engine extras as `__ethics_audit_store__` in `api/agent_engine.py`.
-- **Django model** `EthicsAuditEntryModel` in `api/models.py` with `db_table = "ethics_audit_entry"`. `save()` and `delete()` raise `NotImplementedError` on existing rows, enforcing immutability at the ORM layer.
-- **REST API** `GET /api/ethics-audit/` and `GET /api/ethics-audit/<id>/` — staff-only, supports filtering by `approved`, `process_id`, `from_date`, `to_date`; CSV export via `?export=csv`.
-- **Web UI** at `/ethics-audit/` — table of entries with verdict badge, truncated goal, check type, process id, and pagination. Linked from the sidebar nav (staff-only).
-
 ### Strengths
 
 - Declarative agent behaviour — YAML is editable, inspectable, version-controllable.
@@ -238,7 +225,7 @@ Every ethics gate evaluation is appended to an immutable, queryable audit log af
 - **Dream cycle is experimentally powerful but unvalidated** — LLM-driven mutations aren't gated by tests.
 - **No trust model exists.** Requirements describe SUPERVISED / SEMI-AUTONOMOUS / AUTONOMOUS; implementation has none of this.
 - ~~**No values profile** — ethics is generic Kantian, not personalised.~~ Resolved by F18 (data + UI) and F19 (ethics-gate consumption, REQ-ETH-003).
-- **No personal knowledge store** — only the three workflow-focused tiers.
+- ~~**No personal knowledge store** — only the three workflow-focused tiers.~~ Resolved by F31 (store, CRUD UI, agent loop integration) and F32 (lifecycle: decay, verification, contradiction detection, soft-delete).
 - ~~**Only a goal scheduler, not a time/event scheduler**~~ — `GoalScheduler` (`zebra-agent/zebra_agent/scheduler/goal_queue.py`) picks the next CREATED process for the budget daemon. A cron/interval `SchedulerLoop` now fires built-in and user-defined routines (F27 / REQ-PRIN-008). There is **no event-driven trigger bus** (REQ-PRIN-009).
 - ~~**Single-user implicit** — no `user_id` namespacing anywhere in stores or schemas.~~ Resolved by F6 (REQ-USR-002).
 - **Agent main loop YAML is 258 lines** — hard to unit-test sub-branches.
@@ -278,7 +265,6 @@ Every ethics gate evaluation is appended to an immutable, queryable audit log af
 - `DjangoStore` (workflow state — `ProcessInstanceModel`, `TaskInstanceModel`, `FlowOfExecutionModel`)
 - `DjangoMemoryStore`, `DjangoMetricsStore`
 - Works against SQLite, PostgreSQL, Oracle (Oracle is the integration-test target).
-- All `@sync_to_async` decorators use `thread_sensitive=False` so ORM calls run in the regular thread-pool rather than the request thread's `CurrentThreadExecutor` — required for correctness when goals execute inside `asyncio.create_task()` or `asyncio.run()` in a detached thread.
 
 ### Forms
 
@@ -357,26 +343,12 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | IoC container & registry | `zebra-agent/zebra_agent/ioc/` |
 | Budget manager | `zebra-agent/zebra_agent/budget.py` |
 | Goal scheduler (priority / deadline / age) | `zebra-agent/zebra_agent/scheduler/goal_queue.py` |
-| Polling scheduler (SchedulerLoop, RoutineRegistry, FakeClock) | `zebra-agent/zebra_agent/scheduler/` | interval spec supports `Xs`/`Xm`/`Xh`/`Xd` |
+| Polling scheduler (SchedulerLoop, RoutineRegistry, FakeClock) | `zebra-agent/zebra_agent/scheduler/` |
 | Routine run persistence | `zebra-agent-web/zebra_agent_web/routine_run_store.py` |
 | Web views & templates | `zebra-agent-web/zebra_agent_web/` |
 | Daemon loop | `zebra-agent-web/zebra_agent_web/api/daemon.py` |
 | ASGI middleware (auto-start) | `zebra-agent-web/zebra_agent_web/asgi.py` |
 | Django ORM storage | `zebra-agent-web/zebra_agent_web/storage.py`, `memory_store.py`, `metrics_store.py` |
-
-### CI/CD pipeline
-
-Stages: `lint → test → e2e → deploy → smoke`
-
-| Stage | What runs |
-|---|---|
-| `lint` | `ruff check` + `ruff format --check` |
-| `test` | `pytest -m "not e2e and not smoke"` against SQLite test settings |
-| `e2e` | Cassette-backed e2e tests; uses Oracle E2E schema when `E2E_ORACLE_*` vars present |
-| `deploy` | `podman-compose build --no-cache && podman-compose up -d --force-recreate`; provisions `smoke` Basic-auth user via `SMOKE_PASSWORD` CI variable |
-| `smoke` | `pytest -m smoke` hits live `http://localhost:8000` — submits "Count from 1 to 100" via `POST /api/goals/`, polls until complete, asserts `100` in output |
-
-`deploy` and `smoke` run only on `master` pushes. Podman build uses `--no-cache` to prevent stale layer cache.
 
 ---
 
@@ -390,8 +362,9 @@ Stages: `lint → test → e2e → deploy → smoke`
 | Trust levels & trust gates | **Missing** | REQ-TRUST-001..007 |
 | Values profile (data + UI) | **Implemented** | REQ-ETH-002 |
 | Values-informed ethics gate | **Implemented** | REQ-ETH-003 |
-| Ethics audit trail (immutable log, REST API, UI) | **Implemented** (F20) | REQ-ETH-006 |
-| Personal knowledge store | **Missing** | REQ-MEM-004..006 |
+| Personal knowledge store (CRUD, agent loop integration) | **Implemented** (F31) | REQ-MEM-004 |
+| Knowledge lifecycle (decay, verification, contradiction, soft-delete) | **Implemented** (F32) | REQ-MEM-005 |
+| Cross-domain knowledge access | **Missing** | REQ-MEM-006 |
 | Proactive goal generation | **Missing** | REQ-PEER-001, REQ-PRIN-006 |
 | Polling scheduler (SchedulerLoop + RoutineRegistry) | **Implemented** (F27) | REQ-PRIN-008 |
 | Event-driven trigger bus | **Missing** | REQ-PRIN-009 |

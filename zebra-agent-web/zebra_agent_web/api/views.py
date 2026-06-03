@@ -708,41 +708,29 @@ def run_diagram(request, run_id):
 # =============================================================================
 
 
-@api_view(["GET"])
-async def budget_status(request):
-    """Return current budget status and goal queue depth.
-
-    Response::
-
-        {
-            "daily_budget": 50.0,
-            "spent_today": 1.234,
-            "remaining": 48.766,
-            "paced_allowance": 12.5,
-            "available": 11.266,
-            "pct_used": "2.5%",
-            "reset_hour": 0,
-            "hours_since_reset": 6.0,
-            "queue_depth": 3
-        }
-    """
-    await agent_engine.ensure_initialized()
-
-    budget_manager = agent_engine.get_budget_manager()
-    status = await budget_manager.get_status()
-
-    # Add queue depth
+def _budget_status_data():
     from zebra.core.models import ProcessState
 
     from zebra_agent_web.api.engine import get_engine
 
-    wf_engine = get_engine()
-    created_processes = await wf_engine.store.get_processes_by_state(
-        ProcessState.CREATED, exclude_children=True
-    )
-    status["queue_depth"] = len(created_processes)
+    async def _get():
+        await agent_engine.ensure_initialized()
+        budget_manager = agent_engine.get_budget_manager()
+        status = await budget_manager.get_status()
+        wf_engine = get_engine()
+        created_processes = await wf_engine.store.get_processes_by_state(
+            ProcessState.CREATED, exclude_children=True
+        )
+        status["queue_depth"] = len(created_processes)
+        return status
 
-    return Response(status)
+    return async_to_sync(_get)()
+
+
+@api_view(["GET"])
+def budget_status(request):
+    """Return current budget status and goal queue depth."""
+    return Response(_budget_status_data())
 
 
 @api_view(["GET"])

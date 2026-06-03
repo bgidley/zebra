@@ -330,11 +330,14 @@ class PersonalKnowledgeStore(ABC):
         ...
 
     @abstractmethod
-    async def delete_entry(self, entry_id: str) -> bool:
-        """Delete a knowledge entry by ID.
+    async def soft_delete_entry(self, entry_id: str) -> bool:
+        """Soft-delete a knowledge entry by setting its deleted_at timestamp.
+
+        Deleted entries are excluded from active queries by default but
+        retained for audit purposes.
 
         Returns:
-            True if the entry was found and deleted, False if not found.
+            True if the entry was found and soft-deleted, False if not found.
         """
         ...
 
@@ -344,9 +347,15 @@ class PersonalKnowledgeStore(ABC):
         ...
 
     @abstractmethod
-    async def get_entries(self, user_id: int, category: str | None = None) -> list[KnowledgeEntry]:
+    async def get_entries(
+        self,
+        user_id: int,
+        category: str | None = None,
+        include_deleted: bool = False,
+    ) -> list[KnowledgeEntry]:
         """Get all entries for a user, optionally filtered by category.
 
+        Soft-deleted entries are excluded unless include_deleted is True.
         Results are ordered by last_verified descending.
         """
         ...
@@ -357,7 +366,33 @@ class PersonalKnowledgeStore(ABC):
 
         Returns entries formatted as ``[category] key: value``, one per line,
         ordered by last_verified descending. Returns an empty string when no
-        entries exist for the user.
+        entries exist for the user. Excludes soft-deleted entries.
+        """
+        ...
+
+    @abstractmethod
+    async def get_entries_for_verification(
+        self,
+        user_id: int,
+        low_confidence_threshold: float = 0.6,
+        max_age_days: int = 90,
+        max_entries: int = 5,
+    ) -> list[KnowledgeEntry]:
+        """Return entries that are candidates for human verification.
+
+        Selects non-deleted entries where confidence < low_confidence_threshold
+        OR last_verified is older than max_age_days, ordered by confidence
+        ascending (lowest first). Capped at max_entries.
+        """
+        ...
+
+    @abstractmethod
+    async def find_contradicting_entry(
+        self, user_id: int, category: str, key: str
+    ) -> KnowledgeEntry | None:
+        """Return the existing non-deleted entry for (user_id, category, key), or None.
+
+        Used by add_knowledge to detect contradictions before writing.
         """
         ...
 

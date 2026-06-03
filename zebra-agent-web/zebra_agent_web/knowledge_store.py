@@ -7,7 +7,7 @@ skills, history) for individual users. Backs the KnowledgeEntryModel table.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
@@ -34,6 +34,8 @@ def _to_dataclass(row) -> KnowledgeEntry:  # type: ignore[no-untyped-def]
         last_verified=row.last_verified,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        time_sensitive=row.time_sensitive,
+        deleted_at=row.deleted_at,
     )
 
 
@@ -61,7 +63,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def add_entry(self, entry: KnowledgeEntry) -> None:
         await self._ensure_initialized()
 
-        @sync_to_async(thread_sensitive=False)
+        @sync_to_async
         def _create() -> None:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -74,6 +76,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
                 source=entry.source,
                 confidence=entry.confidence,
                 last_verified=entry.last_verified,
+                time_sensitive=entry.time_sensitive,
             )
 
         await _create()
@@ -81,7 +84,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def update_entry(self, entry: KnowledgeEntry) -> None:
         await self._ensure_initialized()
 
-        @sync_to_async(thread_sensitive=False)
+        @sync_to_async
         def _update() -> None:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -93,26 +96,29 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
                 confidence=entry.confidence,
                 last_verified=entry.last_verified,
                 updated_at=datetime.now(UTC),
+                time_sensitive=entry.time_sensitive,
             )
 
         await _update()
 
-    async def delete_entry(self, entry_id: str) -> bool:
+    async def soft_delete_entry(self, entry_id: str) -> bool:
         await self._ensure_initialized()
 
-        @sync_to_async(thread_sensitive=False)
-        def _delete() -> bool:
+        @sync_to_async
+        def _soft_delete() -> bool:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
-            deleted, _ = KnowledgeEntryModel.objects.filter(id=entry_id).delete()
-            return deleted > 0
+            updated = KnowledgeEntryModel.objects.filter(
+                id=entry_id, deleted_at__isnull=True
+            ).update(deleted_at=datetime.now(UTC))
+            return updated > 0
 
-        return await _delete()
+        return await _soft_delete()
 
     async def get_entry(self, entry_id: str) -> KnowledgeEntry | None:
         await self._ensure_initialized()
 
-        @sync_to_async(thread_sensitive=False)
+        @sync_to_async
         def _fetch() -> KnowledgeEntry | None:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -124,14 +130,21 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
 
         return await _fetch()
 
-    async def get_entries(self, user_id: int, category: str | None = None) -> list[KnowledgeEntry]:
+    async def get_entries(
+        self,
+        user_id: int,
+        category: str | None = None,
+        include_deleted: bool = False,
+    ) -> list[KnowledgeEntry]:
         await self._ensure_initialized()
 
-        @sync_to_async(thread_sensitive=False)
+        @sync_to_async
         def _fetch() -> list[KnowledgeEntry]:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
             qs = KnowledgeEntryModel.objects.filter(user_id=user_id)
+            if not include_deleted:
+                qs = qs.filter(deleted_at__isnull=True)
             if category is not None:
                 qs = qs.filter(category=category)
             qs = qs.order_by("-last_verified")
@@ -146,3 +159,53 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
             return ""
         lines = [f"[{e.category}] {e.key}: {e.value}" for e in entries]
         return "\n".join(lines)
+
+    async def get_entries_for_verification(
+        self,
+        user_id: int,
+        low_confidence_threshold: float = 0.6,
+        max_age_days: int = 90,
+        max_entries: int = 5,
+    ) -> list[KnowledgeEntry]:
+        await self._ensure_initialized()
+
+        @sync_to_async
+        def _fetch() -> list[KnowledgeEntry]:
+            from django.db.models import Q
+
+            from zebra_agent_web.api.models import KnowledgeEntryModel
+
+            cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+            qs = (
+                KnowledgeEntryModel.objects.filter(
+                    user_id=user_id,
+                    deleted_at__isnull=True,
+                )
+                .filter(Q(confidence__lt=low_confidence_threshold) | Q(last_verified__lt=cutoff))
+                .order_by("confidence")[:max_entries]
+            )
+            return [_to_dataclass(row) for row in qs]
+
+        return await _fetch()
+
+    async def find_contradicting_entry(
+        self, user_id: int, category: str, key: str
+    ) -> KnowledgeEntry | None:
+        await self._ensure_initialized()
+
+        @sync_to_async
+        def _fetch() -> KnowledgeEntry | None:
+            from zebra_agent_web.api.models import KnowledgeEntryModel
+
+            try:
+                row = KnowledgeEntryModel.objects.get(
+                    user_id=user_id,
+                    category=category,
+                    key=key,
+                    deleted_at__isnull=True,
+                )
+                return _to_dataclass(row)
+            except KnowledgeEntryModel.DoesNotExist:
+                return None
+
+        return await _fetch()

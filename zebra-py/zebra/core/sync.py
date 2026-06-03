@@ -52,6 +52,9 @@ class TaskSync:
 
             for routing in routings:
                 dest_id = routing.dest_task_id
+                if dest_id is None:
+                    continue  # terminal routing — no downstream task
+
                 dest_task = process_def.get_task(dest_id)
 
                 if dest_task.synchronized:
