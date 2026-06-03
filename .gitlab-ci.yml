@@ -13,7 +13,7 @@ default:
 
 variables:
   DJANGO_SETTINGS_MODULE: zebra_agent_web.settings
-  UV_CACHE_DIR: /home/opc/.cache/uv
+  UV_CACHE_DIR: /var/cache/uv
 
 lint:
   stage: lint
