@@ -612,6 +612,10 @@ class WorkflowEngine:
         foe_serial: FlowOfExecution | None = None
 
         for routing in create_list:
+            if routing.dest_task_id is None:
+                # Terminal routing — this branch ends here; no new task created
+                continue
+
             dest_task_def = definition.get_task(routing.dest_task_id)
 
             if routing.parallel:
@@ -936,7 +940,7 @@ class WorkflowEngine:
             expected_branches = [
                 r.dest_task_id
                 for r in definition.get_routings_from(split_task.task_definition_id)
-                if r.parallel
+                if r.parallel and r.dest_task_id is not None
             ]
 
             if not expected_branches:

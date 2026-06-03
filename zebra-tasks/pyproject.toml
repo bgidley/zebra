@@ -81,6 +81,8 @@ save_values_profile = "zebra_tasks.agent.save_values_profile:SaveValuesProfileAc
 decay_confidence = "zebra_tasks.knowledge.decay:DecayConfidenceAction"
 add_knowledge = "zebra_tasks.knowledge.add:AddKnowledgeAction"
 pick_entries_for_verification = "zebra_tasks.knowledge.verify:PickEntriesForVerificationAction"
+apply_resolution = "zebra_tasks.knowledge.apply_resolution:ApplyResolutionAction"
+apply_verification_result = "zebra_tasks.knowledge.apply_verification_result:ApplyVerificationResultAction"
 
 [build-system]
 requires = ["hatchling"]

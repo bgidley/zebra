@@ -132,7 +132,10 @@ class RoutingDefinition(BaseModel):
 
     id: str = Field(..., description="Unique identifier for this routing")
     source_task_id: str = Field(..., description="ID of the originating task")
-    dest_task_id: str = Field(..., description="ID of the destination task")
+    dest_task_id: str | None = Field(
+        default=None,
+        description="ID of the destination task; None = terminal (end workflow branch)",
+    )
     parallel: bool = Field(
         default=False,
         description="If True, this routing executes in parallel with others. Creates new FOE.",

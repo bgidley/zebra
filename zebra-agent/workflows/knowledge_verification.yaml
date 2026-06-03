@@ -40,8 +40,21 @@ tasks:
               - skip
             default: still_correct
 
+  apply_verification_result:
+    name: "Apply Verification Result"
+    action: apply_verification_result
+    auto: true
+
 routings:
   - from: pick_entries
     to: verify_entries
     condition: route_name
     name: "has_entries"
+  - from: pick_entries
+    to: null
+    condition: route_name
+    name: "no_entries"
+  - from: verify_entries
+    to: apply_verification_result
+  - from: apply_verification_result
+    to: null

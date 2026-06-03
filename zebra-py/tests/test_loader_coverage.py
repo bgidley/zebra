@@ -142,16 +142,17 @@ class TestLoadDefinitionFromDict:
                 }
             )
 
-    def test_routing_missing_to(self):
-        """Test error when routing is missing 'to'."""
-        with pytest.raises(ValidationError, match="missing 'to' field"):
-            load_definition_from_dict(
-                {
-                    "name": "Test",
-                    "tasks": {"t1": {"name": "T1"}},
-                    "routings": [{"from": "t1"}],
-                }
-            )
+    def test_routing_null_to_is_terminal(self):
+        """A routing with no 'to' field (or to: null) creates a terminal routing."""
+        definition = load_definition_from_dict(
+            {
+                "name": "Test",
+                "tasks": {"t1": {"name": "T1"}},
+                "routings": [{"from": "t1"}],
+            }
+        )
+        assert len(definition.routings) == 1
+        assert definition.routings[0].dest_task_id is None
 
     def test_routing_invalid_dest(self):
         """Test error when routing destination task doesn't exist."""

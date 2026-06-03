@@ -153,12 +153,10 @@ def load_definition_from_dict(data: dict[str, Any], source: str = "dict") -> Pro
         if not source_task:
             errors.append(f"Routing {i}: missing 'from' field")
             continue
-        if not dest_task:
-            errors.append(f"Routing {i}: missing 'to' field")
-            continue
+        # dest_task may be None/null — that signals a terminal routing (end of workflow branch)
         if source_task not in tasks:
             errors.append(f"Routing {i}: source task '{source_task}' not found")
-        if dest_task not in tasks:
+        if dest_task is not None and dest_task not in tasks:
             errors.append(f"Routing {i}: destination task '{dest_task}' not found")
 
         routing_id = f"{source_task}_to_{dest_task}_{i}"
@@ -224,13 +222,14 @@ def validate_definition(definition: ProcessDefinition) -> list[str]:
     for routing in definition.routings:
         if routing.source_task_id not in definition.tasks:
             errors.append(f"Routing source '{routing.source_task_id}' not found")
-        if routing.dest_task_id not in definition.tasks:
+        if routing.dest_task_id is not None and routing.dest_task_id not in definition.tasks:
             errors.append(f"Routing destination '{routing.dest_task_id}' not found")
 
     # Check for orphaned tasks
     tasks_with_incoming: set[str] = {definition.first_task_id}
     for routing in definition.routings:
-        tasks_with_incoming.add(routing.dest_task_id)
+        if routing.dest_task_id is not None:
+            tasks_with_incoming.add(routing.dest_task_id)
 
     for task_id in definition.tasks:
         if task_id not in tasks_with_incoming:

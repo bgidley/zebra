@@ -79,14 +79,17 @@ class PickEntriesForVerificationAction(TaskAction):
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         knowledge_store = context.extras.get("__knowledge_store__")
+        _empty = TaskResult(
+            success=True, output={"entries": [], "count": 0}, next_route="no_entries"
+        )
         if knowledge_store is None:
             logger.info("PickEntriesForVerificationAction: no knowledge store — skipping")
-            return TaskResult.ok(output={"entries": [], "count": 0})
+            return _empty
 
         user_id = context.get_process_property("__user_id__")
         if user_id is None:
             logger.info("PickEntriesForVerificationAction: no user_id — skipping")
-            return TaskResult.ok(output={"entries": [], "count": 0})
+            return _empty
 
         low_confidence_threshold = float(task.properties.get("low_confidence_threshold", 0.6))
         max_age_days = int(task.properties.get("max_age_days", 90))
@@ -115,13 +118,15 @@ class PickEntriesForVerificationAction(TaskAction):
 
             result = {"entries": serialized, "count": len(serialized)}
             context.set_process_property(output_key, result)
+            next_route = "has_entries" if serialized else "no_entries"
             logger.info(
-                "PickEntriesForVerificationAction: selected %d entries for user %s",
+                "PickEntriesForVerificationAction: selected %d entries for user %s (route=%s)",
                 len(serialized),
                 user_id,
+                next_route,
             )
-            return TaskResult.ok(output=result)
+            return TaskResult(success=True, output=result, next_route=next_route)
 
         except Exception as e:
             logger.warning("PickEntriesForVerificationAction failed — degrading gracefully: %s", e)
-            return TaskResult.ok(output={"entries": [], "count": 0})
+            return _empty

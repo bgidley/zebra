@@ -37,6 +37,13 @@ tasks:
               - keep_both
             default: keep_existing
 
+  apply_resolution:
+    name: "Apply Resolution"
+    action: apply_resolution
+    auto: true
+
 routings:
   - from: present_contradiction
+    to: apply_resolution
+  - from: apply_resolution
     to: null
