@@ -223,6 +223,17 @@ def get_profile() -> "DjangoProfileStore":
     return _profile
 
 
+def get_knowledge() -> "DjangoPersonalKnowledgeStore":
+    """Get the DjangoPersonalKnowledgeStore instance.
+
+    Raises:
+        RuntimeError: If the knowledge store hasn't been initialized.
+    """
+    if _knowledge is None:
+        raise RuntimeError("Knowledge store not initialized. Call ensure_initialized() first.")
+    return _knowledge
+
+
 def get_ethics_audit() -> "DjangoEthicsAuditStore":
     """Get the DjangoEthicsAuditStore instance."""
     if _ethics_audit is None:

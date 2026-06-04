@@ -10,6 +10,7 @@ This directory contains requirements and design specifications for Zebra.
 | [zebra-to-be.md](zebra-to-be.md) | High-level technical design for the target system: subsystems, interfaces, migration path, risks | Draft |
 | [distributed-data-model.md](distributed-data-model.md) | Design for local-first multi-user data sync (Phase 3) | Draft |
 | [testing-strategy.md](testing-strategy.md) | Testing philosophy: E2E black-box through the web UX as primary layer, narrow units only for stable contracts | Draft |
+| [f9-data-export.md](f9-data-export.md) | Data export feature (REQ-DATA-003 / F9): archive format, API, management command | Implemented |
 
 The concrete feature backlog is tracked as [GitLab issues](https://gitlab.com/gidley/zebra/-/issues).
 
