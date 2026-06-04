@@ -10,7 +10,7 @@ import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from zebra_agent.knowledge import KnowledgeEntry
@@ -449,3 +449,153 @@ class EthicsAuditStore(ABC):
     async def get(self, entry_id: str) -> EthicsAuditEntry | None:
         """Return a single entry by id, or None if not found."""
         ...
+
+
+@dataclass
+class CredentialKey:
+    """Identifies a stored credential without exposing its value."""
+
+    user_id: str
+    integration_name: str
+    credential_type: str
+
+
+class CredentialStore(ABC):
+    """Abstract interface for OS-keychain-backed credential storage.
+
+    Credentials are indexed by ``(user_id, integration_name, credential_type)``
+    and stored in the platform's native secure storage (macOS Keychain,
+    Secret Service on Linux, Windows Credential Manager) or a file-based
+    fallback with 0600 permissions.
+
+    Credentials MUST NEVER appear in logs, process properties, or exception
+    messages.  All implementations must be careful to only pass ``value`` to
+    the backend and never include it in any string formatting.
+    """
+
+    @abstractmethod
+    async def get(
+        self,
+        user_id: str,
+        integration_name: str,
+        credential_type: str,
+    ) -> str | None:
+        """Retrieve a credential value.
+
+        Args:
+            user_id: User identifier (namespaces the credential).
+            integration_name: Integration name (e.g. ``github``, ``google``).
+            credential_type: Credential type (e.g. ``api_key``, ``token``).
+
+        Returns:
+            The stored credential value, or None if not found.
+        """
+        ...
+
+    @abstractmethod
+    async def set(
+        self,
+        user_id: str,
+        integration_name: str,
+        credential_type: str,
+        value: str,
+    ) -> None:
+        """Store a credential value.
+
+        Args:
+            user_id: User identifier.
+            integration_name: Integration name.
+            credential_type: Credential type.
+            value: Credential value — never log this.
+        """
+        ...
+
+    @abstractmethod
+    async def delete(
+        self,
+        user_id: str,
+        integration_name: str,
+        credential_type: str,
+    ) -> None:
+        """Remove a credential.
+
+        Args:
+            user_id: User identifier.
+            integration_name: Integration name.
+            credential_type: Credential type.
+        """
+        ...
+
+    @abstractmethod
+    async def list(self, user_id: str) -> list[CredentialKey]:
+        """List all credential keys for a user (no values returned).
+
+        Args:
+            user_id: User identifier.
+
+        Returns:
+            List of CredentialKey dataclasses (no credential values).
+        """
+        ...
+
+
+class InMemoryCredentialStore(CredentialStore):
+    """In-memory credential store for testing and standalone CLI use.
+
+    Data is lost on process exit.  Do not use in production — use
+    ``KeyringCredentialStore`` or ``FileCredentialStore`` instead.
+
+    The ``_store`` dict is intentionally excluded from ``__repr__`` to
+    avoid accidental credential exposure in logs.
+    """
+
+    def __init__(self) -> None:
+        # Keyed by (user_id, integration_name, credential_type)
+        self._store: dict[tuple[str, str, str], str] = {}
+
+    def __repr__(self) -> str:
+        return f"InMemoryCredentialStore(entries={len(self._store)})"
+
+    async def get(
+        self,
+        user_id: str,
+        integration_name: str,
+        credential_type: str,
+    ) -> str | None:
+        return self._store.get((user_id, integration_name, credential_type))
+
+    async def set(
+        self,
+        user_id: str,
+        integration_name: str,
+        credential_type: str,
+        value: str,
+    ) -> None:
+        self._store[(user_id, integration_name, credential_type)] = value
+
+    async def delete(
+        self,
+        user_id: str,
+        integration_name: str,
+        credential_type: str,
+    ) -> None:
+        self._store.pop((user_id, integration_name, credential_type), None)
+
+    async def list(self, user_id: str) -> list[CredentialKey]:
+        return [
+            CredentialKey(
+                user_id=u,
+                integration_name=i,
+                credential_type=t,
+            )
+            for (u, i, t) in self._store
+            if u == user_id
+        ]
+
+    # ------------------------------------------------------------------
+    # Test helpers (not part of the interface)
+    # ------------------------------------------------------------------
+
+    def _dump(self) -> dict[tuple[str, str, str], Any]:
+        """Return all stored credentials — test use only."""
+        return dict(self._store)

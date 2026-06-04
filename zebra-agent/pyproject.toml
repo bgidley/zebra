@@ -23,6 +23,7 @@ dependencies = [
     "dependency-injector>=4.44.0",
     "pydantic-settings>=2.0",
     "cronsim>=2.6",
+    "keyring>=24.0",
 ]
 
 [tool.uv.sources]
@@ -34,6 +35,9 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.21",
 ]
+
+[project.scripts]
+zebra-agent = "zebra_agent.cli:main"
 
 [project.entry-points."zebra.schedules"]
 # Built-in routine factories are registered here.

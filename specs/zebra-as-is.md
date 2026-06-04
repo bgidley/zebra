@@ -330,7 +330,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 7. **Standalone agent is ephemeral** — no persistent store outside the Django UI; CLI users lose memory on exit.
 8. **Error recovery is minimal** — timeouts, but no retry/backoff, no hung-call detection.
 9. **Template expressiveness** — dotted keys only; any non-trivial branching logic must live inside task actions.
-10. **Security baseline is partial** — passkey auth implemented (F5), kill switch implemented (F2), no credential store (F7 pending), no encryption at rest (F7/Phase 2).
+10. **Security baseline is partial** — passkey auth (F5), kill switch (F2), and OS keychain credential store (F7) are implemented. No encryption at rest yet (Phase 2).
 
 ### Capabilities ready to build on
 
@@ -363,6 +363,8 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | Dream cycle | `zebra-agent/workflows/dream_cycle.yaml` |
 | Memory / metrics DTOs & re-exports | `zebra-agent/zebra_agent/memory.py`, `metrics.py` |
 | Memory / metrics store implementations | `zebra-agent/zebra_agent/storage/interfaces.py`, `storage/memory.py`, `storage/metrics.py` |
+| Credential store (F7) | `zebra-agent/zebra_agent/storage/credentials.py` — `KeyringCredentialStore` (OS keychain) + `FileCredentialStore` (0600 files). See `specs/f7-credential-store.md`. |
+| CLI (F7) | `zebra-agent/zebra_agent/cli.py` — `credential set/get/list/delete` subcommands |
 | Workflow library | `zebra-agent/zebra_agent/library.py` |
 | IoC container & registry | `zebra-agent/zebra_agent/ioc/` |
 | Budget manager | `zebra-agent/zebra_agent/budget.py` |
