@@ -103,6 +103,16 @@ async def run_daemon_loop(
         _ROUTINES_DIR,
     )
 
+    # Recover any processes that were RUNNING when the daemon last stopped.
+    # resume_all_processes() resets RUNNING tasks back to READY (or flags
+    # non-idempotent ones for manual review) so they are not stuck forever.
+    try:
+        resumed = await wf_engine.resume_all_processes()
+        if resumed:
+            logger.info("Daemon startup: resumed %d interrupted process(es)", len(resumed))
+    except Exception:
+        logger.exception("Daemon startup: error during process recovery — continuing")
+
     await scheduler_loop.run()
 
     logger.info("Daemon stopped.")
