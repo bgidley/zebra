@@ -1211,6 +1211,64 @@ def ethics_audit_list(request):
     return Response({"results": serializer.data, "count": len(entries), "offset": offset})
 
 
+# =============================================================================
+# Data Export (REQ-DATA-003 / F9)
+# =============================================================================
+
+
+def _export_data_impl(user_id: str) -> bytes:
+    """Sync helper that runs the async DataExporter via async_to_sync."""
+
+    async def _run():
+        from zebra_agent.export import DataExporter
+
+        await agent_engine.ensure_initialized()
+        await engine.ensure_initialized()
+        exporter = DataExporter()
+        return await exporter.export_user_data(
+            user_id=user_id,
+            memory_store=agent_engine.get_memory(),
+            metrics_store=agent_engine.get_metrics(),
+            knowledge_store=agent_engine.get_knowledge(),
+            process_store=engine.get_store(),
+            workflow_library=agent_engine.get_library(),
+        )
+
+    return async_to_sync(_run)()
+
+
+@api_view(["GET"])
+def export_data(request):
+    """Export all data for the authenticated user as a ZIP archive.
+
+    Returns a ``application/zip`` file download named
+    ``zebra-export-<YYYY-MM-DD>.zip`` containing:
+
+    - ``manifest.json``  — format version, user_id, export timestamp
+    - ``processes.json`` — all process instances and their tasks
+    - ``memory.json``    — workflow memory + conceptual memory entries
+    - ``metrics.json``   — workflow run records
+    - ``knowledge.json`` — personal knowledge entries
+    - ``workflows/``     — YAML workflow files
+    """
+    from datetime import date
+
+    from django.http import HttpResponse
+
+    user_id = str(request.user.id) if request.user and request.user.is_authenticated else "0"
+
+    try:
+        archive_bytes = _export_data_impl(user_id)
+    except Exception as exc:
+        logger.exception("Data export failed for user %s", user_id)
+        return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    filename = f"zebra-export-{date.today().isoformat()}.zip"
+    response = HttpResponse(archive_bytes, content_type="application/zip")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
 @api_view(["GET"])
 def ethics_audit_detail(request, entry_id):
     """Get a single ethics audit entry by id; staff/admin only."""

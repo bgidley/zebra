@@ -57,4 +57,6 @@ urlpatterns = [
     # Ethics audit log (F20 / REQ-ETH-006)
     path("ethics-audit/", views.ethics_audit_list, name="api_ethics_audit_list"),
     path("ethics-audit/<str:entry_id>/", views.ethics_audit_detail, name="api_ethics_audit_detail"),
+    # Data export (F9 / REQ-DATA-003)
+    path("export/", views.export_data, name="api_export_data"),
 ]

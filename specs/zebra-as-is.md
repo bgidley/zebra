@@ -402,7 +402,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | Chat interface | **Missing** | REQ-UI-002 |
 | Multi-user / household support | **Missing** | REQ-USR-003/005 |
 | Encryption at rest, cloud sync, unattended keys | **Missing** | REQ-DATA-002/006 |
-| Data export | **Missing** | REQ-DATA-003 |
+| Data export | Implemented — `DataExporter` service, `GET /api/export/`, `manage.py export_data`. See [specs/f9-data-export.md](f9-data-export.md). | REQ-DATA-003 |
 | Integration provider framework | **Missing** | REQ-INT-001/002/004 |
 | Domain coverage beyond Code | **Missing** | REQ-DOM-SCHED/RESEARCH/FIN/HEALTH/HOME/CREATIVE/SOCIAL |
 | Web authentication | **Implemented** (F5 — passkey/WebAuthn) | REQ-NFR-007 |
