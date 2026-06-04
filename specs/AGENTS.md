@@ -10,6 +10,12 @@ This directory contains requirements and design specifications for Zebra.
 | [zebra-to-be.md](zebra-to-be.md) | High-level technical design for the target system: subsystems, interfaces, migration path, risks | Draft |
 | [distributed-data-model.md](distributed-data-model.md) | Design for local-first multi-user data sync (Phase 3) | Draft |
 | [testing-strategy.md](testing-strategy.md) | Testing philosophy: E2E black-box through the web UX as primary layer, narrow units only for stable contracts | Draft |
+| [f2-kill-switch.md](f2-kill-switch.md) | F2: Kill switch — `SystemStateModel`, daemon halted flag, web endpoint, management command | Implemented |
+| [f3-observability.md](f3-observability.md) | F3: Observability — structlog JSON logging, Prometheus `/metrics`, `/health` endpoint, partial correlation ID | Implemented |
+| [f4-f5-identity-auth.md](f4-f5-identity-auth.md) | F4+F5: Single-user identity setup flow + passkey (WebAuthn) web authentication | Implemented |
+| [f6-user-id-namespacing.md](f6-user-id-namespacing.md) | F6: user_id columns on all Django store tables, `CurrentUserMiddleware` ContextVar propagation | Implemented |
+| [f8-crash-recovery.md](f8-crash-recovery.md) | F8: Crash recovery contract — write-ahead guarantees, daemon startup `resume_all_processes`, 11-test matrix | Implemented |
+| [f28-event-bus.md](f28-event-bus.md) | F28: Event-driven trigger bus — forward spec (NOT YET IMPLEMENTED, deferred from original close) | Forward spec |
 
 The concrete feature backlog is tracked as [GitLab issues](https://gitlab.com/gidley/zebra/-/issues).
 

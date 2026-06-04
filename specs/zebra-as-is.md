@@ -1,6 +1,6 @@
 # Zebra — As-Is Design
 
-**Date**: 2026-04-17
+**Date**: 2026-06-04
 **Status**: Snapshot of current implementation
 **Companion**: [../docs/requirements.md](../docs/requirements.md) describes the target vision; this document describes what exists today.
 
@@ -271,6 +271,18 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 Server-side: reuses `zebra.forms` (`schema_to_form` + coerce/validate).
 Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-field errors, required markers, route buttons.
 
+### Kill switch (F2)
+
+`POST /api/kill-switch/` sets a persisted `halted` flag in `SystemStateModel`. The daemon checks this flag before each goal pickup and during polling — in-flight processes are failed within 2 s of activation. `python manage.py kill_switch --halt|--resume|--status` is the CLI equivalent. See [f2-kill-switch.md](f2-kill-switch.md).
+
+### Observability (F3)
+
+`structlog` JSON logging in production, `ConsoleRenderer` in development. Prometheus metrics at `/api/metrics/` (goals submitted/completed, budget gauges, queue depth). Health check at `/api/health/` (200 healthy / 503 unhealthy). `run_id` is logged inline by the daemon; per-request HTTP correlation IDs are not yet propagated. See [f3-observability.md](f3-observability.md).
+
+### User identity & namespacing (F6)
+
+`user_id = IntegerField` added to six ORM models (processes, tasks, runs, task executions, episodic/conceptual memory) via migration `0011_user_id_columns`. `CurrentUserMiddleware` propagates the authenticated user's PK via a `ContextVar` for the duration of each HTTP request. Django store implementations filter reads by `user_id` when one is in context. Abstract store interfaces (`MemoryStore`, `MetricsStore`) remain unchanged. See [f6-user-id-namespacing.md](f6-user-id-namespacing.md).
+
 ### Strengths
 
 - Unified ORM for memory, metrics, state, and Django models across three DB engines.
@@ -278,10 +290,17 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 - Zero-template-code human tasks via JSON Schema.
 - Activity view falls back gracefully to process properties when a metrics record is missing.
 
+### Authentication & Identity (F4 + F5)
+
+- **Passkey (WebAuthn) authentication** on all web endpoints via `py_webauthn` and Django sessions.
+- **First-run setup flow** (`SetupRedirectMiddleware`) captures display name and generates a stable local identity UUID, stored in `SystemStateModel`.
+- Every process is stamped with `__user_display_name__` and `__user_identity_id__` at creation.
+- See [f4-f5-identity-auth.md](f4-f5-identity-auth.md) for full detail.
+
 ### Weaknesses
 
-- **No authentication at all** — every endpoint is public. Suitable for localhost only.
-- **No per-user isolation** — single implicit tenant.
+- **No passkey management UI** — users cannot delete or rename registered passkeys.
+- **No per-user isolation in all paths** — `clear_conceptual_memories` wipes all users (latent bug). See [f6-user-id-namespacing.md](f6-user-id-namespacing.md).
 - **Channel layer defaults to in-memory** — production needs Redis.
 - **Orphaned processes are handled but fragile** — if `assess_and_record` never fires, metrics are reconstructed from `__task_output_*` properties.
 - **Workflow library search is a list filter** — no full-text, no tagging.
@@ -304,14 +323,14 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 
 1. **Cross-package coupling leaks** — `zebra-tasks/agent/*` reaches into `zebra-agent` types. IoC softens but does not eliminate this.
 2. **MCP story is incomplete** — advertised in docs and requirements, but no live server in `zebra-py/zebra/mcp/`.
-3. **No user namespace** — every store assumes a single tenant. Multi-user (REQ-USR-002..005) will touch every storage interface.
-4. **No trust model** — the policy layer required by REQ-TRUST-* does not exist. Ethics gates are values-informed but advisory (no hard-block in the engine). REQ-ETH-002/003 resolved by F18/F19.
+3. ~~**No user namespace**~~ — `user_id` columns added to all stores (F6); abstract interfaces not yet updated. Multi-user (REQ-USR-003..005) still requires full namespacing of abstract ABCs.
+4. **No trust model** — the policy layer required by REQ-TRUST-001..006 does not exist. The kill switch (F2 / REQ-TRUST-007) is implemented; ethics gates are values-informed but advisory. Full `TrustStore` + `trust_gate` action is pending (F12-F17).
 5. ~~**No time scheduler or event bus**~~ — `SchedulerLoop` (F27) adds cron/interval routine scheduling. `GoalScheduler` ranks queued goals. No event-driven trigger bus (REQ-PRIN-009), no webhook intake, no trigger subscriptions.
 6. **CLI surface is thin** — four commands; no way to manage memory, workflows, trust, or budget from the terminal.
 7. **Standalone agent is ephemeral** — no persistent store outside the Django UI; CLI users lose memory on exit.
 8. **Error recovery is minimal** — timeouts, but no retry/backoff, no hung-call detection.
 9. **Template expressiveness** — dotted keys only; any non-trivial branching logic must live inside task actions.
-10. **Security baseline is low** — no auth, no credential store, no encryption at rest; acceptable for local development, insufficient for any shared deployment.
+10. **Security baseline is partial** — passkey auth implemented (F5), kill switch implemented (F2), no credential store (F7 pending), no encryption at rest (F7/Phase 2).
 
 ### Capabilities ready to build on
 
@@ -327,6 +346,11 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 
 | Concern | Path |
 |---|---|
+| Kill switch helpers | `zebra-agent-web/zebra_agent_web/api/kill_switch.py` |
+| Kill switch model | `SystemStateModel` in `zebra-agent-web/zebra_agent_web/api/models.py` |
+| Structured logging config | `zebra-agent-web/zebra_agent_web/logging_config.py` |
+| Prometheus metrics | `zebra-agent-web/zebra_agent_web/api/metrics.py` |
+| Identity/auth middleware | `zebra-agent-web/zebra_agent_web/middleware.py` |
 | Engine core | `zebra-py/zebra/core/engine.py` |
 | State store interface & impls | `zebra-py/zebra/storage/` |
 | Form helpers | `zebra-py/zebra/forms.py` |
@@ -357,9 +381,13 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | Area | Current State | Requirement Reference |
 |---|---|---|
 | Workflow engine, ethics gates, memory tiers, budget, cost tracking | **Implemented** | REQ-PRIN-001, REQ-ETH-001, REQ-MEM-001/2/3, REQ-NFR-003 |
+| Structured logging, Prometheus metrics, health check | **Implemented** (F3) | REQ-NFR-004 |
+| Single-user identity + passkey web auth | **Implemented** (F4, F5) | REQ-USR-001, REQ-NFR-007 |
+| user_id namespacing in Django stores | **Implemented** (F6) | REQ-USR-002 |
+| Kill switch | **Implemented** (F2) | REQ-TRUST-007 |
 | MCP server | **Missing (advertised)** | REQ-INT-003 |
-| User namespace (`user_id`) | **Missing** | REQ-USR-001/002 |
-| Trust levels & trust gates | **Missing** | REQ-TRUST-001..007 |
+| Full user namespace in abstract store ABCs | **Partial** (Django layer only) | REQ-USR-002 |
+| Trust levels & trust gates (F12–F17) | **Missing** | REQ-TRUST-001..006 |
 | Values profile (data + UI) | **Implemented** | REQ-ETH-002 |
 | Values-informed ethics gate | **Implemented** | REQ-ETH-003 |
 | Personal knowledge store (CRUD, agent loop integration) | **Implemented** (F31) | REQ-MEM-004 |
@@ -367,7 +395,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | Cross-domain knowledge access | **Missing** | REQ-MEM-006 |
 | Proactive goal generation | **Missing** | REQ-PEER-001, REQ-PRIN-006 |
 | Polling scheduler (SchedulerLoop + RoutineRegistry) | **Implemented** (F27) | REQ-PRIN-008 |
-| Event-driven trigger bus | **Missing** | REQ-PRIN-009 |
+| Event-driven trigger bus | **Missing** (closed as deferred — see [f28-event-bus.md](f28-event-bus.md)) | REQ-PRIN-009 |
 | Notification system | **Missing** | REQ-UI-004 |
 | Chat interface | **Missing** | REQ-UI-002 |
 | Multi-user / household support | **Missing** | REQ-USR-003/005 |
@@ -375,6 +403,6 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | Data export | **Missing** | REQ-DATA-003 |
 | Integration provider framework | **Missing** | REQ-INT-001/002/004 |
 | Domain coverage beyond Code | **Missing** | REQ-DOM-SCHED/RESEARCH/FIN/HEALTH/HOME/CREATIVE/SOCIAL |
-| Web authentication | **Missing** | REQ-NFR-007 |
+| Web authentication | **Implemented** (F5 — passkey/WebAuthn) | REQ-NFR-007 |
 
 The existing system is a solid foundation for the *engine* and the *agent loop* described in the requirements, but the *policy*, *personalisation*, *proactivity*, and *multi-user* layers remain to be built.
