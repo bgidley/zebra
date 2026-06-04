@@ -17,6 +17,7 @@ This directory contains requirements and design specifications for Zebra.
 | [f7-credential-store.md](f7-credential-store.md) | F7: OS keychain credential store — `CredentialStore` ABC, keyring + file backends, CLI commands | Implemented |
 | [f8-crash-recovery.md](f8-crash-recovery.md) | F8: Crash recovery contract — write-ahead guarantees, daemon startup `resume_all_processes`, 11-test matrix | Implemented |
 | [f9-data-export.md](f9-data-export.md) | F9: Data export — ZIP archive CLI + `GET /api/export/` + dashboard button | Implemented |
+| [f10-data-deletion.md](f10-data-deletion.md) | F10: Data deletion — soft/hard delete, `DELETE /api/user-data/`, management command | Implemented |
 | [f28-event-bus.md](f28-event-bus.md) | F28: Event-driven trigger bus — forward spec (NOT YET IMPLEMENTED, deferred from original close) | Forward spec |
 
 The concrete feature backlog is tracked as [GitLab issues](https://gitlab.com/gidley/zebra/-/issues).
