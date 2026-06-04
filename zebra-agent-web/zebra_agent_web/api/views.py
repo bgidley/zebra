@@ -1079,6 +1079,71 @@ def process_delete(request, process_id):
     return Response({"deleted": True, "process_id": process_id})
 
 
+# ===========================================================================
+# User Data Deletion (REQ-DATA-005 / F10)
+# ===========================================================================
+
+
+@api_view(["DELETE"])
+def delete_user_data(request):
+    """Delete all data scoped to the currently authenticated user.
+
+    Two modes controlled by the ``hard`` query parameter:
+
+    - ``hard=false`` (default): soft-delete — marks knowledge entries as
+      deleted (``deleted_at`` set). Other tables are unaffected.
+    - ``hard=true``: permanently removes all user-scoped rows from all
+      tables (processes, tasks, FOEs, workflow runs, memories, knowledge,
+      values profile). This operation is IRREVERSIBLE.
+
+    Request body (optional JSON):
+        ``{"confirm": "delete my data"}`` — required confirmation token for
+        hard deletes to prevent accidental data loss.
+
+    Query params:
+        ``hard`` (bool, default false) — select deletion mode.
+
+    Returns:
+        200: DeletionReport as JSON dict
+        400: Missing or invalid confirmation token (hard delete only)
+        401: Unauthenticated
+    """
+    hard = request.query_params.get("hard", "false").lower() in ("true", "1", "yes")
+
+    if hard:
+        body = request.data if isinstance(request.data, dict) else {}
+        confirm = body.get("confirm", "")
+        if confirm != "delete my data":
+            return Response(
+                {
+                    "error": (
+                        "Hard delete requires confirmation. "
+                        'POST body must contain {"confirm": "delete my data"}.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    user_id = request.user.id
+
+    def _run():
+        async def _delete():
+            from zebra_agent.deletion import DataDeletor
+
+            deletor = DataDeletor()
+            return await deletor.delete_user_data(user_id, hard=hard)
+
+        return async_to_sync(_delete)()
+
+    try:
+        report = _run()
+    except Exception as e:
+        logger.exception("User data deletion failed for user %s", user_id)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response(report.as_dict())
+
+
 @login_not_required
 def version_info(request):
     """Return git version metadata baked into the image at build time."""
