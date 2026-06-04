@@ -20,6 +20,12 @@ Example:
 
     # Register a custom service
     container.register_service("my_service", MyService, singleton=True)
+
+    # The credential store is auto-registered as "credential_store" using the
+    # KeyringCredentialStore backend (falls back to FileCredentialStore when
+    # keyring is not available).  Override if needed:
+    from zebra_agent.storage.credentials import FileCredentialStore
+    container.register_service("credential_store", FileCredentialStore, singleton=True)
 """
 
 import logging
@@ -57,6 +63,7 @@ class ZebraContainer:
 
     def __init__(self) -> None:
         self._container = _ContainerDefinition()
+        self._register_default_credential_store()
 
     @property
     def config(self) -> providers.Configuration:
@@ -123,3 +130,24 @@ class ZebraContainer:
             True if the service exists in the container.
         """
         return name in self._container.providers
+
+    def _register_default_credential_store(self) -> None:
+        """Register a default CredentialStore under ``credential_store``.
+
+        Attempts ``KeyringCredentialStore`` first; if the ``keyring`` package
+        is not installed, falls back to ``FileCredentialStore``.  Callers can
+        override by calling ``register_service("credential_store", ...)`` after
+        construction.
+        """
+        try:
+            import keyring  # noqa: F401
+
+            from zebra_agent.storage.credentials import KeyringCredentialStore
+
+            self.register_service("credential_store", KeyringCredentialStore, singleton=True)
+            logger.debug("Default credential store: KeyringCredentialStore")
+        except ImportError:
+            from zebra_agent.storage.credentials import FileCredentialStore
+
+            self.register_service("credential_store", FileCredentialStore, singleton=True)
+            logger.debug("Default credential store: FileCredentialStore (keyring not available)")
