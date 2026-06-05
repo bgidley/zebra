@@ -51,7 +51,9 @@ class AnthropicProvider(LLMProvider):
                 "anthropic package not installed. Install with: pip install anthropic"
             )
 
-        self._model = model or self.DEFAULT_MODEL
+        from zebra_tasks.llm.models import resolve_model_name
+
+        self._model = resolve_model_name(model) or self.DEFAULT_MODEL
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
 
         if not self._api_key:
