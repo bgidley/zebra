@@ -30,14 +30,14 @@ Please review and provide concise feedback (under 200 words) on:
 Be direct and actionable."
 
 # Check the container is running
-if ! uvx podman-compose ps 2>/dev/null | grep -q "web"; then
+if ! uv tool run podman-compose ps 2>/dev/null | grep -q "web"; then
   echo "[zebra-feedback] Production container not running — skipping."
   exit 0
 fi
 
 echo "[zebra-feedback] Submitting to Zebra (model: haiku)..."
 
-OUTPUT=$(uvx podman-compose exec -T web \
+OUTPUT=$(uv tool run podman-compose exec -T web \
   python /app/zebra-agent-web/manage.py run_goal \
   "$(printf '%s' "$GOAL")" \
   --model haiku 2>/dev/null) || {

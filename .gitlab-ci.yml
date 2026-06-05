@@ -60,13 +60,13 @@ deploy:
     - cp /home/gitlab-runner/.env .env
     # Bake git version metadata into the image at build time (git not in container)
     - uv run python scripts/gen_version.py > version.json
-    - uvx podman-compose build --no-cache
-    - uvx podman-compose up -d --force-recreate
-    - uvx podman-compose ps
+    - uv tool run podman-compose build --no-cache
+    - uv tool run podman-compose up -d --force-recreate
+    - uv tool run podman-compose ps
     # Wait for the container to accept requests, then provision the smoke user
     - timeout 60 sh -c 'until curl -sf http://localhost:8000/api/health/ > /dev/null; do sleep 2; done'
     - >-
-      [ -z "$SMOKE_PASSWORD" ] || uvx podman-compose exec -e SMOKE_PASSWORD -T web
+      [ -z "$SMOKE_PASSWORD" ] || uv tool run podman-compose exec -e SMOKE_PASSWORD -T web
       python zebra-agent-web/manage.py shell -c
       "import os; from django.contrib.auth.models import User;
       u,_=User.objects.get_or_create(username='smoke');
