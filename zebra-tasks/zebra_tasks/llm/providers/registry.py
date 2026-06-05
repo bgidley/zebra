@@ -74,6 +74,13 @@ def _try_auto_register(name: str) -> None:
             register_provider("openai", lambda m: OpenAIProvider(model=m))
         except ImportError:
             pass
+    elif name == "kimi":
+        try:
+            from zebra_tasks.llm.providers.kimi import KimiProvider
+
+            register_provider("kimi", lambda m: KimiProvider(model=m))
+        except ImportError:
+            pass
 
 
 def list_providers() -> list[str]:

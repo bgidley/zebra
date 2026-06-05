@@ -4,7 +4,16 @@
 ANTHROPIC_MODELS: dict[str, str] = {
     "haiku": "claude-haiku-4-5-20251001",
     "sonnet": "claude-sonnet-4-6",
-    "opus": "claude-opus-4-7",
+    "opus": "claude-opus-4-8",
+}
+
+# Kimi model aliases
+KIMI_MODELS: dict[str, str] = {
+    "kimi-8k": "moonshot-v1-8k",
+    "kimi-32k": "moonshot-v1-32k",
+    "kimi-128k": "moonshot-v1-128k",
+    "kimi": "moonshot-v1-32k",
+    "kimi-auto": "moonshot-v1-auto",
 }
 
 # Ordered list of friendly names for UI dropdowns / API validation.
