@@ -1,56 +1,56 @@
 {
-  "short_hash": "86fafca",
-  "date": "2026-05-18",
+  "short_hash": "5e0e809",
+  "date": "2026-06-05",
   "commits": [
     {
-      "hash": "86fafca",
-      "date": "2026-05-18",
-      "subject": "fix: support seconds (Xs) in scheduler interval spec"
+      "hash": "5e0e809",
+      "date": "2026-06-05",
+      "subject": "fix: replace uvx with uv tool run \u2014 uvx not in gitlab-runner PATH"
     },
     {
-      "hash": "c311d8f",
-      "date": "2026-05-10",
-      "subject": "fix: restore lost F32 migration and add merge migration"
+      "hash": "3b57dd3",
+      "date": "2026-06-05",
+      "subject": "fix: use podman-compose exec for zebra-feedback \u2014 avoids auth requirement"
     },
     {
-      "hash": "0d2a8ed",
-      "date": "2026-05-10",
-      "subject": "chore: archive ethics-audit-trail change (F20)"
+      "hash": "b60b8f1",
+      "date": "2026-06-05",
+      "subject": "feat: consult Zebra for feedback on its own evolution"
     },
     {
-      "hash": "2d871d6",
-      "date": "2026-05-09",
-      "subject": "Merge f20/ethics-audit-trail \u2014 Closes #20"
+      "hash": "6b07241",
+      "date": "2026-06-05",
+      "subject": "fix: use uvx podman-compose in deploy job \u2014 system podman-compose missing podman_compose module"
     },
     {
-      "hash": "09c756c",
-      "date": "2026-05-09",
-      "subject": "docs: mark F20 tasks complete"
+      "hash": "5342567",
+      "date": "2026-06-04",
+      "subject": "Merge f10/data-deletion \u2014 Closes #10"
     },
     {
-      "hash": "862752f",
-      "date": "2026-05-09",
-      "subject": "feat: ethics audit trail \u2014 immutable log, REST API, UI (F20)"
+      "hash": "1472fe2",
+      "date": "2026-06-04",
+      "subject": "Merge f9/data-export \u2014 Closes #9"
     },
     {
-      "hash": "a6de987",
-      "date": "2026-05-08",
-      "subject": "docs: update AGENTS.md files for F19 ethics-gate values-profile integration"
+      "hash": "6987c27",
+      "date": "2026-06-04",
+      "subject": "Merge f7/os-keychain-credential-store \u2014 Closes #7"
     },
     {
-      "hash": "a6f2ace",
-      "date": "2026-05-07",
-      "subject": "Merge f19/ethics-gate-values-profile \u2014 Closes #19"
+      "hash": "9f04c7e",
+      "date": "2026-06-04",
+      "subject": "Merge f8/crash-recovery-contract \u2014 Closes #8"
     },
     {
-      "hash": "943ce3c",
-      "date": "2026-05-07",
-      "subject": "feat: extend ethics gate with optional values-profile consultation"
+      "hash": "b7622bd",
+      "date": "2026-06-04",
+      "subject": "feat: add crash recovery contract + spec docs for F2/F3/F4/F5/F6/F8/F28"
     },
     {
-      "hash": "da06523",
-      "date": "2026-05-07",
-      "subject": "Merge branch 'master' of https://github.com/bgidley/zebra"
+      "hash": "3eb5828",
+      "date": "2026-06-04",
+      "subject": "feat: add OS keychain credential store (REQ-DATA-006, REQ-INT-002)"
     }
   ]
 }
