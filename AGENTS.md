@@ -107,6 +107,22 @@ uv run ruff check --fix .   # fix lint errors
 uv run ruff format .        # fix formatting
 ```
 
+### Consulting Zebra for Feedback (MUST before the closing commit)
+
+Before the `Closes #N` commit, submit the implementation to the **production Zebra instance** (`http://localhost:8000`) and incorporate its feedback. Zebra is always running via the deployed container. This embeds the XP **Feedback** principle directly in the iteration cycle — Zebra reviewing its own evolution.
+
+```bash
+bash scripts/zebra-feedback.sh <issue_number> "<feature title>" \
+  "- change 1
+- change 2
+- change 3"
+```
+
+**Acting on feedback:**
+- Feedback is **advisory** — incorporate it if it identifies a genuine gap.
+- If you disagree, note it briefly in the commit message.
+- If Zebra is unreachable, the script exits 0 with a notice; add `(Zebra feedback skipped — server unreachable)` to the commit.
+
 ### Pipeline verification (MUST after every push)
 
 Pipeline stages: `lint → unit → e2e → deploy` (see [`README-CICD.md`](README-CICD.md)).
