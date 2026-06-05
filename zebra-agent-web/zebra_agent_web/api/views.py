@@ -361,7 +361,6 @@ def _run_goal_in_background(run_id: str, goal: str, model: str | None = None) ->
 
 
 @api_view(["POST"])
-@permission_classes([AllowAny])
 def execute_goal(request):
     """Start goal execution and return immediately with a run_id.
 
@@ -554,7 +553,6 @@ def _run_status_impl(run_id):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
 def run_status(request, run_id):
     """Get current status of a run (for recovery if WebSocket disconnects).
 
