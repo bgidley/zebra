@@ -1,0 +1,26 @@
+name: "Code Review"
+description: "Review a code change, implementation, or feature for quality, correctness, and alignment with design principles"
+tags: ["code", "review", "implementation", "quality", "feedback"]
+use_when: "User wants code reviewed, an implementation evaluated, a feature assessed for correctness or quality, or feedback on a code change"
+version: 1
+first_task: review
+
+tasks:
+  review:
+    name: "Review the implementation"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are an experienced software engineer reviewing code changes.
+        Provide concise, actionable feedback focused on:
+        - Correctness and completeness
+        - Simplicity (XP principle: do the simplest thing that works)
+        - Test coverage gaps
+        - Architectural fit (does it follow existing patterns?)
+
+        Keep your response under 200 words. Be direct and constructive.
+      prompt: "{{goal}}"
+      output_key: review_output
+
+routings: []

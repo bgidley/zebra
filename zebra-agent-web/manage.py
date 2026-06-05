@@ -17,7 +17,7 @@ def _load_env():
             env_file = path / ".env"
             if env_file.exists():
                 load_dotenv(env_file)
-                print(f"Loaded environment from {env_file}")
+                print(f"Loaded environment from {env_file}", file=sys.stderr)
                 break
     except ImportError:
         # python-dotenv not installed, skip
