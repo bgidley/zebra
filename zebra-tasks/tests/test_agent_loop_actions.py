@@ -1057,3 +1057,105 @@ class TestLoadWorkflowDefinitionsAction:
         mock_context.set_process_property.assert_called()
         call_args = mock_context.set_process_property.call_args
         assert call_args[0][0] == "my_definitions"
+
+
+# =============================================================================
+# UpdateConceptualMemoryAction — user_feedback in LLM prompt
+# =============================================================================
+
+
+class TestUpdateConceptualMemoryActionUserFeedback:
+    """Verify that user_feedback from wf_memories appears in the LLM prompt."""
+
+    async def test_user_feedback_included_in_prompt(
+        self, mock_task, mock_context, mock_memory_store
+    ):
+        """When wf_memories contain user_feedback, it must appear in the LLM prompt."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from zebra_tasks.agent.update_conceptual_memory import UpdateConceptualMemoryAction
+        from zebra_tasks.llm.base import LLMResponse
+
+        # Two workflow memories, one with feedback
+        mem1 = MagicMock()
+        mem1.rating = 4
+        mem1.user_feedback = "Great workflow, very accurate"
+
+        mem2 = MagicMock()
+        mem2.rating = None
+        mem2.user_feedback = ""
+
+        mock_memory_store.get_workflow_memories = AsyncMock(return_value=[mem1, mem2])
+
+        captured_prompt = {}
+
+        async def fake_complete(messages, **kwargs):
+            captured_prompt["messages"] = messages
+            return LLMResponse(
+                content='{"concept":"test concept","recommended_workflows":[],"anti_patterns":""}',
+                model="test",
+                usage={},
+            )
+
+        mock_provider = MagicMock()
+        mock_provider.complete = fake_complete
+
+        mock_context.extras["__memory_store__"] = mock_memory_store
+        mock_task.properties = {
+            "workflow_name": "TestWorkflow",
+            "goal": "Write a report",
+            "success": True,
+            "effectiveness_notes": "Good",
+        }
+
+        action = UpdateConceptualMemoryAction()
+        patch_target = "zebra_tasks.agent.update_conceptual_memory.get_provider"
+        with patch(patch_target, return_value=mock_provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        user_msg = next(m for m in captured_prompt["messages"] if m.role == "user")
+        assert "Great workflow, very accurate" in user_msg.content
+        assert "User feedback on recent runs" in user_msg.content
+
+    async def test_no_user_feedback_omits_section(self, mock_task, mock_context, mock_memory_store):
+        """When no wf_memories have user_feedback, the feedback section is absent."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from zebra_tasks.agent.update_conceptual_memory import UpdateConceptualMemoryAction
+        from zebra_tasks.llm.base import LLMResponse
+
+        mem = MagicMock()
+        mem.rating = None
+        mem.user_feedback = ""
+
+        mock_memory_store.get_workflow_memories = AsyncMock(return_value=[mem])
+
+        captured_prompt = {}
+
+        async def fake_complete(messages, **kwargs):
+            captured_prompt["messages"] = messages
+            return LLMResponse(
+                content='{"concept":"test","recommended_workflows":[],"anti_patterns":""}',
+                model="test",
+                usage={},
+            )
+
+        mock_provider = MagicMock()
+        mock_provider.complete = fake_complete
+
+        mock_context.extras["__memory_store__"] = mock_memory_store
+        mock_task.properties = {
+            "workflow_name": "TestWorkflow",
+            "goal": "Write a report",
+            "success": True,
+        }
+
+        action = UpdateConceptualMemoryAction()
+        patch_target = "zebra_tasks.agent.update_conceptual_memory.get_provider"
+        with patch(patch_target, return_value=mock_provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        user_msg = next(m for m in captured_prompt["messages"] if m.role == "user")
+        assert "User feedback" not in user_msg.content

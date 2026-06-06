@@ -89,6 +89,18 @@ class MemoryStore(ABC):
         """
         ...
 
+    @abstractmethod
+    async def get_workflow_memory_by_run_id(self, run_id: str) -> WorkflowMemoryEntry | None:
+        """Return the workflow memory entry for a specific run, or None if not found.
+
+        Args:
+            run_id: The run ID to look up.
+
+        Returns:
+            The matching WorkflowMemoryEntry, or None if not found.
+        """
+        ...
+
     # =========================================================================
     # Conceptual Memory (Compact goal-pattern index)
     # =========================================================================

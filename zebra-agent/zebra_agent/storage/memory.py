@@ -75,6 +75,14 @@ class InMemoryMemoryStore(MemoryStore):
                 return True
         return False
 
+    async def get_workflow_memory_by_run_id(self, run_id: str) -> WorkflowMemoryEntry | None:
+        """Return the workflow memory entry for a specific run, or None if not found."""
+        await self._ensure_initialized()
+        for entry in self._workflow_memories:
+            if entry.run_id == run_id:
+                return entry
+        return None
+
     # =========================================================================
     # Conceptual Memory
     # =========================================================================

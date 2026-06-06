@@ -343,6 +343,30 @@ class TestInMemoryMemoryStore:
         assert "analyze_code" in context
         assert "Analyze my Python module" in context
 
+    async def test_get_workflow_memory_by_run_id_found(self, memory):
+        """Returns the matching entry when run_id exists."""
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="TestWorkflow",
+            goal="Some goal",
+            success=True,
+            input_summary="in",
+            output_summary="out",
+            effectiveness_notes="",
+            tokens_used=10,
+            run_id="run-abc-123",
+        )
+        await memory.add_workflow_memory(entry)
+
+        result = await memory.get_workflow_memory_by_run_id("run-abc-123")
+        assert result is not None
+        assert result.run_id == "run-abc-123"
+        assert result.workflow_name == "TestWorkflow"
+
+    async def test_get_workflow_memory_by_run_id_not_found(self, memory):
+        """Returns None when run_id does not match any entry."""
+        result = await memory.get_workflow_memory_by_run_id("does-not-exist")
+        assert result is None
+
     async def test_get_stats(self, memory):
         """Test getting memory statistics."""
         stats = await memory.get_stats()

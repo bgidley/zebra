@@ -177,6 +177,37 @@ class DjangoMemoryStore(MemoryStore):
 
         return await _update()
 
+    async def get_workflow_memory_by_run_id(self, run_id: str) -> WorkflowMemoryEntry | None:
+        """Return the workflow memory entry for a specific run, or None if not found."""
+        from zebra_agent.memory import WorkflowMemoryEntry as Entry
+
+        await self._ensure_initialized()
+
+        @sync_to_async(thread_sensitive=False)
+        def _get():
+            from zebra_agent_web.api.models import WorkflowMemoryModel
+
+            m = WorkflowMemoryModel.objects.filter(run_id=run_id).first()
+            if m is None:
+                return None
+            return Entry(
+                id=m.id,
+                timestamp=m.timestamp,
+                workflow_name=m.workflow_name,
+                goal=m.goal,
+                success=m.success,
+                input_summary=m.input_summary,
+                output_summary=m.output_summary,
+                effectiveness_notes=m.effectiveness_notes,
+                tokens_used=m.tokens_used,
+                rating=m.rating,
+                user_feedback=m.user_feedback,
+                run_id=m.run_id,
+                model=m.model,
+            )
+
+        return await _get()
+
     # =========================================================================
     # Conceptual Memory (Compact goal-pattern index)
     # =========================================================================

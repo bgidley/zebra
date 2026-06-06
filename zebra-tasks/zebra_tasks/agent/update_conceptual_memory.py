@@ -164,11 +164,12 @@ class UpdateConceptualMemoryAction(TaskAction):
             existing_context = await memory_store.get_conceptual_context_for_llm()
             existing_entries = await memory_store.get_conceptual_memories(limit=50)
 
-            # Get recent workflow memory for this workflow (for rating context)
+            # Get recent workflow memory for this workflow (for rating + feedback context)
             wf_memories = await memory_store.get_workflow_memories(workflow_name, limit=5)
             ratings = [m.rating for m in wf_memories if m.rating is not None]
             avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else None
             use_count = len(wf_memories)
+            user_feedbacks = [m.user_feedback for m in wf_memories if m.user_feedback]
 
             # Build LLM prompt
             status = "SUCCESS" if success else "FAILURE"
@@ -182,6 +183,10 @@ class UpdateConceptualMemoryAction(TaskAction):
             )
             if avg_rating:
                 prompt += f"  Avg rating: {avg_rating}/5\n"
+            if user_feedbacks:
+                prompt += "User feedback on recent runs:\n"
+                for fb in user_feedbacks:
+                    prompt += f"- {fb[:300]}\n"
 
             if existing_context:
                 prompt += f"\nExisting conceptual memory:\n{existing_context}"
