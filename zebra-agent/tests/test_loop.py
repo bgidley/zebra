@@ -270,6 +270,80 @@ class TestRecordRating:
         assert retrieved.user_rating == 5
 
 
+class TestRecordFeedback:
+    """Tests for record_feedback and its conceptual memory refresh."""
+
+    async def test_record_feedback_no_memory(self, library, mock_engine, metrics):
+        """Returns False immediately when memory store is absent."""
+        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics, provider="anthropic")
+        result = await loop.record_feedback("any-run-id", "some feedback")
+        assert result is False
+
+    async def test_record_feedback_entry_not_found(self, library, mock_engine, metrics, memory):
+        """Returns False and does not schedule refresh when run_id is unknown."""
+        loop = AgentLoop(
+            library=library,
+            engine=mock_engine,
+            metrics=metrics,
+            memory=memory,
+            provider="anthropic",
+        )
+        result = await loop.record_feedback("unknown-run-id", "some feedback")
+        assert result is False
+
+    async def test_record_feedback_found_schedules_refresh(
+        self, library, mock_engine, metrics, memory
+    ):
+        """Returns True and schedules conceptual memory refresh when entry found."""
+        from zebra_agent.memory import WorkflowMemoryEntry
+
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="TestWorkflow",
+            goal="Test goal",
+            success=True,
+            input_summary="input",
+            output_summary="output",
+            effectiveness_notes="good",
+            tokens_used=100,
+            run_id="test-run-001",
+        )
+        await memory.add_workflow_memory(entry)
+
+        refresh_called_with = {}
+
+        async def mock_refresh(mem_entry, feedback_text):
+            refresh_called_with["entry"] = mem_entry
+            refresh_called_with["feedback"] = feedback_text
+
+        loop = AgentLoop(
+            library=library,
+            engine=mock_engine,
+            metrics=metrics,
+            memory=memory,
+            provider="anthropic",
+        )
+
+        # Patch _refresh_conceptual_memory so we don't make real LLM calls
+        import asyncio
+        from unittest.mock import patch
+
+        tasks_created = []
+        original_create_task = asyncio.create_task
+
+        def capture_create_task(coro, **kwargs):
+            tasks_created.append(coro)
+            return original_create_task(coro, **kwargs)
+
+        with patch.object(loop, "_refresh_conceptual_memory", new=mock_refresh):
+            result = await loop.record_feedback("test-run-001", "great workflow")
+            # Allow the event loop to run the scheduled task
+            await asyncio.sleep(0)
+
+        assert result is True
+        assert refresh_called_with.get("feedback") == "great workflow"
+        assert refresh_called_with["entry"].run_id == "test-run-001"
+
+
 class TestProcessGoalWorkflowNotFound:
     """Tests for process_goal when Agent Main Loop workflow is missing."""
 

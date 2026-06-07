@@ -11,6 +11,8 @@ is a thin wrapper that runs the "Agent Main Loop" workflow, which handles:
 """
 
 import asyncio
+import json
+import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -27,6 +29,8 @@ from zebra_agent.storage.interfaces import (
     PersonalKnowledgeStore,
     ProfileStore,
 )
+
+logger = logging.getLogger(__name__)
 
 # Type for progress callback: receives event name and data dict
 ProgressCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
@@ -259,11 +263,152 @@ class AgentLoop:
     async def record_feedback(self, run_id: str, feedback: str) -> bool:
         """Record user feedback on the workflow memory entry for a run.
 
+        After persisting the feedback, triggers an async conceptual memory
+        refresh so the index immediately reflects the user's correction.
+
         Returns True if a matching memory entry was found and updated.
         """
         if self.memory is None:
             return False
-        return await self.memory.update_user_feedback(run_id, feedback)
+        found = await self.memory.update_user_feedback(run_id, feedback)
+        if found:
+            entry = await self.memory.get_workflow_memory_by_run_id(run_id)
+            if entry is not None:
+                asyncio.create_task(self._refresh_conceptual_memory(entry, feedback))
+        return found
+
+    async def _refresh_conceptual_memory(self, entry: Any, feedback: str) -> None:
+        """Re-run conceptual memory update incorporating new user feedback.
+
+        Called fire-and-forget after record_feedback so the HTTP response is
+        not delayed.  Failures are logged and swallowed.
+        """
+        if self.memory is None:
+            return
+        try:
+            from zebra_tasks.llm.base import Message
+            from zebra_tasks.llm.providers import get_provider
+
+            wf_memories = await self.memory.get_workflow_memories(entry.workflow_name, limit=5)
+            ratings = [m.rating for m in wf_memories if m.rating is not None]
+            avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else None
+            use_count = len(wf_memories)
+            user_feedbacks = [m.user_feedback for m in wf_memories if m.user_feedback]
+
+            existing_context = await self.memory.get_conceptual_context_for_llm()
+            existing_entries = await self.memory.get_conceptual_memories(limit=50)
+
+            status = "SUCCESS" if entry.success else "FAILURE"
+            prompt = (
+                f"Recent run:\n"
+                f"  Workflow: {entry.workflow_name}\n"
+                f"  Goal: {entry.goal}\n"
+                f"  Result: {status}\n"
+                f"  Notes: {entry.effectiveness_notes or 'None'}\n"
+                f"  Use count for this workflow: {use_count}\n"
+            )
+            if avg_rating:
+                prompt += f"  Avg rating: {avg_rating}/5\n"
+            if user_feedbacks:
+                prompt += "User feedback on recent runs:\n"
+                for fb in user_feedbacks:
+                    prompt += f"- {fb[:300]}\n"
+
+            if existing_context:
+                prompt += f"\nExisting conceptual memory:\n{existing_context}"
+            else:
+                prompt += "\nNo existing conceptual memory yet — create the first entry."
+
+            system_prompt = (
+                "You are an agent that maintains a conceptual memory index for a workflow system.\n"
+                "Given information about a recently completed workflow run and the existing\n"
+                "conceptual memory, produce an updated index entry that maps this goal pattern\n"
+                "to the recommended workflow(s).\n\n"
+                "Rules:\n"
+                "1. Identify the abstract concept/category that this goal belongs to\n"
+                "2. Either update an existing concept entry (if one matches) or create a new one\n"
+                "3. Keep fit_notes concise (1-2 sentences per workflow)\n"
+                "4. anti_patterns should capture what does NOT work for this concept\n"
+                "5. Include avg_rating if available (use null if not)\n\n"
+                "Respond with JSON only:\n"
+                '{"concept": "short concept label (3-6 words)", '
+                '"recommended_workflows": [{"name": "workflow_name", '
+                '"fit_notes": "why", "avg_rating": null, "use_count": 1}], '
+                '"anti_patterns": "what does not work here"}'
+            )
+
+            provider = get_provider(self.provider_name, self.model)
+            response = await provider.complete(
+                messages=[Message.system(system_prompt), Message.user(prompt)],
+                temperature=0.3,
+                max_tokens=600,
+            )
+
+            content = response.content or "{}"
+            if "```" in content:
+                import re
+
+                match = re.search(r"```(?:json)?\s*(.*?)\s*```", content, re.DOTALL)
+                if match:
+                    content = match.group(1)
+
+            data = json.loads(content)
+            concept_label = data.get("concept", "")
+            recommended = data.get("recommended_workflows", [])
+            anti_patterns = data.get("anti_patterns", "")
+
+            if not concept_label:
+                return
+
+            existing_entry = next(
+                (e for e in existing_entries if e.concept.lower() == concept_label.lower()), None
+            )
+
+            from zebra_agent.memory import ConceptualMemoryEntry
+
+            if existing_entry is not None:
+                existing_names = {wf["name"] for wf in existing_entry.recommended_workflows}
+                merged = list(existing_entry.recommended_workflows)
+                for wf in recommended:
+                    if wf.get("name") not in existing_names:
+                        merged.append(wf)
+                    else:
+                        for existing_wf in merged:
+                            if existing_wf["name"] == wf.get("name"):
+                                existing_wf["fit_notes"] = wf.get(
+                                    "fit_notes", existing_wf.get("fit_notes", "")
+                                )
+                                existing_wf["use_count"] = existing_wf.get("use_count", 0) + 1
+                                if avg_rating:
+                                    existing_wf["avg_rating"] = avg_rating
+                                break
+                updated_entry = ConceptualMemoryEntry(
+                    id=existing_entry.id,
+                    concept=concept_label,
+                    recommended_workflows=merged,
+                    anti_patterns=anti_patterns or existing_entry.anti_patterns,
+                    last_updated=datetime.now(UTC),
+                    tokens=existing_entry.tokens,
+                )
+            else:
+                updated_entry = ConceptualMemoryEntry.create(
+                    concept=concept_label,
+                    recommended_workflows=recommended,
+                    anti_patterns=anti_patterns,
+                )
+
+            await self.memory.save_conceptual_memory(updated_entry)
+            logger.info(
+                "Post-feedback conceptual memory refresh: updated concept '%s' for run %s",
+                concept_label,
+                entry.run_id,
+            )
+        except Exception:
+            logger.warning(
+                "Post-feedback conceptual memory refresh failed for run %s — skipping",
+                entry.run_id,
+                exc_info=True,
+            )
 
     async def run_dream_cycle(
         self,
