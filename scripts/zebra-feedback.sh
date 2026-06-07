@@ -32,7 +32,7 @@ Please review and provide concise feedback (under 200 words) on:
 
 Be direct and actionable."
 
-echo "[zebra-feedback] Submitting to Zebra (model: haiku)..."
+echo "[zebra-feedback] Submitting to Zebra (model: kimi)..."
 
 # Write goal to a temp file to avoid shell quoting issues with newlines
 GOAL_FILE=$(mktemp /tmp/zebra-goal-XXXXXX.txt)
@@ -41,7 +41,7 @@ trap 'rm -f "$GOAL_FILE"' EXIT
 
 OUTPUT=$(cd "$PROJECT_ROOT" && uv run python zebra-agent-web/manage.py run_goal \
   "$(cat "$GOAL_FILE")" \
-  --model haiku 2>/dev/null) || {
+  --model kimi 2>/dev/null) || {
   echo "[zebra-feedback] Goal execution failed — skipping."
   exit 0
 }
