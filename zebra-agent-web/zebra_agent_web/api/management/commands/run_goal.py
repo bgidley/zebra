@@ -35,7 +35,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--model",
             default="haiku",
-            choices=["haiku", "sonnet", "opus"],
+            choices=["haiku", "sonnet", "opus", "kimi"],
             help="LLM model to use (default: haiku)",
         )
 
