@@ -391,6 +391,125 @@ class TestInMemoryMemoryStore:
         assert stats["conceptual_memory_entries"] == 1
 
 
+class TestInMemoryCompaction:
+    """Tests for InMemoryMemoryStore compaction methods."""
+
+    async def test_get_entries_for_compaction_empty(self, memory):
+        """No entries → empty batch."""
+        from datetime import UTC, datetime
+
+        batch = await memory.get_entries_for_compaction(datetime.now(UTC))
+        assert batch.is_empty()
+
+    async def test_hot_entry_not_included(self, memory):
+        """Entry created today stays hot — not in batch."""
+        from datetime import UTC, datetime
+
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="W", goal="g", success=True,
+            input_summary="i", output_summary="o", effectiveness_notes="", tokens_used=0,
+        )
+        await memory.add_workflow_memory(entry)
+        batch = await memory.get_entries_for_compaction(datetime.now(UTC))
+        assert batch.is_empty()
+
+    async def test_warm_workflow_entry_detected(self, memory):
+        """Entry older than 2 weeks and tier==hot → warm_workflow."""
+        from datetime import UTC, datetime, timedelta
+
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="W", goal="g", success=True,
+            input_summary="i", output_summary="o", effectiveness_notes="", tokens_used=0,
+        )
+        entry.timestamp = datetime.now(UTC) - timedelta(weeks=3)
+        await memory.add_workflow_memory(entry)
+        batch = await memory.get_entries_for_compaction(datetime.now(UTC))
+        assert len(batch.warm_workflow) == 1
+        assert batch.warm_workflow[0].id == entry.id
+
+    async def test_cold_workflow_entry_detected(self, memory):
+        """Entry older than 60 days and tier!=cold → cold_workflow."""
+        from datetime import UTC, datetime, timedelta
+
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="W", goal="g", success=True,
+            input_summary="i", output_summary="o", effectiveness_notes="", tokens_used=0,
+        )
+        entry.timestamp = datetime.now(UTC) - timedelta(days=90)
+        await memory.add_workflow_memory(entry)
+        batch = await memory.get_entries_for_compaction(datetime.now(UTC))
+        assert len(batch.cold_workflow) == 1
+        assert entry.id not in [e.id for e in batch.warm_workflow]
+
+    async def test_already_warm_entry_excluded(self, memory):
+        """Entry that is already tier=warm at warm age → not re-compacted."""
+        from datetime import UTC, datetime, timedelta
+
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="W", goal="g", success=True,
+            input_summary="i", output_summary="o", effectiveness_notes="", tokens_used=0,
+        )
+        entry.timestamp = datetime.now(UTC) - timedelta(weeks=3)
+        entry.tier = "warm"
+        await memory.add_workflow_memory(entry)
+        batch = await memory.get_entries_for_compaction(datetime.now(UTC))
+        assert batch.is_empty()
+
+    async def test_update_workflow_memory_tier(self, memory):
+        """update_workflow_memory_tier updates tier and fields in-place."""
+        from datetime import UTC, datetime
+
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="W", goal="g", success=True,
+            input_summary="i", output_summary="original output",
+            effectiveness_notes="original notes", tokens_used=0,
+        )
+        await memory.add_workflow_memory(entry)
+        await memory.update_workflow_memory_tier(
+            entry.id, tier="warm", output_summary="digest", effectiveness_notes=""
+        )
+        updated = await memory.get_workflow_memory_by_run_id(entry.run_id)
+        # Find by id
+        found = next((e for e in memory._workflow_memories if e.id == entry.id), None)
+        assert found is not None
+        assert found.tier == "warm"
+        assert found.output_summary == "digest"
+        assert found.effectiveness_notes == ""
+
+    async def test_warm_conceptual_entry_detected(self, memory):
+        """ConceptualMemoryEntry older than 2 weeks and tier==hot → warm_conceptual."""
+        from datetime import UTC, datetime, timedelta
+
+        entry = ConceptualMemoryEntry.create(
+            concept="code analysis",
+            recommended_workflows=[{"name": "a", "use_count": 3}, {"name": "b", "use_count": 1}],
+            anti_patterns="avoid X",
+        )
+        entry.last_updated = datetime.now(UTC) - timedelta(weeks=3)
+        await memory.save_conceptual_memory(entry)
+        batch = await memory.get_entries_for_compaction(datetime.now(UTC))
+        assert len(batch.warm_conceptual) == 1
+
+    async def test_update_conceptual_memory_tier(self, memory):
+        """update_conceptual_memory_tier updates tier and fields in-place."""
+        entry = ConceptualMemoryEntry.create(
+            concept="writing",
+            recommended_workflows=[{"name": "a", "use_count": 5}, {"name": "b", "use_count": 2}],
+            anti_patterns="avoid verbosity",
+        )
+        await memory.save_conceptual_memory(entry)
+        await memory.update_conceptual_memory_tier(
+            entry.id, tier="warm",
+            recommended_workflows=[{"name": "a", "use_count": 5}],
+            anti_patterns="compressed",
+        )
+        found = next((e for e in memory._conceptual_memories if e.id == entry.id), None)
+        assert found is not None
+        assert found.tier == "warm"
+        assert len(found.recommended_workflows) == 1
+        assert found.anti_patterns == "compressed"
+
+
 class TestEstimateTokens:
     """Test token estimation."""
 

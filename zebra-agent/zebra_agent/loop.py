@@ -505,5 +505,6 @@ class AgentLoop:
             "Dream Cycle",
             "Create Goal",
             "Values Profile Wizard",
+            "Compact Memory",
         }
         return name in system_workflows

@@ -1,0 +1,10 @@
+name: compact_memory
+description: >
+  Enforce hot/warm/cold tiered retention on agent memory every 6 hours.
+  Warm entries (2w–2mo) are LLM-compressed; cold entries (>2mo) are stripped
+  to metadata stubs.
+schedule: "0 */6 * * *"
+workflow: Compact Memory
+budget_aware: false
+quiet_hours_ok: true
+on_missed: run

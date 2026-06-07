@@ -12,11 +12,30 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
+
 if TYPE_CHECKING:
     from zebra_agent.knowledge import KnowledgeEntry
-    from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
     from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
     from zebra_agent.profile import ValuesProfileVersion
+
+
+@dataclass
+class CompactionBatch:
+    """Entries that need tier transitions, grouped by direction and type."""
+
+    warm_workflow: list[WorkflowMemoryEntry] = field(default_factory=list)
+    cold_workflow: list[WorkflowMemoryEntry] = field(default_factory=list)
+    warm_conceptual: list[ConceptualMemoryEntry] = field(default_factory=list)
+    cold_conceptual: list[ConceptualMemoryEntry] = field(default_factory=list)
+
+    def is_empty(self) -> bool:
+        return not (
+            self.warm_workflow
+            or self.cold_workflow
+            or self.warm_conceptual
+            or self.cold_conceptual
+        )
 
 
 @dataclass
@@ -145,6 +164,62 @@ class MemoryStore(ABC):
     @abstractmethod
     async def get_stats(self) -> dict:
         """Return memory statistics."""
+        ...
+
+    # =========================================================================
+    # Compaction (Tiered retention)
+    # =========================================================================
+
+    @abstractmethod
+    async def get_entries_for_compaction(self, now: datetime) -> CompactionBatch:
+        """Return entries whose current tier is staler than their age warrants.
+
+        Only returns entries that have crossed a tier boundary:
+        - warm_workflow / warm_conceptual: age > 2 weeks AND current tier == "hot"
+        - cold_workflow / cold_conceptual: age > 2 months AND current tier != "cold"
+
+        Args:
+            now: Reference datetime for age calculation.
+
+        Returns:
+            CompactionBatch grouped by transition type.
+        """
+        ...
+
+    @abstractmethod
+    async def update_workflow_memory_tier(
+        self,
+        entry_id: str,
+        tier: str,
+        output_summary: str | None = None,
+        effectiveness_notes: str | None = None,
+    ) -> None:
+        """Update the tier and optionally compressed fields on a WorkflowMemoryEntry.
+
+        Args:
+            entry_id: The entry's id field.
+            tier: New tier value ("warm" or "cold").
+            output_summary: Replacement text (None = leave unchanged).
+            effectiveness_notes: Replacement text (None = leave unchanged).
+        """
+        ...
+
+    @abstractmethod
+    async def update_conceptual_memory_tier(
+        self,
+        entry_id: str,
+        tier: str,
+        recommended_workflows: list[dict] | None = None,
+        anti_patterns: str | None = None,
+    ) -> None:
+        """Update the tier and optionally trimmed fields on a ConceptualMemoryEntry.
+
+        Args:
+            entry_id: The entry's id field.
+            tier: New tier value ("warm" or "cold").
+            recommended_workflows: Replacement list (None = leave unchanged).
+            anti_patterns: Replacement text (None = leave unchanged).
+        """
         ...
 
 

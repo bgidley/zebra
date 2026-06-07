@@ -36,6 +36,7 @@ class WorkflowMemoryEntry:
     user_feedback: str = ""  # Free-text user feedback for next run
     run_id: str = ""  # Link back to the workflow run for post-hoc updates
     model: str = ""  # LLM model used (e.g. "claude-sonnet-4-20250514")
+    tier: str = "hot"  # Compaction tier: hot | warm | cold
 
     @classmethod
     def create(
@@ -85,6 +86,7 @@ class WorkflowMemoryEntry:
             "user_feedback": self.user_feedback,
             "run_id": self.run_id,
             "model": self.model,
+            "tier": self.tier,
         }
 
     @classmethod
@@ -104,6 +106,7 @@ class WorkflowMemoryEntry:
             user_feedback=data.get("user_feedback", ""),
             run_id=data.get("run_id", ""),
             model=data.get("model", ""),
+            tier=data.get("tier", "hot"),
         )
 
 
@@ -121,6 +124,7 @@ class ConceptualMemoryEntry:
     anti_patterns: str  # What doesn't work for this concept
     last_updated: datetime
     tokens: int = 0
+    tier: str = "hot"  # Compaction tier: hot | warm | cold
 
     @classmethod
     def create(
@@ -152,6 +156,7 @@ class ConceptualMemoryEntry:
             "anti_patterns": self.anti_patterns,
             "last_updated": self.last_updated.isoformat(),
             "tokens": self.tokens,
+            "tier": self.tier,
         }
 
     @classmethod
@@ -164,6 +169,7 @@ class ConceptualMemoryEntry:
             anti_patterns=data.get("anti_patterns", ""),
             last_updated=datetime.fromisoformat(data["last_updated"]),
             tokens=data.get("tokens", 0),
+            tier=data.get("tier", "hot"),
         )
 
 

@@ -239,6 +239,9 @@ class WorkflowMemoryModel(models.Model):
     model = models.CharField(
         max_length=255, blank=True, default="", help_text="LLM model used for this run"
     )
+    tier = models.CharField(
+        max_length=10, default="hot", help_text="Compaction tier: hot | warm | cold"
+    )
 
     class Meta:
         db_table = "zebra_workflow_memories"
@@ -267,6 +270,9 @@ class ConceptualMemoryModel(models.Model):
     anti_patterns = models.TextField(blank=True, default="", help_text="What doesn't work here")
     last_updated = models.DateTimeField(db_index=True)
     tokens = models.IntegerField(default=0)
+    tier = models.CharField(
+        max_length=10, default="hot", help_text="Compaction tier: hot | warm | cold"
+    )
 
     class Meta:
         db_table = "zebra_conceptual_memories"
