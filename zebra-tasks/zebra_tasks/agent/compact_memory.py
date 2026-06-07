@@ -13,16 +13,16 @@ from zebra_tasks.llm.providers import get_provider
 logger = logging.getLogger(__name__)
 
 _WARM_WORKFLOW_PROMPT = (
-    'You are summarising an old workflow run record. Compress the following '
-    'output summary and effectiveness notes into a single concise digest of '
-    'at most 150 tokens. Keep the most important outcome and any key lessons. '
+    "You are summarising an old workflow run record. Compress the following "
+    "output summary and effectiveness notes into a single concise digest of "
+    "at most 150 tokens. Keep the most important outcome and any key lessons. "
     'Return JSON only: {{"digest": "..."}}\n\n'
     "Output summary: {output_summary}\n"
     "Effectiveness notes: {effectiveness_notes}"
 )
 
 _WARM_ANTI_PATTERNS_PROMPT = (
-    'Compress the following anti-patterns text to at most 100 tokens. '
+    "Compress the following anti-patterns text to at most 100 tokens. "
     'Preserve the key warnings. Return JSON only: {{"compressed": "..."}}\n\n'
     "{anti_patterns}"
 )

@@ -1206,12 +1206,17 @@ class TestCompactMemoryAction:
 
         from zebra_agent.memory import WorkflowMemoryEntry
         from zebra_agent.storage.interfaces import CompactionBatch
+
         from zebra_tasks.agent.compact_memory import CompactMemoryAction
         from zebra_tasks.llm.base import LLMResponse
 
         entry = WorkflowMemoryEntry.create(
-            workflow_name="W", goal="g", success=True,
-            input_summary="i", output_summary="long output", effectiveness_notes="notes",
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="long output",
+            effectiveness_notes="notes",
             tokens_used=0,
         )
         batch = CompactionBatch(warm_workflow=[entry])
@@ -1221,8 +1226,11 @@ class TestCompactMemoryAction:
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(
             return_value=LLMResponse(
-                content='{"digest": "compressed"}', model="t", usage={},
-                tool_calls=None, finish_reason="end_turn",
+                content='{"digest": "compressed"}',
+                model="t",
+                usage={},
+                tool_calls=None,
+                finish_reason="end_turn",
             )
         )
 
@@ -1243,11 +1251,17 @@ class TestCompactMemoryAction:
 
         from zebra_agent.memory import WorkflowMemoryEntry
         from zebra_agent.storage.interfaces import CompactionBatch
+
         from zebra_tasks.agent.compact_memory import CompactMemoryAction
 
         entry = WorkflowMemoryEntry.create(
-            workflow_name="W", goal="g", success=True,
-            input_summary="i", output_summary="o", effectiveness_notes="", tokens_used=0,
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
         )
         batch = CompactionBatch(cold_workflow=[entry])
         store = self._make_memory_store(batch)
@@ -1270,6 +1284,7 @@ class TestCompactMemoryAction:
 
         from zebra_agent.memory import ConceptualMemoryEntry
         from zebra_agent.storage.interfaces import CompactionBatch
+
         from zebra_tasks.agent.compact_memory import CompactMemoryAction
         from zebra_tasks.llm.base import LLMResponse
 
@@ -1290,8 +1305,11 @@ class TestCompactMemoryAction:
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(
             return_value=LLMResponse(
-                content='{"compressed": "short"}', model="t", usage={},
-                tool_calls=None, finish_reason="end_turn",
+                content='{"compressed": "short"}',
+                model="t",
+                usage={},
+                tool_calls=None,
+                finish_reason="end_turn",
             )
         )
 
@@ -1313,6 +1331,7 @@ class TestCompactMemoryAction:
 
         from zebra_agent.memory import ConceptualMemoryEntry
         from zebra_agent.storage.interfaces import CompactionBatch
+
         from zebra_tasks.agent.compact_memory import CompactMemoryAction
 
         entry = ConceptualMemoryEntry.create(
@@ -1346,11 +1365,17 @@ class TestCompactMemoryAction:
 
         from zebra_agent.memory import WorkflowMemoryEntry
         from zebra_agent.storage.interfaces import CompactionBatch
+
         from zebra_tasks.agent.compact_memory import CompactMemoryAction
 
         entry = WorkflowMemoryEntry.create(
-            workflow_name="W", goal="g", success=True,
-            input_summary="i", output_summary="o", effectiveness_notes="", tokens_used=0,
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
         )
         batch = CompactionBatch(warm_workflow=[entry])
         store = self._make_memory_store(batch)

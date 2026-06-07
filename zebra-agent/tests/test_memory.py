@@ -406,8 +406,13 @@ class TestInMemoryCompaction:
         from datetime import UTC, datetime
 
         entry = WorkflowMemoryEntry.create(
-            workflow_name="W", goal="g", success=True,
-            input_summary="i", output_summary="o", effectiveness_notes="", tokens_used=0,
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
         )
         await memory.add_workflow_memory(entry)
         batch = await memory.get_entries_for_compaction(datetime.now(UTC))
@@ -418,8 +423,13 @@ class TestInMemoryCompaction:
         from datetime import UTC, datetime, timedelta
 
         entry = WorkflowMemoryEntry.create(
-            workflow_name="W", goal="g", success=True,
-            input_summary="i", output_summary="o", effectiveness_notes="", tokens_used=0,
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
         )
         entry.timestamp = datetime.now(UTC) - timedelta(weeks=3)
         await memory.add_workflow_memory(entry)
@@ -432,8 +442,13 @@ class TestInMemoryCompaction:
         from datetime import UTC, datetime, timedelta
 
         entry = WorkflowMemoryEntry.create(
-            workflow_name="W", goal="g", success=True,
-            input_summary="i", output_summary="o", effectiveness_notes="", tokens_used=0,
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
         )
         entry.timestamp = datetime.now(UTC) - timedelta(days=90)
         await memory.add_workflow_memory(entry)
@@ -446,8 +461,13 @@ class TestInMemoryCompaction:
         from datetime import UTC, datetime, timedelta
 
         entry = WorkflowMemoryEntry.create(
-            workflow_name="W", goal="g", success=True,
-            input_summary="i", output_summary="o", effectiveness_notes="", tokens_used=0,
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
         )
         entry.timestamp = datetime.now(UTC) - timedelta(weeks=3)
         entry.tier = "warm"
@@ -457,18 +477,20 @@ class TestInMemoryCompaction:
 
     async def test_update_workflow_memory_tier(self, memory):
         """update_workflow_memory_tier updates tier and fields in-place."""
-        from datetime import UTC, datetime
 
         entry = WorkflowMemoryEntry.create(
-            workflow_name="W", goal="g", success=True,
-            input_summary="i", output_summary="original output",
-            effectiveness_notes="original notes", tokens_used=0,
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="original output",
+            effectiveness_notes="original notes",
+            tokens_used=0,
         )
         await memory.add_workflow_memory(entry)
         await memory.update_workflow_memory_tier(
             entry.id, tier="warm", output_summary="digest", effectiveness_notes=""
         )
-        updated = await memory.get_workflow_memory_by_run_id(entry.run_id)
         # Find by id
         found = next((e for e in memory._workflow_memories if e.id == entry.id), None)
         assert found is not None
@@ -499,7 +521,8 @@ class TestInMemoryCompaction:
         )
         await memory.save_conceptual_memory(entry)
         await memory.update_conceptual_memory_tier(
-            entry.id, tier="warm",
+            entry.id,
+            tier="warm",
             recommended_workflows=[{"name": "a", "use_count": 5}],
             anti_patterns="compressed",
         )

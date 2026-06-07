@@ -8,6 +8,7 @@ for testing and ephemeral CLI use cases.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from zebra_agent.storage.interfaces import CompactionBatch, MemoryStore, PersonalKnowledgeStore
@@ -174,8 +175,6 @@ class InMemoryMemoryStore(MemoryStore):
     async def get_entries_for_compaction(self, now: datetime) -> CompactionBatch:
         """Return entries that have crossed a tier boundary since last compaction."""
         from datetime import timedelta
-
-        from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
 
         await self._ensure_initialized()
         warm_cutoff = now - timedelta(weeks=2)

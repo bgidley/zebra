@@ -31,10 +31,7 @@ class CompactionBatch:
 
     def is_empty(self) -> bool:
         return not (
-            self.warm_workflow
-            or self.cold_workflow
-            or self.warm_conceptual
-            or self.cold_conceptual
+            self.warm_workflow or self.cold_workflow or self.warm_conceptual or self.cold_conceptual
         )
 
 
