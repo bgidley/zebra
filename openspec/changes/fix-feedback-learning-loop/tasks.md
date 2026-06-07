@@ -27,5 +27,5 @@
 ## 6. Lint, Format, and Commit
 
 - [x] 6.1 Run `uv run ruff check --fix . && uv run ruff format .`
-- [ ] 6.2 Commit with message `fix: wire user feedback into conceptual memory refresh\n\nCloses #105`
-- [ ] 6.3 Push branch to GitLab and verify CI pipeline passes (lint → unit → e2e)
+- [x] 6.2 Commit with message `fix: wire user feedback into conceptual memory refresh\n\nCloses #105`
+- [x] 6.3 Push branch to GitLab and verify CI pipeline passes (lint → unit → e2e)
