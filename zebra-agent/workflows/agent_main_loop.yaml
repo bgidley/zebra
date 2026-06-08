@@ -32,6 +32,7 @@ tasks:
     properties:
       goal: "{{goal}}"
       check_type: "input_gate"
+      provider: "{{__llm_provider_name__}}"
       output_key: ethics_input_assessment
 
   # Step 4: Select best workflow (informed by memory shortlist and personal knowledge)
@@ -80,6 +81,7 @@ tasks:
       goal: "{{goal}}"
       check_type: "plan_review"
       plan_context: "{{workflow_name}}"
+      provider: "{{__llm_provider_name__}}"
       output_key: ethics_plan_assessment
 
   # Step 6: Execute the selected/created workflow
