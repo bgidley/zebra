@@ -1600,6 +1600,7 @@ source = { editable = "zebra-tasks" }
 dependencies = [
     { name = "aiofiles" },
     { name = "httpx" },
+    { name = "openai" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "zebra-workflow" },
@@ -1628,6 +1629,7 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'all'", specifier = ">=0.18" },
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.18" },
     { name = "httpx", specifier = ">=0.25" },
+    { name = "openai", specifier = ">=2.15.0" },
     { name = "openai", marker = "extra == 'all'", specifier = ">=1.0" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.0" },

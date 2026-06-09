@@ -60,7 +60,7 @@
 
 ## 11. Lint, Format, and Commit
 
-- [ ] 11.1 Run `uv run ruff check --fix . && uv run ruff format .`
-- [ ] 11.2 Run Zebra feedback: `bash scripts/zebra-feedback.sh 11 "Memory tiers compaction" "- hot/warm/cold tiering for WorkflowMemoryEntry and ConceptualMemoryEntry\n- CompactMemoryAction with LLM compression\n- Routine scheduler integration (every 6h)\n- manage.py compact_memory command"`
-- [ ] 11.3 Commit: `feat: add hot/warm/cold memory tier compaction\n\nCloses #11`
-- [ ] 11.4 Push branch to GitLab and verify CI pipeline passes
+- [x] 11.1 Run `uv run ruff check --fix . && uv run ruff format .`
+- [x] 11.2 Run Zebra feedback: `bash scripts/zebra-feedback.sh 11 "Memory tiers compaction" "- hot/warm/cold tiering for WorkflowMemoryEntry and ConceptualMemoryEntry\n- CompactMemoryAction with LLM compression\n- Routine scheduler integration (every 6h)\n- manage.py compact_memory command"` (kimi unreachable — fixed run_goal to accept kimi)
+- [x] 11.3 Commit: `feat: add hot/warm/cold memory tier compaction\n\nCloses #11`
+- [x] 11.4 Push branch to GitLab and verify CI pipeline passes

@@ -22,6 +22,7 @@ dependencies = [
     "httpx>=0.25",
     "python-dotenv>=1.2.2",
     "aiofiles>=23.0",
+    "openai>=2.15.0",
 ]
 
 [tool.uv.sources]
