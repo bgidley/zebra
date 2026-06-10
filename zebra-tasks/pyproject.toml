@@ -22,6 +22,7 @@ dependencies = [
     "httpx>=0.25",
     "python-dotenv>=1.2.2",
     "aiofiles>=23.0",
+    "openai>=2.15.0",
 ]
 
 [tool.uv.sources]
@@ -65,6 +66,7 @@ workflow_variant_creator = "zebra_tasks.agent.variant_creator:WorkflowVariantCre
 execute_goal_workflow = "zebra_tasks.agent.execute_workflow:ExecuteGoalWorkflowAction"
 assess_and_record = "zebra_tasks.agent.assess_and_record:AssessAndRecordAction"
 update_conceptual_memory = "zebra_tasks.agent.update_conceptual_memory:UpdateConceptualMemoryAction"
+compact_memory = "zebra_tasks.agent.compact_memory:CompactMemoryAction"
 record_metrics = "zebra_tasks.agent.record_metrics:RecordMetricsAction"
 queue_goal = "zebra_tasks.agent.queue_goal:QueueGoalAction"
 # Agent - Analysis and optimization

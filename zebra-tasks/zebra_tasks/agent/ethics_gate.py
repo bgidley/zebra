@@ -290,8 +290,12 @@ class EthicsGateAction(TaskAction):
         else:
             user_prompt = INPUT_GATE_PROMPT.format(goal=goal)
 
-        # Get LLM provider
-        provider_name = task.properties.get("provider", "anthropic")
+        # Get LLM provider — task property > process property > default
+        provider_name = (
+            task.properties.get("provider")
+            or context.process.properties.get("__llm_provider_name__")
+            or "anthropic"
+        )
         model = task.properties.get("model")
         if not model:
             model = context.process.properties.get("__llm_model__")

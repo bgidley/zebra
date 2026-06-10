@@ -1,7 +1,17 @@
 {
-  "short_hash": "5e0e809",
+  "short_hash": "29626de",
   "date": "2026-06-05",
   "commits": [
+    {
+      "hash": "29626de",
+      "date": "2026-06-05",
+      "subject": "chore: remove accidentally staged agent worktrees from index"
+    },
+    {
+      "hash": "75eed12",
+      "date": "2026-06-05",
+      "subject": "fix: move management commands to api/management/commands/ (correct Django app)"
+    },
     {
       "hash": "5e0e809",
       "date": "2026-06-05",
@@ -41,16 +51,6 @@
       "hash": "9f04c7e",
       "date": "2026-06-04",
       "subject": "Merge f8/crash-recovery-contract \u2014 Closes #8"
-    },
-    {
-      "hash": "b7622bd",
-      "date": "2026-06-04",
-      "subject": "feat: add crash recovery contract + spec docs for F2/F3/F4/F5/F6/F8/F28"
-    },
-    {
-      "hash": "3eb5828",
-      "date": "2026-06-04",
-      "subject": "feat: add OS keychain credential store (REQ-DATA-006, REQ-INT-002)"
     }
   ]
 }

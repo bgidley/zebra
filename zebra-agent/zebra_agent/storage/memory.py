@@ -8,9 +8,10 @@ for testing and ephemeral CLI use cases.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from zebra_agent.storage.interfaces import MemoryStore, PersonalKnowledgeStore
+from zebra_agent.storage.interfaces import CompactionBatch, MemoryStore, PersonalKnowledgeStore
 
 if TYPE_CHECKING:
     from zebra_agent.knowledge import KnowledgeEntry
@@ -166,6 +167,69 @@ class InMemoryMemoryStore(MemoryStore):
             "workflow_memory_entries": len(self._workflow_memories),
             "conceptual_memory_entries": len(self._conceptual_memories),
         }
+
+    # =========================================================================
+    # Compaction (Tiered retention)
+    # =========================================================================
+
+    async def get_entries_for_compaction(self, now: datetime) -> CompactionBatch:
+        """Return entries that have crossed a tier boundary since last compaction."""
+        from datetime import timedelta
+
+        await self._ensure_initialized()
+        warm_cutoff = now - timedelta(weeks=2)
+        cold_cutoff = now - timedelta(days=60)
+
+        batch: CompactionBatch = CompactionBatch()
+        for entry in self._workflow_memories:
+            if entry.timestamp <= cold_cutoff and entry.tier != "cold":
+                batch.cold_workflow.append(entry)
+            elif entry.timestamp <= warm_cutoff and entry.tier == "hot":
+                batch.warm_workflow.append(entry)
+
+        for entry in self._conceptual_memories:
+            if entry.last_updated <= cold_cutoff and entry.tier != "cold":
+                batch.cold_conceptual.append(entry)
+            elif entry.last_updated <= warm_cutoff and entry.tier == "hot":
+                batch.warm_conceptual.append(entry)
+
+        return batch
+
+    async def update_workflow_memory_tier(
+        self,
+        entry_id: str,
+        tier: str,
+        output_summary: str | None = None,
+        effectiveness_notes: str | None = None,
+    ) -> None:
+        """Update tier and optionally compressed fields on a WorkflowMemoryEntry."""
+        await self._ensure_initialized()
+        for entry in self._workflow_memories:
+            if entry.id == entry_id:
+                entry.tier = tier
+                if output_summary is not None:
+                    entry.output_summary = output_summary
+                if effectiveness_notes is not None:
+                    entry.effectiveness_notes = effectiveness_notes
+                return
+
+    async def update_conceptual_memory_tier(
+        self,
+        entry_id: str,
+        tier: str,
+        recommended_workflows: list[dict] | None = None,
+        anti_patterns: str | None = None,
+    ) -> None:
+        """Update tier and optionally trimmed fields on a ConceptualMemoryEntry."""
+        await self._ensure_initialized()
+        for entry in self._conceptual_memories:
+            if entry.id == entry_id:
+                entry.tier = tier
+                if recommended_workflows is not None:
+                    entry.recommended_workflows = recommended_workflows
+                if anti_patterns is not None:
+                    entry.anti_patterns = anti_patterns
+                return
 
 
 class InMemoryPersonalKnowledgeStore(PersonalKnowledgeStore):

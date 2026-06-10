@@ -1,0 +1,15 @@
+name: "Compact Memory"
+version: 1
+description: "Enforce hot/warm/cold tiered retention on agent memory entries."
+tags: ["agent", "internal", "system", "maintenance"]
+use_when: "INTERNAL USE ONLY — triggered by the compaction routine scheduler"
+
+tasks:
+  compact:
+    name: "Compact Memory Tiers"
+    action: compact_memory
+    auto: true
+    properties:
+      output_key: compaction_result
+
+routings: []

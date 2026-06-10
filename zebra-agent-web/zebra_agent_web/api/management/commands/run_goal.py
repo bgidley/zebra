@@ -35,7 +35,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--model",
             default="haiku",
-            choices=["haiku", "sonnet", "opus"],
+            choices=["haiku", "sonnet", "opus", "kimi"],
             help="LLM model to use (default: haiku)",
         )
 
@@ -75,6 +75,15 @@ class Command(BaseCommand):
 
         run_id = str(uuid.uuid4())
 
+        # Derive provider from model alias so non-Anthropic models route correctly
+        _MODEL_PROVIDERS = {"kimi": "kimi"}
+        provider = _MODEL_PROVIDERS.get(model)
+
+        # Temporarily override provider on the loop if needed
+        original_provider = agent_loop.provider_name
+        if provider:
+            agent_loop.provider_name = provider
+
         # Run process_goal in background; concurrently auto-approve any human tasks
         goal_task = asyncio.create_task(
             agent_loop.process_goal(goal=goal, model=model, run_id=run_id)
@@ -102,4 +111,7 @@ class Command(BaseCommand):
             except Exception:
                 pass  # don't let polling errors kill the main task
 
-        return await goal_task
+        try:
+            return await goal_task
+        finally:
+            agent_loop.provider_name = original_provider

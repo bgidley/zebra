@@ -11,10 +11,11 @@ Two-tier memory system:
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
-from zebra_agent.storage.interfaces import MemoryStore
+from zebra_agent.storage.interfaces import CompactionBatch, MemoryStore
 
 from zebra_agent_web.middleware import get_current_user_id
 
@@ -82,6 +83,7 @@ class DjangoMemoryStore(MemoryStore):
                     "user_feedback": entry.user_feedback,
                     "run_id": entry.run_id,
                     "model": entry.model,
+                    "tier": entry.tier,
                     "user_id": user_id,
                 },
             )
@@ -120,6 +122,7 @@ class DjangoMemoryStore(MemoryStore):
                     user_feedback=m.user_feedback,
                     run_id=m.run_id,
                     model=m.model,
+                    tier=m.tier,
                 )
                 for m in qs
             ]
@@ -156,6 +159,7 @@ class DjangoMemoryStore(MemoryStore):
                     user_feedback=m.user_feedback,
                     run_id=m.run_id,
                     model=m.model,
+                    tier=m.tier,
                 )
                 for m in qs
             ]
@@ -204,6 +208,7 @@ class DjangoMemoryStore(MemoryStore):
                 user_feedback=m.user_feedback,
                 run_id=m.run_id,
                 model=m.model,
+                tier=m.tier,
             )
 
         return await _get()
@@ -235,6 +240,7 @@ class DjangoMemoryStore(MemoryStore):
                     anti_patterns=m.anti_patterns or "",
                     last_updated=m.last_updated,
                     tokens=m.tokens,
+                    tier=m.tier,
                 )
                 for m in qs
             ]
@@ -257,6 +263,7 @@ class DjangoMemoryStore(MemoryStore):
                     "anti_patterns": entry.anti_patterns,
                     "last_updated": entry.last_updated,
                     "tokens": entry.tokens,
+                    "tier": entry.tier,
                     "user_id": get_current_user_id(),
                 },
             )
@@ -338,3 +345,119 @@ class DjangoMemoryStore(MemoryStore):
             }
 
         return await _get_counts()
+
+    # =========================================================================
+    # Compaction (Tiered retention)
+    # =========================================================================
+
+    async def get_entries_for_compaction(self, now: datetime) -> CompactionBatch:
+        """Return entries that have crossed a tier boundary since last compaction."""
+        from datetime import timedelta
+
+        from zebra_agent.memory import ConceptualMemoryEntry as CEntry
+        from zebra_agent.memory import WorkflowMemoryEntry as WEntry
+
+        await self._ensure_initialized()
+        warm_cutoff = now - timedelta(weeks=2)
+        cold_cutoff = now - timedelta(days=60)
+
+        @sync_to_async(thread_sensitive=False)
+        def _query():
+            from zebra_agent_web.api.models import ConceptualMemoryModel, WorkflowMemoryModel
+
+            warm_wf = WorkflowMemoryModel.objects.filter(
+                timestamp__lte=warm_cutoff, tier="hot"
+            ).exclude(timestamp__lte=cold_cutoff)
+            cold_wf = WorkflowMemoryModel.objects.filter(timestamp__lte=cold_cutoff).exclude(
+                tier="cold"
+            )
+            warm_cm = ConceptualMemoryModel.objects.filter(
+                last_updated__lte=warm_cutoff, tier="hot"
+            ).exclude(last_updated__lte=cold_cutoff)
+            cold_cm = ConceptualMemoryModel.objects.filter(last_updated__lte=cold_cutoff).exclude(
+                tier="cold"
+            )
+
+            def _to_wentry(m):
+                return WEntry(
+                    id=m.id,
+                    timestamp=m.timestamp,
+                    workflow_name=m.workflow_name,
+                    goal=m.goal,
+                    success=m.success,
+                    input_summary=m.input_summary,
+                    output_summary=m.output_summary,
+                    effectiveness_notes=m.effectiveness_notes,
+                    tokens_used=m.tokens_used,
+                    rating=m.rating,
+                    user_feedback=m.user_feedback,
+                    run_id=m.run_id,
+                    model=m.model,
+                    tier=m.tier,
+                )
+
+            def _to_centry(m):
+                return CEntry(
+                    id=m.id,
+                    concept=m.concept,
+                    recommended_workflows=m.recommended_workflows or [],
+                    anti_patterns=m.anti_patterns or "",
+                    last_updated=m.last_updated,
+                    tokens=m.tokens,
+                    tier=m.tier,
+                )
+
+            return CompactionBatch(
+                warm_workflow=[_to_wentry(m) for m in warm_wf],
+                cold_workflow=[_to_wentry(m) for m in cold_wf],
+                warm_conceptual=[_to_centry(m) for m in warm_cm],
+                cold_conceptual=[_to_centry(m) for m in cold_cm],
+            )
+
+        return await _query()
+
+    async def update_workflow_memory_tier(
+        self,
+        entry_id: str,
+        tier: str,
+        output_summary: str | None = None,
+        effectiveness_notes: str | None = None,
+    ) -> None:
+        """Update tier and optionally compressed fields on a WorkflowMemoryEntry."""
+        await self._ensure_initialized()
+
+        @sync_to_async(thread_sensitive=False)
+        def _update():
+            from zebra_agent_web.api.models import WorkflowMemoryModel
+
+            updates: dict = {"tier": tier}
+            if output_summary is not None:
+                updates["output_summary"] = output_summary
+            if effectiveness_notes is not None:
+                updates["effectiveness_notes"] = effectiveness_notes
+            WorkflowMemoryModel.objects.filter(id=entry_id).update(**updates)
+
+        await _update()
+
+    async def update_conceptual_memory_tier(
+        self,
+        entry_id: str,
+        tier: str,
+        recommended_workflows: list[dict] | None = None,
+        anti_patterns: str | None = None,
+    ) -> None:
+        """Update tier and optionally trimmed fields on a ConceptualMemoryEntry."""
+        await self._ensure_initialized()
+
+        @sync_to_async(thread_sensitive=False)
+        def _update():
+            from zebra_agent_web.api.models import ConceptualMemoryModel
+
+            updates: dict = {"tier": tier}
+            if recommended_workflows is not None:
+                updates["recommended_workflows"] = recommended_workflows
+            if anti_patterns is not None:
+                updates["anti_patterns"] = anti_patterns
+            ConceptualMemoryModel.objects.filter(id=entry_id).update(**updates)
+
+        await _update()

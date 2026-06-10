@@ -1159,3 +1159,236 @@ class TestUpdateConceptualMemoryActionUserFeedback:
         assert result.success is True
         user_msg = next(m for m in captured_prompt["messages"] if m.role == "user")
         assert "User feedback" not in user_msg.content
+
+
+# =============================================================================
+# CompactMemoryAction Tests
+# =============================================================================
+
+
+class TestCompactMemoryAction:
+    """Tests for CompactMemoryAction."""
+
+    def _make_memory_store(self, batch=None):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from zebra_agent.storage.interfaces import CompactionBatch
+
+        store = MagicMock()
+        store.get_entries_for_compaction = AsyncMock(return_value=batch or CompactionBatch())
+        store.update_workflow_memory_tier = AsyncMock()
+        store.update_conceptual_memory_tier = AsyncMock()
+        return store
+
+    async def test_no_memory_store_skips_gracefully(self, mock_task, mock_context):
+        """Returns success with zeros when no memory store is present."""
+        from zebra_tasks.agent.compact_memory import CompactMemoryAction
+
+        action = CompactMemoryAction()
+        result = await action.run(mock_task, mock_context)
+        assert result.success is True
+        assert result.output["warm_workflow"] == 0
+
+    async def test_empty_batch_skips(self, mock_task, mock_context):
+        """Nothing to compact → success with zeros."""
+        from zebra_tasks.agent.compact_memory import CompactMemoryAction
+
+        store = self._make_memory_store()
+        mock_context.extras["__memory_store__"] = store
+        action = CompactMemoryAction()
+        result = await action.run(mock_task, mock_context)
+        assert result.success is True
+        assert result.output["warm_workflow"] == 0
+
+    async def test_warm_workflow_entry_compressed(self, mock_task, mock_context):
+        """Warm workflow entries are LLM-compressed and tier updated."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from zebra_agent.memory import WorkflowMemoryEntry
+        from zebra_agent.storage.interfaces import CompactionBatch
+
+        from zebra_tasks.agent.compact_memory import CompactMemoryAction
+        from zebra_tasks.llm.base import LLMResponse
+
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="long output",
+            effectiveness_notes="notes",
+            tokens_used=0,
+        )
+        batch = CompactionBatch(warm_workflow=[entry])
+        store = self._make_memory_store(batch)
+        mock_context.extras["__memory_store__"] = store
+
+        mock_provider = MagicMock()
+        mock_provider.complete = AsyncMock(
+            return_value=LLMResponse(
+                content='{"digest": "compressed"}',
+                model="t",
+                usage={},
+                tool_calls=None,
+                finish_reason="end_turn",
+            )
+        )
+
+        action = CompactMemoryAction()
+        patch_target = "zebra_tasks.agent.compact_memory.get_provider"
+        with patch(patch_target, return_value=mock_provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.output["warm_workflow"] == 1
+        store.update_workflow_memory_tier.assert_called_once_with(
+            entry.id, tier="warm", output_summary="compressed", effectiveness_notes=""
+        )
+
+    async def test_cold_workflow_entry_stripped(self, mock_task, mock_context):
+        """Cold workflow entries are stripped without LLM call."""
+        from unittest.mock import patch
+
+        from zebra_agent.memory import WorkflowMemoryEntry
+        from zebra_agent.storage.interfaces import CompactionBatch
+
+        from zebra_tasks.agent.compact_memory import CompactMemoryAction
+
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
+        )
+        batch = CompactionBatch(cold_workflow=[entry])
+        store = self._make_memory_store(batch)
+        mock_context.extras["__memory_store__"] = store
+
+        action = CompactMemoryAction()
+        patch_target = "zebra_tasks.agent.compact_memory.get_provider"
+        with patch(patch_target, return_value=None):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.output["cold_workflow"] == 1
+        store.update_workflow_memory_tier.assert_called_once_with(
+            entry.id, tier="cold", output_summary="", effectiveness_notes=""
+        )
+
+    async def test_warm_conceptual_trimmed_and_compressed(self, mock_task, mock_context):
+        """Warm conceptual entries: top-3 trim + anti_patterns compressed."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from zebra_agent.memory import ConceptualMemoryEntry
+        from zebra_agent.storage.interfaces import CompactionBatch
+
+        from zebra_tasks.agent.compact_memory import CompactMemoryAction
+        from zebra_tasks.llm.base import LLMResponse
+
+        entry = ConceptualMemoryEntry.create(
+            concept="c",
+            recommended_workflows=[
+                {"name": "a", "use_count": 5},
+                {"name": "b", "use_count": 3},
+                {"name": "c", "use_count": 2},
+                {"name": "d", "use_count": 1},
+            ],
+            anti_patterns="long anti patterns text",
+        )
+        batch = CompactionBatch(warm_conceptual=[entry])
+        store = self._make_memory_store(batch)
+        mock_context.extras["__memory_store__"] = store
+
+        mock_provider = MagicMock()
+        mock_provider.complete = AsyncMock(
+            return_value=LLMResponse(
+                content='{"compressed": "short"}',
+                model="t",
+                usage={},
+                tool_calls=None,
+                finish_reason="end_turn",
+            )
+        )
+
+        action = CompactMemoryAction()
+        patch_target = "zebra_tasks.agent.compact_memory.get_provider"
+        with patch(patch_target, return_value=mock_provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.output["warm_conceptual"] == 1
+        call_kwargs = store.update_conceptual_memory_tier.call_args
+        assert call_kwargs.kwargs["tier"] == "warm"
+        assert len(call_kwargs.kwargs["recommended_workflows"]) == 3
+        assert call_kwargs.kwargs["anti_patterns"] == "short"
+
+    async def test_cold_conceptual_top1_and_cleared(self, mock_task, mock_context):
+        """Cold conceptual entries: trimmed to top-1, anti_patterns cleared."""
+        from unittest.mock import patch
+
+        from zebra_agent.memory import ConceptualMemoryEntry
+        from zebra_agent.storage.interfaces import CompactionBatch
+
+        from zebra_tasks.agent.compact_memory import CompactMemoryAction
+
+        entry = ConceptualMemoryEntry.create(
+            concept="c",
+            recommended_workflows=[
+                {"name": "best", "use_count": 10},
+                {"name": "other", "use_count": 1},
+            ],
+            anti_patterns="stuff",
+        )
+        batch = CompactionBatch(cold_conceptual=[entry])
+        store = self._make_memory_store(batch)
+        mock_context.extras["__memory_store__"] = store
+
+        action = CompactMemoryAction()
+        patch_target = "zebra_tasks.agent.compact_memory.get_provider"
+        with patch(patch_target, return_value=None):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.output["cold_conceptual"] == 1
+        call_kwargs = store.update_conceptual_memory_tier.call_args
+        assert call_kwargs.kwargs["tier"] == "cold"
+        assert len(call_kwargs.kwargs["recommended_workflows"]) == 1
+        assert call_kwargs.kwargs["recommended_workflows"][0]["name"] == "best"
+        assert call_kwargs.kwargs["anti_patterns"] == ""
+
+    async def test_llm_failure_degrades_gracefully(self, mock_task, mock_context):
+        """LLM failure on one entry is logged and skipped; others processed."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from zebra_agent.memory import WorkflowMemoryEntry
+        from zebra_agent.storage.interfaces import CompactionBatch
+
+        from zebra_tasks.agent.compact_memory import CompactMemoryAction
+
+        entry = WorkflowMemoryEntry.create(
+            workflow_name="W",
+            goal="g",
+            success=True,
+            input_summary="i",
+            output_summary="o",
+            effectiveness_notes="",
+            tokens_used=0,
+        )
+        batch = CompactionBatch(warm_workflow=[entry])
+        store = self._make_memory_store(batch)
+        mock_context.extras["__memory_store__"] = store
+
+        mock_provider = MagicMock()
+        mock_provider.complete = AsyncMock(side_effect=RuntimeError("LLM down"))
+
+        action = CompactMemoryAction()
+        patch_target = "zebra_tasks.agent.compact_memory.get_provider"
+        with patch(patch_target, return_value=mock_provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.output["warm_workflow"] == 0
+        store.update_workflow_memory_tier.assert_not_called()
