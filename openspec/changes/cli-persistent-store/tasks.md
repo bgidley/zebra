@@ -35,6 +35,6 @@
 ## 7. Lint, Feedback, Commit
 
 - [x] 7.1 Run `uv run ruff check --fix . && uv run ruff format .`
-- [ ] 7.2 Run Zebra feedback: `bash scripts/zebra-feedback.sh 34 "CLI with persistent store" "- zebra goal/goals console commands in zebra-agent-web backed by Oracle\n- Oracle backend guard against silent SQLite fallback\n- queue_goal() helper shared by CLI and web view"`
-- [ ] 7.3 Commit: `feat: add zebra CLI with Oracle-backed goal/goals commands\n\nCloses #34`
-- [ ] 7.4 Push branch and verify CI pipeline passes
+- [x] 7.2 Run Zebra feedback: `bash scripts/zebra-feedback.sh 34 "CLI with persistent store" "- zebra goal/goals console commands in zebra-agent-web backed by Oracle\n- Oracle backend guard against silent SQLite fallback\n- queue_goal() helper shared by CLI and web view"` (kimi: requirements met)
+- [x] 7.3 Commit: `feat: add zebra CLI with Oracle-backed goal/goals commands\n\nCloses #34`
+- [x] 7.4 Push branch and verify CI pipeline passes (pipeline #151 green)
