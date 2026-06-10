@@ -423,10 +423,7 @@ async def run_goal_queue(request):
     if not goal:
         return HttpResponse("Goal is required", status=400)
 
-    from zebra_tasks.llm.models import resolve_model_name
-
     model_name = request.POST.get("model", "").strip() or None
-    resolved_model = resolve_model_name(model_name) if model_name else None
 
     priority = request.POST.get("priority", "3").strip()
     try:
@@ -439,62 +436,19 @@ async def run_goal_queue(request):
     if deadline:
         deadline = deadline.replace("T", "T") + ":00Z" if "Z" not in deadline else deadline
 
-    await agent_engine.ensure_initialized()
-    await engine.ensure_initialized()
-
-    from zebra_agent_web.api.engine import get_engine
-
-    library = agent_engine.get_library()
-    wf_engine = get_engine()
+    from zebra_agent_web.api.goals import queue_goal
 
     try:
-        definition = library.get_workflow("Agent Main Loop")
+        process = await queue_goal(
+            goal,
+            model=model_name,
+            priority=priority,
+            deadline=deadline or None,
+            user_id=request.user.id if request.user.is_authenticated else None,
+            identity=_identity_context(),
+        )
     except ValueError as e:
         return HttpResponse(f"Cannot load Agent Main Loop workflow: {e}", status=500)
-
-    # Gather available workflows
-    workflows = await library.list_workflows()
-    available = [
-        {
-            "name": w.name,
-            "description": w.description,
-            "tags": w.tags,
-            "success_rate": f"{w.success_rate:.0%}" if w.use_count > 0 else "N/A",
-            "use_count": w.use_count,
-            "use_when": w.use_when,
-        }
-        for w in workflows
-        if "system" not in (w.tags or [])
-    ]
-
-    import uuid as _uuid
-    from datetime import UTC, datetime
-
-    run_id = str(_uuid.uuid4())
-    identity = _identity_context()
-    properties = {
-        "goal": goal,
-        "run_id": run_id,
-        "priority": priority,
-        "available_workflows": available,
-        "__llm_provider_name__": "anthropic",
-        "__llm_model__": resolved_model,
-        "__started_at__": datetime.now(UTC).isoformat(),
-        "__user_display_name__": identity["user_display_name"],
-        "__user_identity_id__": identity["user_identity_id"],
-        "__user_id__": request.user.id if request.user.is_authenticated else None,
-    }
-    if deadline:
-        properties["deadline"] = deadline
-
-    try:
-        process = await wf_engine.create_process(definition, properties=properties)
-        logger.info(
-            "Queued goal as process %s (priority=%d, deadline=%s)",
-            process.id[:12],
-            priority,
-            deadline or "none",
-        )
     except Exception as e:
         logger.exception("Failed to queue goal")
         return HttpResponse(f"Failed to queue goal: {e}", status=500)

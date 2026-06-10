@@ -48,6 +48,7 @@ dev = [
 ]
 
 [project.scripts]
+zebra = "zebra_agent_web.cli:main"
 zebra-web-agent = "zebra_agent_web.cli:serve"
 zebra-web-agent-public = "zebra_agent_web.cli:serve_public"
 zebra-web-agent-dev = "zebra_agent_web.cli:dev"
