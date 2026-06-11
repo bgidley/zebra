@@ -86,7 +86,33 @@
         <p class="text-xs text-gray-500 mt-1">{{ budget.pct_used }} of daily budget used ({{ budget.hours_since_reset }}h since reset)</p>
     </div>
     {% endif %}
-    
+
+    {% if trust_levels %}
+    <!-- Trust by Domain (F12) -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6" data-testid="trust-by-domain">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-white">Trust by Domain</h2>
+            <span class="text-sm text-gray-400">All domains start supervised</span>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {% for entry in trust_levels %}
+            <div>
+                <p class="text-xs text-gray-500 uppercase tracking-wider">{{ entry.domain }}</p>
+                <p class="mt-1">
+                    {% if entry.level == "AUTONOMOUS" %}
+                    <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-green-900 text-green-300">AUTONOMOUS</span>
+                    {% elif entry.level == "SEMI_AUTONOMOUS" %}
+                    <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-amber-900 text-amber-300">SEMI-AUTONOMOUS</span>
+                    {% else %}
+                    <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-gray-700 text-gray-300">SUPERVISED</span>
+                    {% endif %}
+                </p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Content Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Top Workflows -->

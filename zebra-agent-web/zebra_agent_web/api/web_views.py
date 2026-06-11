@@ -104,12 +104,25 @@ async def dashboard(request):
     except RuntimeError:
         pass  # Budget manager not initialized
 
+    # Trust by domain (F12) — read-only display of the current trust levels
+    trust_levels = None
+    if request.user.is_authenticated:
+        try:
+            trust_store = agent_engine.get_trust()
+            levels = await trust_store.get_all_trust_levels(request.user.id)
+            trust_levels = [
+                {"domain": domain, "level": level.value} for domain, level in levels.items()
+            ]
+        except RuntimeError:
+            pass  # Trust store not initialized
+
     context = {
         **_identity_context(),
         "workflows_count": len(workflows),
         "total_runs": total_runs,
         "success_rate": f"{success_rate:.0%}",
         "budget": budget_status,
+        "trust_levels": trust_levels,
         "recent_runs": [
             {
                 "id": r.id,

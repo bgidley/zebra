@@ -584,3 +584,71 @@ class EthicsAuditEntryModel(models.Model):
     def __str__(self):
         verdict = "approved" if self.approved else "rejected"
         return f"EthicsAudit({verdict}, {self.evaluated_at.date()})"
+
+
+# =============================================================================
+# Trust Levels (REQ-TRUST-001 / F12)
+# =============================================================================
+
+
+class TrustLevelModel(models.Model):
+    """Current trust level for a (user, domain) pair.
+
+    Rows exist only for pairs that have been explicitly set — unset pairs
+    read as SUPERVISED in the store layer without a row here.
+    """
+
+    user_id = models.IntegerField(db_index=True)
+    domain = models.CharField(max_length=100)
+    level = models.CharField(max_length=20, default="SUPERVISED")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "zebra_trust_levels"
+        verbose_name = "Trust Level"
+        verbose_name_plural = "Trust Levels"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user_id", "domain"],
+                name="zebra_trust_user_domain_unique",
+            ),
+        ]
+
+    def __str__(self):
+        return f"TrustLevel(user={self.user_id}, {self.domain}={self.level})"
+
+
+class TrustChangeModel(models.Model):
+    """Immutable audit record of a single trust level change.
+
+    Rows are append-only. save() and delete() raise NotImplementedError on
+    existing rows so immutability is enforced at the ORM layer.
+    """
+
+    id = models.CharField(max_length=36, primary_key=True)
+    user_id = models.IntegerField(db_index=True)
+    domain = models.CharField(max_length=100, db_index=True)
+    old_level = models.CharField(max_length=20)
+    new_level = models.CharField(max_length=20)
+    reason = models.TextField()
+    changed_by = models.CharField(max_length=255)
+    changed_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        db_table = "zebra_trust_changes"
+        verbose_name = "Trust Change"
+        verbose_name_plural = "Trust Changes"
+        indexes = [
+            models.Index(fields=["user_id", "domain", "-changed_at"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk and TrustChangeModel.objects.filter(pk=self.pk).exists():
+            raise NotImplementedError("TrustChangeModel rows are immutable")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise NotImplementedError("TrustChangeModel rows are immutable")
+
+    def __str__(self):
+        return f"TrustChange({self.domain}: {self.old_level}->{self.new_level})"
