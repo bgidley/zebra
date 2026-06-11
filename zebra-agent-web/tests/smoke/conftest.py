@@ -1,6 +1,7 @@
-"""Fixtures for smoke tests against a live podman container.
+"""Fixtures for smoke tests against the live deployed container.
 
-Set ZEBRA_SMOKE_URL to point at the running container (default: http://localhost:8001).
+Set SMOKE_BASE_URL to point at the running container (default: http://localhost:8000),
+matching test_live_smoke.py and the CI smoke job.
 Set ZEBRA_SMOKE_SESSION to a valid Django session key — the CI job creates one via
 manage.py shell after starting the container.
 """
@@ -10,7 +11,7 @@ import os
 import httpx
 import pytest
 
-BASE_URL = os.environ.get("ZEBRA_SMOKE_URL", "http://localhost:8001")
+BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8000")
 SESSION_KEY = os.environ.get("ZEBRA_SMOKE_SESSION", "")
 
 
