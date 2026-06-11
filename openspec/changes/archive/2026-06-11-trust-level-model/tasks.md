@@ -49,7 +49,7 @@
 ## 5. Feedback, commit, CI
 
 - [x] 5.1 Run Zebra feedback: `bash scripts/zebra-feedback.sh 12 "Trust level data model" "<changes>"`
-- [ ] 5.2 Commit (`feat: add per-domain trust level data model` … `Closes #12`), push
-      `f12/trust-level-model`, verify GitLab pipeline green
+- [x] 5.2 Commit (`feat: add per-domain trust level data model` … `Closes #12`), push
+      `f12/trust-level-model`, verify GitLab pipeline green (pipeline #156)
 - [ ] 5.3 Open GitHub PR, merge to master per CLAUDE.md workflow, verify deploy + smoke
       stages pass, confirm issue #12 closed
