@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from zebra_agent_web.memory_store import DjangoMemoryStore
     from zebra_agent_web.metrics_store import DjangoMetricsStore
     from zebra_agent_web.profile_store import DjangoProfileStore
+    from zebra_agent_web.trust_store import DjangoTrustStore
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ _memory: "DjangoMemoryStore | None" = None
 _profile: "DjangoProfileStore | None" = None
 _knowledge: "DjangoPersonalKnowledgeStore | None" = None
 _ethics_audit: "DjangoEthicsAuditStore | None" = None
+_trust: "DjangoTrustStore | None" = None
 _agent_loop: "AgentLoop | None" = None
 _budget_manager: "BudgetManager | None" = None
 _initialized = False
@@ -63,7 +65,7 @@ def initialize() -> None:
 
 async def _async_init() -> None:
     """Async initialization of agent components."""
-    global _library, _metrics, _memory, _profile, _ethics_audit, _agent_loop
+    global _library, _metrics, _memory, _profile, _ethics_audit, _trust, _agent_loop
 
     if _library is not None:
         return
@@ -79,6 +81,7 @@ async def _async_init() -> None:
     from zebra_agent_web.memory_store import DjangoMemoryStore
     from zebra_agent_web.metrics_store import DjangoMetricsStore
     from zebra_agent_web.profile_store import DjangoProfileStore
+    from zebra_agent_web.trust_store import DjangoTrustStore
 
     agent_settings = _get_agent_settings()
 
@@ -107,6 +110,11 @@ async def _async_init() -> None:
     logger.info("Initializing ethics audit store (Django)")
     _ethics_audit = DjangoEthicsAuditStore()
     await _ethics_audit.initialize()
+
+    # Initialize trust store (Django ORM, F12)
+    logger.info("Initializing trust store (Django)")
+    _trust = DjangoTrustStore()
+    await _trust.initialize()
 
     # Initialize workflow library
     library_path = Path(agent_settings["LIBRARY_PATH"]).expanduser()
@@ -160,9 +168,10 @@ async def _async_init() -> None:
         warning_threshold_usd=agent_settings.get("GOAL_COST_WARNING_USD", 5.0),
     )
 
-    # Inject budget manager and ethics audit store into engine extras
+    # Inject budget manager, ethics audit store, and trust store into engine extras
     engine.extras["__budget_manager__"] = _budget_manager
     engine.extras["__ethics_audit_store__"] = _ethics_audit
+    engine.extras["__trust_store__"] = _trust
 
     # Initialize agent loop with memory and personal knowledge store
     _agent_loop = AgentLoop(
@@ -239,6 +248,13 @@ def get_ethics_audit() -> "DjangoEthicsAuditStore":
     if _ethics_audit is None:
         raise RuntimeError("Ethics audit store not initialized. Call ensure_initialized() first.")
     return _ethics_audit
+
+
+def get_trust() -> "DjangoTrustStore":
+    """Get the DjangoTrustStore instance."""
+    if _trust is None:
+        raise RuntimeError("Trust store not initialized. Call ensure_initialized() first.")
+    return _trust
 
 
 def get_agent_loop() -> "AgentLoop":

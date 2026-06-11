@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from zebra_agent.knowledge import KnowledgeEntry
     from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
     from zebra_agent.profile import ValuesProfileVersion
+    from zebra_agent.storage.trust import TrustChangeRecord, TrustLevel
 
 
 @dataclass
@@ -532,6 +533,81 @@ class EthicsAuditStore(ABC):
     @abstractmethod
     async def get(self, entry_id: str) -> EthicsAuditEntry | None:
         """Return a single entry by id, or None if not found."""
+        ...
+
+
+class TrustStore(ABC):
+    """Abstract interface for per-(user, domain) trust levels (REQ-TRUST-001).
+
+    Trust is a policy layer above the engine: gates (F13) read the level
+    before executing domain-scoped actions. Every (user, domain) pair reads
+    as SUPERVISED until explicitly changed, and each change appends an
+    immutable ``TrustChangeRecord`` — there is no update or delete API.
+    """
+
+    @abstractmethod
+    async def initialize(self) -> None:
+        """Initialize the trust store."""
+        ...
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Close the trust store and release resources."""
+        ...
+
+    @abstractmethod
+    async def get_trust_level(self, user_id: int, domain: str) -> TrustLevel:
+        """Return the trust level for a (user, domain) pair.
+
+        Pairs that have never been set return SUPERVISED without creating
+        a stored record.
+        """
+        ...
+
+    @abstractmethod
+    async def set_trust_level(
+        self,
+        user_id: int,
+        domain: str,
+        level: TrustLevel,
+        reason: str,
+        changed_by: str,
+    ) -> TrustChangeRecord:
+        """Set the trust level for a (user, domain) pair and audit the change.
+
+        Args:
+            user_id: The user whose trust is being changed.
+            domain: A domain present in the taxonomy registry.
+            level: The new trust level.
+            reason: Why the level is changing (stored in the audit record).
+            changed_by: Who made the change (stored in the audit record).
+
+        Returns:
+            The appended TrustChangeRecord.
+
+        Raises:
+            ValueError: If the domain is not in the taxonomy registry.
+        """
+        ...
+
+    @abstractmethod
+    async def get_all_trust_levels(self, user_id: int) -> dict[str, TrustLevel]:
+        """Return the trust level of every registered domain for a user.
+
+        Domains without a stored level are reported as SUPERVISED.
+        """
+        ...
+
+    @abstractmethod
+    async def list_trust_changes(
+        self, user_id: int, domain: str | None = None
+    ) -> list[TrustChangeRecord]:
+        """Return trust change records for a user, newest first.
+
+        Args:
+            user_id: The user whose history to return.
+            domain: Restrict to one domain (None = all domains).
+        """
         ...
 
 

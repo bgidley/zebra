@@ -20,15 +20,31 @@ Example usage:
     await metrics.initialize()
 """
 
-from zebra_agent.storage.interfaces import MemoryStore, MetricsStore
+from zebra_agent.storage.interfaces import MemoryStore, MetricsStore, TrustStore
 from zebra_agent.storage.memory import InMemoryMemoryStore
 from zebra_agent.storage.metrics import InMemoryMetricsStore
+from zebra_agent.storage.trust import (
+    DEFAULT_DOMAINS,
+    InMemoryTrustStore,
+    TrustChangeRecord,
+    TrustLevel,
+    list_domains,
+    register_domain,
+)
 
 __all__ = [
     # Interfaces
     "MemoryStore",
     "MetricsStore",
+    "TrustStore",
     # Implementations
     "InMemoryMemoryStore",
     "InMemoryMetricsStore",
+    "InMemoryTrustStore",
+    # Trust model
+    "DEFAULT_DOMAINS",
+    "TrustChangeRecord",
+    "TrustLevel",
+    "list_domains",
+    "register_domain",
 ]
