@@ -51,7 +51,7 @@
 ## 6. Feedback, commit, CI
 
 - [x] 6.1 `bash scripts/zebra-feedback.sh 14 "Contextual reversibility assessment" "<changes>"`
-- [ ] 6.2 Commit (`feat: add contextual reversibility assessment` … `Closes #14`), push,
-      verify GitLab pipeline green
+- [x] 6.2 Commit (`feat: add contextual reversibility assessment` … `Closes #14`), push,
+      verify GitLab pipeline green (pipeline #162)
 - [ ] 6.3 Archive change (sync new spec + apply trust-gate MODIFIED delta), GitHub PR,
       merge to master, verify deploy + smoke, confirm issue #14 closed
