@@ -81,6 +81,38 @@ class TrustChangeRecord:
     changed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
+SUGGESTION_PENDING = "pending"
+SUGGESTION_APPROVED = "approved"
+SUGGESTION_REJECTED = "rejected"
+
+#: Maximum evidence characters carried into the approval audit reason.
+_EVIDENCE_REASON_LEN = 200
+
+
+@dataclass
+class TrustSuggestion:
+    """An agent-submitted trust promotion request awaiting human resolution.
+
+    Suggestions never change a trust level by themselves (REQ-TRUST-004) —
+    only a human resolving one with approve=True triggers ``set_trust_level``.
+    """
+
+    user_id: int
+    domain: str
+    to_level: TrustLevel
+    evidence: str
+    status: str = SUGGESTION_PENDING
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    resolved_at: datetime | None = None
+    resolved_by: str = ""
+
+
+def approval_reason(evidence: str) -> str:
+    """Audit reason used when a human approves an agent suggestion."""
+    return f"Approved agent suggestion: {evidence[:_EVIDENCE_REASON_LEN]}"
+
+
 class InMemoryTrustStore(TrustStore):
     """In-memory implementation of the trust store.
 
@@ -92,6 +124,7 @@ class InMemoryTrustStore(TrustStore):
     def __init__(self) -> None:
         self._levels: dict[tuple[int, str], TrustLevel] = {}
         self._changes: list[TrustChangeRecord] = []
+        self._suggestions: dict[str, TrustSuggestion] = {}
 
     async def initialize(self) -> None:
         logger.info("InMemoryTrustStore initialized")
@@ -148,3 +181,48 @@ class InMemoryTrustStore(TrustStore):
             if r.user_id == user_id and (domain is None or r.domain == domain)
         ]
         return list(reversed(records))
+
+    async def add_suggestion(
+        self, user_id: int, domain: str, to_level: TrustLevel, evidence: str
+    ) -> TrustSuggestion:
+        validate_domain(domain)
+        to_level = TrustLevel(to_level)  # raises ValueError on unknown level
+        suggestion = TrustSuggestion(
+            user_id=user_id, domain=domain, to_level=to_level, evidence=evidence
+        )
+        self._suggestions[suggestion.id] = suggestion
+        logger.info(
+            "Trust suggestion for user %s domain %s -> %s queued", user_id, domain, to_level
+        )
+        return suggestion
+
+    async def list_suggestions(
+        self, user_id: int, status: str | None = None
+    ) -> list[TrustSuggestion]:
+        suggestions = [
+            s
+            for s in self._suggestions.values()
+            if s.user_id == user_id and (status is None or s.status == status)
+        ]
+        return sorted(suggestions, key=lambda s: s.created_at, reverse=True)
+
+    async def resolve_suggestion(
+        self, suggestion_id: str, approve: bool, resolved_by: str
+    ) -> TrustSuggestion:
+        suggestion = self._suggestions.get(suggestion_id)
+        if suggestion is None:
+            raise ValueError(f"Unknown trust suggestion {suggestion_id!r}")
+        if suggestion.status != SUGGESTION_PENDING:
+            raise ValueError(f"Trust suggestion {suggestion_id!r} is already {suggestion.status}")
+        if approve:
+            await self.set_trust_level(
+                suggestion.user_id,
+                suggestion.domain,
+                suggestion.to_level,
+                reason=approval_reason(suggestion.evidence),
+                changed_by=resolved_by,
+            )
+        suggestion.status = SUGGESTION_APPROVED if approve else SUGGESTION_REJECTED
+        suggestion.resolved_at = datetime.now(UTC)
+        suggestion.resolved_by = resolved_by
+        return suggestion

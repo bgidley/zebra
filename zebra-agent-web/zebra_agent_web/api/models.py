@@ -652,3 +652,33 @@ class TrustChangeModel(models.Model):
 
     def __str__(self):
         return f"TrustChange({self.domain}: {self.old_level}->{self.new_level})"
+
+
+class TrustSuggestionModel(models.Model):
+    """An agent-submitted trust promotion suggestion awaiting human resolution.
+
+    Suggestions never change a trust level by themselves (REQ-TRUST-004) —
+    approval happens through DjangoTrustStore.resolve_suggestion, which records
+    the resolving human in the trust change audit trail.
+    """
+
+    id = models.CharField(max_length=36, primary_key=True)
+    user_id = models.IntegerField(db_index=True)
+    domain = models.CharField(max_length=100)
+    to_level = models.CharField(max_length=20)
+    evidence = models.TextField()
+    status = models.CharField(max_length=10, default="pending", db_index=True)
+    created_at = models.DateTimeField(db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        db_table = "zebra_trust_suggestions"
+        verbose_name = "Trust Suggestion"
+        verbose_name_plural = "Trust Suggestions"
+        indexes = [
+            models.Index(fields=["user_id", "status", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"TrustSuggestion({self.domain}->{self.to_level}, {self.status})"

@@ -132,3 +132,77 @@ async def test_audit_rows_are_immutable() -> None:
         row.save()
     with pytest.raises(NotImplementedError):
         row.delete()
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_add_suggestion_is_pending_and_changes_nothing(store: DjangoTrustStore) -> None:
+    suggestion = await store.add_suggestion(1, "code", TrustLevel.SEMI_AUTONOMOUS, "20 runs")
+
+    assert suggestion.status == "pending"
+    assert await store.get_trust_level(1, "code") == TrustLevel.SUPERVISED
+    assert await store.list_trust_changes(1) == []
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_add_suggestion_validates_domain_and_level(store: DjangoTrustStore) -> None:
+    with pytest.raises(ValueError, match="time-travel"):
+        await store.add_suggestion(1, "time-travel", TrustLevel.AUTONOMOUS, "x")
+    with pytest.raises(ValueError):
+        await store.add_suggestion(1, "code", "OMNIPOTENT", "x")
+    assert await store.list_suggestions(1) == []
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_list_suggestions_filters_by_user_and_status(store: DjangoTrustStore) -> None:
+    s1 = await store.add_suggestion(1, "code", TrustLevel.SEMI_AUTONOMOUS, "a")
+    await store.add_suggestion(1, "home", TrustLevel.AUTONOMOUS, "b")
+    await store.add_suggestion(2, "code", TrustLevel.AUTONOMOUS, "c")
+    await store.resolve_suggestion(s1.id, approve=False, resolved_by="ben")
+
+    assert len(await store.list_suggestions(1)) == 2
+    pending = await store.list_suggestions(1, status="pending")
+    assert [s.evidence for s in pending] == ["b"]
+    assert [s.evidence for s in await store.list_suggestions(2)] == ["c"]
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_approve_changes_level_and_audits_resolver(store: DjangoTrustStore) -> None:
+    suggestion = await store.add_suggestion(1, "code", TrustLevel.SEMI_AUTONOMOUS, "20 runs")
+
+    resolved = await store.resolve_suggestion(suggestion.id, approve=True, resolved_by="ben")
+
+    assert resolved.status == "approved"
+    assert resolved.resolved_by == "ben"
+    assert resolved.resolved_at is not None
+    assert await store.get_trust_level(1, "code") == TrustLevel.SEMI_AUTONOMOUS
+    changes = await store.list_trust_changes(1, "code")
+    assert len(changes) == 1
+    assert changes[0].changed_by == "ben"
+    assert "20 runs" in changes[0].reason
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_reject_leaves_level_untouched(store: DjangoTrustStore) -> None:
+    suggestion = await store.add_suggestion(1, "code", TrustLevel.AUTONOMOUS, "trust me")
+
+    resolved = await store.resolve_suggestion(suggestion.id, approve=False, resolved_by="ben")
+
+    assert resolved.status == "rejected"
+    assert await store.get_trust_level(1, "code") == TrustLevel.SUPERVISED
+    assert await store.list_trust_changes(1) == []
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_double_resolution_rejected(store: DjangoTrustStore) -> None:
+    suggestion = await store.add_suggestion(1, "code", TrustLevel.AUTONOMOUS, "x")
+    await store.resolve_suggestion(suggestion.id, approve=False, resolved_by="ben")
+
+    with pytest.raises(ValueError, match="already"):
+        await store.resolve_suggestion(suggestion.id, approve=True, resolved_by="ben")
+    assert await store.get_trust_level(1, "code") == TrustLevel.SUPERVISED
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_unknown_suggestion_rejected(store: DjangoTrustStore) -> None:
+    with pytest.raises(ValueError, match="Unknown"):
+        await store.resolve_suggestion("nope", approve=True, resolved_by="ben")

@@ -1362,3 +1362,123 @@ def ethics_audit_detail(request, entry_id):
         }
     )
     return Response(serializer.data)
+
+
+# =============================================================================
+# Trust Management (F15 / REQ-TRUST-004)
+# =============================================================================
+
+
+def _trust_store_sync():
+    """Resolve the trust store, initializing the agent if needed (sync helper)."""
+
+    async def _get():
+        await agent_engine.ensure_initialized()
+        return agent_engine.get_trust()
+
+    return async_to_sync(_get)()
+
+
+@api_view(["GET"])
+def trust_levels(request):
+    """Return the authenticated user's trust level for every registered domain."""
+    trust = _trust_store_sync()
+    levels = async_to_sync(trust.get_all_trust_levels)(request.user.id)
+    return Response({"levels": {domain: level.value for domain, level in levels.items()}})
+
+
+@api_view(["POST"])
+def trust_set_level(request, domain):
+    """Set a domain's trust level for the authenticated user (human-only path).
+
+    Body: {"level": "SUPERVISED|SEMI_AUTONOMOUS|AUTONOMOUS", "reason": "..."}
+    """
+    from zebra_agent.storage.trust import TrustLevel
+
+    raw_level = request.data.get("level", "")
+    reason = request.data.get("reason", "")
+    try:
+        level = TrustLevel(raw_level)
+    except ValueError:
+        return Response(
+            {"error": f"Invalid trust level {raw_level!r}"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    trust = _trust_store_sync()
+    try:
+        record = async_to_sync(trust.set_trust_level)(
+            request.user.id, domain, level, reason, request.user.username
+        )
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(
+        {
+            "domain": domain,
+            "old_level": record.old_level.value,
+            "new_level": record.new_level.value,
+            "changed_by": record.changed_by,
+        }
+    )
+
+
+@api_view(["GET"])
+def trust_changes(request):
+    """Return the authenticated user's trust change history, newest first."""
+    domain = request.query_params.get("domain")
+    trust = _trust_store_sync()
+    records = async_to_sync(trust.list_trust_changes)(request.user.id, domain)
+    return Response(
+        {
+            "changes": [
+                {
+                    "id": r.id,
+                    "domain": r.domain,
+                    "old_level": r.old_level.value,
+                    "new_level": r.new_level.value,
+                    "reason": r.reason,
+                    "changed_by": r.changed_by,
+                    "changed_at": r.changed_at.isoformat(),
+                }
+                for r in records
+            ]
+        }
+    )
+
+
+def _suggestion_payload(s):
+    return {
+        "id": s.id,
+        "domain": s.domain,
+        "to_level": str(s.to_level),
+        "evidence": s.evidence,
+        "status": s.status,
+        "created_at": s.created_at.isoformat(),
+        "resolved_at": s.resolved_at.isoformat() if s.resolved_at else None,
+        "resolved_by": s.resolved_by,
+    }
+
+
+@api_view(["GET"])
+def trust_suggestions(request):
+    """List the authenticated user's trust suggestions, newest first."""
+    suggestion_status = request.query_params.get("status")
+    trust = _trust_store_sync()
+    suggestions = async_to_sync(trust.list_suggestions)(request.user.id, suggestion_status)
+    return Response({"suggestions": [_suggestion_payload(s) for s in suggestions]})
+
+
+@api_view(["POST"])
+def trust_suggestion_resolve(request, suggestion_id):
+    """Approve or reject a pending trust suggestion (human-only path).
+
+    Body: {"approve": true|false}
+    """
+    approve = bool(request.data.get("approve", False))
+    trust = _trust_store_sync()
+    try:
+        suggestion = async_to_sync(trust.resolve_suggestion)(
+            suggestion_id, approve, request.user.username
+        )
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(_suggestion_payload(suggestion))

@@ -2110,3 +2110,72 @@ async def ethics_audit(request):
             **_identity_context(),
         },
     )
+
+
+# =============================================================================
+# Trust Management (F15 / REQ-TRUST-004)
+# =============================================================================
+
+
+async def trust_page(request):
+    """Trust management page: per-domain levels, pending suggestions, history."""
+    from zebra_agent.storage.trust import TrustLevel
+
+    await agent_engine.ensure_initialized()
+    trust = agent_engine.get_trust()
+    user_id = request.user.id
+
+    levels = await trust.get_all_trust_levels(user_id)
+    suggestions = await trust.list_suggestions(user_id)
+    changes = await trust.list_trust_changes(user_id)
+
+    context = {
+        **_identity_context(),
+        "domains": [{"domain": domain, "level": level.value} for domain, level in levels.items()],
+        "trust_levels": [level.value for level in TrustLevel],
+        "pending_suggestions": [s for s in suggestions if s.status == "pending"],
+        "resolved_suggestions": [s for s in suggestions if s.status != "pending"][:10],
+        "changes": changes[:25],
+        "message": request.GET.get("message", ""),
+        "error": request.GET.get("error", ""),
+    }
+    return render(request, "pages/trust.html", context)
+
+
+@require_POST
+async def trust_set_level_form(request, domain):
+    """Set a domain's trust level from the trust page form (human-only path)."""
+    from urllib.parse import urlencode
+
+    from zebra_agent.storage.trust import TrustLevel
+
+    await agent_engine.ensure_initialized()
+    trust = agent_engine.get_trust()
+
+    raw_level = request.POST.get("level", "")
+    reason = request.POST.get("reason", "").strip() or "Set via trust page"
+    try:
+        level = TrustLevel(raw_level)
+        await trust.set_trust_level(request.user.id, domain, level, reason, request.user.username)
+    except ValueError as exc:
+        return redirect(f"/trust/?{urlencode({'error': str(exc)})}")
+    return redirect(f"/trust/?{urlencode({'message': f'{domain} set to {level.value}'})}")
+
+
+@require_POST
+async def trust_suggestion_resolve_form(request, suggestion_id):
+    """Approve or reject a pending suggestion from the trust page (human-only path)."""
+    from urllib.parse import urlencode
+
+    await agent_engine.ensure_initialized()
+    trust = agent_engine.get_trust()
+
+    approve = request.POST.get("decision") == "approve"
+    try:
+        suggestion = await trust.resolve_suggestion(suggestion_id, approve, request.user.username)
+    except ValueError as exc:
+        return redirect(f"/trust/?{urlencode({'error': str(exc)})}")
+    verb = "approved" if approve else "rejected"
+    return redirect(
+        f"/trust/?{urlencode({'message': f'Suggestion for {suggestion.domain} {verb}'})}"
+    )

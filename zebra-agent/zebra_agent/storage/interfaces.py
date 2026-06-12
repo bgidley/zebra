@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from zebra_agent.knowledge import KnowledgeEntry
     from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
     from zebra_agent.profile import ValuesProfileVersion
-    from zebra_agent.storage.trust import TrustChangeRecord, TrustLevel
+    from zebra_agent.storage.trust import TrustChangeRecord, TrustLevel, TrustSuggestion
 
 
 @dataclass
@@ -607,6 +607,61 @@ class TrustStore(ABC):
         Args:
             user_id: The user whose history to return.
             domain: Restrict to one domain (None = all domains).
+        """
+        ...
+
+    @abstractmethod
+    async def add_suggestion(
+        self, user_id: int, domain: str, to_level: TrustLevel, evidence: str
+    ) -> TrustSuggestion:
+        """Queue an agent-submitted trust promotion suggestion (REQ-TRUST-004).
+
+        Always created with status ``pending``; never changes a trust level.
+
+        Args:
+            user_id: The user whose trust the suggestion concerns.
+            domain: A domain present in the taxonomy registry.
+            to_level: The suggested trust level.
+            evidence: The agent's supporting evidence, shown to the human.
+
+        Raises:
+            ValueError: If the domain or level is unknown.
+        """
+        ...
+
+    @abstractmethod
+    async def list_suggestions(
+        self, user_id: int, status: str | None = None
+    ) -> list[TrustSuggestion]:
+        """Return trust suggestions for a user, newest first.
+
+        Args:
+            user_id: The user whose suggestions to return.
+            status: Restrict to one status (``pending`` / ``approved`` /
+                ``rejected``); None returns all.
+        """
+        ...
+
+    @abstractmethod
+    async def resolve_suggestion(
+        self, suggestion_id: str, approve: bool, resolved_by: str
+    ) -> TrustSuggestion:
+        """Resolve a pending suggestion as a human decision.
+
+        Approval performs ``set_trust_level`` (with the resolver as
+        ``changed_by``) atomically with marking the suggestion approved;
+        rejection only flips the status.
+
+        Args:
+            suggestion_id: The suggestion to resolve.
+            approve: True to approve (changes the level), False to reject.
+            resolved_by: The human resolving the suggestion.
+
+        Returns:
+            The resolved TrustSuggestion.
+
+        Raises:
+            ValueError: If the suggestion is unknown or not pending.
         """
         ...
 

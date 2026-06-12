@@ -30,6 +30,15 @@ urlpatterns = [
     path("runs/<str:run_id>/diagram/", views.run_diagram, name="api_run_diagram"),
     # Budget
     path("budget/", views.budget_status, name="api_budget_status"),
+    path("trust/", views.trust_levels, name="api_trust_levels"),
+    path("trust/changes/", views.trust_changes, name="api_trust_changes"),
+    path("trust/suggestions/", views.trust_suggestions, name="api_trust_suggestions"),
+    path(
+        "trust/suggestions/<str:suggestion_id>/resolve/",
+        views.trust_suggestion_resolve,
+        name="api_trust_suggestion_resolve",
+    ),
+    path("trust/<str:domain>/", views.trust_set_level, name="api_trust_set_level"),
     # Kill switch
     path("kill-switch/", views.kill_switch_view, name="api_kill_switch"),
     # Execution monitoring (processes and tasks)
