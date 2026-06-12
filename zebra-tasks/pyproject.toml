@@ -75,6 +75,8 @@ load_workflow_definitions = "zebra_tasks.agent.load_definitions:LoadWorkflowDefi
 workflow_evaluator = "zebra_tasks.agent.evaluator:WorkflowEvaluatorAction"
 workflow_optimizer = "zebra_tasks.agent.optimizer:WorkflowOptimizerAction"
 ethics_gate = "zebra_tasks.agent.ethics_gate:EthicsGateAction"
+# Agent - Trust gate (F13)
+trust_gate = "zebra_tasks.agent.trust_gate:TrustGateAction"
 # Agent - Values profile (F18)
 load_values_profile = "zebra_tasks.agent.load_values_profile:LoadValuesProfileAction"
 extract_values_tags = "zebra_tasks.agent.extract_values_tags:ExtractValuesTagsAction"
