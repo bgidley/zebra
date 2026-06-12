@@ -135,3 +135,38 @@ class TestActionRegistry:
         """Test that always_true is registered by default."""
         registry = ActionRegistry()
         assert registry.has_condition("always_true")
+
+
+class TestReversibilityQueries:
+    """Tests for registry reversibility queries (F14 / REQ-TRUST-002)."""
+
+    def test_get_action_class_returns_class(self):
+        registry = ActionRegistry()
+        registry.register_action("dummy", DummyAction)
+
+        cls = registry.get_action_class("dummy")
+        assert cls is DummyAction
+
+    def test_get_action_class_unknown_raises(self):
+        registry = ActionRegistry()
+        with pytest.raises(ActionNotFoundError):
+            registry.get_action_class("nope")
+
+    def test_list_reversibility_hints(self):
+        class ReadOnlyAction(DummyAction):
+            reversibility_hint = "always_reversible"
+
+        class DestructiveAction(DummyAction):
+            reversibility_hint = "always_irreversible"
+
+        registry = ActionRegistry()
+        registry.register_action("read_only", ReadOnlyAction)
+        registry.register_action("destructive", DestructiveAction)
+        registry.register_action("dummy", DummyAction)
+
+        hints = registry.list_reversibility_hints()
+        assert hints == {
+            "read_only": "always_reversible",
+            "destructive": "always_irreversible",
+            "dummy": "context_dependent",
+        }

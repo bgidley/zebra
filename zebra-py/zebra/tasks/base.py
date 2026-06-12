@@ -84,6 +84,13 @@ class ActionMetadata(BaseModel):
     outputs: list[ParameterDef] = Field(
         default_factory=list, description="Output parameters produced"
     )
+    reversibility_hint: str = Field(
+        default="context_dependent",
+        description=(
+            "Reversibility classification (REQ-TRUST-002): 'always_reversible', "
+            "'always_irreversible', or 'context_dependent'"
+        ),
+    )
 
     model_config = {"frozen": True}
 
@@ -255,17 +262,26 @@ class TaskAction(ABC):
     inputs: ClassVar[list[ParameterDef]] = []
     outputs: ClassVar[list[ParameterDef]] = []
 
+    # Reversibility classification for trust gating (REQ-TRUST-002).
+    # One of: "always_reversible", "always_irreversible", "context_dependent".
+    # "always_*" hints short-circuit the contextual assessment; the default
+    # "context_dependent" means reversibility is judged at runtime from the
+    # action's concrete parameters.
+    reversibility_hint: ClassVar[str] = "context_dependent"
+
     @classmethod
     def get_metadata(cls) -> ActionMetadata:
         """Return structured metadata about this action.
 
         Returns:
-            ActionMetadata with description, inputs, and outputs.
+            ActionMetadata with description, inputs, outputs, and
+            reversibility hint.
         """
         return ActionMetadata(
             description=cls.description,
             inputs=list(cls.inputs),
             outputs=list(cls.outputs),
+            reversibility_hint=cls.reversibility_hint,
         )
 
     def validate_inputs(self, task: TaskInstance) -> list[str]:

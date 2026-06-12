@@ -152,3 +152,145 @@ async def test_semi_autonomous_without_declaration_pauses():
     assert process.state == ProcessState.RUNNING
     pending = await engine.get_pending_tasks(process.id)
     assert [t.task_definition_id for t in pending] == ["request_approval"]
+
+
+# =============================================================================
+# F14: contextual reversibility assessment (issue #14 e2e criterion)
+# =============================================================================
+
+ASSESSED_WORKFLOW_YAML = """
+id: assessed_cleanup
+name: "Assessed Cleanup"
+first_task_id: check_trust
+tasks:
+  check_trust:
+    name: "Check Trust"
+    action: trust_gate
+    properties:
+      domain: "code"
+      action_description: "delete files"
+      target_task_id: "delete_files"
+  request_approval:
+    name: "Approve Deletion"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Approve file deletion?"
+  delete_files:
+    name: "Delete Files"
+    action: file_delete
+    properties:
+      path: "{{delete_path}}"
+      allow_absolute: true
+routings:
+  - from: check_trust
+    to: delete_files
+    condition: route_name
+    name: "proceed"
+  - from: check_trust
+    to: request_approval
+    condition: route_name
+    name: "approve"
+  - from: request_approval
+    to: delete_files
+"""
+
+PROTECTED_PREFIX = "/etc/zebra"
+
+
+def _path_judging_provider():
+    """Mock LLM provider that classifies deletes under PROTECTED_PREFIX as irreversible."""
+    import json as _json
+    from unittest.mock import AsyncMock, MagicMock
+
+    async def _complete(messages, **kwargs):
+        prompt = messages[1].content
+        irreversible = PROTECTED_PREFIX in prompt
+        return MagicMock(
+            content=_json.dumps(
+                {
+                    "reversible": not irreversible,
+                    "reasoning": "protected path" if irreversible else "temp path",
+                    "confidence": 0.95,
+                    "chain_notes": "none",
+                }
+            )
+        )
+
+    provider = MagicMock()
+    provider.complete = AsyncMock(side_effect=_complete)
+    return provider
+
+
+def _make_assessed_engine() -> WorkflowEngine:
+    from zebra_tasks.filesystem.delete import FileDeleteAction
+
+    registry = ActionRegistry()
+    registry.register_action("trust_gate", TrustGateAction)
+    registry.register_action("file_delete", FileDeleteAction)
+    registry.register_condition("route_name", RouteNameCondition)
+    return WorkflowEngine(
+        InMemoryStore(),
+        registry,
+        extras={"__trust_store__": FakeTrustStore("SEMI_AUTONOMOUS")},
+    )
+
+
+async def test_protected_path_delete_classified_irreversible_forces_gate():
+    """Issue #14: file delete under a protected prefix forces the trust gate."""
+    from unittest.mock import patch
+
+    engine = _make_assessed_engine()
+    definition = load_definition_from_yaml(ASSESSED_WORKFLOW_YAML)
+
+    with patch(
+        "zebra_tasks.agent.reversibility.get_provider",
+        return_value=_path_judging_provider(),
+    ):
+        process = await engine.create_process(
+            definition,
+            properties={"__user_id__": 1, "delete_path": f"{PROTECTED_PREFIX}/prod.conf"},
+        )
+        await engine.start_process(process.id)
+
+    process = await engine.store.load_process(process.id)
+    assert process.state == ProcessState.RUNNING  # paused at approval
+
+    pending = await engine.get_pending_tasks(process.id)
+    assert [t.task_definition_id for t in pending] == ["request_approval"]
+
+    assessment = process.properties["__trust_assessments__"][0]
+    assert assessment["reversible"] is False
+    assert assessment["source"] == "llm"
+    decision = process.properties[DECISIONS_KEY][0]
+    assert decision["route"] == "approve"
+    assert decision["assessment"] == assessment
+
+
+async def test_temp_path_delete_classified_reversible_proceeds(tmp_path):
+    """Reversible temp-path delete proceeds without approval and actually deletes."""
+    from unittest.mock import patch
+
+    victim = tmp_path / "scratch.txt"
+    victim.write_text("temp data")
+
+    engine = _make_assessed_engine()
+    definition = load_definition_from_yaml(ASSESSED_WORKFLOW_YAML)
+
+    with patch(
+        "zebra_tasks.agent.reversibility.get_provider",
+        return_value=_path_judging_provider(),
+    ):
+        process = await engine.create_process(
+            definition, properties={"__user_id__": 1, "delete_path": str(victim)}
+        )
+        await engine.start_process(process.id)
+
+    process = await engine.store.load_process(process.id)
+    assert process.state == ProcessState.COMPLETE
+    assert not victim.exists()
+
+    pending = await engine.get_pending_tasks(process.id)
+    assert pending == []
+    assert process.properties["__trust_assessments__"][0]["reversible"] is True

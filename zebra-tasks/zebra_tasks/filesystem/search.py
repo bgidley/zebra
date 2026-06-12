@@ -56,6 +56,7 @@ class FileSearchAction(TaskAction):
     """
 
     description = "Search for files matching glob patterns with optional content filtering."
+    reversibility_hint = "always_reversible"
 
     inputs = [
         ParameterDef(

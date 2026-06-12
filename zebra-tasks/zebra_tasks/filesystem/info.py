@@ -49,6 +49,7 @@ class FileExistsAction(TaskAction):
     """
 
     description = "Check if a file or directory exists."
+    reversibility_hint = "always_reversible"
 
     inputs = [
         ParameterDef(

@@ -70,6 +70,22 @@ class ActionRegistry:
             raise ActionNotFoundError(f"No task action registered with name '{name}'")
         return self._actions[name]()
 
+    def get_action_class(self, name: str) -> type[TaskAction]:
+        """Get a registered task action class without instantiating it.
+
+        Args:
+            name: The registered name of the action
+
+        Returns:
+            The registered TaskAction subclass
+
+        Raises:
+            ActionNotFoundError: If no action is registered with that name
+        """
+        if name not in self._actions:
+            raise ActionNotFoundError(f"No task action registered with name '{name}'")
+        return self._actions[name]
+
     def has_action(self, name: str) -> bool:
         """Check if a task action is registered."""
         return name in self._actions
@@ -77,6 +93,14 @@ class ActionRegistry:
     def list_actions(self) -> list[str]:
         """List all registered task action names."""
         return list(self._actions.keys())
+
+    def list_reversibility_hints(self) -> dict[str, str]:
+        """Map every registered action name to its reversibility hint.
+
+        Supports the REQ-TRUST-002 acceptance criterion that a registry query
+        can list all actions and their ``reversibility_hint`` values.
+        """
+        return {name: cls.reversibility_hint for name, cls in self._actions.items()}
 
     # =========================================================================
     # Condition Registration
