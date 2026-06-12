@@ -1,10 +1,21 @@
 """Tests for TrustGateAction - per-domain trust level enforcement (F13 / REQ-TRUST-003)."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from zebra_tasks.agent.trust_gate import DECISIONS_KEY, TrustGateAction
+from zebra_tasks.agent.reversibility import ReversibilityAssessment
+from zebra_tasks.agent.trust_gate import ASSESSMENTS_KEY, DECISIONS_KEY, TrustGateAction
+
+
+def _assessment(reversible: bool) -> ReversibilityAssessment:
+    return ReversibilityAssessment(
+        reversible=reversible,
+        reasoning="judged",
+        confidence=0.9,
+        chain_notes="none",
+        source="llm",
+    )
 
 
 @pytest.fixture
@@ -56,29 +67,86 @@ class TestRouting:
         assert result.next_route == "proceed"
         assert result.output["level"] == "AUTONOMOUS"
 
-    async def test_semi_autonomous_reversible_proceeds(self, mock_task, mock_context):
+    async def test_semi_autonomous_reversible_assessment_proceeds(self, mock_task, mock_context):
         mock_context.extras["__trust_store__"] = _store_with_level("SEMI_AUTONOMOUS")
-        mock_task.properties["reversibility"] = "reversible"
+        mock_task.properties["action_description"] = "draft a reply"
 
-        result = await TrustGateAction().run(mock_task, mock_context)
+        with patch(
+            "zebra_tasks.agent.trust_gate.assess_reversibility",
+            new=AsyncMock(return_value=_assessment(True)),
+        ):
+            result = await TrustGateAction().run(mock_task, mock_context)
 
         assert result.next_route == "proceed"
+        assert "assessed reversible" in result.output["reason"]
 
-    async def test_semi_autonomous_irreversible_requires_approval(self, mock_task, mock_context):
+    async def test_semi_autonomous_irreversible_assessment_requires_approval(
+        self, mock_task, mock_context
+    ):
         mock_context.extras["__trust_store__"] = _store_with_level("SEMI_AUTONOMOUS")
-        mock_task.properties["reversibility"] = "irreversible"
+        mock_task.properties["action_description"] = "delete prod config"
 
-        result = await TrustGateAction().run(mock_task, mock_context)
+        with patch(
+            "zebra_tasks.agent.trust_gate.assess_reversibility",
+            new=AsyncMock(return_value=_assessment(False)),
+        ):
+            result = await TrustGateAction().run(mock_task, mock_context)
 
         assert result.next_route == "approve"
+        assert "assessed irreversible" in result.output["reason"]
 
-    async def test_semi_autonomous_undeclared_requires_approval(self, mock_task, mock_context):
+    async def test_semi_autonomous_declaration_does_not_bypass_assessment(
+        self, mock_task, mock_context
+    ):
+        """A static reversibility declaration is context only — assessment wins."""
         mock_context.extras["__trust_store__"] = _store_with_level("SEMI_AUTONOMOUS")
+        mock_task.properties["reversibility"] = "reversible"
+        mock_task.properties["action_description"] = "delete prod config"
 
-        result = await TrustGateAction().run(mock_task, mock_context)
+        with patch(
+            "zebra_tasks.agent.trust_gate.assess_reversibility",
+            new=AsyncMock(return_value=_assessment(False)),
+        ) as assess:
+            result = await TrustGateAction().run(mock_task, mock_context)
 
         assert result.next_route == "approve"
-        assert "not declared reversible" in result.output["reason"]
+        assert assess.call_args.kwargs["declared"] == "reversible"
+
+    async def test_semi_autonomous_nothing_to_assess_fails_closed(self, mock_task, mock_context):
+        """No target_task_id and no action_description -> approve without LLM."""
+        mock_context.extras["__trust_store__"] = _store_with_level("SEMI_AUTONOMOUS")
+
+        with patch("zebra_tasks.agent.reversibility.get_provider") as get_provider:
+            result = await TrustGateAction().run(mock_task, mock_context)
+
+        get_provider.assert_not_called()
+        assert result.next_route == "approve"
+        assert result.output["assessment"]["source"] == "fail_closed"
+
+    async def test_supervised_and_autonomous_never_assess(self, mock_task, mock_context):
+        mock_task.properties["action_description"] = "anything"
+        with patch("zebra_tasks.agent.trust_gate.assess_reversibility", new=AsyncMock()) as assess:
+            mock_context.extras["__trust_store__"] = _store_with_level("SUPERVISED")
+            await TrustGateAction().run(mock_task, mock_context)
+            mock_context.extras["__trust_store__"] = _store_with_level("AUTONOMOUS")
+            await TrustGateAction().run(mock_task, mock_context)
+
+        assess.assert_not_awaited()
+
+    async def test_assessment_recorded_in_audit_trail(self, mock_task, mock_context):
+        mock_context.extras["__trust_store__"] = _store_with_level("SEMI_AUTONOMOUS")
+        mock_task.properties["action_description"] = "draft a reply"
+
+        with patch(
+            "zebra_tasks.agent.trust_gate.assess_reversibility",
+            new=AsyncMock(return_value=_assessment(True)),
+        ):
+            result = await TrustGateAction().run(mock_task, mock_context)
+
+        assessments = mock_context.process.properties[ASSESSMENTS_KEY]
+        assert len(assessments) == 1
+        assert assessments[0]["reversible"] is True
+        assert result.output["assessment"] == assessments[0]
 
     async def test_store_queried_with_resolved_user_and_domain(self, mock_task, mock_context):
         store = _store_with_level("AUTONOMOUS")

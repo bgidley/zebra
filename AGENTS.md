@@ -543,7 +543,7 @@ When adding a new task action, follow this end-to-end checklist:
 
 1. Create the action class in `zebra-tasks/zebra_tasks/` (appropriate subdirectory), inheriting from `TaskAction`
 2. Implement `async def run(self, task, context) -> TaskResult`
-3. Add a `description` class attribute and define `inputs`/`outputs` using `ParameterDef` from `zebra.tasks.base`
+3. Add a `description` class attribute and define `inputs`/`outputs` using `ParameterDef` from `zebra.tasks.base`; set `reversibility_hint` (`always_reversible` / `always_irreversible`) when the action's reversibility is unconditional — the default `context_dependent` means trust gates assess it at runtime (REQ-TRUST-002)
 4. **Register as entry point** in `zebra-tasks/pyproject.toml`:
    ```toml
    [project.entry-points."zebra.tasks"]

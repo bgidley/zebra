@@ -49,6 +49,7 @@ class FileReadAction(TaskAction):
     """
 
     description = "Read file contents and store in process properties."
+    reversibility_hint = "always_reversible"
 
     inputs = [
         ParameterDef(

@@ -63,6 +63,7 @@ class LLMCallAction(TaskAction):
     """
 
     description = "Call an LLM provider to generate text or structured responses."
+    reversibility_hint = "always_reversible"
 
     inputs = [
         ParameterDef(

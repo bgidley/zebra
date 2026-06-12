@@ -519,3 +519,30 @@ class TestMetadataSerialization:
         json_str = meta.model_dump_json()
         assert "Process input data" in json_str
         assert '"name":"data"' in json_str.replace(" ", "")
+
+
+class TestReversibilityHint:
+    """Tests for the reversibility_hint metadata (F14 / REQ-TRUST-002)."""
+
+    def test_default_hint_is_context_dependent(self):
+        """Actions that don't set a hint default to context_dependent."""
+
+        class Undeclared(TaskAction):
+            async def run(self, task, context):
+                return TaskResult.ok()
+
+        assert Undeclared.reversibility_hint == "context_dependent"
+        assert Undeclared.get_metadata().reversibility_hint == "context_dependent"
+
+    def test_declared_hint_surfaces_in_metadata(self):
+        """A declared hint is reported through ActionMetadata."""
+
+        class ReadOnly(TaskAction):
+            reversibility_hint = "always_reversible"
+
+            async def run(self, task, context):
+                return TaskResult.ok()
+
+        meta = ReadOnly.get_metadata()
+        assert meta.reversibility_hint == "always_reversible"
+        assert meta.model_dump()["reversibility_hint"] == "always_reversible"

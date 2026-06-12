@@ -38,7 +38,8 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
-| `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13) |
+| `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13/F14) |
+| `zebra_tasks/agent/reversibility.py` | `assess_reversibility()` - contextual reversibility assessment (F14) |
 | `zebra_tasks/agent/load_values_profile.py` | LoadValuesProfileAction - load current values-profile version |
 | `zebra_tasks/agent/save_values_profile.py` | SaveValuesProfileAction - persist a values-profile version |
 | `zebra_tasks/agent/extract_values_tags.py` | ExtractValuesTagsAction - LLM tag extraction for profile wizard |
@@ -402,14 +403,18 @@ Enforce the per-domain trust level (F12/F13) at a workflow gate point. Routes `p
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `domain` | string | - | Trust domain to check (e.g. `code`, `finance`); template-resolvable |
+| `target_task_id` | string | null | Task definition id of the gated action — gives the assessment its action class hint and concrete (template-resolved) parameters |
 | `action_description` | string | `""` | Human-readable description of the gated action |
 | `user_id` | number | null | User id; falls back to `__user_id__` process property |
-| `reversibility` | string | null | `"reversible"` / `"irreversible"` declaration (contextual assessment arrives with F14) |
+| `reversibility` | string | null | Workflow-declared reversibility — untrusted context for the assessment; never grants proceed by itself |
+| `model` | string | null | LLM model for the reversibility assessment (default `haiku`) |
 | `output_key` | string | `"trust_gate_decision"` | Process property key for the decision record |
 
-**Output:** the decision record (`domain`, `user_id`, `level`, `reversibility`, `route`, `reason`, `decided_at`). Also appended to `__trust_gate_decisions__` in process properties for audit.
+**Output:** the decision record (`domain`, `user_id`, `level`, `reversibility`, `assessment`, `route`, `reason`, `decided_at`). Also appended to `__trust_gate_decisions__`; assessments additionally to `__trust_assessments__`.
 
-**Routes:** `"proceed"` (SUPERVISED never; SEMI_AUTONOMOUS only when `reversibility: reversible`; AUTONOMOUS always) or `"approve"` (everything else).
+**Routes:** `"proceed"` (SUPERVISED never; SEMI_AUTONOMOUS when the contextual reversibility assessment returns reversible; AUTONOMOUS always) or `"approve"` (everything else). No assessment runs at SUPERVISED or AUTONOMOUS.
+
+**Reversibility assessment (F14 / REQ-TRUST-002):** `assess_reversibility()` in `zebra_tasks/agent/reversibility.py`. Action-class `reversibility_hint` values `always_reversible` / `always_irreversible` short-circuit without an LLM call; `context_dependent` (the default) triggers an LLM judgment (haiku) over the gated action's concrete parameters, framed on the chain of consequences, the Asimov dropped-weight test, and anti-gaming. The assessor fails closed to irreversible on provider errors or unparseable responses.
 
 **Fail-closed:** missing `__trust_store__`, unresolvable user id, store errors, or unrecognised levels are treated as SUPERVISED — the gate routes to `approve` and logs a warning. It never fails open.
 
