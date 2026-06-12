@@ -57,6 +57,6 @@
 ## 8. Feedback, commit, CI
 
 - [x] 8.1 `bash scripts/zebra-feedback.sh 15 "Human-only trust promotion/demotion" "<changes>"`
-- [ ] 8.2 Commit `Closes #15`, push, pipeline green
+- [x] 8.2 Commit `Closes #15`, push, pipeline green (pipeline #2598155479)
 - [ ] 8.3 Archive change (sync spec), GitHub PR, merge, verify deploy + smoke, issue
       #15 closed
