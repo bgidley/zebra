@@ -37,7 +37,7 @@
 ## 5. Feedback, commit, CI
 
 - [x] 5.1 Run Zebra feedback: `bash scripts/zebra-feedback.sh 13 "trust_gate task action" "<changes>"`
-- [ ] 5.2 Commit (`feat: add trust_gate task action` … `Closes #13`), push
-      `f13/trust-gate`, verify GitLab pipeline green
+- [x] 5.2 Commit (`feat: add trust_gate task action` … `Closes #13`), push
+      `f13/trust-gate`, verify GitLab pipeline green (pipeline #159)
 - [ ] 5.3 Archive the change (sync spec), open GitHub PR, merge to master per CLAUDE.md
       workflow, verify deploy + smoke pass, confirm issue #13 closed
