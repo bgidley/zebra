@@ -40,6 +40,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
 | `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13/F14) |
 | `zebra_tasks/agent/reversibility.py` | `assess_reversibility()` - contextual reversibility assessment (F14) |
+| `zebra_tasks/agent/propose_trust_promotion.py` | ProposeTrustPromotionAction - queue a trust promotion suggestion (F15) |
 | `zebra_tasks/agent/load_values_profile.py` | LoadValuesProfileAction - load current values-profile version |
 | `zebra_tasks/agent/save_values_profile.py` | SaveValuesProfileAction - persist a values-profile version |
 | `zebra_tasks/agent/extract_values_tags.py` | ExtractValuesTagsAction - LLM tag extraction for profile wizard |
@@ -419,6 +420,14 @@ Enforce the per-domain trust level (F12/F13) at a workflow gate point. Routes `p
 **Fail-closed:** missing `__trust_store__`, unresolvable user id, store errors, or unrecognised levels are treated as SUPERVISED — the gate routes to `approve` and logs a warning. It never fails open.
 
 **Store Access:** Reads `context.extras["__trust_store__"]` (injected by the web app since F12; tests can inject `InMemoryTrustStore`). No `zebra-agent` import — trust levels are compared as strings.
+
+### ProposeTrustPromotionAction
+
+Queue a trust promotion suggestion for human review (F15 / REQ-TRUST-004). This is the agent's **only** trust write path — it calls `TrustStore.add_suggestion` (suggestion created `pending`) and has no code path to `set_trust_level`; promotion happens only when the human approves via the web/API.
+
+**Properties:** `domain` (required), `to_level` (required, `SEMI_AUTONOMOUS`/`AUTONOMOUS`), `evidence` (required, template-resolvable), `user_id` (falls back to `__user_id__`), `output_key` (default `trust_promotion_proposal`).
+
+**Output:** `{submitted, suggestion_id, domain, to_level, status}`; `submitted: False` with a warning when `__trust_store__` is absent.
 
 ## Testing Task Actions
 

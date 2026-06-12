@@ -577,6 +577,14 @@ POST /api/tasks/<task_id>/complete/
 | `/api/runs/<id>/diagram/` | `run_diagram` | Get workflow diagram SVG (API) |
 | `/api/tasks/<id>/complete/` | `task_complete` | Complete a human/manual task (API) |
 | `/api/budget/` | `budget_status` | Get budget status JSON (API) |
+| `/trust/` | `trust_page` | Trust management page (levels, suggestions, history) |
+| `/trust/<domain>/set/` | `trust_set_level_form` | Set domain trust level (POST, human-only) |
+| `/trust/suggestions/<id>/resolve/` | `trust_suggestion_resolve_form` | Approve/reject suggestion (POST) |
+| `/api/trust/` | `trust_levels` | Trust levels per domain (API) |
+| `/api/trust/<domain>/` | `trust_set_level` | Set domain trust level (API, POST) |
+| `/api/trust/changes/` | `trust_changes` | Trust change history (API) |
+| `/api/trust/suggestions/` | `trust_suggestions` | List trust suggestions (API) |
+| `/api/trust/suggestions/<id>/resolve/` | `trust_suggestion_resolve` | Approve/reject suggestion (API, POST) |
 
 ### WebSocket Routes
 

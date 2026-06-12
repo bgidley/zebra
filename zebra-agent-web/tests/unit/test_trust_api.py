@@ -1,0 +1,124 @@
+"""Tests for the trust management API endpoints (F15 / REQ-TRUST-004)."""
+
+from __future__ import annotations
+
+import pytest
+from zebra_agent.storage.trust import TrustLevel, reset_domain_registry
+from zebra_agent_web.api import agent_engine
+from zebra_agent_web.trust_store import DjangoTrustStore
+
+
+@pytest.fixture(autouse=True)
+def _clean_registry():
+    reset_domain_registry()
+    yield
+    reset_domain_registry()
+
+
+@pytest.fixture
+def trust_store():
+    return DjangoTrustStore()
+
+
+@pytest.fixture(autouse=True)
+def stub_agent_engine(monkeypatch, trust_store):
+    """Route the views' trust store lookup straight to a Django store."""
+
+    async def _noop():
+        return None
+
+    monkeypatch.setattr(agent_engine, "ensure_initialized", _noop)
+    monkeypatch.setattr(agent_engine, "get_trust", lambda: trust_store)
+    return trust_store
+
+
+@pytest.mark.django_db(transaction=True)
+def test_endpoints_require_auth(client):
+    assert client.get("/api/trust/").status_code in (302, 401, 403)
+    assert client.post("/api/trust/code/", {}, content_type="application/json").status_code in (
+        302,
+        401,
+        403,
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_get_trust_levels(authenticated_client):
+    response = authenticated_client.get("/api/trust/")
+
+    assert response.status_code == 200
+    levels = response.json()["levels"]
+    assert levels["code"] == "SUPERVISED"
+    assert len(levels) == 8
+
+
+@pytest.mark.django_db(transaction=True)
+def test_set_level_writes_audit_with_changed_by(authenticated_client, test_user, trust_store):
+    response = authenticated_client.post(
+        "/api/trust/code/",
+        {"level": "SEMI_AUTONOMOUS", "reason": "20 clean runs"},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["new_level"] == "SEMI_AUTONOMOUS"
+    assert body["changed_by"] == test_user.username
+
+    changes = authenticated_client.get("/api/trust/changes/?domain=code").json()["changes"]
+    assert len(changes) == 1
+    assert changes[0]["changed_by"] == test_user.username
+    assert changes[0]["reason"] == "20 clean runs"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_set_invalid_level_returns_400(authenticated_client):
+    response = authenticated_client.post(
+        "/api/trust/code/", {"level": "OMNIPOTENT"}, content_type="application/json"
+    )
+    assert response.status_code == 400
+
+    response = authenticated_client.post(
+        "/api/trust/time-travel/", {"level": "AUTONOMOUS"}, content_type="application/json"
+    )
+    assert response.status_code == 400
+
+    assert authenticated_client.get("/api/trust/changes/").json()["changes"] == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_suggestion_list_and_resolve_flow(authenticated_client, test_user, trust_store):
+    import asyncio
+
+    suggestion = asyncio.run(
+        trust_store.add_suggestion(
+            test_user.id, "code", TrustLevel.SEMI_AUTONOMOUS, "20 clean runs"
+        )
+    )
+
+    pending = authenticated_client.get("/api/trust/suggestions/?status=pending").json()
+    assert [s["id"] for s in pending["suggestions"]] == [suggestion.id]
+
+    response = authenticated_client.post(
+        f"/api/trust/suggestions/{suggestion.id}/resolve/",
+        {"approve": True},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "approved"
+    assert body["resolved_by"] == test_user.username
+
+    levels = authenticated_client.get("/api/trust/").json()["levels"]
+    assert levels["code"] == "SEMI_AUTONOMOUS"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_resolve_unknown_suggestion_returns_400(authenticated_client):
+    response = authenticated_client.post(
+        "/api/trust/suggestions/nope/resolve/",
+        {"approve": True},
+        content_type="application/json",
+    )
+    assert response.status_code == 400

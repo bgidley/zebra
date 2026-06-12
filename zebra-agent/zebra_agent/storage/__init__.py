@@ -28,6 +28,7 @@ from zebra_agent.storage.trust import (
     InMemoryTrustStore,
     TrustChangeRecord,
     TrustLevel,
+    TrustSuggestion,
     list_domains,
     register_domain,
 )
@@ -45,6 +46,7 @@ __all__ = [
     "DEFAULT_DOMAINS",
     "TrustChangeRecord",
     "TrustLevel",
+    "TrustSuggestion",
     "list_domains",
     "register_domain",
 ]
