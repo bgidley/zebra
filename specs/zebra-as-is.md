@@ -324,7 +324,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 1. **Cross-package coupling leaks** — `zebra-tasks/agent/*` reaches into `zebra-agent` types. IoC softens but does not eliminate this.
 2. **MCP story is incomplete** — advertised in docs and requirements, but no live server in `zebra-py/zebra/mcp/`.
 3. ~~**No user namespace**~~ — `user_id` columns added to all stores (F6); abstract interfaces not yet updated. Multi-user (REQ-USR-003..005) still requires full namespacing of abstract ABCs.
-4. **Trust model is data-only so far** — the trust level data model (F12 / REQ-TRUST-001) is implemented: `TrustStore` ABC + `InMemoryTrustStore` (`zebra-agent/zebra_agent/storage/trust.py`), `DjangoTrustStore` (`zebra-agent-web/zebra_agent_web/trust_store.py`), per-(user, domain) levels defaulting to SUPERVISED, an eight-domain taxonomy registry, an append-only change audit, engine injection via `extras["__trust_store__"]`, and a read-only dashboard card. Enforcement is still pending: no `trust_gate` action (F13), reversibility assessment (F14), promotion UI (F15), pause-all (F16), or freeing flow (F17). The kill switch (F2 / REQ-TRUST-007) is implemented; ethics gates are values-informed but advisory.
+4. **Trust model is data-only so far** — the trust level data model (F12 / REQ-TRUST-001) is implemented: `TrustStore` ABC + `InMemoryTrustStore` (`zebra-agent/zebra_agent/storage/trust.py`), `DjangoTrustStore` (`zebra-agent-web/zebra_agent_web/trust_store.py`), per-(user, domain) levels defaulting to SUPERVISED, an eight-domain taxonomy registry, an append-only change audit, engine injection via `extras["__trust_store__"]`, and a read-only dashboard card. The `trust_gate` action (F13 / REQ-TRUST-003, `zebra-tasks/zebra_tasks/agent/trust_gate.py`) enforces levels at workflow gate points: SUPERVISED routes to a human approval task (`auto: false` pause), SEMI_AUTONOMOUS proceeds only for actions declared `reversibility: reversible`, AUTONOMOUS proceeds with logging; the gate fails closed and audits every decision to `__trust_gate_decisions__`. Still pending: contextual reversibility assessment (F14), promotion UI (F15), pause-all (F16), freeing flow (F17). The kill switch (F2 / REQ-TRUST-007) is implemented; ethics gates are values-informed but advisory.
 5. ~~**No time scheduler or event bus**~~ — `SchedulerLoop` (F27) adds cron/interval routine scheduling. `GoalScheduler` ranks queued goals. No event-driven trigger bus (REQ-PRIN-009), no webhook intake, no trigger subscriptions.
 6. **CLI surface is thin** — four commands; no way to manage memory, workflows, trust, or budget from the terminal.
 7. **Standalone agent is ephemeral** — no persistent store outside the Django UI; CLI users lose memory on exit.
@@ -390,7 +390,8 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 | MCP server | **Missing (advertised)** | REQ-INT-003 |
 | Full user namespace in abstract store ABCs | **Partial** (Django layer only) | REQ-USR-002 |
 | Trust level data model (F12) | **Implemented** | REQ-TRUST-001 |
-| Trust gates & trust management (F13–F17) | **Missing** | REQ-TRUST-002..006 |
+| trust_gate action (F13) | **Implemented** | REQ-TRUST-003 |
+| Reversibility & trust management (F14–F17) | **Missing** | REQ-TRUST-002, 004..006 |
 | Values profile (data + UI) | **Implemented** | REQ-ETH-002 |
 | Values-informed ethics gate | **Implemented** | REQ-ETH-003 |
 | Personal knowledge store (CRUD, agent loop integration) | **Implemented** (F31) | REQ-MEM-004 |

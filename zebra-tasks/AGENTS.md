@@ -38,6 +38,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
+| `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13) |
 | `zebra_tasks/agent/load_values_profile.py` | LoadValuesProfileAction - load current values-profile version |
 | `zebra_tasks/agent/save_values_profile.py` | SaveValuesProfileAction - persist a values-profile version |
 | `zebra_tasks/agent/extract_values_tags.py` | ExtractValuesTagsAction - LLM tag extraction for profile wizard |
@@ -391,6 +392,28 @@ Evaluate a goal or plan against Kantian ethics, optionally combined with the use
 **Precedence rule:** `approved = kantian_approved AND (values_approved if profile_loaded else True)`. Kantian rejection always wins; values can only restrict, never permit what Kantian forbids.
 
 **Store Access:** When `user_id` is present, reads `context.extras["__profile_store__"]`. Gracefully falls back to Kantian-only if the store is absent or no profile exists for the user.
+
+### TrustGateAction
+
+Enforce the per-domain trust level (F12/F13) at a workflow gate point. Routes `proceed` or `approve`; the workflow's `approve` route should lead to an `auto: false` human approval task, which pauses the workflow until completed.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `domain` | string | - | Trust domain to check (e.g. `code`, `finance`); template-resolvable |
+| `action_description` | string | `""` | Human-readable description of the gated action |
+| `user_id` | number | null | User id; falls back to `__user_id__` process property |
+| `reversibility` | string | null | `"reversible"` / `"irreversible"` declaration (contextual assessment arrives with F14) |
+| `output_key` | string | `"trust_gate_decision"` | Process property key for the decision record |
+
+**Output:** the decision record (`domain`, `user_id`, `level`, `reversibility`, `route`, `reason`, `decided_at`). Also appended to `__trust_gate_decisions__` in process properties for audit.
+
+**Routes:** `"proceed"` (SUPERVISED never; SEMI_AUTONOMOUS only when `reversibility: reversible`; AUTONOMOUS always) or `"approve"` (everything else).
+
+**Fail-closed:** missing `__trust_store__`, unresolvable user id, store errors, or unrecognised levels are treated as SUPERVISED — the gate routes to `approve` and logs a warning. It never fails open.
+
+**Store Access:** Reads `context.extras["__trust_store__"]` (injected by the web app since F12; tests can inject `InMemoryTrustStore`). No `zebra-agent` import — trust levels are compared as strings.
 
 ## Testing Task Actions
 
