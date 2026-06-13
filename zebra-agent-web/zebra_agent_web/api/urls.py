@@ -31,6 +31,7 @@ urlpatterns = [
     # Budget
     path("budget/", views.budget_status, name="api_budget_status"),
     path("trust/", views.trust_levels, name="api_trust_levels"),
+    path("trust/pause-all/", views.trust_pause_all, name="api_trust_pause_all"),
     path("trust/changes/", views.trust_changes, name="api_trust_changes"),
     path("trust/suggestions/", views.trust_suggestions, name="api_trust_suggestions"),
     path(

@@ -2163,6 +2163,23 @@ async def trust_set_level_form(request, domain):
 
 
 @require_POST
+async def trust_pause_all_form(request):
+    """Emergency override from the trust page: revert all domains to SUPERVISED."""
+    from urllib.parse import urlencode
+
+    await agent_engine.ensure_initialized()
+    trust = agent_engine.get_trust()
+
+    reason = request.POST.get("reason", "").strip() or "Triggered from trust page"
+    reverted = await trust.pause_all(request.user.id, reason, request.user.username)
+    if reverted:
+        msg = f"Emergency override: reverted {', '.join(reverted)} to SUPERVISED"
+    else:
+        msg = "Emergency override: all domains were already SUPERVISED"
+    return redirect(f"/trust/?{urlencode({'message': msg})}")
+
+
+@require_POST
 async def trust_suggestion_resolve_form(request, suggestion_id):
     """Approve or reject a pending suggestion from the trust page (human-only path)."""
     from urllib.parse import urlencode

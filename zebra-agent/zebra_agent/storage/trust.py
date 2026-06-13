@@ -113,6 +113,13 @@ def approval_reason(evidence: str) -> str:
     return f"Approved agent suggestion: {evidence[:_EVIDENCE_REASON_LEN]}"
 
 
+def override_reason(reason: str) -> str:
+    """Audit reason used when the emergency override reverts a domain (REQ-TRUST-005)."""
+    return (
+        f"Emergency override: {reason[:_EVIDENCE_REASON_LEN]}" if reason else "Emergency override"
+    )
+
+
 class InMemoryTrustStore(TrustStore):
     """In-memory implementation of the trust store.
 
@@ -181,6 +188,21 @@ class InMemoryTrustStore(TrustStore):
             if r.user_id == user_id and (domain is None or r.domain == domain)
         ]
         return list(reversed(records))
+
+    async def pause_all(self, user_id: int, reason: str, changed_by: str) -> list[str]:
+        reverted: list[str] = []
+        for domain in list_domains():
+            if self._levels.get((user_id, domain), TrustLevel.SUPERVISED) != TrustLevel.SUPERVISED:
+                await self.set_trust_level(
+                    user_id,
+                    domain,
+                    TrustLevel.SUPERVISED,
+                    reason=override_reason(reason),
+                    changed_by=changed_by,
+                )
+                reverted.append(domain)
+        logger.info("Emergency override for user %s reverted %s", user_id, reverted)
+        return reverted
 
     async def add_suggestion(
         self, user_id: int, domain: str, to_level: TrustLevel, evidence: str

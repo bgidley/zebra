@@ -581,6 +581,8 @@ POST /api/tasks/<task_id>/complete/
 | `/trust/<domain>/set/` | `trust_set_level_form` | Set domain trust level (POST, human-only) |
 | `/trust/suggestions/<id>/resolve/` | `trust_suggestion_resolve_form` | Approve/reject suggestion (POST) |
 | `/api/trust/` | `trust_levels` | Trust levels per domain (API) |
+| `/trust/pause-all/` | `trust_pause_all_form` | Emergency override: revert all to SUPERVISED (POST) |
+| `/api/trust/pause-all/` | `trust_pause_all` | Emergency override (API, POST) |
 | `/api/trust/<domain>/` | `trust_set_level` | Set domain trust level (API, POST) |
 | `/api/trust/changes/` | `trust_changes` | Trust change history (API) |
 | `/api/trust/suggestions/` | `trust_suggestions` | List trust suggestions (API) |

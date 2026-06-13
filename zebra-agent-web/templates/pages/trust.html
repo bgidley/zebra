@@ -4,9 +4,19 @@
 
 {% block content %}
 <div class="space-y-6">
-    <div>
-        <h1 class="text-2xl font-bold text-white">Trust by Domain</h1>
-        <p class="text-gray-400 mt-1">Only you can change trust levels. The agent may suggest promotions; they take effect only when you approve them.</p>
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Trust by Domain</h1>
+            <p class="text-gray-400 mt-1">Only you can change trust levels. The agent may suggest promotions; they take effect only when you approve them.</p>
+        </div>
+        <form method="post" action="/trust/pause-all/" class="shrink-0"
+              onsubmit="return confirm('Revert ALL domains to SUPERVISED? Running autonomous workflows will require approval at their next step.');">
+            {% csrf_token %}
+            <input type="hidden" name="reason" value="Emergency override from trust page">
+            <button class="px-4 py-2 rounded bg-red-700 hover:bg-red-600 text-white text-sm font-semibold" data-testid="pause-all">
+                Emergency Override — revert all to SUPERVISED
+            </button>
+        </form>
     </div>
 
     {% if message %}

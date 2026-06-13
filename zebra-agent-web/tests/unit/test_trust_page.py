@@ -127,3 +127,16 @@ async def test_e2e_agent_suggestion_approved_by_human(
     changes = await trust_store.list_trust_changes(test_user.id, "code")
     assert changes[0].changed_by == test_user.username
     assert "Completed 20 scheduling tasks" in changes[0].reason
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_pause_all_form_reverts_and_redirects(
+    authenticated_async_client, trust_store, test_user
+):
+    await trust_store.set_trust_level(test_user.id, "code", TrustLevel.AUTONOMOUS, "x", "ben")
+
+    response = await authenticated_async_client.post("/trust/pause-all/", {})
+
+    assert response.status_code == 302
+    assert "/trust/" in response.url
+    assert await trust_store.get_trust_level(test_user.id, "code") == TrustLevel.SUPERVISED
