@@ -122,3 +122,35 @@ def test_resolve_unknown_suggestion_returns_400(authenticated_client):
         content_type="application/json",
     )
     assert response.status_code == 400
+
+
+@pytest.mark.django_db(transaction=True)
+def test_pause_all_requires_auth(client):
+    assert client.post(
+        "/api/trust/pause-all/", {}, content_type="application/json"
+    ).status_code in (
+        302,
+        401,
+        403,
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_pause_all_reverts_and_audits(authenticated_client, test_user, trust_store):
+    import asyncio
+
+    asyncio.run(
+        trust_store.set_trust_level(test_user.id, "code", TrustLevel.AUTONOMOUS, "x", "ben")
+    )
+
+    response = authenticated_client.post(
+        "/api/trust/pause-all/", {"reason": "stop now"}, content_type="application/json"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["reverted"] == ["code"]
+    levels = authenticated_client.get("/api/trust/").json()["levels"]
+    assert levels["code"] == "SUPERVISED"
+    latest = authenticated_client.get("/api/trust/changes/?domain=code").json()["changes"][0]
+    assert latest["changed_by"] == test_user.username
+    assert "Emergency override" in latest["reason"]

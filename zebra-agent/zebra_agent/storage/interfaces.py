@@ -611,6 +611,25 @@ class TrustStore(ABC):
         ...
 
     @abstractmethod
+    async def pause_all(self, user_id: int, reason: str, changed_by: str) -> list[str]:
+        """Emergency override: revert every domain to SUPERVISED (REQ-TRUST-005).
+
+        Each domain not already SUPERVISED is reverted via ``set_trust_level``
+        (so each gets an audit record), reason prefixed "Emergency override:".
+        Running autonomous workflows observe the change at their next trust gate.
+
+        Args:
+            user_id: The user whose domains are being reverted.
+            reason: Human-supplied reason, recorded in the audit trail.
+            changed_by: The user triggering the override.
+
+        Returns:
+            The list of domains that were reverted (already-supervised domains
+            are skipped).
+        """
+        ...
+
+    @abstractmethod
     async def add_suggestion(
         self, user_id: int, domain: str, to_level: TrustLevel, evidence: str
     ) -> TrustSuggestion:

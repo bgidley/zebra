@@ -15,6 +15,7 @@ from zebra_agent.storage.trust import (
     TrustSuggestion,
     approval_reason,
     list_domains,
+    override_reason,
     validate_domain,
 )
 
@@ -163,6 +164,32 @@ class DjangoTrustStore(TrustStore):
             return [_to_record(row) for row in qs]
 
         return await _query()
+
+    async def pause_all(self, user_id: int, reason: str, changed_by: str) -> list[str]:
+        @sync_to_async(thread_sensitive=False)
+        def _pause() -> list[str]:
+            from django.db import transaction
+
+            from zebra_agent_web.api.models import TrustLevelModel
+
+            with transaction.atomic():
+                elevated = list(
+                    TrustLevelModel.objects.filter(user_id=user_id)
+                    .exclude(level=TrustLevel.SUPERVISED.value)
+                    .values_list("domain", flat=True)
+                )
+                for domain in elevated:
+                    _set_level_sync(
+                        user_id,
+                        domain,
+                        TrustLevel.SUPERVISED,
+                        reason=override_reason(reason),
+                        changed_by=changed_by,
+                    )
+            logger.info("Emergency override for user %s reverted %s", user_id, elevated)
+            return elevated
+
+        return await _pause()
 
     async def add_suggestion(
         self, user_id: int, domain: str, to_level: TrustLevel, evidence: str

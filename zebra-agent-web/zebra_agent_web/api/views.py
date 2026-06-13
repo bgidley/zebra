@@ -1445,6 +1445,18 @@ def trust_changes(request):
     )
 
 
+@api_view(["POST"])
+def trust_pause_all(request):
+    """Emergency override: revert all of the user's domains to SUPERVISED (REQ-TRUST-005).
+
+    Body: {"reason": "..."} (optional)
+    """
+    reason = request.data.get("reason", "")
+    trust = _trust_store_sync()
+    reverted = async_to_sync(trust.pause_all)(request.user.id, reason, request.user.username)
+    return Response({"reverted": reverted})
+
+
 def _suggestion_payload(s):
     return {
         "id": s.id,

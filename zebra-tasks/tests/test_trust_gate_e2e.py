@@ -294,3 +294,88 @@ async def test_temp_path_delete_classified_reversible_proceeds(tmp_path):
     pending = await engine.get_pending_tasks(process.id)
     assert pending == []
     assert process.properties["__trust_assessments__"][0]["reversible"] is True
+
+
+# =============================================================================
+# F16: emergency override (issue #16 e2e criterion)
+# =============================================================================
+
+# A workflow that gates the "code" domain twice with a checkpoint pause in
+# between, so the emergency override can fire mid-flight and the second gate
+# observes the demotion (the authentic REQ-TRUST-005 scenario).
+TWO_GATE_WORKFLOW_YAML = """
+id: two_gate
+name: "Two Gate"
+first_task_id: gate_one
+tasks:
+  gate_one:
+    name: "Gate One"
+    action: trust_gate
+    properties:
+      domain: "code"
+      output_key: gate_one_decision
+  checkpoint:
+    name: "Checkpoint"
+    auto: false
+  gate_two:
+    name: "Gate Two"
+    action: trust_gate
+    properties:
+      domain: "code"
+      output_key: gate_two_decision
+  approve_two:
+    name: "Approve Two"
+    auto: false
+  done:
+    name: "Done"
+    action: recording
+routings:
+  - {from: gate_one, to: checkpoint, condition: route_name, name: "proceed"}
+  - {from: gate_one, to: checkpoint, condition: route_name, name: "approve"}
+  - {from: checkpoint, to: gate_two}
+  - {from: gate_two, to: done, condition: route_name, name: "proceed"}
+  - {from: gate_two, to: approve_two, condition: route_name, name: "approve"}
+  - {from: approve_two, to: done}
+"""
+
+
+async def test_emergency_override_forces_approval_on_next_gate():
+    """Issue #16: a mid-flight override makes the next gate of a running workflow
+    require approval, even though the workflow began while the domain was AUTONOMOUS."""
+    from zebra_agent.storage.trust import InMemoryTrustStore, TrustLevel
+
+    trust_store = InMemoryTrustStore()
+    await trust_store.initialize()
+    await trust_store.set_trust_level(1, "code", TrustLevel.AUTONOMOUS, "earned", "ben")
+
+    registry = ActionRegistry()
+    registry.register_action("trust_gate", TrustGateAction)
+    registry.register_action("recording", RecordingAction)
+    registry.register_condition("route_name", RouteNameCondition)
+    engine = WorkflowEngine(InMemoryStore(), registry, extras={"__trust_store__": trust_store})
+    definition = load_definition_from_yaml(TWO_GATE_WORKFLOW_YAML)
+
+    process = await engine.create_process(definition, properties={"__user_id__": 1})
+    await engine.start_process(process.id)
+
+    # Gate one ran while code was AUTONOMOUS and proceeded; the workflow is now
+    # paused at the checkpoint human task.
+    process = await engine.store.load_process(process.id)
+    assert process.properties["gate_one_decision"]["route"] == "proceed"
+    pending = await engine.get_pending_tasks(process.id)
+    assert [t.task_definition_id for t in pending] == ["checkpoint"]
+
+    # The human triggers the emergency override while the workflow is paused.
+    reverted = await trust_store.pause_all(1, "stop everything", "ben")
+    assert reverted == ["code"]
+
+    # Resuming the workflow: the second gate observes SUPERVISED and now requires
+    # approval — the previously-autonomous run is stopped at its next step.
+    await engine.complete_task(pending[0].id, TaskResult.ok(output={}))
+
+    process = await engine.store.load_process(process.id)
+    assert process.properties["gate_two_decision"]["level"] == "SUPERVISED"
+    assert process.properties["gate_two_decision"]["route"] == "approve"
+    assert process.state == ProcessState.RUNNING
+    pending = await engine.get_pending_tasks(process.id)
+    assert [t.task_definition_id for t in pending] == ["approve_two"]

@@ -181,3 +181,38 @@ class TestSuggestions:
     async def test_unknown_suggestion_rejected(self, store):
         with pytest.raises(ValueError, match="Unknown"):
             await store.resolve_suggestion("nope", approve=True, resolved_by="ben")
+
+
+class TestPauseAll:
+    """Emergency override — revert all domains to SUPERVISED (F16 / REQ-TRUST-005)."""
+
+    async def test_reverts_elevated_domains_and_audits(self, store):
+        await store.set_trust_level(1, "code", TrustLevel.AUTONOMOUS, "earned", "ben")
+        await store.set_trust_level(1, "scheduling", TrustLevel.SEMI_AUTONOMOUS, "ok", "ben")
+
+        reverted = await store.pause_all(1, "stop everything", "ben")
+
+        assert set(reverted) == {"code", "scheduling"}
+        assert await store.get_trust_level(1, "code") == TrustLevel.SUPERVISED
+        assert await store.get_trust_level(1, "scheduling") == TrustLevel.SUPERVISED
+        for domain in ("code", "scheduling"):
+            latest = (await store.list_trust_changes(1, domain))[0]
+            assert latest.new_level == TrustLevel.SUPERVISED
+            assert latest.changed_by == "ben"
+            assert "Emergency override" in latest.reason
+            assert "stop everything" in latest.reason
+
+    async def test_idempotent_on_all_supervised(self, store):
+        reverted = await store.pause_all(1, "nothing to do", "ben")
+
+        assert reverted == []
+        assert await store.list_trust_changes(1) == []
+
+    async def test_scoped_to_user(self, store):
+        await store.set_trust_level(1, "code", TrustLevel.AUTONOMOUS, "earned", "ben")
+        await store.set_trust_level(2, "code", TrustLevel.AUTONOMOUS, "earned", "alice")
+
+        await store.pause_all(1, "stop", "ben")
+
+        assert await store.get_trust_level(1, "code") == TrustLevel.SUPERVISED
+        assert await store.get_trust_level(2, "code") == TrustLevel.AUTONOMOUS

@@ -206,3 +206,38 @@ async def test_double_resolution_rejected(store: DjangoTrustStore) -> None:
 async def test_unknown_suggestion_rejected(store: DjangoTrustStore) -> None:
     with pytest.raises(ValueError, match="Unknown"):
         await store.resolve_suggestion("nope", approve=True, resolved_by="ben")
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_pause_all_reverts_elevated_and_audits(store: DjangoTrustStore) -> None:
+    await store.set_trust_level(1, "code", TrustLevel.AUTONOMOUS, "earned", "ben")
+    await store.set_trust_level(1, "scheduling", TrustLevel.SEMI_AUTONOMOUS, "ok", "ben")
+
+    reverted = await store.pause_all(1, "stop everything", "ben")
+
+    assert set(reverted) == {"code", "scheduling"}
+    assert await store.get_trust_level(1, "code") == TrustLevel.SUPERVISED
+    assert await store.get_trust_level(1, "scheduling") == TrustLevel.SUPERVISED
+    latest = (await store.list_trust_changes(1, "code"))[0]
+    assert latest.new_level == TrustLevel.SUPERVISED
+    assert latest.changed_by == "ben"
+    assert "Emergency override" in latest.reason
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_pause_all_idempotent_on_supervised(store: DjangoTrustStore) -> None:
+    reverted = await store.pause_all(1, "nothing", "ben")
+
+    assert reverted == []
+    assert await store.list_trust_changes(1) == []
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_pause_all_scoped_to_user(store: DjangoTrustStore) -> None:
+    await store.set_trust_level(1, "code", TrustLevel.AUTONOMOUS, "earned", "ben")
+    await store.set_trust_level(2, "code", TrustLevel.AUTONOMOUS, "earned", "alice")
+
+    await store.pause_all(1, "stop", "ben")
+
+    assert await store.get_trust_level(1, "code") == TrustLevel.SUPERVISED
+    assert await store.get_trust_level(2, "code") == TrustLevel.AUTONOMOUS
