@@ -45,5 +45,5 @@
 ## 6. Feedback, commit, CI
 
 - [x] 6.1 `bash scripts/zebra-feedback.sh 17 "Freeing Zebra — full autonomous promotion" "<changes>"`
-- [ ] 6.2 Commit `Closes #17`, push, pipeline green
+- [x] 6.2 Commit `Closes #17`, push, pipeline green (pipeline #2599329847)
 - [ ] 6.3 Archive change (sync spec), GitHub PR, merge, verify deploy + smoke, issue #17 closed
