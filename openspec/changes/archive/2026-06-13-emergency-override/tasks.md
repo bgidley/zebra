@@ -35,5 +35,5 @@
 ## 6. Feedback, commit, CI
 
 - [x] 6.1 `bash scripts/zebra-feedback.sh 16 "Emergency override — revert all to SUPERVISED" "<changes>"`
-- [ ] 6.2 Commit `Closes #16`, push, pipeline green
+- [x] 6.2 Commit `Closes #16`, push, pipeline green (pipeline #2598835724)
 - [ ] 6.3 Archive change (sync spec), GitHub PR, merge, verify deploy + smoke, issue #16 closed
