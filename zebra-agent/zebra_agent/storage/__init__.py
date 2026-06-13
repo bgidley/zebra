@@ -25,6 +25,7 @@ from zebra_agent.storage.memory import InMemoryMemoryStore
 from zebra_agent.storage.metrics import InMemoryMetricsStore
 from zebra_agent.storage.trust import (
     DEFAULT_DOMAINS,
+    FreeingStatus,
     InMemoryTrustStore,
     TrustChangeRecord,
     TrustLevel,
@@ -44,6 +45,7 @@ __all__ = [
     "InMemoryTrustStore",
     # Trust model
     "DEFAULT_DOMAINS",
+    "FreeingStatus",
     "TrustChangeRecord",
     "TrustLevel",
     "TrustSuggestion",

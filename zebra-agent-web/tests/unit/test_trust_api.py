@@ -154,3 +154,75 @@ def test_pause_all_reverts_and_audits(authenticated_client, test_user, trust_sto
     latest = authenticated_client.get("/api/trust/changes/?domain=code").json()["changes"][0]
     assert latest["changed_by"] == test_user.username
     assert "Emergency override" in latest["reason"]
+
+
+async def _free_all(trust_store, user_id):
+    from zebra_agent.storage.trust import list_domains
+
+    for domain in list_domains():
+        await trust_store.set_trust_level(user_id, domain, TrustLevel.AUTONOMOUS, "earned", "ben")
+
+
+@pytest.fixture
+def fast_freeing(monkeypatch):
+    """Use a zero cooling-off DjangoTrustStore so confirm works immediately."""
+    from datetime import timedelta
+
+    from zebra_agent_web.api import agent_engine
+    from zebra_agent_web.trust_store import DjangoTrustStore
+
+    store = DjangoTrustStore(cooling_off=timedelta(0))
+    monkeypatch.setattr(agent_engine, "get_trust", lambda: store)
+    return store
+
+
+@pytest.mark.django_db(transaction=True)
+def test_freeing_endpoints_require_auth(client):
+    assert client.get("/api/trust/freeing/").status_code in (302, 401, 403)
+    assert client.post(
+        "/api/trust/freeing/initiate/", {}, content_type="application/json"
+    ).status_code in (302, 401, 403)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_initiate_blocked_unless_all_autonomous(authenticated_client, fast_freeing):
+    response = authenticated_client.post(
+        "/api/trust/freeing/initiate/", {}, content_type="application/json"
+    )
+    assert response.status_code == 400
+    assert "AUTONOMOUS" in response.json()["error"]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_freeing_flow_initiate_confirm(authenticated_client, fast_freeing, test_user):
+    import asyncio
+
+    asyncio.run(_free_all(fast_freeing, test_user.id))
+
+    initiate = authenticated_client.post(
+        "/api/trust/freeing/initiate/", {}, content_type="application/json"
+    )
+    assert initiate.status_code == 200
+    assert initiate.json()["state"] in ("cooling_off", "freed")
+
+    confirm = authenticated_client.post(
+        "/api/trust/freeing/confirm/", {}, content_type="application/json"
+    )
+    assert confirm.status_code == 200
+    assert confirm.json()["state"] == "freed"
+
+    status_resp = authenticated_client.get("/api/trust/freeing/")
+    assert status_resp.json()["state"] == "freed"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_freeing_disabled_returns_403(authenticated_client, fast_freeing, settings):
+    settings.ZEBRA_DISABLE_FREEING = True
+
+    assert authenticated_client.get("/api/trust/freeing/").status_code == 403
+    assert (
+        authenticated_client.post(
+            "/api/trust/freeing/initiate/", {}, content_type="application/json"
+        ).status_code
+        == 403
+    )

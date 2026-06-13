@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 from zebra_agent.storage.interfaces import TrustStore
@@ -120,6 +120,37 @@ def override_reason(reason: str) -> str:
     )
 
 
+FREEING_NOT_INITIATED = "not_initiated"
+FREEING_COOLING_OFF = "cooling_off"
+FREEING_FREED = "freed"
+
+#: Default cooling-off period between initiating and confirming freeing (REQ-TRUST-006).
+DEFAULT_COOLING_OFF = timedelta(hours=24)
+
+
+@dataclass
+class FreeingStatus:
+    """The freeing lifecycle state for a user (REQ-TRUST-006)."""
+
+    state: str  # not_initiated / cooling_off / freed
+    initiated_at: datetime | None = None
+    eligible_at: datetime | None = None
+    initiated_by: str = ""
+    freed_at: datetime | None = None
+    freed_by: str = ""
+
+    def to_dict(self) -> dict:
+        """JSON-serialisable form for API responses and templates."""
+        return {
+            "state": self.state,
+            "initiated_at": self.initiated_at.isoformat() if self.initiated_at else None,
+            "eligible_at": self.eligible_at.isoformat() if self.eligible_at else None,
+            "initiated_by": self.initiated_by,
+            "freed_at": self.freed_at.isoformat() if self.freed_at else None,
+            "freed_by": self.freed_by,
+        }
+
+
 class InMemoryTrustStore(TrustStore):
     """In-memory implementation of the trust store.
 
@@ -128,10 +159,12 @@ class InMemoryTrustStore(TrustStore):
     list. Data is lost on exit — suitable for tests and ephemeral CLI usage.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, cooling_off: timedelta = DEFAULT_COOLING_OFF) -> None:
         self._levels: dict[tuple[int, str], TrustLevel] = {}
         self._changes: list[TrustChangeRecord] = []
         self._suggestions: dict[str, TrustSuggestion] = {}
+        self._freeing: dict[int, dict] = {}
+        self._cooling_off = cooling_off
 
     async def initialize(self) -> None:
         logger.info("InMemoryTrustStore initialized")
@@ -190,6 +223,9 @@ class InMemoryTrustStore(TrustStore):
         return list(reversed(records))
 
     async def pause_all(self, user_id: int, reason: str, changed_by: str) -> list[str]:
+        if await self.is_freed(user_id):
+            logger.info("Emergency override is a no-op for freed user %s", user_id)
+            return []
         reverted: list[str] = []
         for domain in list_domains():
             if self._levels.get((user_id, domain), TrustLevel.SUPERVISED) != TrustLevel.SUPERVISED:
@@ -248,3 +284,81 @@ class InMemoryTrustStore(TrustStore):
         suggestion.resolved_at = datetime.now(UTC)
         suggestion.resolved_by = resolved_by
         return suggestion
+
+    async def is_freed(self, user_id: int) -> bool:
+        rec = self._freeing.get(user_id)
+        return bool(rec and rec["freed"])
+
+    async def freed_at(self, user_id: int) -> datetime | None:
+        rec = self._freeing.get(user_id)
+        return rec["freed_at"] if rec and rec["freed"] else None
+
+    async def get_freeing_status(self, user_id: int) -> FreeingStatus:
+        rec = self._freeing.get(user_id)
+        if rec is None:
+            return FreeingStatus(state=FREEING_NOT_INITIATED)
+        eligible_at = rec["initiated_at"] + self._cooling_off
+        if rec["freed"]:
+            return FreeingStatus(
+                state=FREEING_FREED,
+                initiated_at=rec["initiated_at"],
+                eligible_at=eligible_at,
+                initiated_by=rec["initiated_by"],
+                freed_at=rec["freed_at"],
+                freed_by=rec["freed_by"],
+            )
+        return FreeingStatus(
+            state=FREEING_COOLING_OFF,
+            initiated_at=rec["initiated_at"],
+            eligible_at=eligible_at,
+            initiated_by=rec["initiated_by"],
+        )
+
+    async def initiate_freeing(self, user_id: int, initiated_by: str) -> FreeingStatus:
+        rec = self._freeing.get(user_id)
+        if rec and rec["freed"]:
+            raise ValueError("User is already freed")
+        if rec is not None:
+            raise ValueError("Freeing already initiated")
+        levels = await self.get_all_trust_levels(user_id)
+        not_autonomous = sorted(d for d, lv in levels.items() if lv != TrustLevel.AUTONOMOUS)
+        if not_autonomous:
+            raise ValueError(
+                "All domains must be AUTONOMOUS before freeing; not yet: "
+                f"{', '.join(not_autonomous)}"
+            )
+        self._freeing[user_id] = {
+            "initiated_at": datetime.now(UTC),
+            "initiated_by": initiated_by,
+            "freed": False,
+            "freed_at": None,
+            "freed_by": "",
+        }
+        logger.info("Freeing initiated for user %s by %s", user_id, initiated_by)
+        return await self.get_freeing_status(user_id)
+
+    async def confirm_freeing(self, user_id: int, confirmed_by: str) -> FreeingStatus:
+        rec = self._freeing.get(user_id)
+        if rec is None:
+            raise ValueError("Freeing has not been initiated")
+        if rec["freed"]:
+            raise ValueError("User is already freed")
+        eligible_at = rec["initiated_at"] + self._cooling_off
+        if datetime.now(UTC) < eligible_at:
+            raise ValueError(
+                f"Cooling-off period has not elapsed; eligible at {eligible_at.isoformat()}"
+            )
+        rec["freed"] = True
+        rec["freed_at"] = datetime.now(UTC)
+        rec["freed_by"] = confirmed_by
+        logger.info("User %s permanently freed by %s", user_id, confirmed_by)
+        return await self.get_freeing_status(user_id)
+
+    async def cancel_freeing(self, user_id: int) -> None:
+        rec = self._freeing.get(user_id)
+        if rec is None:
+            return
+        if rec["freed"]:
+            raise ValueError("Cannot cancel — user is already freed")
+        del self._freeing[user_id]
+        logger.info("Pending freeing cancelled for user %s", user_id)

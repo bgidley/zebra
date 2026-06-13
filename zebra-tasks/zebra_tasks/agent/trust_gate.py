@@ -32,6 +32,8 @@ ASSESSMENTS_KEY = "__trust_assessments__"
 _SUPERVISED = "SUPERVISED"
 _SEMI_AUTONOMOUS = "SEMI_AUTONOMOUS"
 _AUTONOMOUS = "AUTONOMOUS"
+# Synthetic level recorded when a freed user bypasses the gate (REQ-TRUST-006).
+_FREED = "FREED"
 
 ROUTE_PROCEED = "proceed"
 ROUTE_APPROVE = "approve"
@@ -147,10 +149,19 @@ class TrustGateAction(TaskAction):
         reversibility = _resolve(task.properties.get("reversibility"), context)
 
         user_id = self._resolve_user_id(task, context)
-        level, level_reason = await self._read_level(user_id, domain, context)
+
+        # Freed users (REQ-TRUST-006) bypass trust gates entirely — before any
+        # level read or assessment. Ethics gates and the kill switch are
+        # independent and still apply.
+        if user_id is not None and await self._is_freed(user_id, context):
+            level, level_reason = _FREED, None
+        else:
+            level, level_reason = await self._read_level(user_id, domain, context)
 
         assessment = None
-        if level == _AUTONOMOUS:
+        if level == _FREED:
+            route, reason = ROUTE_PROCEED, "user is freed — trust gates bypassed"
+        elif level == _AUTONOMOUS:
             route, reason = ROUTE_PROCEED, "domain is AUTONOMOUS"
         elif level == _SEMI_AUTONOMOUS:
             assessment = await self._assess(task, context, action_description, reversibility)
@@ -194,6 +205,22 @@ class TrustGateAction(TaskAction):
             reason,
         )
         return TaskResult(success=True, output=decision, next_route=route)
+
+    async def _is_freed(self, user_id: int, context: ExecutionContext) -> bool:
+        """Return True if the user is freed; degrade to False on any problem.
+
+        Guarded with getattr so a trust store without freeing support (or no
+        store at all) gates normally rather than crashing.
+        """
+        store = context.extras.get("__trust_store__")
+        is_freed = getattr(store, "is_freed", None)
+        if is_freed is None:
+            return False
+        try:
+            return bool(await is_freed(user_id))
+        except Exception as exc:
+            logger.warning("Trust gate: is_freed check failed (%s) — gating normally", exc)
+            return False
 
     def _resolve_user_id(self, task: TaskInstance, context: ExecutionContext) -> int | None:
         """Resolve the user id from the task property, then __user_id__."""

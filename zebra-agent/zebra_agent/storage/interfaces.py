@@ -18,7 +18,12 @@ if TYPE_CHECKING:
     from zebra_agent.knowledge import KnowledgeEntry
     from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
     from zebra_agent.profile import ValuesProfileVersion
-    from zebra_agent.storage.trust import TrustChangeRecord, TrustLevel, TrustSuggestion
+    from zebra_agent.storage.trust import (
+        FreeingStatus,
+        TrustChangeRecord,
+        TrustLevel,
+        TrustSuggestion,
+    )
 
 
 @dataclass
@@ -617,6 +622,8 @@ class TrustStore(ABC):
         Each domain not already SUPERVISED is reverted via ``set_trust_level``
         (so each gets an audit record), reason prefixed "Emergency override:".
         Running autonomous workflows observe the change at their next trust gate.
+        For a freed user (REQ-TRUST-006) this is a no-op — emergency override no
+        longer applies once freed.
 
         Args:
             user_id: The user whose domains are being reverted.
@@ -624,8 +631,58 @@ class TrustStore(ABC):
             changed_by: The user triggering the override.
 
         Returns:
-            The list of domains that were reverted (already-supervised domains
-            are skipped).
+            The list of domains that were reverted (already-supervised domains,
+            and all domains for a freed user, are skipped).
+        """
+        ...
+
+    @abstractmethod
+    async def is_freed(self, user_id: int) -> bool:
+        """Return True if the user has been permanently freed (REQ-TRUST-006)."""
+        ...
+
+    @abstractmethod
+    async def freed_at(self, user_id: int) -> datetime | None:
+        """Return when the user was freed, or None if not freed."""
+        ...
+
+    @abstractmethod
+    async def get_freeing_status(self, user_id: int) -> FreeingStatus:
+        """Return the user's freeing lifecycle state (not_initiated/cooling_off/freed)."""
+        ...
+
+    @abstractmethod
+    async def initiate_freeing(self, user_id: int, initiated_by: str) -> FreeingStatus:
+        """Begin freeing (confirmation step 1), starting the cooling-off period.
+
+        Permitted only when every registered domain for the user is AUTONOMOUS.
+
+        Raises:
+            ValueError: If not all domains are AUTONOMOUS, freeing is already
+                initiated, or the user is already freed.
+        """
+        ...
+
+    @abstractmethod
+    async def confirm_freeing(self, user_id: int, confirmed_by: str) -> FreeingStatus:
+        """Finalise freeing (confirmation step 2) after the cooling-off elapses.
+
+        Sets the freed state permanently.
+
+        Raises:
+            ValueError: If freeing was not initiated, the cooling-off has not
+                elapsed, or the user is already freed.
+        """
+        ...
+
+    @abstractmethod
+    async def cancel_freeing(self, user_id: int) -> None:
+        """Cancel a pending (not-yet-confirmed) freeing request.
+
+        A no-op if nothing is pending.
+
+        Raises:
+            ValueError: If the user is already freed (freeing is irreversible).
         """
         ...
 
