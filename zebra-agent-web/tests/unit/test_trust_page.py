@@ -140,3 +140,68 @@ async def test_pause_all_form_reverts_and_redirects(
     assert response.status_code == 302
     assert "/trust/" in response.url
     assert await trust_store.get_trust_level(test_user.id, "code") == TrustLevel.SUPERVISED
+
+
+async def _free_all_levels(trust_store, user_id):
+    from zebra_agent.storage.trust import list_domains
+
+    for domain in list_domains():
+        await trust_store.set_trust_level(user_id, domain, TrustLevel.AUTONOMOUS, "earned", "ben")
+
+
+@pytest.fixture
+def fast_freeing_store(monkeypatch):
+    """Swap in a zero cooling-off store so the confirm step works immediately."""
+    from datetime import timedelta
+
+    store = DjangoTrustStore(cooling_off=timedelta(0))
+    monkeypatch.setattr(agent_engine, "get_trust", lambda: store)
+    return store
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_trust_page_shows_freeing_section_when_all_autonomous(
+    authenticated_async_client, fast_freeing_store, test_user
+):
+    await _free_all_levels(fast_freeing_store, test_user.id)
+
+    response = await authenticated_async_client.get("/trust/")
+
+    html = response.content.decode()
+    assert "Freeing Zebra" in html
+    assert "freeing-initiate" in html
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_freeing_section_hidden_when_disabled(
+    authenticated_async_client, fast_freeing_store, test_user, settings
+):
+    settings.ZEBRA_DISABLE_FREEING = True
+    await _free_all_levels(fast_freeing_store, test_user.id)
+
+    response = await authenticated_async_client.get("/trust/")
+
+    assert "Freeing Zebra" not in response.content.decode()
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_e2e_freeing_flow_initiate_confirm_then_cannot_revert(
+    authenticated_async_client, fast_freeing_store, test_user
+):
+    """Issue #17: confirm flow → freed → cannot reverse (via the web forms + API)."""
+    await _free_all_levels(fast_freeing_store, test_user.id)
+
+    # Initiate (confirmation step 1)
+    r1 = await authenticated_async_client.post("/trust/freeing/initiate/")
+    assert r1.status_code == 302
+    assert (await fast_freeing_store.get_freeing_status(test_user.id)).state == "cooling_off"
+
+    # Confirm (confirmation step 2; cooling-off is zero in this store)
+    r2 = await authenticated_async_client.post("/trust/freeing/confirm/")
+    assert r2.status_code == 302
+    assert await fast_freeing_store.is_freed(test_user.id) is True
+
+    # Cannot reverse: cancel after freed fails, state stays freed
+    with pytest.raises(ValueError, match="already freed"):
+        await fast_freeing_store.cancel_freeing(test_user.id)
+    assert await fast_freeing_store.is_freed(test_user.id) is True

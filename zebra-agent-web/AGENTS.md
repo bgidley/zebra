@@ -583,6 +583,11 @@ POST /api/tasks/<task_id>/complete/
 | `/api/trust/` | `trust_levels` | Trust levels per domain (API) |
 | `/trust/pause-all/` | `trust_pause_all_form` | Emergency override: revert all to SUPERVISED (POST) |
 | `/api/trust/pause-all/` | `trust_pause_all` | Emergency override (API, POST) |
+| `/trust/freeing/<action>/` | `trust_freeing_action_form` | Freeing initiate/confirm/cancel (POST) |
+| `/api/trust/freeing/` | `trust_freeing_status` | Freeing lifecycle status (API) |
+| `/api/trust/freeing/initiate/` | `trust_freeing_initiate` | Begin freeing (API, POST) |
+| `/api/trust/freeing/confirm/` | `trust_freeing_confirm` | Finalise freeing (API, POST) |
+| `/api/trust/freeing/cancel/` | `trust_freeing_cancel` | Cancel pending freeing (API, POST) |
 | `/api/trust/<domain>/` | `trust_set_level` | Set domain trust level (API, POST) |
 | `/api/trust/changes/` | `trust_changes` | Trust change history (API) |
 | `/api/trust/suggestions/` | `trust_suggestions` | List trust suggestions (API) |

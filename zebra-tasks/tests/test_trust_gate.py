@@ -43,10 +43,34 @@ def mock_context():
     return context
 
 
-def _store_with_level(level: str) -> MagicMock:
+def _store_with_level(level: str, freed: bool = False) -> MagicMock:
     store = MagicMock()
     store.get_trust_level = AsyncMock(return_value=level)
+    store.is_freed = AsyncMock(return_value=freed)
     return store
+
+
+class TestFreedBypass:
+    async def test_freed_user_proceeds_regardless_of_level(self, mock_task, mock_context):
+        store = _store_with_level("SUPERVISED", freed=True)
+        mock_context.extras["__trust_store__"] = store
+
+        result = await TrustGateAction().run(mock_task, mock_context)
+
+        assert result.next_route == "proceed"
+        assert result.output["level"] == "FREED"
+        assert "freed" in result.output["reason"]
+        store.get_trust_level.assert_not_called()
+
+    async def test_store_without_is_freed_gates_normally(self, mock_task, mock_context):
+        store = MagicMock(spec=["get_trust_level"])
+        store.get_trust_level = AsyncMock(return_value="SUPERVISED")
+        mock_context.extras["__trust_store__"] = store
+
+        result = await TrustGateAction().run(mock_task, mock_context)
+
+        assert result.next_route == "approve"
+        assert result.output["level"] == "SUPERVISED"
 
 
 class TestRouting:

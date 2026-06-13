@@ -206,6 +206,10 @@ WEBAUTHN_RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "Zebra Agent")
 WEBAUTHN_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
 WEBAUTHN_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "http://localhost:8000")
 
+# Freeing Zebra (F17 / REQ-TRUST-006). When set, the freeing API and UI are
+# removed entirely — a deployment can permanently forbid freeing the agent.
+ZEBRA_DISABLE_FREEING = os.environ.get("ZEBRA_DISABLE_FREEING", "0") == "1"
+
 # Zebra Agent settings
 # Storage is handled by Django ORM (see DATABASES config above)
 ZEBRA_AGENT_SETTINGS = {

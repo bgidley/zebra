@@ -216,3 +216,97 @@ class TestPauseAll:
 
         assert await store.get_trust_level(1, "code") == TrustLevel.SUPERVISED
         assert await store.get_trust_level(2, "code") == TrustLevel.AUTONOMOUS
+
+
+class TestFreeing:
+    """Freeing Zebra — permanent full autonomy (F17 / REQ-TRUST-006)."""
+
+    async def _make_all_autonomous(self, store, user_id=1):
+        for domain in list_domains():
+            await store.set_trust_level(user_id, domain, TrustLevel.AUTONOMOUS, "earned", "ben")
+
+    async def test_initiate_blocked_unless_all_autonomous(self, store):
+        await store.set_trust_level(1, "code", TrustLevel.AUTONOMOUS, "earned", "ben")
+
+        with pytest.raises(ValueError, match="AUTONOMOUS"):
+            await store.initiate_freeing(1, "ben")
+        status = await store.get_freeing_status(1)
+        assert status.state == "not_initiated"
+
+    async def test_confirm_blocked_during_cooling_off(self):
+        from datetime import timedelta
+
+        store = InMemoryTrustStore(cooling_off=timedelta(hours=24))
+        await self._make_all_autonomous(store)
+        await store.initiate_freeing(1, "ben")
+
+        status = await store.get_freeing_status(1)
+        assert status.state == "cooling_off"
+        assert status.eligible_at is not None
+        with pytest.raises(ValueError, match="Cooling-off"):
+            await store.confirm_freeing(1, "ben")
+        assert await store.is_freed(1) is False
+
+    async def test_confirm_after_cooling_off_frees_permanently(self):
+        from datetime import timedelta
+
+        store = InMemoryTrustStore(cooling_off=timedelta(0))
+        await self._make_all_autonomous(store)
+        await store.initiate_freeing(1, "ben")
+
+        status = await store.confirm_freeing(1, "ben")
+
+        assert status.state == "freed"
+        assert status.freed_by == "ben"
+        assert await store.is_freed(1) is True
+        assert await store.freed_at(1) is not None
+
+    async def test_pending_request_can_be_cancelled(self):
+        from datetime import timedelta
+
+        store = InMemoryTrustStore(cooling_off=timedelta(0))
+        await self._make_all_autonomous(store)
+        await store.initiate_freeing(1, "ben")
+
+        await store.cancel_freeing(1)
+
+        assert (await store.get_freeing_status(1)).state == "not_initiated"
+        assert await store.is_freed(1) is False
+
+    async def test_cannot_cancel_or_reinitiate_after_freed(self):
+        from datetime import timedelta
+
+        store = InMemoryTrustStore(cooling_off=timedelta(0))
+        await self._make_all_autonomous(store)
+        await store.initiate_freeing(1, "ben")
+        await store.confirm_freeing(1, "ben")
+
+        with pytest.raises(ValueError, match="already freed"):
+            await store.cancel_freeing(1)
+        with pytest.raises(ValueError, match="already freed"):
+            await store.initiate_freeing(1, "ben")
+        assert await store.is_freed(1) is True
+
+    async def test_pause_all_is_noop_when_freed(self):
+        from datetime import timedelta
+
+        store = InMemoryTrustStore(cooling_off=timedelta(0))
+        await self._make_all_autonomous(store)
+        await store.initiate_freeing(1, "ben")
+        await store.confirm_freeing(1, "ben")
+
+        reverted = await store.pause_all(1, "stop", "ben")
+
+        assert reverted == []
+        assert await store.get_trust_level(1, "code") == TrustLevel.AUTONOMOUS
+
+    async def test_freeing_is_user_scoped(self):
+        from datetime import timedelta
+
+        store = InMemoryTrustStore(cooling_off=timedelta(0))
+        await self._make_all_autonomous(store, user_id=1)
+        await store.initiate_freeing(1, "ben")
+        await store.confirm_freeing(1, "ben")
+
+        assert await store.is_freed(1) is True
+        assert await store.is_freed(2) is False

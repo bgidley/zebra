@@ -682,3 +682,27 @@ class TrustSuggestionModel(models.Model):
 
     def __str__(self):
         return f"TrustSuggestion({self.domain}->{self.to_level}, {self.status})"
+
+
+class TrustFreedModel(models.Model):
+    """Freeing lifecycle state per user (F17 / REQ-TRUST-006).
+
+    One row per user once freeing is initiated. ``freed`` becomes True
+    permanently on confirmation; the row is deleted only when a *pending*
+    (not-yet-freed) request is cancelled.
+    """
+
+    user_id = models.IntegerField(primary_key=True)
+    initiated_at = models.DateTimeField()
+    initiated_by = models.CharField(max_length=255)
+    freed = models.BooleanField(default=False)
+    freed_at = models.DateTimeField(null=True, blank=True)
+    freed_by = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        db_table = "zebra_trust_freed"
+        verbose_name = "Trust Freed State"
+        verbose_name_plural = "Trust Freed States"
+
+    def __str__(self):
+        return f"TrustFreed(user={self.user_id}, freed={self.freed})"

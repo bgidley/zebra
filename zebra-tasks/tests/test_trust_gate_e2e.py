@@ -379,3 +379,41 @@ async def test_emergency_override_forces_approval_on_next_gate():
     assert process.state == ProcessState.RUNNING
     pending = await engine.get_pending_tasks(process.id)
     assert [t.task_definition_id for t in pending] == ["approve_two"]
+
+
+# =============================================================================
+# F17: freeing bypasses the gate (REQ-TRUST-006)
+# =============================================================================
+
+
+async def test_freed_user_bypasses_gate_even_when_supervised():
+    """A freed user's workflow proceeds through a gate whose domain is SUPERVISED."""
+    from datetime import timedelta
+
+    from zebra_agent.storage.trust import InMemoryTrustStore, TrustLevel, list_domains
+
+    trust_store = InMemoryTrustStore(cooling_off=timedelta(0))
+    await trust_store.initialize()
+    # All domains AUTONOMOUS, then freed.
+    for domain in list_domains():
+        await trust_store.set_trust_level(1, domain, TrustLevel.AUTONOMOUS, "earned", "ben")
+    await trust_store.initiate_freeing(1, "ben")
+    await trust_store.confirm_freeing(1, "ben")
+    # Demoting after freeing is inert at the gate (and pause_all is a no-op).
+    assert await trust_store.pause_all(1, "try to stop", "ben") == []
+
+    registry = ActionRegistry()
+    registry.register_action("trust_gate", TrustGateAction)
+    registry.register_action("recording", RecordingAction)
+    registry.register_condition("route_name", RouteNameCondition)
+    engine = WorkflowEngine(InMemoryStore(), registry, extras={"__trust_store__": trust_store})
+    definition = load_definition_from_yaml(GATED_WORKFLOW_YAML)
+
+    process = await engine.create_process(definition, properties={"__user_id__": 1})
+    await engine.start_process(process.id)
+
+    process = await engine.store.load_process(process.id)
+    assert process.state == ProcessState.COMPLETE
+    assert RecordingAction.executed == 1
+    assert process.properties[DECISIONS_KEY][0]["level"] == "FREED"
+    assert process.properties[DECISIONS_KEY][0]["route"] == "proceed"

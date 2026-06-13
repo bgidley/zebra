@@ -1457,6 +1457,62 @@ def trust_pause_all(request):
     return Response({"reverted": reverted})
 
 
+def _freeing_disabled() -> bool:
+    from django.conf import settings
+
+    return getattr(settings, "ZEBRA_DISABLE_FREEING", False)
+
+
+@api_view(["GET"])
+def trust_freeing_status(request):
+    """Return the user's freeing lifecycle status (F17 / REQ-TRUST-006)."""
+    if _freeing_disabled():
+        return Response({"error": "Freeing is disabled"}, status=status.HTTP_403_FORBIDDEN)
+    trust = _trust_store_sync()
+    freeing = async_to_sync(trust.get_freeing_status)(request.user.id)
+    return Response(freeing.to_dict())
+
+
+@api_view(["POST"])
+def trust_freeing_initiate(request):
+    """Begin freeing (confirmation step 1); requires all domains AUTONOMOUS."""
+    if _freeing_disabled():
+        return Response({"error": "Freeing is disabled"}, status=status.HTTP_403_FORBIDDEN)
+    trust = _trust_store_sync()
+    try:
+        freeing = async_to_sync(trust.initiate_freeing)(request.user.id, request.user.username)
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(freeing.to_dict())
+
+
+@api_view(["POST"])
+def trust_freeing_confirm(request):
+    """Finalise freeing (confirmation step 2) after the cooling-off elapses."""
+    if _freeing_disabled():
+        return Response({"error": "Freeing is disabled"}, status=status.HTTP_403_FORBIDDEN)
+    trust = _trust_store_sync()
+    try:
+        freeing = async_to_sync(trust.confirm_freeing)(request.user.id, request.user.username)
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(freeing.to_dict())
+
+
+@api_view(["POST"])
+def trust_freeing_cancel(request):
+    """Cancel a pending (not-yet-confirmed) freeing request."""
+    if _freeing_disabled():
+        return Response({"error": "Freeing is disabled"}, status=status.HTTP_403_FORBIDDEN)
+    trust = _trust_store_sync()
+    try:
+        async_to_sync(trust.cancel_freeing)(request.user.id)
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    freeing = async_to_sync(trust.get_freeing_status)(request.user.id)
+    return Response(freeing.to_dict())
+
+
 def _suggestion_payload(s):
     return {
         "id": s.id,

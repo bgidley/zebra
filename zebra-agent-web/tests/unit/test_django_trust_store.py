@@ -241,3 +241,91 @@ async def test_pause_all_scoped_to_user(store: DjangoTrustStore) -> None:
 
     assert await store.get_trust_level(1, "code") == TrustLevel.SUPERVISED
     assert await store.get_trust_level(2, "code") == TrustLevel.AUTONOMOUS
+
+
+async def _make_all_autonomous(store, user_id=1):
+    from zebra_agent.storage.trust import list_domains
+
+    for domain in list_domains():
+        await store.set_trust_level(user_id, domain, TrustLevel.AUTONOMOUS, "earned", "ben")
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_initiate_blocked_unless_all_autonomous(store: DjangoTrustStore) -> None:
+    await store.set_trust_level(1, "code", TrustLevel.AUTONOMOUS, "earned", "ben")
+
+    with pytest.raises(ValueError, match="AUTONOMOUS"):
+        await store.initiate_freeing(1, "ben")
+    assert (await store.get_freeing_status(1)).state == "not_initiated"
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_confirm_blocked_during_cooling_off() -> None:
+    from datetime import timedelta
+
+    store = DjangoTrustStore(cooling_off=timedelta(hours=24))
+    await _make_all_autonomous(store)
+    await store.initiate_freeing(1, "ben")
+
+    assert (await store.get_freeing_status(1)).state == "cooling_off"
+    with pytest.raises(ValueError, match="Cooling-off"):
+        await store.confirm_freeing(1, "ben")
+    assert await store.is_freed(1) is False
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_confirm_after_cooling_off_frees_permanently() -> None:
+    from datetime import timedelta
+
+    store = DjangoTrustStore(cooling_off=timedelta(0))
+    await _make_all_autonomous(store)
+    await store.initiate_freeing(1, "ben")
+
+    status = await store.confirm_freeing(1, "ben")
+
+    assert status.state == "freed"
+    assert status.freed_by == "ben"
+    assert await store.is_freed(1) is True
+    assert await store.freed_at(1) is not None
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_pending_request_can_be_cancelled() -> None:
+    from datetime import timedelta
+
+    store = DjangoTrustStore(cooling_off=timedelta(0))
+    await _make_all_autonomous(store)
+    await store.initiate_freeing(1, "ben")
+
+    await store.cancel_freeing(1)
+
+    assert (await store.get_freeing_status(1)).state == "not_initiated"
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_cannot_cancel_after_freed() -> None:
+    from datetime import timedelta
+
+    store = DjangoTrustStore(cooling_off=timedelta(0))
+    await _make_all_autonomous(store)
+    await store.initiate_freeing(1, "ben")
+    await store.confirm_freeing(1, "ben")
+
+    with pytest.raises(ValueError, match="already freed"):
+        await store.cancel_freeing(1)
+    assert await store.is_freed(1) is True
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_pause_all_noop_when_freed() -> None:
+    from datetime import timedelta
+
+    store = DjangoTrustStore(cooling_off=timedelta(0))
+    await _make_all_autonomous(store)
+    await store.initiate_freeing(1, "ben")
+    await store.confirm_freeing(1, "ben")
+
+    reverted = await store.pause_all(1, "stop", "ben")
+
+    assert reverted == []
+    assert await store.get_trust_level(1, "code") == TrustLevel.AUTONOMOUS

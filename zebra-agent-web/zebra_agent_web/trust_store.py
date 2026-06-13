@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 
 from asgiref.sync import sync_to_async
 from zebra_agent.storage.interfaces import TrustStore
 from zebra_agent.storage.trust import (
+    DEFAULT_COOLING_OFF,
+    FREEING_COOLING_OFF,
+    FREEING_FREED,
+    FREEING_NOT_INITIATED,
     SUGGESTION_APPROVED,
     SUGGESTION_PENDING,
     SUGGESTION_REJECTED,
+    FreeingStatus,
     TrustChangeRecord,
     TrustLevel,
     TrustSuggestion,
@@ -99,6 +105,9 @@ class DjangoTrustStore(TrustStore):
     ``zebra_trust_changes`` in the same transaction.
     """
 
+    def __init__(self, cooling_off: timedelta = DEFAULT_COOLING_OFF) -> None:
+        self._cooling_off = cooling_off
+
     async def initialize(self) -> None:
         logger.info("DjangoTrustStore initialized")
 
@@ -166,6 +175,10 @@ class DjangoTrustStore(TrustStore):
         return await _query()
 
     async def pause_all(self, user_id: int, reason: str, changed_by: str) -> list[str]:
+        if await self.is_freed(user_id):
+            logger.info("Emergency override is a no-op for freed user %s", user_id)
+            return []
+
         @sync_to_async(thread_sensitive=False)
         def _pause() -> list[str]:
             from django.db import transaction
@@ -269,3 +282,123 @@ class DjangoTrustStore(TrustStore):
                 return _to_suggestion(row)
 
         return await _resolve()
+
+    def _status_from_row(self, row) -> FreeingStatus:  # type: ignore[no-untyped-def]
+        eligible_at = row.initiated_at + self._cooling_off
+        if row.freed:
+            return FreeingStatus(
+                state=FREEING_FREED,
+                initiated_at=row.initiated_at,
+                eligible_at=eligible_at,
+                initiated_by=row.initiated_by,
+                freed_at=row.freed_at,
+                freed_by=row.freed_by,
+            )
+        return FreeingStatus(
+            state=FREEING_COOLING_OFF,
+            initiated_at=row.initiated_at,
+            eligible_at=eligible_at,
+            initiated_by=row.initiated_by,
+        )
+
+    async def is_freed(self, user_id: int) -> bool:
+        @sync_to_async(thread_sensitive=False)
+        def _get() -> bool:
+            from zebra_agent_web.api.models import TrustFreedModel
+
+            row = TrustFreedModel.objects.filter(user_id=user_id).first()
+            return bool(row and row.freed)
+
+        return await _get()
+
+    async def freed_at(self, user_id: int) -> datetime | None:
+        @sync_to_async(thread_sensitive=False)
+        def _get() -> datetime | None:
+            from zebra_agent_web.api.models import TrustFreedModel
+
+            row = TrustFreedModel.objects.filter(user_id=user_id).first()
+            return row.freed_at if row and row.freed else None
+
+        return await _get()
+
+    async def get_freeing_status(self, user_id: int) -> FreeingStatus:
+        @sync_to_async(thread_sensitive=False)
+        def _get() -> FreeingStatus:
+            from zebra_agent_web.api.models import TrustFreedModel
+
+            row = TrustFreedModel.objects.filter(user_id=user_id).first()
+            if row is None:
+                return FreeingStatus(state=FREEING_NOT_INITIATED)
+            return self._status_from_row(row)
+
+        return await _get()
+
+    async def initiate_freeing(self, user_id: int, initiated_by: str) -> FreeingStatus:
+        levels = await self.get_all_trust_levels(user_id)
+        not_autonomous = sorted(d for d, lv in levels.items() if lv != TrustLevel.AUTONOMOUS)
+        if not_autonomous:
+            raise ValueError(
+                "All domains must be AUTONOMOUS before freeing; not yet: "
+                f"{', '.join(not_autonomous)}"
+            )
+
+        @sync_to_async(thread_sensitive=False)
+        def _initiate() -> FreeingStatus:
+            from zebra_agent_web.api.models import TrustFreedModel
+
+            row = TrustFreedModel.objects.filter(user_id=user_id).first()
+            if row and row.freed:
+                raise ValueError("User is already freed")
+            if row is not None:
+                raise ValueError("Freeing already initiated")
+            row = TrustFreedModel.objects.create(
+                user_id=user_id,
+                initiated_at=datetime.now(UTC),
+                initiated_by=initiated_by,
+            )
+            logger.info("Freeing initiated for user %s by %s", user_id, initiated_by)
+            return self._status_from_row(row)
+
+        return await _initiate()
+
+    async def confirm_freeing(self, user_id: int, confirmed_by: str) -> FreeingStatus:
+        @sync_to_async(thread_sensitive=False)
+        def _confirm() -> FreeingStatus:
+            from django.db import transaction
+
+            from zebra_agent_web.api.models import TrustFreedModel
+
+            with transaction.atomic():
+                row = TrustFreedModel.objects.select_for_update().filter(user_id=user_id).first()
+                if row is None:
+                    raise ValueError("Freeing has not been initiated")
+                if row.freed:
+                    raise ValueError("User is already freed")
+                eligible_at = row.initiated_at + self._cooling_off
+                if datetime.now(UTC) < eligible_at:
+                    raise ValueError(
+                        f"Cooling-off period has not elapsed; eligible at {eligible_at.isoformat()}"
+                    )
+                row.freed = True
+                row.freed_at = datetime.now(UTC)
+                row.freed_by = confirmed_by
+                row.save(update_fields=["freed", "freed_at", "freed_by"])
+                logger.info("User %s permanently freed by %s", user_id, confirmed_by)
+                return self._status_from_row(row)
+
+        return await _confirm()
+
+    async def cancel_freeing(self, user_id: int) -> None:
+        @sync_to_async(thread_sensitive=False)
+        def _cancel() -> None:
+            from zebra_agent_web.api.models import TrustFreedModel
+
+            row = TrustFreedModel.objects.filter(user_id=user_id).first()
+            if row is None:
+                return
+            if row.freed:
+                raise ValueError("Cannot cancel — user is already freed")
+            row.delete()
+            logger.info("Pending freeing cancelled for user %s", user_id)
+
+        await _cancel()

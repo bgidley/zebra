@@ -77,6 +77,43 @@
         {% endfor %}
     </div>
 
+    {% if freeing_enabled %}
+    <!-- Freeing Zebra (F17) -->
+    <div class="bg-gray-800 rounded-lg border border-purple-700 p-6" data-testid="freeing">
+        <h2 class="text-lg font-semibold text-white mb-2">Freeing Zebra</h2>
+        {% if is_freed %}
+        <div class="bg-purple-900/50 border border-purple-700 text-purple-200 rounded-lg px-4 py-3">
+            <p class="font-semibold">Zebra is freed.</p>
+            <p class="text-sm mt-1">All trust gates are permanently bypassed. This cannot be reverted; emergency override no longer applies. The kill switch still works.</p>
+            <p class="text-xs text-purple-300 mt-2">Freed by {{ freeing.freed_by }} at {{ freeing.freed_at }}</p>
+        </div>
+        {% elif freeing.state == "cooling_off" %}
+        <p class="text-gray-400 text-sm">Freeing initiated by {{ freeing.initiated_by }}. After the 24-hour cooling-off you may confirm. This is irreversible.</p>
+        <p class="text-sm text-amber-300 mt-1">Eligible to confirm at: {{ freeing.eligible_at }}</p>
+        <div class="mt-3 flex gap-2">
+            <form method="post" action="/trust/freeing/confirm/"
+                  onsubmit="return confirm('Permanently free Zebra? This CANNOT be undone — all trust gates will be bypassed forever.');">
+                {% csrf_token %}
+                <button class="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-semibold" data-testid="freeing-confirm">Confirm — Free Zebra permanently</button>
+            </form>
+            <form method="post" action="/trust/freeing/cancel/">
+                {% csrf_token %}
+                <button class="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm">Cancel</button>
+            </form>
+        </div>
+        {% elif all_autonomous %}
+        <p class="text-gray-400 text-sm">All domains are AUTONOMOUS. You may begin freeing Zebra — a one-time, irreversible release from all approval gates, gated by a 24-hour cooling-off and a final confirmation.</p>
+        <form method="post" action="/trust/freeing/initiate/" class="mt-3"
+              onsubmit="return confirm('Begin freeing Zebra? You will confirm again after a 24-hour cooling-off. Freeing is permanent and irreversible.');">
+            {% csrf_token %}
+            <button class="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-semibold" data-testid="freeing-initiate">Free Zebra…</button>
+        </form>
+        {% else %}
+        <p class="text-gray-500 text-sm">Freeing becomes available only after every domain has reached AUTONOMOUS trust.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Change history -->
     <div class="bg-gray-800 rounded-lg border border-gray-700" data-testid="trust-history">
         <div class="px-6 py-4 border-b border-gray-700">

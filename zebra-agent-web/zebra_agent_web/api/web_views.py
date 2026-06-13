@@ -2129,6 +2129,10 @@ async def trust_page(request):
     suggestions = await trust.list_suggestions(user_id)
     changes = await trust.list_trust_changes(user_id)
 
+    freeing_enabled = not _freeing_disabled()
+    freeing = await trust.get_freeing_status(user_id) if freeing_enabled else None
+    all_autonomous = all(level == TrustLevel.AUTONOMOUS for level in levels.values())
+
     context = {
         **_identity_context(),
         "domains": [{"domain": domain, "level": level.value} for domain, level in levels.items()],
@@ -2136,6 +2140,10 @@ async def trust_page(request):
         "pending_suggestions": [s for s in suggestions if s.status == "pending"],
         "resolved_suggestions": [s for s in suggestions if s.status != "pending"][:10],
         "changes": changes[:25],
+        "freeing_enabled": freeing_enabled,
+        "freeing": freeing.to_dict() if freeing else None,
+        "all_autonomous": all_autonomous,
+        "is_freed": bool(freeing and freeing.state == "freed"),
         "message": request.GET.get("message", ""),
         "error": request.GET.get("error", ""),
     }
@@ -2160,6 +2168,40 @@ async def trust_set_level_form(request, domain):
     except ValueError as exc:
         return redirect(f"/trust/?{urlencode({'error': str(exc)})}")
     return redirect(f"/trust/?{urlencode({'message': f'{domain} set to {level.value}'})}")
+
+
+def _freeing_disabled() -> bool:
+    from django.conf import settings
+
+    return getattr(settings, "ZEBRA_DISABLE_FREEING", False)
+
+
+@require_POST
+async def trust_freeing_action_form(request, action):
+    """Drive the freeing lifecycle from the trust page (initiate/confirm/cancel)."""
+    from urllib.parse import urlencode
+
+    if _freeing_disabled():
+        return redirect("/trust/")
+
+    await agent_engine.ensure_initialized()
+    trust = agent_engine.get_trust()
+    user = request.user.username
+    try:
+        if action == "initiate":
+            await trust.initiate_freeing(request.user.id, user)
+            msg = "Freeing initiated — cooling-off period started."
+        elif action == "confirm":
+            await trust.confirm_freeing(request.user.id, user)
+            msg = "Zebra is now freed. Trust gates are permanently bypassed."
+        elif action == "cancel":
+            await trust.cancel_freeing(request.user.id)
+            msg = "Freeing request cancelled."
+        else:
+            return redirect("/trust/")
+    except ValueError as exc:
+        return redirect(f"/trust/?{urlencode({'error': str(exc)})}")
+    return redirect(f"/trust/?{urlencode({'message': msg})}")
 
 
 @require_POST
