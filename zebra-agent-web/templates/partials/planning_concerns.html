@@ -1,0 +1,42 @@
+{% comment %}
+Planning Concerns panel (F21 — proactive, advisory concern flagging).
+
+Parameters (via include "with"):
+  - planning_concerns: dict with `concerns` (list of {description, severity, step})
+    and optional `summary`. Renders nothing when falsy or empty.
+{% endcomment %}
+{% if planning_concerns %}
+<div class="bg-gray-800 rounded-lg border border-amber-700/60">
+    <div class="px-6 py-4 border-b border-amber-700/60 flex items-center gap-2">
+        <svg class="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <h2 class="text-lg font-semibold text-white">Planning Concerns</h2>
+        <span class="ml-auto text-xs text-amber-300/80">flagged before execution &middot; advisory</span>
+    </div>
+    <div class="p-6 space-y-3">
+        {% if planning_concerns.summary %}
+        <p class="text-sm text-amber-200/90">{{ planning_concerns.summary }}</p>
+        {% endif %}
+        <ul class="space-y-2">
+            {% for concern in planning_concerns.concerns %}
+            <li class="flex items-start gap-3 bg-gray-900/40 rounded-md p-3 border border-gray-700">
+                {% if concern.severity == "high" %}
+                <span class="shrink-0 px-2 py-0.5 text-xs rounded-full bg-red-900 text-red-300 uppercase">High</span>
+                {% elif concern.severity == "medium" %}
+                <span class="shrink-0 px-2 py-0.5 text-xs rounded-full bg-amber-900 text-amber-300 uppercase">Medium</span>
+                {% else %}
+                <span class="shrink-0 px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-300 uppercase">Low</span>
+                {% endif %}
+                <div class="text-sm text-gray-200">
+                    {{ concern.description }}
+                    {% if concern.step %}
+                    <span class="block text-xs text-gray-500 mt-0.5">Relates to: {{ concern.step }}</span>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}

@@ -75,6 +75,8 @@ load_workflow_definitions = "zebra_tasks.agent.load_definitions:LoadWorkflowDefi
 workflow_evaluator = "zebra_tasks.agent.evaluator:WorkflowEvaluatorAction"
 workflow_optimizer = "zebra_tasks.agent.optimizer:WorkflowOptimizerAction"
 ethics_gate = "zebra_tasks.agent.ethics_gate:EthicsGateAction"
+# Agent - Proactive concern flagging (F21)
+flag_concerns = "zebra_tasks.agent.flag_concerns:FlagConcernsAction"
 # Agent - Trust gate (F13)
 trust_gate = "zebra_tasks.agent.trust_gate:TrustGateAction"
 propose_trust_promotion = "zebra_tasks.agent.propose_trust_promotion:ProposeTrustPromotionAction"

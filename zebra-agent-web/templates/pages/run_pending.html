@@ -197,6 +197,9 @@
     </div>
     {% endif %}
 
+    <!-- Planning Concerns (F21 — proactive, advisory) -->
+    {% include "partials/planning_concerns.html" %}
+
     <!-- Parent Orchestration Flow -->
     {% if parent_flow %}
     <div class="bg-gray-800 rounded-lg border border-gray-700" x-data="{ showParent: true, selectedTask: '' }">
