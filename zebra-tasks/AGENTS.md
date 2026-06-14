@@ -38,6 +38,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
+| `zebra_tasks/agent/flag_concerns.py` | FlagConcernsAction - proactive, advisory concern flagging during planning (F21) |
 | `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13/F14) |
 | `zebra_tasks/agent/reversibility.py` | `assess_reversibility()` - contextual reversibility assessment (F14) |
 | `zebra_tasks/agent/propose_trust_promotion.py` | ProposeTrustPromotionAction - queue a trust promotion suggestion (F15) |
@@ -394,6 +395,33 @@ Evaluate a goal or plan against Kantian ethics, optionally combined with the use
 **Precedence rule:** `approved = kantian_approved AND (values_approved if profile_loaded else True)`. Kantian rejection always wins; values can only restrict, never permit what Kantian forbids.
 
 **Store Access:** When `user_id` is present, reads `context.extras["__profile_store__"]`. Gracefully falls back to Kantian-only if the store is absent or no profile exists for the user.
+
+### FlagConcernsAction
+
+Proactively flag potential concerns about a planned approach during the planning
+phase (F21 / REQ-ETH-004). **Advisory and non-blocking** — unlike the ethics
+gate it never routes to a rejection branch; it only records concerns for the
+human to see in run detail. Runs between workflow selection/creation and the
+formal `ethics_plan_review` gate in `agent_main_loop.yaml`.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `goal` | string | - | The goal being pursued (supports `{{var}}` templates) |
+| `plan_context` | string | `""` | Workflow name or plan details being reviewed |
+| `reasoning` | string | `""` | Why this plan/workflow was selected (extra context) |
+| `provider` | string | `"anthropic"` | LLM provider name |
+| `model` | string | `haiku` | Model override — defaults to the cheap haiku scan |
+| `output_key` | string | `"planning_concerns"` | Process property key for the result |
+
+**Output / stored result:** `{"concerns": [{"description", "severity": "low|medium|high", "step"}], "summary"}`. A routine, low-risk plan returns an empty `concerns` list.
+
+**Routes:** none — always `TaskResult.ok` with no `next_route`.
+
+**Fail-soft:** provider errors, unparseable responses, or a missing goal all yield an empty concerns list and still succeed (never blocks the workflow).
+
+**Surfacing:** the result lands on the Agent Main Loop root process as `planning_concerns` / `__task_output_flag_concerns`; the web run-detail view renders it via `partials/planning_concerns.html`. See `specs/f21-concern-flagging.md`.
 
 ### TrustGateAction
 

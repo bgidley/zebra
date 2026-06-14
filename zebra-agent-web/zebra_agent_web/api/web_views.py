@@ -774,7 +774,26 @@ async def _build_parent_flow_context(
         "workflow_name": parent_def.name,
         "svg": parent_svg,
         "task_panels": task_panels,
+        "planning_concerns": _extract_planning_concerns(parent_props),
     }
+
+
+def _extract_planning_concerns(parent_props: dict) -> dict | None:
+    """Pull proactive planning concerns (F21) from the parent process properties.
+
+    The ``flag_concerns`` task stores its result both under ``planning_concerns``
+    and the engine's ``__task_output_flag_concerns`` key. Returns a dict with a
+    non-empty ``concerns`` list, or None when nothing was flagged.
+    """
+    result = parent_props.get("planning_concerns") or parent_props.get(
+        "__task_output_flag_concerns"
+    )
+    if not isinstance(result, dict):
+        return None
+    concerns = result.get("concerns") or []
+    if not concerns:
+        return None
+    return {"concerns": concerns, "summary": result.get("summary", "")}
 
 
 async def _run_detail_pending_fallback(request, run_id: str):
@@ -882,6 +901,7 @@ async def _run_detail_pending_fallback(request, run_id: str):
         "error": error,
         "task_outputs": task_outputs,
         "parent_flow": parent_flow,
+        "planning_concerns": parent_flow.get("planning_concerns") if parent_flow else None,
     }
     return render(request, "pages/run_pending.html", context)
 
@@ -1005,6 +1025,7 @@ async def run_detail(request, run_id):
         "workflow_svg": workflow_svg,
         "task_executions": formatted_executions,
         "parent_flow": parent_flow,
+        "planning_concerns": parent_flow.get("planning_concerns") if parent_flow else None,
     }
 
     return render(request, "pages/run_detail.html", context)

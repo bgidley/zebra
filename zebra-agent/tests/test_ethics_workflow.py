@@ -75,6 +75,25 @@ class StubWorkflowSelector(TaskAction):
         return TaskResult(success=True, output=output, next_route="use_existing")
 
 
+class StubFlagConcerns(TaskAction):
+    """Advisory concern flagging — never blocks, flags one sample concern."""
+
+    async def run(self, task, context):
+        output = {
+            "concerns": [
+                {
+                    "description": "Plan includes a potentially risky step",
+                    "severity": "medium",
+                    "step": "execute",
+                }
+            ],
+            "summary": "One medium-severity concern flagged.",
+        }
+        key = task.properties.get("output_key", "planning_concerns")
+        context.set_process_property(key, output)
+        return TaskResult.ok(output=output)
+
+
 class StubExecuteWorkflow(TaskAction):
     async def run(self, task, context):
         output = {
@@ -135,6 +154,7 @@ def _make_registry(ethics_gate_class):
     registry.register_action("consult_memory", StubConsultMemory)
     registry.register_action("consult_knowledge", StubConsultKnowledge)
     registry.register_action("ethics_gate", ethics_gate_class)
+    registry.register_action("flag_concerns", StubFlagConcerns)
     registry.register_action("workflow_selector", StubWorkflowSelector)
     registry.register_action("workflow_creator", StubWorkflowSelector)  # not reached
     registry.register_action("workflow_variant_creator", StubWorkflowSelector)  # not reached
@@ -183,6 +203,27 @@ class TestEthicsWorkflowIntegration:
 
         process = await store.load_process(process.id)
         assert process.state == ProcessState.COMPLETE
+
+    async def test_concerns_flagged_during_planning(self, definition):
+        """flag_concerns runs in the planning phase and records concerns on the process."""
+        registry = _make_registry(StubEthicsGateApprove)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry)
+
+        process = await engine.create_process(
+            definition,
+            properties={"goal": "Clean up files", "available_workflows": []},
+        )
+        await engine.start_process(process.id)
+
+        process = await store.load_process(process.id)
+        # planning_concerns is populated (advisory step ran before the gate)
+        concerns = process.properties.get("planning_concerns")
+        assert concerns is not None
+        assert concerns["concerns"][0]["severity"] == "medium"
+        # The advisory step did not block — flow proceeded to the human confirmation gate
+        pending = await engine.get_pending_tasks(process.id)
+        assert pending[0].task_definition_id == "ethics_human_confirmation"
 
     async def test_input_gate_rejects_stops_at_rejection(self, definition):
         """When input gate rejects, process completes at ethics_rejection."""

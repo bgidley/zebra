@@ -154,6 +154,7 @@ consult_memory
   → ethics_input_gate
   → workflow_selector
   → [create_new | create_variant | use_existing]
+  → flag_concerns            (advisory, non-blocking — F21)
   → ethics_plan_review
   → execute_goal_workflow
   → ethics_post_review
@@ -200,6 +201,8 @@ Minimal: `/list`, `/stats`, `/help`, `/quit`. Launch with `zebra-agent` / `pytho
 Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, post-execution review. Implementation is LLM-prompt-based Kantian reasoning (universalizability, rational beings as ends, autonomy). Human confirmation task waits for acknowledgement before completion.
 
 `EthicsGateAction` accepts an optional `user_id` input. When provided and `__profile_store__` is available in `context.extras`, the gate loads the user's current `ValuesProfile` and incorporates it into a combined evaluation prompt. Kantian rejection always takes precedence (values can only restrict further). The stored assessment includes a `values_assessment` key (`null` for Kantian-only runs). Verdict log lines show both Kantian and values flags when a profile was consulted.
+
+**Proactive concern flagging (F21 / REQ-ETH-004).** Between workflow selection and the plan-review gate, `flag_concerns` (`FlagConcernsAction`) runs an advisory, non-blocking LLM scan of the planned approach and records any concerns (`{description, severity, step}` + summary) on the root process as `planning_concerns`. It never routes to a rejection branch; the web run-detail view surfaces the concerns in an advisory panel. See [f21-concern-flagging.md](f21-concern-flagging.md).
 
 ### Values profile (F18 / REQ-ETH-002)
 
