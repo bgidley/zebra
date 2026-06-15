@@ -104,7 +104,9 @@ consult_memory --> select_workflow
                        |
                 flag_concerns  (advisory, non-blocking)
                        |
-                ethics_plan_review  (blocking gate)
+                ethics_plan_review  (blocking gate; may escalate)
+                       |          \
+                       |           escalate → resolve dilemma → record (F22)
                        |
                 execute_workflow
                        |
@@ -120,6 +122,7 @@ consult_memory --> select_workflow
 3. **create_workflow**: `WorkflowCreatorAction` creates new workflow if no match (route: `create_new`)
 4. **create_variant**: `WorkflowVariantCreatorAction` modifies existing workflow (route: `create_variant`)
 4b. **flag_concerns**: `FlagConcernsAction` proactively flags planning concerns (advisory, non-blocking; F21) before the ethics plan-review gate
+4c. **ethics_plan_review → escalate**: when values genuinely conflict on a Kantian-permissible plan, the gate routes `escalate` to the `ethics_dilemma_resolution` human task (both sides shown); `record_dilemma_resolution` records the choice and routes proceed/reject (F22)
 5. **execute_workflow**: `ExecuteGoalWorkflowAction` runs the selected/created workflow
 6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
 7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
@@ -135,6 +138,7 @@ These actions (in `zebra-tasks/zebra_tasks/agent/`) power the agent loop:
 | `workflow_creator` | `creator.py` | LLM-powered workflow creation |
 | `workflow_variant_creator` | `variant_creator.py` | LLM-powered workflow variant creation |
 | `flag_concerns` | `flag_concerns.py` | Advisory proactive concern flagging before the plan-review gate (F21) |
+| `record_dilemma_resolution` | `record_dilemma_resolution.py` | Record a human ethics-dilemma resolution and route proceed/reject (F22) |
 | `execute_goal_workflow` | `execute_workflow.py` | Execute workflow by name |
 | `assess_and_record` | `assess_and_record.py` | LLM assessment + metrics + memory write |
 | `update_conceptual_memory` | `update_conceptual_memory.py` | Incrementally update conceptual memory index |

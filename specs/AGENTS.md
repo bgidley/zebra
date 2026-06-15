@@ -19,6 +19,7 @@ This directory contains requirements and design specifications for Zebra.
 | [f9-data-export.md](f9-data-export.md) | F9: Data export — ZIP archive CLI + `GET /api/export/` + dashboard button | Implemented |
 | [f10-data-deletion.md](f10-data-deletion.md) | F10: Data deletion — soft/hard delete, `DELETE /api/user-data/`, management command | Implemented |
 | [f21-concern-flagging.md](f21-concern-flagging.md) | F21: Proactive concern flagging — advisory `flag_concerns` action in the planning phase, surfaced on run detail | Implemented |
+| [f22-dilemma-escalation.md](f22-dilemma-escalation.md) | F22: Dilemma escalation — ethics gate `escalate` verdict + human resolution task showing both sides | Implemented |
 | [f28-event-bus.md](f28-event-bus.md) | F28: Event-driven trigger bus — forward spec (NOT YET IMPLEMENTED, deferred from original close) | Forward spec |
 
 The concrete feature backlog is tracked as [GitLab issues](https://gitlab.com/gidley/zebra/-/issues).

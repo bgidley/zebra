@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 4
+version: 5
 first_task: consult_memory
 
 tasks:
@@ -84,6 +84,9 @@ tasks:
       output_key: planning_concerns
 
   # Step 6: Ethics plan review - is the chosen approach ethical?
+  # Passing user_id activates values-informed evaluation (F19) and dilemma
+  # escalation (F22): a Kantian-permissible plan with a genuine values conflict
+  # routes "escalate" instead of silently proceeding or rejecting.
   ethics_plan_review:
     name: "Ethics Plan Review"
     action: ethics_gate
@@ -92,7 +95,57 @@ tasks:
       goal: "{{goal}}"
       check_type: "plan_review"
       plan_context: "{{workflow_name}}"
+      user_id: "{{__user_id__}}"
       output_key: ethics_plan_assessment
+
+  # Step 6a: Dilemma escalation (F22) - pause and ask the human to resolve a
+  # genuine values conflict. The form shows both sides; the decision drives routing.
+  ethics_dilemma_resolution:
+    name: "Resolve Ethics Dilemma"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Ethics Dilemma — Your Decision Needed"
+        description: "This action is ethically permissible but conflicts with your values. Review both sides and decide."
+        required:
+          - decision
+        properties:
+          goal:
+            type: string
+            title: "Goal"
+            default: "{{goal}}"
+            readOnly: true
+          dilemma:
+            type: string
+            title: "The Dilemma (both sides)"
+            description: "The agent's analysis of the conflicting values and its recommendation"
+            format: multiline
+            default: "{{dilemma_display}}"
+            readOnly: true
+          decision:
+            type: string
+            title: "Your decision"
+            description: "Should the agent proceed with this plan, or decline?"
+            enum:
+              - proceed
+              - decline
+            default: proceed
+          note:
+            type: string
+            title: "Note (optional)"
+            description: "Record your reasoning for future consistency"
+            format: multiline
+
+  # Step 6b: Record the human's resolution and route on their decision
+  record_dilemma_resolution:
+    name: "Record Dilemma Resolution"
+    action: record_dilemma_resolution
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      resolution_task_id: ethics_dilemma_resolution
+      output_key: dilemma_resolution
 
   # Step 7: Execute the selected/created workflow
   execute_workflow:
@@ -270,6 +323,25 @@ routings:
     name: "proceed"
 
   - from: ethics_plan_review
+    to: ethics_rejection
+    condition: route_name
+    name: "reject"
+
+  # Dilemma escalation (F22): pause for human resolution, then route on their decision
+  - from: ethics_plan_review
+    to: ethics_dilemma_resolution
+    condition: route_name
+    name: "escalate"
+
+  - from: ethics_dilemma_resolution
+    to: record_dilemma_resolution
+
+  - from: record_dilemma_resolution
+    to: execute_workflow
+    condition: route_name
+    name: "proceed"
+
+  - from: record_dilemma_resolution
     to: ethics_rejection
     condition: route_name
     name: "reject"
