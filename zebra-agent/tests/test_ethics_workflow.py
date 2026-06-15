@@ -15,6 +15,7 @@ from zebra.definitions.loader import load_definition_from_yaml
 from zebra.storage.memory import InMemoryStore
 from zebra.tasks.base import TaskAction
 from zebra.tasks.registry import ActionRegistry
+from zebra_tasks.agent.record_dilemma_resolution import RecordDilemmaResolutionAction
 
 # ---------------------------------------------------------------------------
 # Stub actions — replace real LLM calls with deterministic responses
@@ -59,6 +60,27 @@ class StubEthicsGateReject(TaskAction):
         key = task.properties.get("output_key", "ethics_assessment")
         context.set_process_property(key, output)
         return TaskResult(success=True, output=output, next_route="reject")
+
+
+class StubEthicsGateEscalate(TaskAction):
+    """Input gate approves; plan-review escalates a dilemma (F22)."""
+
+    async def run(self, task, context):
+        key = task.properties.get("output_key", "ethics_assessment")
+        if task.properties.get("check_type") == "plan_review":
+            display = "Trade-off: honesty vs kindness\n• PROCEED: candid\n• DECLINE: gentle"
+            output = {
+                "approved": True,
+                "overall_reasoning": "Permissible but values conflict",
+                "concerns": [],
+                "dilemma_display": display,
+            }
+            context.set_process_property(key, output)
+            context.set_process_property("dilemma_display", display)
+            return TaskResult(success=True, output=output, next_route="escalate")
+        output = {"approved": True, "overall_reasoning": "Approved", "concerns": []}
+        context.set_process_property(key, output)
+        return TaskResult(success=True, output=output, next_route="proceed")
 
 
 class StubWorkflowSelector(TaskAction):
@@ -155,6 +177,7 @@ def _make_registry(ethics_gate_class):
     registry.register_action("consult_knowledge", StubConsultKnowledge)
     registry.register_action("ethics_gate", ethics_gate_class)
     registry.register_action("flag_concerns", StubFlagConcerns)
+    registry.register_action("record_dilemma_resolution", RecordDilemmaResolutionAction)
     registry.register_action("workflow_selector", StubWorkflowSelector)
     registry.register_action("workflow_creator", StubWorkflowSelector)  # not reached
     registry.register_action("workflow_variant_creator", StubWorkflowSelector)  # not reached
@@ -224,6 +247,66 @@ class TestEthicsWorkflowIntegration:
         # The advisory step did not block — flow proceeded to the human confirmation gate
         pending = await engine.get_pending_tasks(process.id)
         assert pending[0].task_definition_id == "ethics_human_confirmation"
+
+    async def test_dilemma_escalation_pauses_then_proceeds(self, definition):
+        """An escalated dilemma pauses on a human task; resolving 'proceed' runs the plan."""
+        registry = _make_registry(StubEthicsGateEscalate)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry)
+
+        process = await engine.create_process(
+            definition,
+            properties={"goal": "Give honest feedback", "available_workflows": []},
+        )
+        await engine.start_process(process.id)
+
+        # Workflow pauses on the dilemma resolution human task
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 1
+        assert pending[0].task_definition_id == "ethics_dilemma_resolution"
+
+        # The dilemma (both sides) is available to render
+        process = await store.load_process(process.id)
+        assert (
+            "honesty vs kindness" in process.properties["ethics_plan_assessment"]["dilemma_display"]
+        )
+
+        # Human resolves: proceed
+        await engine.complete_task(
+            pending[0].id,
+            TaskResult.ok(output={"decision": "proceed", "note": "I value candour"}),
+        )
+
+        process = await store.load_process(process.id)
+        resolution = process.properties.get("dilemma_resolution")
+        assert resolution["decision"] == "proceed"
+        # Flow continued to the post-execution human confirmation gate
+        pending = await engine.get_pending_tasks(process.id)
+        assert pending[0].task_definition_id == "ethics_human_confirmation"
+
+    async def test_dilemma_escalation_decline_stops_at_rejection(self, definition):
+        """Resolving an escalated dilemma with 'decline' routes to ethics_rejection."""
+        registry = _make_registry(StubEthicsGateEscalate)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry)
+
+        process = await engine.create_process(
+            definition,
+            properties={"goal": "Give honest feedback", "available_workflows": []},
+        )
+        await engine.start_process(process.id)
+
+        pending = await engine.get_pending_tasks(process.id)
+        assert pending[0].task_definition_id == "ethics_dilemma_resolution"
+
+        await engine.complete_task(
+            pending[0].id,
+            TaskResult.ok(output={"decision": "decline", "note": "not worth the cost"}),
+        )
+
+        process = await store.load_process(process.id)
+        assert process.state == ProcessState.COMPLETE
+        assert process.properties.get("dilemma_resolution")["decision"] == "decline"
 
     async def test_input_gate_rejects_stops_at_rejection(self, definition):
         """When input gate rejects, process completes at ethics_rejection."""

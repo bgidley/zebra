@@ -39,6 +39,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
 | `zebra_tasks/agent/flag_concerns.py` | FlagConcernsAction - proactive, advisory concern flagging during planning (F21) |
+| `zebra_tasks/agent/record_dilemma_resolution.py` | RecordDilemmaResolutionAction - record a human ethics-dilemma resolution and route (F22) |
 | `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13/F14) |
 | `zebra_tasks/agent/reversibility.py` | `assess_reversibility()` - contextual reversibility assessment (F14) |
 | `zebra_tasks/agent/propose_trust_promotion.py` | ProposeTrustPromotionAction - queue a trust promotion suggestion (F15) |
@@ -390,9 +391,11 @@ Evaluate a goal or plan against Kantian ethics, optionally combined with the use
 | `concerns` | list | Any concerns raised (even for approved goals) |
 | `values_assessment` | dict\|null | Values-alignment result (`null` when no profile loaded) |
 
-**Routes:** `"proceed"` (approved) or `"reject"` (not approved)
+**Routes:** `"proceed"` (approved), `"reject"` (not approved), or `"escalate"` (F22 — a genuine values dilemma; see below).
 
 **Precedence rule:** `approved = kantian_approved AND (values_approved if profile_loaded else True)`. Kantian rejection always wins; values can only restrict, never permit what Kantian forbids.
+
+**Dilemma escalation (F22 / REQ-ETH-005):** when a values profile is loaded and the action is Kantian-permissible but the model flags a genuine `dilemma.detected` (value-vs-value trade-off, or Kantian-vs-value tension), the gate routes `"escalate"` instead of silently proceeding/rejecting, and writes a flat `dilemma_display` process property (human-readable both-sides text). A stated **deal-breaker** violation or a Kantian failure is a decisive `"reject"`, not a dilemma. Without a profile, `"escalate"` is never emitted (backward compatible). The combined output gains a `dilemma` object `{detected, summary, sides[], recommendation, recommendation_reasoning}`.
 
 **Store Access:** When `user_id` is present, reads `context.extras["__profile_store__"]`. Gracefully falls back to Kantian-only if the store is absent or no profile exists for the user.
 
@@ -422,6 +425,27 @@ formal `ethics_plan_review` gate in `agent_main_loop.yaml`.
 **Fail-soft:** provider errors, unparseable responses, or a missing goal all yield an empty concerns list and still succeed (never blocks the workflow).
 
 **Surfacing:** the result lands on the Agent Main Loop root process as `planning_concerns` / `__task_output_flag_concerns`; the web run-detail view renders it via `partials/planning_concerns.html`. See `specs/f21-concern-flagging.md`.
+
+### RecordDilemmaResolutionAction
+
+Record the human's resolution of an escalated ethics dilemma and route on their decision
+(F22 / REQ-ETH-005). Runs after the `ethics_dilemma_resolution` human task.
+
+**Properties:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `goal` | string | `""` | The goal under evaluation (for the audit record) |
+| `resolution_task_id` | string | `ethics_dilemma_resolution` | Human task whose output holds the decision |
+| `output_key` | string | `dilemma_resolution` | Process property key for the resolution record |
+
+**Reads** the human task output `{decision: "proceed"|"decline", note}`. **Writes** a
+`dilemma_resolution` process property `{decision, note, route}` and appends an
+`EthicsAuditEntry` (`check_type="dilemma_resolution"`) when `__ethics_audit_store__` is present.
+
+**Routes:** `"proceed"` (decision `proceed`) or `"reject"` (otherwise). Defaults to `proceed`
+if the human output is missing (never leaves the workflow stuck). Degrades gracefully without
+an audit store — the routing decision is always honoured.
 
 ### TrustGateAction
 
