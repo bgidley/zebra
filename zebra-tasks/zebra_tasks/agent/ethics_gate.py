@@ -175,6 +175,20 @@ def _build_values_system_prompt(profile: dict) -> str:
     return _KANTIAN_PREAMBLE + "\n\n" + values_section + "\n\n" + _COMBINED_JSON_SCHEMA
 
 
+def _parse_user_id(raw_user_id: int | str | None) -> int | None:
+    """Parse raw_user_id to int, returning None on any failure.
+
+    Templates resolve Python None to the string "None", so callers must handle
+    non-numeric strings gracefully rather than calling int() directly.
+    """
+    if raw_user_id is None:
+        return None
+    try:
+        return int(raw_user_id)
+    except (TypeError, ValueError):
+        return None
+
+
 async def _load_profile(raw_user_id: int | str | None, context: ExecutionContext) -> dict | None:
     """Load the user's current values profile; returns None on any problem."""
     if raw_user_id is None:
@@ -470,7 +484,7 @@ class EthicsGateAction(TaskAction):
                 approved=approved,
                 overall_reasoning=assessment.get("overall_reasoning", ""),
                 check_type=audit_check_type,
-                user_id=int(raw_user_id) if raw_user_id is not None else None,
+                user_id=_parse_user_id(raw_user_id),
             )
 
             return TaskResult(
