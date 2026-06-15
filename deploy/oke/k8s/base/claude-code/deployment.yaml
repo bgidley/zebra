@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claude-code
+  labels:
+    app: claude-code
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # single writer on the RWO workspace volume
+  selector:
+    matchLabels:
+      app: claude-code
+  template:
+    metadata:
+      labels:
+        app: claude-code
+    spec:
+      serviceAccountName: claude-code
+      imagePullSecrets:
+        - name: ocir-pull
+      containers:
+        - name: claude-code
+          image: zebra-claude # overridden by kustomize images:
+          # Long-lived sandbox; humans/agents `kubectl exec -it ... -- bash|claude`.
+          command: ["sleep", "infinity"]
+          workingDir: /workspace
+          envFrom:
+            - secretRef:
+                name: claude-secrets
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: config
+              mountPath: /root/.claude
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: claude-workspace
+        - name: config
+          persistentVolumeClaim:
+            claimName: claude-config

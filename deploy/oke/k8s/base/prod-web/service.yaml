@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: zebra-web
+  annotations:
+    # Always-Free 10 Mbps flexible OCI Load Balancer.
+    oci.oraclecloud.com/load-balancer-type: "lb"
+    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "10"
+spec:
+  type: LoadBalancer
+  selector:
+    app: zebra-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP

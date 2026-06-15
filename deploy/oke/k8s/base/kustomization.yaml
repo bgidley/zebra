@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Aggregate of the long-lived workloads. `kustomize build base` renders
+# namespaces + prod web/daemon + claude-code. The smoke overlay is applied
+# separately and ephemerally by 50-smoke.sh.
+resources:
+  - namespaces.yaml
+  - prod-web
+  - prod-daemon
+  - claude-code

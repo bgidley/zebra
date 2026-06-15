@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: prod
+resources:
+  - deployment.yaml
+  - service.yaml
+# Real registry/tag injected by 40-deploy.sh / CI:
+#   kustomize edit set image zebra-web=<ocir_registry>/zebra/zebra-web:<tag>
+images:
+  - name: zebra-web
+    newName: REGISTRY/zebra/zebra-web
+    newTag: latest

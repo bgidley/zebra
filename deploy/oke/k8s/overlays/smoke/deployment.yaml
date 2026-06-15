@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zebra-web
+  labels:
+    app: zebra-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zebra-web
+  template:
+    metadata:
+      labels:
+        app: zebra-web
+    spec:
+      imagePullSecrets:
+        - name: ocir-pull
+      containers:
+        - name: zebra-web
+          image: zebra-web # overridden by kustomize images: to the :<sha> under test
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DJANGO_DEBUG
+              value: "0"
+            - name: DJANGO_ALLOWED_HOSTS
+              value: "*"
+            - name: APP_PORT
+              value: "8000"
+            - name: ZEBRA_DAEMON_AUTO_START
+              value: "0"
+          envFrom:
+            # Smoke Oracle schema — isolated from prod.
+            - secretRef:
+                name: zebra-smoke-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi

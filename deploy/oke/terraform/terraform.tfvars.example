@@ -1,0 +1,32 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is git-ignored.
+# See deploy/oke/docs/oci-onboarding.md for where each value comes from.
+
+# --- OCI auth ---
+tenancy_ocid     = "ocid1.tenancy.oc1..xxxx"
+user_ocid        = "ocid1.user.oc1..xxxx"
+fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "uk-london-1"
+region_key       = "lhr" # OCIR host prefix for the region
+
+# --- Placement ---
+compartment_ocid = "ocid1.compartment.oc1..xxxx"
+
+# --- Cluster ---
+cluster_name       = "zebra"
+kubernetes_version = "v1.30.1"
+
+# Migration sizing (Always-Free A1 pool is 4 OCPU / 24 GB total).
+# Keep small while the old VM still runs; bump to 4 / 24 at cutover.
+node_ocpus     = 2
+node_memory_gb = 12
+node_count     = 1
+
+ssh_public_key = "ssh-ed25519 AAAA... you@host"
+
+# --- Networking ---
+# Lock the public k8s API + SSH to your admin IP. Find it: curl -s ifconfig.me
+admin_cidr = "203.0.113.10/32"
+
+# --- Registry ---
+ocir_repo_prefix = "zebra"

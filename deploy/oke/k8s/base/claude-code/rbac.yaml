@@ -1,0 +1,36 @@
+# ServiceAccount the claude-code pod uses for in-cluster kubectl (no kubeconfig
+# secret needed — kubectl auto-detects the mounted token).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: claude-code
+  namespace: tools
+---
+# Cluster-wide read so the agent can inspect any namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-code-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: claude-code
+    namespace: tools
+---
+# Full edit within its own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: claude-code-edit
+  namespace: tools
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: claude-code
+    namespace: tools
