@@ -143,6 +143,23 @@ All feature and bug work is tracked as **GitLab issues** at https://gitlab.com/g
 - When starting work on a feature, reference the corresponding issue number in commit messages and MR descriptions (e.g. `Closes #12`).
 - Do **not** create or edit markdown plan files (e.g. `plan/backlog.md`) — GitLab issues are the single source of truth for the backlog.
 
+## OpenSpec Change Workflow
+
+Every non-trivial feature or change MUST be captured as an **OpenSpec change** under
+`openspec/changes/<name>/` *before* (or alongside) implementation — not just as a
+free-form `specs/` design doc. This is the project's source of truth for in-flight work
+and is what the delivery flow archives.
+
+- **Create it first**: run `/openspec-propose` (or `openspec new change "<name>"`) to
+  generate `proposal.md`, `design.md`, `specs/<capability>/spec.md`, and `tasks.md`.
+  Capabilities map to spec files with `### Requirement:` + `#### Scenario:` (WHEN/THEN).
+- **Validate**: `openspec validate "<name>" --strict` must pass.
+- **Implement** against the tasks via `/opsx:apply`, ticking `tasks.md` as you go.
+- **Archive at delivery**: `/opsx:archive` (the `cicd-manager` flow expects this) and sync
+  `specs/zebra-as-is.md`.
+- The `specs/<feature>-design.md` document (see **Specification** above) is complementary
+  narrative design — it does **not** replace the OpenSpec change.
+
 ## Project Overview
 
 Zebra is a multi-language workflow orchestration system for AI-assisted development with:
