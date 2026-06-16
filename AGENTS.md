@@ -143,6 +143,23 @@ All feature and bug work is tracked as **GitLab issues** at https://gitlab.com/g
 - When starting work on a feature, reference the corresponding issue number in commit messages and MR descriptions (e.g. `Closes #12`).
 - Do **not** create or edit markdown plan files (e.g. `plan/backlog.md`) — GitLab issues are the single source of truth for the backlog.
 
+## OpenSpec Change Workflow
+
+Every non-trivial feature or change MUST be captured as an **OpenSpec change** under
+`openspec/changes/<name>/` *before* (or alongside) implementation — not just as a
+free-form `specs/` design doc. This is the project's source of truth for in-flight work
+and is what the delivery flow archives.
+
+- **Create it first**: run `/openspec-propose` (or `openspec new change "<name>"`) to
+  generate `proposal.md`, `design.md`, `specs/<capability>/spec.md`, and `tasks.md`.
+  Capabilities map to spec files with `### Requirement:` + `#### Scenario:` (WHEN/THEN).
+- **Validate**: `openspec validate "<name>" --strict` must pass.
+- **Implement** against the tasks via `/opsx:apply`, ticking `tasks.md` as you go.
+- **Archive at delivery**: `/opsx:archive` (the `cicd-manager` flow expects this) and sync
+  `specs/zebra-as-is.md`.
+- The `specs/<feature>-design.md` document (see **Specification** above) is complementary
+  narrative design — it does **not** replace the OpenSpec change.
+
 ## Project Overview
 
 Zebra is a multi-language workflow orchestration system for AI-assisted development with:
@@ -500,7 +517,7 @@ Using Django's `AsyncClient` with **SQLite** in pytest-django tests is a known s
 
 **Mitigations applied:**
 1. **Unit tests**: Use `:memory:` SQLite + remove `SetupRedirectMiddleware` + cache-based sessions + WAL mode for file-based tests. See `zebra_agent_web/test_settings.py` and `e2e_settings.py`.
-2. **E2E tests in CI**: Use the dedicated **Oracle E2E schema** (`E2E_ORACLE_DSN`) instead of SQLite. Oracle handles concurrent readers/writers natively. The `e2e` job in `.gitlab-ci.yml` already supports this — the only requirement is that the `E2E_ORACLE_*` CI variables are **unprotected** (or the branch is protected), otherwise they are not injected into feature-branch pipelines and the job silently falls back to SQLite.
+2. **E2E tests in CI**: Run against a **per-pipeline ephemeral Oracle schema** (real prod parity, fully isolated). The `e2e` job calls `scripts/e2e_oracle_schema.py create` to provision a throwaway Oracle user named `E2E_<branch>_<pipeline-id>` via the least-privilege `E2E_PROVISIONER` account (creds in the runner's `/home/gitlab-runner/.env`, not GitLab variables), migrates into it, runs the suite, and drops it in `after_script`. This avoids both SQLite flakiness and shared-schema collisions between concurrent feature-branch pipelines. If `E2E_PROVISIONER_*` is absent the job falls back to SQLite (`e2e_settings`).
 3. **`transaction=True` for async fixtures**: When `AsyncClient` tests rely on fixtures that create DB records (e.g., `test_user`), use `@pytest.mark.django_db(transaction=True)` so fixture data is committed and visible across connections/threads. Without it, the async request handler may not see uncommitted fixture data and return `403 Forbidden`.
 
 ### Test Coverage

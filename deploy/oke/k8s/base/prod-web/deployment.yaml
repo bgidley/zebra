@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zebra-web
+  labels:
+    app: zebra-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zebra-web
+  template:
+    metadata:
+      labels:
+        app: zebra-web
+    spec:
+      imagePullSecrets:
+        - name: ocir-pull
+      containers:
+        - name: zebra-web
+          image: zebra-web # overridden by kustomize images:
+          ports:
+            - containerPort: 8000
+          # Runs the image's default entrypoint: migrate + collectstatic + daphne.
+          env:
+            - name: DJANGO_DEBUG
+              value: "0"
+            - name: DJANGO_ALLOWED_HOSTS
+              value: "*"
+            - name: APP_PORT
+              value: "8000"
+            # The budget daemon runs as its own Deployment (prod-daemon), not in-process.
+            - name: ZEBRA_DAEMON_AUTO_START
+              value: "0"
+          envFrom:
+            - secretRef:
+                name: zebra-prod-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi

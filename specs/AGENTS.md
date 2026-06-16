@@ -21,6 +21,7 @@ This directory contains requirements and design specifications for Zebra.
 | [f21-concern-flagging.md](f21-concern-flagging.md) | F21: Proactive concern flagging — advisory `flag_concerns` action in the planning phase, surfaced on run detail | Implemented |
 | [f22-dilemma-escalation.md](f22-dilemma-escalation.md) | F22: Dilemma escalation — ethics gate `escalate` verdict + human resolution task showing both sides | Implemented |
 | [f28-event-bus.md](f28-event-bus.md) | F28: Event-driven trigger bus — forward spec (NOT YET IMPLEMENTED, deferred from original close) | Forward spec |
+| [oke-migration-design.md](oke-migration-design.md) | F108: Migrate to Oracle Kubernetes Engine (OKE) — three isolated workloads (prod/smoke/claude-code), OCIR images, Terraform + kustomize IaC in `deploy/oke/` | Scaffolding |
 
 The concrete feature backlog is tracked as [GitLab issues](https://gitlab.com/gidley/zebra/-/issues).
 

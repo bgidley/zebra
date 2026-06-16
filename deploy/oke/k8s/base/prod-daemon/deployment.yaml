@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zebra-daemon
+  labels:
+    app: zebra-daemon
+spec:
+  replicas: 1
+  # Exactly one daemon; never two. Recreate (not rolling) avoids a brief overlap.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: zebra-daemon
+  template:
+    metadata:
+      labels:
+        app: zebra-daemon
+    spec:
+      imagePullSecrets:
+        - name: ocir-pull
+      containers:
+        - name: zebra-daemon
+          image: zebra-web # same image as web; overridden by kustomize images:
+          # Override the image entrypoint to run the budget daemon instead of Daphne.
+          command: ["/app/.venv/bin/python", "zebra-agent-web/manage.py", "run_daemon"]
+          workingDir: /app
+          envFrom:
+            - secretRef:
+                name: zebra-prod-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

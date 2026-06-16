@@ -1,0 +1,11 @@
+# Secrets — never commit real values (only *.example are tracked)
+secrets/*.env
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/tfplan
+terraform/crash.log
