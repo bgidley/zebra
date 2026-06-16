@@ -30,18 +30,42 @@ e2e:
   stage: e2e
   script:
     - cp /home/gitlab-runner/.env .env
-    # Prevent the production ORACLE_DSN in .env from overriding E2E exports
+    # Read provisioner creds paren-safely. The Oracle DSN is a connect descriptor
+    # full of '(' ')' and spaces, so it must NOT be bash-sourced (`. .env`) — extract
+    # the exact values instead. pytest-dotenv still loads .env for the app at runtime.
+    - export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' .env)"
+    - export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' .env)"
+    - export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' .env)"
+    # Blank the prod ORACLE_DSN so pytest-dotenv can't select the prod DB.
     - sed -i 's/^ORACLE_DSN=.*/ORACLE_DSN=/' .env
     - |
-      if [ -n "$E2E_ORACLE_DSN" ]; then
-        # Use dedicated e2e Oracle schema
-        export ORACLE_DSN="$E2E_ORACLE_DSN" ORACLE_USERNAME="$E2E_ORACLE_USERNAME" ORACLE_PASSWORD="$E2E_ORACLE_PASSWORD"
-        uv run python zebra-agent-web/manage.py migrate --noinput --fake-initial
-        uv run python zebra-agent-web/manage.py flush --noinput
+      if [ -n "$E2E_PROVISIONER_DSN" ] && [ -n "$E2E_PROVISIONER_USERNAME" ] && [ -n "$E2E_PROVISIONER_PASSWORD" ]; then
+        # Per-pipeline ephemeral Oracle schema — real prod parity, fully isolated.
+        export E2E_SCHEMA="E2E_$(printf '%s' "$CI_COMMIT_REF_SLUG" | tr 'a-z-' 'A-Z_' | tr -cd 'A-Z0-9_' | cut -c1-8)_${CI_PIPELINE_ID}"
+        echo "Provisioning ephemeral Oracle schema $E2E_SCHEMA"
+        uv run python scripts/e2e_oracle_schema.py create --schema "$E2E_SCHEMA" --out e2e_db.env
+        export ORACLE_DSN="$(sed -n 's/^ORACLE_DSN=//p' e2e_db.env)"
+        export ORACLE_USERNAME="$(sed -n 's/^ORACLE_USERNAME=//p' e2e_db.env)"
+        export ORACLE_PASSWORD="$(sed -n 's/^ORACLE_PASSWORD=//p' e2e_db.env)"
+        uv run python zebra-agent-web/manage.py migrate --noinput
         uv run pytest zebra-agent-web/tests/e2e/ -m e2e
       else
-        # Fallback: force SQLite via --ds so Django never sees Oracle DSN
+        # Fallback (no provisioner creds on the runner): SQLite. Feature-branch flake possible.
+        echo "E2E_PROVISIONER_* not set — falling back to SQLite e2e"
         uv run pytest zebra-agent-web/tests/e2e/ -m e2e --ds=zebra_agent_web.e2e_settings
+      fi
+  after_script:
+    # Always drop the ephemeral schema (after_script runs even on failure/cancel).
+    # Fresh shell here, so re-extract creds and recompute the deterministic name.
+    - |
+      cp /home/gitlab-runner/.env .env 2>/dev/null || true
+      export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' .env)"
+      export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' .env)"
+      export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' .env)"
+      if [ -n "$E2E_PROVISIONER_DSN" ]; then
+        SCHEMA="E2E_$(printf '%s' "$CI_COMMIT_REF_SLUG" | tr 'a-z-' 'A-Z_' | tr -cd 'A-Z0-9_' | cut -c1-8)_${CI_PIPELINE_ID}"
+        echo "Dropping ephemeral Oracle schema $SCHEMA"
+        uv run python scripts/e2e_oracle_schema.py drop --schema "$SCHEMA" || true
       fi
 
 e2e-live:
