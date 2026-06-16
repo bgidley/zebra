@@ -17,9 +17,12 @@ and privs must be held WITH ADMIN OPTION:
     GRANT SELECT_CATALOG_ROLE TO E2E_PROVISIONER;   -- for `reap`
 
 Usage:
-    e2e_oracle_schema.py create --schema E2E_FOO_123 --out e2e_db.env
+    E2E_SCHEMA_PASSWORD=<alnum,12+> e2e_oracle_schema.py create --schema E2E_FOO_123
     e2e_oracle_schema.py drop   --schema E2E_FOO_123
     e2e_oracle_schema.py reap   --older-than 6h
+
+The schema password is taken from $E2E_SCHEMA_PASSWORD (chosen by the caller) and
+is never written to a file or printed — the caller already holds it.
 """
 
 from __future__ import annotations
@@ -27,7 +30,6 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import secrets
 import sys
 from datetime import UTC, datetime, timedelta
 
@@ -56,11 +58,6 @@ def _validate(schema: str) -> str:
     return schema
 
 
-def _gen_password() -> str:
-    """ADB-complexity-safe password: upper + lower + digit, alnum only (no shell-quoting)."""
-    return "Az9" + secrets.token_hex(12)
-
-
 def _drop_user(cur, schema: str) -> None:
     try:
         cur.execute(f"DROP USER {schema} CASCADE")
@@ -72,24 +69,24 @@ def _drop_user(cur, schema: str) -> None:
 
 def cmd_create(args: argparse.Namespace) -> None:
     schema = _validate(args.schema)
-    password = _gen_password()
+    # Password is supplied by the caller via env and never persisted to disk or
+    # stdout by this script (the caller already holds it and uses it for
+    # ORACLE_PASSWORD). Keeps the secret out of any file/log.
+    password = os.environ.get("E2E_SCHEMA_PASSWORD")
+    if not password:
+        sys.exit("E2E_SCHEMA_PASSWORD must be set (the schema password, chosen by the caller)")
+    if not re.fullmatch(r"[A-Za-z0-9]{12,}", password):
+        sys.exit("E2E_SCHEMA_PASSWORD must be >=12 alphanumeric chars (ADB complexity)")
     with _conn() as conn:
         cur = conn.cursor()
         _drop_user(cur, schema)  # idempotent: clean any prior run with the same name
-        cur.execute(f"CREATE USER {schema} IDENTIFIED BY {password}")
+        cur.execute(f'CREATE USER {schema} IDENTIFIED BY "{password}"')
         # Standard Django-on-Oracle privilege set. On Autonomous DB, grant quota
         # via ALTER USER (UNLIMITED TABLESPACE is restricted); the default user
         # tablespace on ADB is DATA.
         cur.execute(f"GRANT CONNECT, RESOURCE, CREATE VIEW TO {schema}")
         cur.execute(f"ALTER USER {schema} QUOTA UNLIMITED ON DATA")
         conn.commit()
-
-    dsn = os.environ["E2E_PROVISIONER_DSN"]  # schema lives in the same ADB as the provisioner
-    if args.out:
-        with open(args.out, "w") as fh:
-            fh.write(f"ORACLE_DSN={dsn}\n")
-            fh.write(f"ORACLE_USERNAME={schema}\n")
-            fh.write(f"ORACLE_PASSWORD={password}\n")
     print(schema)
 
 
@@ -132,9 +129,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_create = sub.add_parser("create", help="create an ephemeral schema")
+    p_create = sub.add_parser(
+        "create", help="create an ephemeral schema (password from $E2E_SCHEMA_PASSWORD)"
+    )
     p_create.add_argument("--schema", required=True)
-    p_create.add_argument("--out", help="write ORACLE_* env file for the new schema")
     p_create.set_defaults(func=cmd_create)
 
     p_drop = sub.add_parser("drop", help="drop a schema")

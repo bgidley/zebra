@@ -42,11 +42,14 @@ e2e:
       if [ -n "$E2E_PROVISIONER_DSN" ] && [ -n "$E2E_PROVISIONER_USERNAME" ] && [ -n "$E2E_PROVISIONER_PASSWORD" ]; then
         # Per-pipeline ephemeral Oracle schema — real prod parity, fully isolated.
         export E2E_SCHEMA="E2E_$(printf '%s' "$CI_COMMIT_REF_SLUG" | tr 'a-z-' 'A-Z_' | tr -cd 'A-Z0-9_' | cut -c1-8)_${CI_PIPELINE_ID}"
+        # Generate the schema password in-shell (never written to a file or logged);
+        # reuse the same value for ORACLE_PASSWORD below.
+        export E2E_SCHEMA_PASSWORD="Az9$(openssl rand -hex 13)"
         echo "Provisioning ephemeral Oracle schema $E2E_SCHEMA"
-        uv run python scripts/e2e_oracle_schema.py create --schema "$E2E_SCHEMA" --out e2e_db.env
-        export ORACLE_DSN="$(sed -n 's/^ORACLE_DSN=//p' e2e_db.env)"
-        export ORACLE_USERNAME="$(sed -n 's/^ORACLE_USERNAME=//p' e2e_db.env)"
-        export ORACLE_PASSWORD="$(sed -n 's/^ORACLE_PASSWORD=//p' e2e_db.env)"
+        uv run python scripts/e2e_oracle_schema.py create --schema "$E2E_SCHEMA"
+        export ORACLE_DSN="$E2E_PROVISIONER_DSN"
+        export ORACLE_USERNAME="$E2E_SCHEMA"
+        export ORACLE_PASSWORD="$E2E_SCHEMA_PASSWORD"
         uv run python zebra-agent-web/manage.py migrate --noinput
         uv run pytest zebra-agent-web/tests/e2e/ -m e2e
       else
