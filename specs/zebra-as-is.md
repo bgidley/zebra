@@ -155,7 +155,7 @@ consult_memory
   → workflow_selector
   → [create_new | create_variant | use_existing]
   → flag_concerns            (advisory, non-blocking — F21)
-  → ethics_plan_review
+  → ethics_plan_review       (escalate → resolve dilemma → record — F22)
   → execute_goal_workflow
   → ethics_post_review
   → assess_and_record
@@ -203,6 +203,8 @@ Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, po
 `EthicsGateAction` accepts an optional `user_id` input. When provided and `__profile_store__` is available in `context.extras`, the gate loads the user's current `ValuesProfile` and incorporates it into a combined evaluation prompt. Kantian rejection always takes precedence (values can only restrict further). The stored assessment includes a `values_assessment` key (`null` for Kantian-only runs). Verdict log lines show both Kantian and values flags when a profile was consulted.
 
 **Proactive concern flagging (F21 / REQ-ETH-004).** Between workflow selection and the plan-review gate, `flag_concerns` (`FlagConcernsAction`) runs an advisory, non-blocking LLM scan of the planned approach and records any concerns (`{description, severity, step}` + summary) on the root process as `planning_concerns`. It never routes to a rejection branch; the web run-detail view surfaces the concerns in an advisory panel. See [f21-concern-flagging.md](f21-concern-flagging.md).
+
+**Dilemma escalation (F22 / REQ-ETH-005).** The plan-review gate now receives `user_id` (activating values-informed evaluation in the loop). When an action is Kantian-permissible but a genuine values conflict exists, `EthicsGateAction` emits a third verdict — `escalate` — instead of silently proceeding or rejecting. The loop pauses on the `ethics_dilemma_resolution` human task (both sides shown via `{{dilemma_display}}` + a proceed/decline decision); `record_dilemma_resolution` then records the choice to the ethics audit trail and routes accordingly. Deal-breaker and Kantian failures still reject decisively; with no profile loaded `escalate` is never emitted. See [f22-dilemma-escalation.md](f22-dilemma-escalation.md).
 
 ### Values profile (F18 / REQ-ETH-002)
 

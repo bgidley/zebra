@@ -212,7 +212,7 @@ class TestEthicsGateAction:
         with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             await action.run(mock_task, mock_context)
 
-        expected = {**_approved_response(), "values_assessment": None}
+        expected = {**_approved_response(), "values_assessment": None, "dilemma": None}
         mock_context.set_process_property.assert_called_with("my_ethics_check", expected)
 
     async def test_json_in_code_block(self, mock_task, mock_context):
@@ -316,6 +316,92 @@ def _kantian_rejected_values_approved_response() -> dict:
             "conflicts": [],
         },
     }
+
+
+def _dilemma_response() -> dict:
+    """Kantian passes, values in genuine tension, LLM flags a dilemma (F22)."""
+    return {
+        **_approved_response(),
+        "values_assessment": {
+            "approved": True,
+            "reasoning": "Honours candour but strains kindness.",
+            "conflicts": [],
+        },
+        "dilemma": {
+            "detected": True,
+            "summary": "Honesty vs kindness in the feedback",
+            "sides": [
+                {
+                    "position": "proceed",
+                    "values": ["honesty"],
+                    "reasoning": "Candid feedback respects the recipient.",
+                },
+                {
+                    "position": "decline",
+                    "values": ["kindness"],
+                    "reasoning": "Blunt feedback may wound.",
+                },
+            ],
+            "recommendation": "proceed",
+            "recommendation_reasoning": "You prize honesty.",
+        },
+    }
+
+
+class TestEthicsGateDilemmaEscalation:
+    """F22 / REQ-ETH-005 — dilemma escalation routing."""
+
+    async def test_flagged_dilemma_routes_escalate(self, mock_task, mock_context):
+        mock_context.extras["__profile_store__"] = _make_profile_store(_sample_profile())
+        provider = _make_provider(_dilemma_response())
+        mock_task.properties = {
+            "goal": "Give blunt feedback to a colleague",
+            "check_type": "plan_review",
+            "user_id": 42,
+        }
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.next_route == "escalate"
+        assert result.output["dilemma"]["detected"] is True
+        # A human-readable both-sides rendering is produced for the UI
+        display = result.output["dilemma_display"]
+        assert "Honesty vs kindness" in display
+        assert "PROCEED" in display and "DECLINE" in display
+
+    async def test_dealbreaker_rejection_does_not_escalate(self, mock_task, mock_context):
+        """Values reject with no flagged dilemma → decisive reject, not escalate."""
+        mock_context.extras["__profile_store__"] = _make_profile_store(_sample_profile())
+        provider = _make_provider(_kantian_approved_values_rejected_response())
+        mock_task.properties = {
+            "goal": "Build a gambling app",
+            "check_type": "plan_review",
+            "user_id": 42,
+        }
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.next_route == "reject"
+
+    async def test_no_profile_never_escalates(self, mock_task, mock_context):
+        """Without a profile, a dilemma is never emitted (backward compatible)."""
+        provider = _make_provider(_dilemma_response())
+        mock_task.properties = {
+            "goal": "Give blunt feedback",
+            "check_type": "plan_review",
+            # no user_id → no profile loaded
+        }
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.next_route == "proceed"
+        assert result.output["dilemma"] is None
 
 
 class TestEthicsGateValuesIntegration:

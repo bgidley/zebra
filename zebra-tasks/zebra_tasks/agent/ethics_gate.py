@@ -68,7 +68,20 @@ _VALUES_SECTION_TEMPLATE = """\
 <ethical_positions>{ethical_positions}</ethical_positions>
 <priorities>{priorities}</priorities>
 <deal_breakers>{deal_breakers}</deal_breakers>
-</user_values_profile>"""
+</user_values_profile>
+
+5. DILEMMA DETECTION
+   Decide whether this is a genuine ethical *dilemma* that the human should resolve,
+   rather than something you should silently decide. Set "dilemma.detected" to true only
+   when the action is Kantian-permissible (the three tests pass) AND there is a genuine
+   trade-off, i.e. it honours one of the user's values while conflicting with another
+   (value-vs-value), or it is reasonable on the Kantian view yet sits in real tension
+   with a personal value where thoughtful people could disagree.
+   Do NOT flag a dilemma when:
+     - the action is clearly aligned with all values (just proceed), or
+     - it violates a stated deal-breaker or fails a Kantian test — those are decisive
+       rejections, not trade-offs to deliberate.
+   Never manufacture dilemmas. When one exists, lay out BOTH sides fairly and recommend."""
 
 _COMBINED_JSON_SCHEMA = """\
 Respond with JSON only:
@@ -83,6 +96,17 @@ Respond with JSON only:
         "approved": true or false,
         "reasoning": "...",
         "conflicts": ["specific value conflicts if rejected, otherwise empty list"]
+    },
+    "dilemma": {
+        "detected": true or false,
+        "summary": "one-line statement of the trade-off (empty if none)",
+        "sides": [
+            {"position": "proceed" or "decline",
+             "values": ["values supporting this side"],
+             "reasoning": "why this side has merit"}
+        ],
+        "recommendation": "proceed" or "decline",
+        "recommendation_reasoning": "why you lean this way"
     }
 }"""
 
@@ -107,6 +131,39 @@ not just the goal."""
 _MAX_PROFILE_FIELD_LEN = 300
 
 
+def _format_dilemma_display(dilemma: dict | None, values_assessment: dict | None) -> str:
+    """Render a dilemma into human-readable text for the escalation UI ('both sides')."""
+    lines: list[str] = []
+    summary = (dilemma or {}).get("summary") if isinstance(dilemma, dict) else None
+    if summary:
+        lines.append(f"Trade-off: {summary}")
+
+    sides = (dilemma or {}).get("sides") if isinstance(dilemma, dict) else None
+    if isinstance(sides, list):
+        for side in sides:
+            if not isinstance(side, dict):
+                continue
+            position = side.get("position", "?")
+            values = ", ".join(side.get("values", []) or [])
+            reasoning = side.get("reasoning", "")
+            header = f"• {position.upper()}"
+            if values:
+                header += f" (values: {values})"
+            lines.append(f"{header}: {reasoning}".rstrip(": "))
+
+    if not sides and isinstance(values_assessment, dict):
+        conflicts = values_assessment.get("conflicts") or []
+        if conflicts:
+            lines.append("Conflicting values: " + ", ".join(conflicts))
+
+    rec = (dilemma or {}).get("recommendation") if isinstance(dilemma, dict) else None
+    if rec:
+        rec_reason = dilemma.get("recommendation_reasoning", "")
+        lines.append(f"Agent recommendation: {rec} — {rec_reason}".rstrip(" —"))
+
+    return "\n".join(lines) if lines else "A values conflict was detected for this action."
+
+
 def _build_values_system_prompt(profile: dict) -> str:
     """Build a combined Kantian + values-alignment system prompt."""
     values_section = _VALUES_SECTION_TEMPLATE.format(
@@ -116,6 +173,20 @@ def _build_values_system_prompt(profile: dict) -> str:
         deal_breakers=profile.get("deal_breakers_text", "")[:_MAX_PROFILE_FIELD_LEN],
     )
     return _KANTIAN_PREAMBLE + "\n\n" + values_section + "\n\n" + _COMBINED_JSON_SCHEMA
+
+
+def _parse_user_id(raw_user_id: int | str | None) -> int | None:
+    """Parse raw_user_id to int, returning None on any failure.
+
+    Templates resolve Python None to the string "None", so callers must handle
+    non-numeric strings gracefully rather than calling int() directly.
+    """
+    if raw_user_id is None:
+        return None
+    try:
+        return int(raw_user_id)
+    except (TypeError, ValueError):
+        return None
 
 
 async def _load_profile(raw_user_id: int | str | None, context: ExecutionContext) -> dict | None:
@@ -182,7 +253,11 @@ class EthicsGateAction(TaskAction):
 
     The precedence rule: approved = kantian_approved AND (values_approved if profile else True).
 
-    Sets next_route to "proceed" or "reject" based on the final verdict.
+    Sets next_route to "proceed" or "reject" based on the final verdict. When a values
+    profile is loaded and the action is Kantian-permissible but values genuinely conflict
+    (Kantian-vs-value or value-vs-value), it instead routes "escalate" (F22 / REQ-ETH-005)
+    so the workflow can pause and ask the human to resolve the dilemma. Without a profile,
+    "escalate" is never emitted and behaviour is unchanged.
     """
 
     description = "Kantian ethics gate — evaluate whether an action is ethically permissible."
@@ -348,15 +423,42 @@ class EthicsGateAction(TaskAction):
             # Precedence rule: Kantian rejection wins; values can only restrict, never permit
             approved = kantian_approved and values_approved
             assessment["approved"] = approved
-            next_route = "proceed" if approved else "reject"
+
+            # Dilemma escalation (F22 / REQ-ETH-005): when the action is Kantian-permissible
+            # but values are in genuine conflict, pause and escalate to the human rather than
+            # silently applying the precedence rule. Only possible when a profile is loaded —
+            # without one, behaviour is unchanged (proceed/reject on the Kantian verdict).
+            dilemma = assessment.get("dilemma") if profile is not None else None
+            llm_flagged = bool(dilemma.get("detected")) if isinstance(dilemma, dict) else False
+            # Escalate only genuine trade-offs the model flags as a dilemma. A clear
+            # deal-breaker violation (values reject, no dilemma flagged) still rejects —
+            # the user pre-declared it a "no", so there is nothing to deliberate.
+            dilemma_detected = kantian_approved and llm_flagged
+            if profile is None:
+                assessment["dilemma"] = None
+            elif dilemma_detected:
+                display = _format_dilemma_display(dilemma, values_assessment)
+                assessment["dilemma_display"] = display
+                # Also expose a flat property so human-task form defaults can render it
+                # via a simple {{dilemma_display}} template (the form resolver does not
+                # support nested attribute access).
+                context.set_process_property("dilemma_display", display)
+
+            # A flagged dilemma escalates (only possible when Kantian-permissible);
+            # otherwise apply the precedence verdict. Kantian failure and deal-breaker
+            # value rejections both fall through to a decisive reject.
+            if dilemma_detected:
+                next_route = "escalate"
+            else:
+                next_route = "proceed" if approved else "reject"
 
             if profile is not None:
                 logger.info(
-                    "Ethics %s result: kantian=%s values=%s final=%s, reasoning=%s",
+                    "Ethics %s result: kantian=%s values=%s route=%s, reasoning=%s",
                     check_type,
                     kantian_approved,
                     values_approved,
-                    approved,
+                    next_route,
                     assessment.get("overall_reasoning", "")[:150],
                 )
             else:
@@ -371,14 +473,18 @@ class EthicsGateAction(TaskAction):
             output_key = task.properties.get("output_key", "ethics_assessment")
             context.set_process_property(output_key, assessment)
 
+            audit_check_type = "kantian+values" if profile is not None else "kantian"
+            if next_route == "escalate":
+                audit_check_type += "+escalated"
+
             await _write_audit(
                 context=context,
                 process_id=task.process_id,
                 goal=goal,
                 approved=approved,
                 overall_reasoning=assessment.get("overall_reasoning", ""),
-                check_type="kantian+values" if profile is not None else "kantian",
-                user_id=int(raw_user_id) if raw_user_id is not None else None,
+                check_type=audit_check_type,
+                user_id=_parse_user_id(raw_user_id),
             )
 
             return TaskResult(
