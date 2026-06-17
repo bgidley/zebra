@@ -4,6 +4,11 @@ stages:
   - e2e
   - deploy
   - smoke
+  # OKE migration stages (gated by $OKE_ENABLED; no-ops until the cluster is live).
+  # Ordered build -> smoke -> deploy: validate the exact image, then promote it.
+  - oke_build
+  - oke_smoke
+  - oke_deploy
 
 default:
   tags:
@@ -28,6 +33,9 @@ unit:
 
 e2e:
   stage: e2e
+  # Auto-recover transient ADB connection drops (e.g. DPY-4011). The per-pipeline
+  # schema is dropped in after_script and re-created (drop-if-exists) on retry.
+  retry: 2
   script:
     - cp /home/gitlab-runner/.env .env
     # Provisioner creds live in a SEPARATE runner file (.env.e2e), never the prod
@@ -99,7 +107,8 @@ deploy:
       u.set_password(os.environ['SMOKE_PASSWORD']); u.save();
       print('Smoke user ready')"
   rules:
-    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
+    # VM (podman-compose) deploy — runs until OKE is switched on.
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push" && $OKE_ENABLED != "true"
   resource_group: zebra-prod
 
 smoke:
@@ -109,5 +118,40 @@ smoke:
   variables:
     SMOKE_BASE_URL: "http://localhost:8000"
   rules:
-    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push" && $OKE_ENABLED != "true"
       when: on_success
+
+# ===========================================================================
+# OKE pipeline (F109) — build once -> validate in an ephemeral smoke namespace
+# -> promote the SAME image to prod. Gated by $OKE_ENABLED == "true" so it stays
+# dormant until the cluster exists (F110). The VM deploy/smoke above are gated off
+# at the same time, so exactly one path runs.
+# ===========================================================================
+.oke_rules: &oke_rules
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push" && $OKE_ENABLED == "true"
+
+oke_build:
+  stage: oke_build
+  <<: *oke_rules
+  script:
+    # Build the web image once and push it to OCIR tagged with the commit SHA.
+    - uv run python scripts/gen_version.py > version.json
+    - BUILD_CLAUDE="${BUILD_CLAUDE:-0}" bash deploy/oke/scripts/25-build-push.sh "$CI_COMMIT_SHORT_SHA"
+
+oke_smoke:
+  stage: oke_smoke
+  <<: *oke_rules
+  script:
+    # Stand up an ephemeral smoke instance of :$SHA against the smoke Oracle schema,
+    # run the smoke suite, and tear the namespace down (handled inside the script).
+    - SMOKE_PASSWORD="$SMOKE_PASSWORD" bash deploy/oke/scripts/50-smoke.sh "$CI_COMMIT_SHORT_SHA"
+
+oke_deploy:
+  stage: oke_deploy
+  <<: *oke_rules
+  resource_group: zebra-prod
+  script:
+    # Promote the exact validated image to prod (no rebuild), then prune OCIR.
+    - bash deploy/oke/scripts/40-deploy.sh "$CI_COMMIT_SHORT_SHA"
+    - KEEP="${OCIR_KEEP:-5}" bash deploy/oke/scripts/prune-ocir.sh
