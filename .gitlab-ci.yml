@@ -30,12 +30,12 @@ e2e:
   stage: e2e
   script:
     - cp /home/gitlab-runner/.env .env
-    # Read provisioner creds paren-safely. The Oracle DSN is a connect descriptor
-    # full of '(' ')' and spaces, so it must NOT be bash-sourced (`. .env`) — extract
-    # the exact values instead. pytest-dotenv still loads .env for the app at runtime.
-    - export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' .env)"
-    - export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' .env)"
-    - export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' .env)"
+    # Provisioner creds live in a SEPARATE runner file (.env.e2e), never the prod
+    # .env — the prod container bash-sources .env, and the DSN's '(' ')' would break
+    # that. Extract paren-safely (the DSN must not be bash-sourced).
+    - export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
+    - export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
+    - export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
     # Blank the prod ORACLE_DSN so pytest-dotenv can't select the prod DB.
     - sed -i 's/^ORACLE_DSN=.*/ORACLE_DSN=/' .env
     - |
@@ -61,10 +61,9 @@ e2e:
     # Always drop the ephemeral schema (after_script runs even on failure/cancel).
     # Fresh shell here, so re-extract creds and recompute the deterministic name.
     - |
-      cp /home/gitlab-runner/.env .env 2>/dev/null || true
-      export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' .env)"
-      export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' .env)"
-      export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' .env)"
+      export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
+      export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
+      export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
       if [ -n "$E2E_PROVISIONER_DSN" ]; then
         SCHEMA="E2E_$(printf '%s' "$CI_COMMIT_REF_SLUG" | tr 'a-z-' 'A-Z_' | tr -cd 'A-Z0-9_' | cut -c1-8)_${CI_PIPELINE_ID}"
         echo "Dropping ephemeral Oracle schema $SCHEMA"

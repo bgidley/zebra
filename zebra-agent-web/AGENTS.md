@@ -419,7 +419,7 @@ E2E tests that use `AsyncClient` + SQLite are prone to `database table is locked
    ```
    Without `transaction=True`, the async request handler may not see uncommitted fixture data and return `403 Forbidden`.
 
-2. **In CI, use Oracle for e2e tests**. The `e2e` job provisions a **per-pipeline ephemeral Oracle schema** (`scripts/e2e_oracle_schema.py`): a throwaway `E2E_<branch>_<pipeline-id>` user created via the least-privilege `E2E_PROVISIONER` account (creds in the runner's `/home/gitlab-runner/.env`), migrated, tested, then dropped in `after_script`. Real prod parity, isolated per run, no shared-schema collisions. Falls back to SQLite only when `E2E_PROVISIONER_*` is unset.
+2. **In CI, use Oracle for e2e tests**. The `e2e` job provisions a **per-pipeline ephemeral Oracle schema** (`scripts/e2e_oracle_schema.py`): a throwaway `E2E_<branch>_<pipeline-id>` user created via the least-privilege `E2E_PROVISIONER` account (creds in the runner's `/home/gitlab-runner/.env.e2e`, kept separate from the prod `.env` the container bash-sources), migrated, tested, then dropped in `after_script`. Real prod parity, isolated per run, no shared-schema collisions. Falls back to SQLite only when `E2E_PROVISIONER_*` is unset.
 
 ### Integration Tests
 
