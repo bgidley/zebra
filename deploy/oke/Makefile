@@ -25,5 +25,10 @@ deploy:    ## Deploy/promote prod + claude-code at TAG
 	bash $(S)/40-deploy.sh $(TAG)
 smoke:     ## Ephemeral smoke run against TAG (needs SMOKE_PASSWORD)
 	bash $(S)/50-smoke.sh $(TAG)
+register-runner: ## Register the in-cluster GitLab Runner (needs GITLAB_RUNNER_TOKEN)
+	bash $(S)/60-register-runner.sh
+	kubectl apply -k k8s/base/gitlab-runner
+prune:     ## Prune OCIR, keeping newest KEEP images (default 5)
+	bash $(S)/prune-ocir.sh
 
 all: tooling auth infra kubeconfig secrets ## First-time bring-up of infra

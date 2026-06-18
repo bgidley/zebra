@@ -36,11 +36,11 @@
 
 ## 6. CI on OKE
 
-- [ ] 6.1 Deploy GitLab Runner (Kubernetes executor) into `ns: ci`; register it
-- [ ] 6.2 Rewrite `.gitlab-ci.yml` → `lint → test → e2e → build → smoke → deploy` (deploy = `kubectl set image` to `:<sha>`)
-- [ ] 6.3 Add the OCIR prune step (keep last N) to the deploy stage
-- [ ] 6.4 Verify deploy is gated on smoke; failed smoke blocks deploy (release-promotion: "Deploy gated on smoke")
-- [ ] 6.5 Full pipeline green on the in-cluster runner
+- [x] 6.1 GitLab Runner (Kubernetes executor) manifests in `k8s/base/gitlab-runner/` + `60-register-runner.sh` (apply/register at cutover)
+- [x] 6.2 `.gitlab-ci.yml` gated `oke_build → oke_smoke → oke_deploy` (deploy = `kubectl set image` to `:<sha>`), behind `$OKE_ENABLED`; VM deploy/smoke gate off
+- [x] 6.3 `prune-ocir.sh` (keep last N) wired into `oke_deploy`
+- [ ] 6.4 Verify deploy is gated on smoke; failed smoke blocks deploy (release-promotion: "Deploy gated on smoke") — needs live cluster
+- [ ] 6.5 Full pipeline green on the in-cluster runner — needs live cluster (F110)
 
 ## 7. Cutover & decommission
 

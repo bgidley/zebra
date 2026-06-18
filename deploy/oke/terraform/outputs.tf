@@ -11,6 +11,11 @@ output "cluster_name" {
   value = oci_containerengine_cluster.this.name
 }
 
+output "compartment_ocid" {
+  description = "Compartment holding all Zebra resources (used by prune-ocir.sh)."
+  value       = var.compartment_ocid
+}
+
 output "region" {
   value = var.region
 }

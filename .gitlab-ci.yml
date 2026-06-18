@@ -4,6 +4,11 @@ stages:
   - e2e
   - deploy
   - smoke
+  # OKE migration stages (gated by $OKE_ENABLED; no-ops until the cluster is live).
+  # Ordered build -> smoke -> deploy: validate the exact image, then promote it.
+  - oke_build
+  - oke_smoke
+  - oke_deploy
 
 default:
   tags:
@@ -28,14 +33,17 @@ unit:
 
 e2e:
   stage: e2e
+  # Auto-recover transient ADB connection drops (e.g. DPY-4011). The per-pipeline
+  # schema is dropped in after_script and re-created (drop-if-exists) on retry.
+  retry: 2
   script:
     - cp /home/gitlab-runner/.env .env
-    # Read provisioner creds paren-safely. The Oracle DSN is a connect descriptor
-    # full of '(' ')' and spaces, so it must NOT be bash-sourced (`. .env`) — extract
-    # the exact values instead. pytest-dotenv still loads .env for the app at runtime.
-    - export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' .env)"
-    - export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' .env)"
-    - export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' .env)"
+    # Provisioner creds live in a SEPARATE runner file (.env.e2e), never the prod
+    # .env — the prod container bash-sources .env, and the DSN's '(' ')' would break
+    # that. Extract paren-safely (the DSN must not be bash-sourced).
+    - export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
+    - export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
+    - export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
     # Blank the prod ORACLE_DSN so pytest-dotenv can't select the prod DB.
     - sed -i 's/^ORACLE_DSN=.*/ORACLE_DSN=/' .env
     - |
@@ -61,10 +69,9 @@ e2e:
     # Always drop the ephemeral schema (after_script runs even on failure/cancel).
     # Fresh shell here, so re-extract creds and recompute the deterministic name.
     - |
-      cp /home/gitlab-runner/.env .env 2>/dev/null || true
-      export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' .env)"
-      export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' .env)"
-      export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' .env)"
+      export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
+      export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
+      export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
       if [ -n "$E2E_PROVISIONER_DSN" ]; then
         SCHEMA="E2E_$(printf '%s' "$CI_COMMIT_REF_SLUG" | tr 'a-z-' 'A-Z_' | tr -cd 'A-Z0-9_' | cut -c1-8)_${CI_PIPELINE_ID}"
         echo "Dropping ephemeral Oracle schema $SCHEMA"
@@ -100,7 +107,8 @@ deploy:
       u.set_password(os.environ['SMOKE_PASSWORD']); u.save();
       print('Smoke user ready')"
   rules:
-    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
+    # VM (podman-compose) deploy — runs until OKE is switched on.
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push" && $OKE_ENABLED != "true"
   resource_group: zebra-prod
 
 smoke:
@@ -110,5 +118,40 @@ smoke:
   variables:
     SMOKE_BASE_URL: "http://localhost:8000"
   rules:
-    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push" && $OKE_ENABLED != "true"
       when: on_success
+
+# ===========================================================================
+# OKE pipeline (F109) — build once -> validate in an ephemeral smoke namespace
+# -> promote the SAME image to prod. Gated by $OKE_ENABLED == "true" so it stays
+# dormant until the cluster exists (F110). The VM deploy/smoke above are gated off
+# at the same time, so exactly one path runs.
+# ===========================================================================
+.oke_rules: &oke_rules
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push" && $OKE_ENABLED == "true"
+
+oke_build:
+  stage: oke_build
+  <<: *oke_rules
+  script:
+    # Build the web image once and push it to OCIR tagged with the commit SHA.
+    - uv run python scripts/gen_version.py > version.json
+    - BUILD_CLAUDE="${BUILD_CLAUDE:-0}" bash deploy/oke/scripts/25-build-push.sh "$CI_COMMIT_SHORT_SHA"
+
+oke_smoke:
+  stage: oke_smoke
+  <<: *oke_rules
+  script:
+    # Stand up an ephemeral smoke instance of :$SHA against the smoke Oracle schema,
+    # run the smoke suite, and tear the namespace down (handled inside the script).
+    - SMOKE_PASSWORD="$SMOKE_PASSWORD" bash deploy/oke/scripts/50-smoke.sh "$CI_COMMIT_SHORT_SHA"
+
+oke_deploy:
+  stage: oke_deploy
+  <<: *oke_rules
+  resource_group: zebra-prod
+  script:
+    # Promote the exact validated image to prod (no rebuild), then prune OCIR.
+    - bash deploy/oke/scripts/40-deploy.sh "$CI_COMMIT_SHORT_SHA"
+    - KEEP="${OCIR_KEEP:-5}" bash deploy/oke/scripts/prune-ocir.sh

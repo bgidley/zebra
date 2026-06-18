@@ -61,8 +61,12 @@ Makefile     thin wrapper over scripts
   at cutover, single 10 Mbps LB.
 - **Registry hygiene**: OCIR has no stable Terraform retention resource; prune the
   registry from the CI deploy stage (keep last N) — replaces the old host-disk cleanup.
-- **CI on OKE** (later increment): GitLab Runner with the Kubernetes executor in ns
-  `ci`; pipeline becomes `lint → test → e2e → build → smoke → deploy`, deploy = `kubectl set image`.
+- **CI on OKE** (F109, scaffolded): GitLab Runner (Kubernetes executor) manifests in
+  `k8s/base/gitlab-runner/` + `scripts/60-register-runner.sh`. `.gitlab-ci.yml` gains
+  gated `oke_build → oke_smoke → oke_deploy` stages (build to OCIR → ephemeral smoke ns
+  → `kubectl set image` promote + `prune-ocir.sh`), behind `$OKE_ENABLED == "true"`. While
+  that flag is unset the existing VM `deploy`/`smoke` run unchanged; set it (and the VM jobs
+  gate off) at cutover. Bring up: `make register-runner` (needs `GITLAB_RUNNER_TOKEN`).
 
 ## Verify without an account
 `terraform -chdir=terraform init -backend=false && terraform -chdir=terraform validate`

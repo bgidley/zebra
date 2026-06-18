@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab-runner
+  namespace: ci
+  labels:
+    app: gitlab-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab-runner
+  template:
+    metadata:
+      labels:
+        app: gitlab-runner
+    spec:
+      serviceAccountName: gitlab-runner
+      containers:
+        - name: gitlab-runner
+          image: gitlab/gitlab-runner:latest
+          # Register (idempotent with an authentication token) then run. Executor =
+          # kubernetes; build pods land in ns ci using the gitlab-runner SA. Buildah
+          # image builds need privileged + /dev/fuse — tune at apply time (F110).
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -e
+              gitlab-runner register --non-interactive \
+                --url "$CI_SERVER_URL" \
+                --token "$RUNNER_TOKEN" \
+                --executor kubernetes \
+                --kubernetes-namespace ci \
+                --kubernetes-service-account gitlab-runner \
+                --kubernetes-image "$BUILD_IMAGE" \
+                --kubernetes-privileged true \
+                --tag-list oke-k8s \
+                --locked=false --run-untagged=false
+              exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner
+          env:
+            - name: CI_SERVER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-runner-secret
+                  key: ci-server-url
+            - name: RUNNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-runner-secret
+                  key: runner-token
+            # Build image carries uv + kubectl + buildah + git/glab/gh (the claude image).
+            - name: BUILD_IMAGE
+              value: REGISTRY/zebra/zebra-claude:latest
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
