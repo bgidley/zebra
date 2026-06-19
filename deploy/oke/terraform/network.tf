@@ -3,8 +3,9 @@
 #
 # Design choices (cost/free-tier):
 #   - Workers live in a PUBLIC subnet behind an Internet Gateway, so we avoid a
-#     paid NAT Gateway for egress (image pulls, Anthropic, Oracle ADB).
-#   - A Service Gateway gives free private access to OCI services (OCIR, etc.).
+#     paid NAT Gateway for egress (image pulls, Anthropic, Oracle ADB, OCIR).
+#     (No Service Gateway: OCI rejects an IGW default route alongside a SGW
+#      "All Services" route, and the IGW already covers OCI service egress.)
 #   - Ingress is locked down with security lists; the k8s API and SSH are
 #     restricted to var.admin_cidr.
 # ---------------------------------------------------------------------------
@@ -23,23 +24,10 @@ resource "oci_core_internet_gateway" "this" {
   enabled        = true
 }
 
-data "oci_core_services" "all" {
-  filter {
-    name   = "name"
-    values = ["All .* Services In Oracle Services Network"]
-    regex  = true
-  }
-}
-
-resource "oci_core_service_gateway" "this" {
-  compartment_id = var.compartment_ocid
-  vcn_id         = oci_core_vcn.this.id
-  display_name   = "${local.name}-sgw"
-  services {
-    service_id = data.oci_core_services.all.services[0]["id"]
-  }
-}
-
+# Workers sit in a public subnet and reach OCI services (OCIR, object storage)
+# over the Internet Gateway, so no Service Gateway is needed. OCI also rejects an
+# IGW 0.0.0.0/0 route alongside a Service-Gateway "All Services" route in the same
+# table, so a single default route to the IGW is both sufficient and required here.
 resource "oci_core_route_table" "public" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.this.id
@@ -49,12 +37,6 @@ resource "oci_core_route_table" "public" {
     destination       = "0.0.0.0/0"
     destination_type  = "CIDR_BLOCK"
     network_entity_id = oci_core_internet_gateway.this.id
-  }
-
-  route_rules {
-    destination       = data.oci_core_services.all.services[0]["cidr_block"]
-    destination_type  = "SERVICE_CIDR_BLOCK"
-    network_entity_id = oci_core_service_gateway.this.id
   }
 }
 
