@@ -8,3 +8,4 @@ resources:
   - prod-web
   - prod-daemon
   - claude-code
+  - claude-code-cross-ns-rbac.yaml
