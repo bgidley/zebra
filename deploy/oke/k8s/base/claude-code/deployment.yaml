@@ -28,6 +28,27 @@ spec:
           envFrom:
             - secretRef:
                 name: claude-secrets
+          # Reconstruct git auth + repo from env on every start (ephemeral /root
+          # is recreated each restart). Idempotent; self-seeds a fresh PVC.
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    git config --global user.name "${GIT_AUTHOR_NAME:-Zebra Agent}"
+                    git config --global user.email "${GIT_AUTHOR_EMAIL:-agent@gidley.co.uk}"
+                    git config --global credential.helper store
+                    umask 077
+                    { [ -n "$GITLAB_TOKEN" ] && echo "https://oauth2:${GITLAB_TOKEN}@gitlab.com";
+                      [ -n "$GH_TOKEN" ] && echo "https://x-access-token:${GH_TOKEN}@github.com"; } > /root/.git-credentials
+                    if [ ! -d /workspace/zebra/.git ]; then
+                      git clone https://gitlab.com/gidley/zebra.git /workspace/zebra || true
+                    fi
+                    cd /workspace/zebra 2>/dev/null && \
+                      git remote get-url github >/dev/null 2>&1 || \
+                      git -C /workspace/zebra remote add github https://github.com/bgidley/zebra.git 2>/dev/null || true
           volumeMounts:
             - name: workspace
               mountPath: /workspace
