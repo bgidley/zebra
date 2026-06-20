@@ -28,14 +28,20 @@ RUN KVER="$(curl -fsSL https://dl.k8s.io/release/stable.txt)" \
     && chmod +x /usr/local/bin/kubectl
 
 # glab (GitLab CLI) + gh (GitHub CLI), arm64
-RUN GLAB_VER="1.45.0" \
-    && curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VER}/downloads/glab_${GLAB_VER}_linux_arm64.tar.gz" \
-       | tar -xz -C /usr/local --strip-components=1 bin/glab \
-    && GH_VER="2.62.0" \
-    && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VER}/gh_${GH_VER}_linux_arm64.tar.gz" \
-       | tar -xz -C /tmp \
-    && install -m0755 "/tmp/gh_${GH_VER}_linux_arm64/bin/gh" /usr/local/bin/gh \
-    && rm -rf /tmp/gh_*
+# GitLab/GitHub CLIs (best-effort — fetch glab's current version dynamically; the
+# agent still works via git + tokens if a download is unavailable, so don't fail the build).
+RUN arch=arm64; \
+    GLAB_VER="$(curl -fsSL 'https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases' 2>/dev/null | jq -r '.[0].tag_name' 2>/dev/null | sed 's/^v//')"; \
+    if [ -n "$GLAB_VER" ]; then \
+      curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VER}/downloads/glab_${GLAB_VER}_linux_${arch}.tar.gz" \
+        | tar -xz -C /usr/local --strip-components=1 bin/glab || echo "WARN: glab install skipped"; \
+    fi; \
+    GH_VER=2.62.0; \
+    { curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VER}/gh_${GH_VER}_linux_${arch}.tar.gz" \
+        | tar -xz -C /tmp \
+      && install -m0755 "/tmp/gh_${GH_VER}_linux_${arch}/bin/gh" /usr/local/bin/gh \
+      && rm -rf /tmp/gh_*; } || echo "WARN: gh install skipped"; \
+    true
 
 WORKDIR /workspace
 

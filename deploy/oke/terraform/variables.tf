@@ -48,8 +48,8 @@ variable "cluster_name" {
 
 variable "kubernetes_version" {
   type        = string
-  description = "OKE Kubernetes version, e.g. v1.30.1. List options: `oci ce cluster-options get --cluster-option-id all`."
-  default     = "v1.30.1"
+  description = "OKE Kubernetes version. List options: `oci ce cluster-options get --cluster-option-id all`."
+  default     = "v1.34.2"
 }
 
 # Worker pool sizing. Free Always-Free A1 pool is 4 OCPU / 24 GB total.

@@ -1,0 +1,52 @@
+# Least-privilege external access for running Claude in the pod from a laptop
+# (over Tailscale → private API endpoint). Grants ONLY: read pods/deployments and
+# exec into pods in ns tools. Cannot touch prod or other namespaces.
+# The token is auto-populated into the annotated Secret by k8s (no secret in git).
+# Build a kubeconfig: server=https://<private-endpoint>:6443, CA + token from the Secret.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mac-claude
+  namespace: tools
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mac-claude-exec
+  namespace: tools
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mac-claude-exec
+  namespace: tools
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mac-claude-exec
+subjects:
+  - kind: ServiceAccount
+    name: mac-claude
+    namespace: tools
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mac-claude-token
+  namespace: tools
+  annotations:
+    kubernetes.io/service-account.name: mac-claude
+type: kubernetes.io/service-account-token

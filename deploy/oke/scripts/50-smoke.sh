@@ -44,8 +44,10 @@ kubectl -n smoke rollout status deploy/zebra-web --timeout=180s
 
 log "provisioning smoke user"
 POD="$(kubectl -n smoke get pod -l app=zebra-web -o jsonpath='{.items[0].metadata.name}')"
-kubectl -n smoke exec "$POD" -- \
-  python zebra-agent-web/manage.py ensure_smoke_user "$SMOKE_PASSWORD"
+# SMOKE_PASSWORD is already in the pod env (from zebra-smoke-secrets); create the
+# user via a shell one-liner (matches the proven deploy path — no custom command).
+kubectl -n smoke exec "$POD" -- python zebra-agent-web/manage.py shell -c \
+  "import os; from django.contrib.auth.models import User; u,_=User.objects.get_or_create(username='smoke'); u.set_password(os.environ['SMOKE_PASSWORD']); u.save(); print('smoke user ready')"
 
 log "port-forwarding smoke service → localhost:18000"
 kubectl -n smoke port-forward svc/zebra-web 18000:80 >/dev/null 2>&1 &

@@ -13,7 +13,7 @@ PREFIX="${OCIR_REPO_PREFIX:-zebra}"
 for repo in "$PREFIX/zebra-web" "$PREFIX/zebra-claude"; do
   log "pruning $repo (keeping newest $KEEP)"
   # Newest first; slice off the first KEEP, delete the rest.
-  ids="$(oci artifacts container-image list \
+  ids="$(oci artifacts container image list \
             --compartment-id "$COMPARTMENT" \
             --repository-name "$repo" \
             --sort-by TIMECREATED --sort-order DESC --all \
@@ -22,7 +22,7 @@ for repo in "$PREFIX/zebra-web" "$PREFIX/zebra-claude"; do
   for id in $ids; do
     [ -n "$id" ] || continue
     log "deleting image $id"
-    oci artifacts container-image delete --image-id "$id" --force >/dev/null
+    oci artifacts container image delete --image-id "$id" --force >/dev/null
   done
 done
 log "OCIR prune complete."

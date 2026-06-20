@@ -1,15 +1,14 @@
+# Private by design — ClusterIP only, NO public LoadBalancer. Reach prod via:
+#   kubectl -n prod port-forward svc/zebra-web 8000:80   (kubeconfig-authenticated)
+# For day-to-day private access, front it with an OCI *internal* LB
+# (annotation service.beta.kubernetes.io/oci-load-balancer-internal: "true") reachable
+# over a VPN/peered VCN, or a Tailscale subnet router on the cluster (matches the VM).
 apiVersion: v1
 kind: Service
 metadata:
   name: zebra-web
-  annotations:
-    # Always-Free 10 Mbps flexible OCI Load Balancer.
-    oci.oraclecloud.com/load-balancer-type: "lb"
-    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
-    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
-    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "10"
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: zebra-web
   ports:

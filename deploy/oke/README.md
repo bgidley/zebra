@@ -5,7 +5,7 @@ Kubernetes (OKE)**, with three isolated workloads and images in **OCIR**:
 
 | Workload | Namespace | Lifecycle | DB |
 |----------|-----------|-----------|----|
-| `zebra-web` + `zebra-daemon` (prod) | `prod` | always-on, fronted by the Always-Free 10 Mbps LB | Oracle **prod** schema |
+| `zebra-web` + `zebra-daemon` (prod) | `prod` | always-on, **private** (ClusterIP; port-forward / internal LB / Tailscale) | Oracle **prod** schema |
 | smoke instance + test run | `smoke` | **ephemeral** per CI run, then deleted | Oracle **smoke** schema |
 | `claude-code` (agent + dev sandbox) | `tools` | always-on pod, repo on a PVC | — |
 
@@ -22,7 +22,7 @@ flowchart LR
   OCIR --> P[prod ns: web + daemon]
   OCIR --> S[smoke ns: ephemeral, own Oracle schema]
   OCIR --> T[tools ns: claude-code pod]
-  P --> LB[[Always-Free 10Mbps LB]] --> Users((users))
+  P -. private: port-forward / internal LB / Tailscale .- Users((admin))
   ADB[(Oracle ADB)] -. prod schema .- P
   ADB -. smoke schema .- S
 ```
@@ -58,7 +58,8 @@ Makefile     thin wrapper over scripts
   `DaemonStarterMiddleware`, guaranteeing exactly one daemon.
 - **Free-tier shape**: OKE **Basic** (free control plane), Flannel CNI, workers in a
   **public subnet + IGW** (no paid NAT), one A1 node sized 2/12 for migration → 4/24
-  at cutover, single 10 Mbps LB.
+  at cutover. Prod is **private** (ClusterIP, no public LB); the LB subnet/security
+  list are scoped to the VCN for an optional future internal LB.
 - **Registry hygiene**: OCIR has no stable Terraform retention resource; prune the
   registry from the CI deploy stage (keep last N) — replaces the old host-disk cleanup.
 - **CI on OKE** (F109, scaffolded): GitLab Runner (Kubernetes executor) manifests in

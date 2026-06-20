@@ -9,7 +9,7 @@ Move Zebra off the single Always-Free VM (where prod, smoke, and Claude Code sha
 a host with no isolation and the disk fills up) onto **OKE** with three isolated
 workloads and images in **OCIR**:
 
-- **prod** (`ns: prod`) — `zebra-web` (Daphne) + `zebra-daemon` (budget daemon), always-on, public via the Always-Free 10 Mbps LB. Oracle **prod** schema.
+- **prod** (`ns: prod`) — `zebra-web` (Daphne) + `zebra-daemon` (budget daemon), always-on, **private** (ClusterIP — no public LB; reach via `kubectl port-forward`, or an OCI *internal* LB / Tailscale subnet router). Oracle **prod** schema.
 - **smoke** (`ns: smoke`) — ephemeral per-CI-run instance + test execution against a dedicated Oracle **smoke** schema; deleted on completion. Replaces today's "smoke tests hit live prod".
 - **claude-code** (`ns: tools`) — long-lived sandbox pod (autonomous agent + dev), repo on a PVC.
 
