@@ -21,9 +21,13 @@ spec:
         app: tailscale-subnet-router
     spec:
       serviceAccountName: tailscale
+      imagePullSecrets:
+        - name: ocir-pull
       containers:
         - name: tailscale
-          image: tailscale/tailscale:latest
+          # Mirrored into OCIR (avoids Docker Hub anonymous pull rate limits on the node).
+          # Refresh with: buildah pull docker.io/tailscale/tailscale:stable && buildah tag … && push
+          image: REGISTRY/zebra/tailscale:stable
           env:
             - name: TS_AUTHKEY
               valueFrom:
