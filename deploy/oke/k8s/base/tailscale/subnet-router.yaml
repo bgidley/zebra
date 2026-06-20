@@ -40,7 +40,7 @@ spec:
               value: "true"
             # Advertise the k8s service CIDR (reach prod ClusterIP) + pod CIDR.
             - name: TS_ROUTES
-              value: "10.96.0.0/16,10.244.0.0/16"
+              value: "10.96.0.0/16,10.244.0.0/16,10.20.0.0/16"
             - name: TS_EXTRA_ARGS
               value: "--hostname=zebra-oke --accept-dns=false"
             - name: POD_IP

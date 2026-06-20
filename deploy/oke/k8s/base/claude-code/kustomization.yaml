@@ -5,6 +5,7 @@ resources:
   - pvc.yaml
   - rbac.yaml
   - deployment.yaml
+  - mac-access.yaml
 images:
   - name: zebra-claude
     newName: REGISTRY/zebra/zebra-claude
