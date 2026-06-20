@@ -25,6 +25,9 @@ deploy:    ## Deploy/promote prod + claude-code at TAG
 	bash $(S)/40-deploy.sh $(TAG)
 smoke:     ## Ephemeral smoke run against TAG (needs SMOKE_PASSWORD)
 	bash $(S)/50-smoke.sh $(TAG)
+tailscale: ## Deploy the Tailscale subnet router (needs TS_AUTHKEY)
+	bash $(S)/70-tailscale.sh
+
 register-runner: ## Register the in-cluster GitLab Runner (needs GITLAB_RUNNER_TOKEN)
 	bash $(S)/60-register-runner.sh
 	kubectl apply -k k8s/base/gitlab-runner

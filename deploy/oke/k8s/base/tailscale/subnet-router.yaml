@@ -1,0 +1,52 @@
+# Tailscale subnet router — advertises the cluster service + pod CIDRs onto the
+# tailnet so tailnet devices reach prod (and any service) privately, no public LB.
+# Userspace networking (no /dev/net/tun needed); state persisted in a k8s Secret.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-subnet-router
+  namespace: tailscale
+  labels:
+    app: tailscale-subnet-router
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tailscale-subnet-router
+  template:
+    metadata:
+      labels:
+        app: tailscale-subnet-router
+    spec:
+      serviceAccountName: tailscale
+      containers:
+        - name: tailscale
+          image: tailscale/tailscale:latest
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-auth
+                  key: TS_AUTHKEY
+            - name: TS_KUBE_SECRET
+              value: tailscale-state
+            - name: TS_USERSPACE
+              value: "true"
+            # Advertise the k8s service CIDR (reach prod ClusterIP) + pod CIDR.
+            - name: TS_ROUTES
+              value: "10.96.0.0/16,10.244.0.0/16"
+            - name: TS_EXTRA_ARGS
+              value: "--hostname=zebra-oke --accept-dns=false"
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

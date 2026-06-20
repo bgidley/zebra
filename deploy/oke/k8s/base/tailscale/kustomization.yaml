@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - subnet-router.yaml
+# The tailscale-auth Secret (TS_AUTHKEY) is created by 70-tailscale.sh from
+# $TS_AUTHKEY at apply time — never committed.

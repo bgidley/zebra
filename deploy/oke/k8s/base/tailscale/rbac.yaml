@@ -1,0 +1,35 @@
+# The subnet router stores its node state in a k8s Secret (TS_KUBE_SECRET), so it
+# needs get/create/update on that secret in its own namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tailscale
+  namespace: tailscale
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tailscale
+  namespace: tailscale
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["tailscale-state"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tailscale
+  namespace: tailscale
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tailscale
+subjects:
+  - kind: ServiceAccount
+    name: tailscale
+    namespace: tailscale
