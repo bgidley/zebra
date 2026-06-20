@@ -163,9 +163,11 @@ resource "oci_core_security_list" "lb" {
     protocol    = "all"
   }
 
-  # Public HTTP/HTTPS to the prod app.
+  # Private by design: prod is a ClusterIP service (no public LB). If an OCI
+  # *internal* LB is later fronted here, it only needs in-VCN reachability — so
+  # HTTP/HTTPS ingress is scoped to the VCN, never the public internet.
   ingress_security_rules {
-    source   = "0.0.0.0/0"
+    source   = var.vcn_cidr
     protocol = "6"
     tcp_options {
       min = 80
@@ -174,7 +176,7 @@ resource "oci_core_security_list" "lb" {
   }
 
   ingress_security_rules {
-    source   = "0.0.0.0/0"
+    source   = var.vcn_cidr
     protocol = "6"
     tcp_options {
       min = 443
