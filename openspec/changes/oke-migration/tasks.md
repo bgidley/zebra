@@ -40,7 +40,7 @@
 - [x] 6.2 `.gitlab-ci.yml` gated `oke_build → oke_smoke → oke_deploy` (deploy = `kubectl set image` to `:<sha>`), behind `$OKE_ENABLED`; VM deploy/smoke gate off
 - [x] 6.3 `prune-ocir.sh` (keep last N) wired into `oke_deploy`
 - [ ] 6.4 Verify deploy is gated on smoke; failed smoke blocks deploy (release-promotion: "Deploy gated on smoke") — needs live cluster
-- [ ] 6.5 Full pipeline green on the in-cluster runner — needs live cluster (F110)
+- [ ] 6.5 Full pipeline green on the in-cluster runner — needs live cluster; fixed missing `tags: [oke-k8s]` on `oke_build`/`oke_smoke`/`oke_deploy` (they were silently inheriting the VM's `default.tags: [opc-shell]`, so they'd never have run on the new runner); runner registered via API (id 53800437) but applying its k8s manifests + the `ci` namespace secret needs cluster-admin RBAC the `claude-code` pod doesn't have (it's `view` cluster-wide + `edit` only in `tools`) — pending manual apply
 
 ## 7. Cutover & decommission
 
