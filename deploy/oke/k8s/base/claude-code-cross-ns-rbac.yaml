@@ -1,0 +1,31 @@
+# Cross-namespace edit for the in-pod agent (tools:claude-code SA): it manages
+# prod + ci workloads during cutover (set images, start the daemon, deploy the
+# runner). Kept in the base kustomization (NOT the claude-code overlay, which pins
+# namespace: tools and would otherwise rewrite these into the tools namespace).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: claude-code-edit-prod
+  namespace: prod
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: claude-code
+    namespace: tools
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: claude-code-edit-ci
+  namespace: ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: claude-code
+    namespace: tools

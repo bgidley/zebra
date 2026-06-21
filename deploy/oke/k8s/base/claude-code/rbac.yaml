@@ -6,6 +6,22 @@ metadata:
   name: claude-code
   namespace: tools
 ---
+# Full cluster-admin: the in-pod agent runs the whole migration/cutover and needs
+# cluster-scoped actions (namespaces, ClusterRoleBindings, CRDs) beyond `edit`.
+# This supersedes the view/edit bindings below (kept for clarity / easy downgrade).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-code-cluster-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: claude-code
+    namespace: tools
+---
 # Cluster-wide read so the agent can inspect any namespace.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
