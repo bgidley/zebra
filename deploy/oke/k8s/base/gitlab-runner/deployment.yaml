@@ -18,10 +18,14 @@ spec:
       serviceAccountName: gitlab-runner
       containers:
         - name: gitlab-runner
-          image: gitlab/gitlab-runner:latest
+          image: docker.io/gitlab/gitlab-runner:latest
           # Register (idempotent with an authentication token) then run. Executor =
           # kubernetes; build pods land in ns ci using the gitlab-runner SA. Buildah
           # image builds need privileged + /dev/fuse — tune at apply time (F110).
+          # Tags/locked/run-untagged are NOT passed here — with a runner
+          # authentication token (glrt-...) those are server-side config tied to
+          # the runner object (set when it was created via POST /user/runners);
+          # passing them to `register` is rejected as of GitLab 16+.
           command: ["/bin/bash", "-c"]
           args:
             - |
@@ -33,9 +37,7 @@ spec:
                 --kubernetes-namespace ci \
                 --kubernetes-service-account gitlab-runner \
                 --kubernetes-image "$BUILD_IMAGE" \
-                --kubernetes-privileged true \
-                --tag-list oke-k8s \
-                --locked=false --run-untagged=false
+                --kubernetes-privileged=true
               exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner
           env:
             - name: CI_SERVER_URL

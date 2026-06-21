@@ -134,6 +134,8 @@ smoke:
 oke_build:
   stage: oke_build
   <<: *oke_rules
+  tags:
+    - oke-k8s
   script:
     # Build the web image once and push it to OCIR tagged with the commit SHA.
     - uv run python scripts/gen_version.py > version.json
@@ -142,6 +144,8 @@ oke_build:
 oke_smoke:
   stage: oke_smoke
   <<: *oke_rules
+  tags:
+    - oke-k8s
   script:
     # Stand up an ephemeral smoke instance of :$SHA against the smoke Oracle schema,
     # run the smoke suite, and tear the namespace down (handled inside the script).
@@ -150,6 +154,8 @@ oke_smoke:
 oke_deploy:
   stage: oke_deploy
   <<: *oke_rules
+  tags:
+    - oke-k8s
   resource_group: zebra-prod
   script:
     # Promote the exact validated image to prod (no rebuild), then prune OCIR.
