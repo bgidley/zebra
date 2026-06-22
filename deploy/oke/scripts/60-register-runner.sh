@@ -9,9 +9,12 @@
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 require kubectl
+require kustomize
 
 : "${GITLAB_RUNNER_TOKEN:?set GITLAB_RUNNER_TOKEN (glrt-... authentication token)}"
 GITLAB_URL="${GITLAB_URL:-https://gitlab.com}"
+REGISTRY="$(tf_out ocir_registry)"
+PREFIX="${OCIR_REPO_PREFIX:-zebra}"
 
 kubectl create namespace ci --dry-run=client -o yaml | kubectl apply -f -
 
@@ -22,5 +25,15 @@ kubectl -n ci create secret generic gitlab-runner-secret \
   --dry-run=client -o yaml | kubectl apply -f -
 
 log "gitlab-runner-secret created in ns ci."
-log "Apply the runner manifests:  kubectl apply -k $K8S_DIR/base/gitlab-runner"
-log "Then verify it shows online under the project's CI/CD → Runners."
+
+# BUILD_IMAGE is a plain env value (not a container image field), so kustomize's
+# `images` transformer can't rewrite it — sed the REGISTRY placeholder directly,
+# apply, then revert so the placeholder isn't committed.
+sed -i.bak "s#REGISTRY/zebra/zebra-claude#$REGISTRY/$PREFIX/zebra-claude#" \
+  "$K8S_DIR/base/gitlab-runner/deployment.yaml"
+rm -f "$K8S_DIR/base/gitlab-runner/deployment.yaml.bak"
+kustomize build "$K8S_DIR/base/gitlab-runner" | kubectl apply -f -
+git -C "$OKE_DIR" checkout -- k8s 2>/dev/null || true
+
+log "gitlab-runner applied with BUILD_IMAGE=$REGISTRY/$PREFIX/zebra-claude:latest."
+log "Verify it shows online under the project's CI/CD → Runners."
