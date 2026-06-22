@@ -8,9 +8,11 @@ FROM python:3.14-slim
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/root/.local/bin:${PATH}"
 
-# Base tooling
+# Base tooling. buildah + fuse-overlayfs: this image doubles as the in-cluster
+# GitLab Runner's build container (deploy/oke/scripts/25-build-push.sh).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates openssh-client ripgrep jq less unzip gnupg \
+        buildah fuse-overlayfs \
     && rm -rf /var/lib/apt/lists/*
 
 # uv (Python package/exec manager used across the monorepo)
