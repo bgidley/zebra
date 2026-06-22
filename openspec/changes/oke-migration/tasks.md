@@ -26,7 +26,7 @@
 - [x] 4.1 prod-web deployed; rollout Ready (prod-daemon deliberately held until cutover — avoids double-daemon vs the live VM)
 - [x] 4.2 Single-daemon verification — `zebra-daemon` deployed to OKE (F111); SchedulerLoop started cleanly, resumed 24 interrupted processes, and correctly no-op'd on the goal queue ("Kill switch active — skipping pickup") since Ben halted the system-wide kill switch before this. Confirms the OKE daemon and the VM's in-process daemon can coexist safely while halted; VM daemon still needs to be structurally disabled (not just halted) before un-halting for real cutover
 - [x] 4.3 `/api/health/` via LB `79.72.65.246` → 200
-- [x] 4.4 claude-code up (claude/kubectl/git/gh + in-cluster RBAC); `glab` best-effort (skipped, non-blocking)
+- [x] 4.4 claude-code up (claude/kubectl/git/gh/glab + in-cluster RBAC). `glab` install previously silently landed in the wrong path (`--strip-components` bug in the Dockerfile) — fixed during F111; both `gh`/`glab` are now required, verified installs
 
 ## 5. Smoke isolation validation
 
