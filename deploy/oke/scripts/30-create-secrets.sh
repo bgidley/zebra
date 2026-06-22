@@ -35,10 +35,11 @@ mk_generic() {
 
 mk_pull_secret prod
 mk_pull_secret tools
+mk_pull_secret ci
 
 # --- app secrets ---
 mk_generic prod zebra-prod-secrets "$SECRETS_DIR/prod.env"
 mk_generic tools claude-secrets "$SECRETS_DIR/claude.env"
 
-log "secrets created in namespaces: prod, tools."
+log "secrets created in namespaces: prod, tools, ci."
 log "(smoke secret + pull secret are created per-run by 50-smoke.sh)"
