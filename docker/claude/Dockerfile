@@ -8,11 +8,13 @@ FROM python:3.14-slim
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/root/.local/bin:${PATH}"
 
-# Base tooling. buildah + fuse-overlayfs: this image doubles as the in-cluster
-# GitLab Runner's build container (deploy/oke/scripts/25-build-push.sh).
+# Base tooling. buildah + fuse-overlayfs + netavark/aardvark-dns: this image
+# doubles as the in-cluster GitLab Runner's build container
+# (deploy/oke/scripts/25-build-push.sh) — buildah needs a network backend to
+# create build containers, which isn't pulled in by --no-install-recommends.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates openssh-client ripgrep jq less unzip gnupg \
-        buildah fuse-overlayfs \
+        buildah fuse-overlayfs netavark aardvark-dns \
     && rm -rf /var/lib/apt/lists/*
 
 # uv (Python package/exec manager used across the monorepo)
