@@ -40,6 +40,14 @@ spec:
                 --kubernetes-privileged=true \
                 --kubernetes-helper-image-autoset-arch-and-os=true \
                 --kubernetes-image-pull-secrets ocir-pull
+              # No register flag exposes Kubernetes-executor secret volumes; append
+              # the TOML directly so build pods get the e2e/smoke Oracle provisioner
+              # creds as files (kept out of GitLab CI/CD variables on purpose).
+              printf '%s\n' \
+                '[[runners.kubernetes.volumes.secret]]' \
+                '  name = "e2e-provisioner"' \
+                '  mount_path = "/etc/gitlab-secrets/e2e-provisioner"' \
+                >> /etc/gitlab-runner/config.toml
               exec gitlab-runner run --user=gitlab-runner --working-directory=/home/gitlab-runner
           env:
             - name: CI_SERVER_URL

@@ -72,8 +72,9 @@ cp deploy/oke/terraform/terraform.tfvars.example deploy/oke/terraform/terraform.
 #       compartment_ocid, ssh_public_key, admin_cidr (your IP /32 — `curl ifconfig.me`)
 cp deploy/oke/secrets/registry.env.example deploy/oke/secrets/registry.env   # + OCIR token
 cp deploy/oke/secrets/prod.env.example      deploy/oke/secrets/prod.env       # prod Oracle + keys
-cp deploy/oke/secrets/smoke.env.example     deploy/oke/secrets/smoke.env      # smoke Oracle schema
 cp deploy/oke/secrets/claude.env.example    deploy/oke/secrets/claude.env     # agent tokens
+# Smoke gets its own ephemeral Oracle schema per run via scripts/e2e_oracle_schema.py
+# (same provisioner account as e2e) — no static smoke.env needed anymore.
 ```
 
 ## 6. Hand off to the scripts
