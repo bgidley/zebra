@@ -34,13 +34,17 @@ tf_out() {
 # Registry host, e.g. lhr.ocir.io (strips the /<namespace> suffix).
 ocir_host() { tf_out ocir_registry | cut -d/ -f1; }
 
-# Log buildah/podman into OCIR. Requires registry.env (OCI_USERNAME / OCIR_TOKEN).
+# Log buildah/podman into OCIR. Requires registry.env (OCI_USERNAME / OCIR_TOKEN)
+# locally, or OCI_USERNAME/OCIR_TOKEN already in the environment (CI/CD variables
+# — there's no secrets/ checkout on an ephemeral CI runner).
 ocir_login() {
   local builder="${1:-buildah}"
-  [ -f "$SECRETS_DIR/registry.env" ] || die "create $SECRETS_DIR/registry.env from registry.env.example"
-  # shellcheck disable=SC1091
-  source "$SECRETS_DIR/registry.env"
-  : "${OCI_USERNAME:?OCI_USERNAME not set in registry.env}"
-  : "${OCIR_TOKEN:?OCIR_TOKEN not set in registry.env}"
+  if [ -z "${OCI_USERNAME:-}" ] || [ -z "${OCIR_TOKEN:-}" ]; then
+    [ -f "$SECRETS_DIR/registry.env" ] || die "create $SECRETS_DIR/registry.env from registry.env.example (or set OCI_USERNAME/OCIR_TOKEN for CI)"
+    # shellcheck disable=SC1091
+    source "$SECRETS_DIR/registry.env"
+  fi
+  : "${OCI_USERNAME:?OCI_USERNAME not set}"
+  : "${OCIR_TOKEN:?OCIR_TOKEN not set}"
   echo "$OCIR_TOKEN" | "$builder" login --username "$OCI_USERNAME" --password-stdin "$(ocir_host)"
 }
