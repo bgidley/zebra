@@ -17,8 +17,19 @@ die() {
 
 require() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1 (run scripts/00-bootstrap-tooling.sh)"; }
 
-# Read a Terraform output (must have run `terraform apply`).
-tf_out() { terraform -chdir="$TF_DIR" output -raw "$1" 2>/dev/null || die "terraform output '$1' unavailable — run 10-apply-infra.sh first"; }
+# Read a Terraform output (must have run `terraform apply`). CI build pods are
+# fresh checkouts with no terraform state, so allow a same-named TF_OUT_<NAME>
+# env var (set as a GitLab CI/CD variable) to override per output.
+tf_out() {
+  local name="$1"
+  local override_var="TF_OUT_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')"
+  if [ -n "${!override_var:-}" ]; then
+    printf '%s' "${!override_var}"
+    return
+  fi
+  terraform -chdir="$TF_DIR" output -raw "$name" 2>/dev/null \
+    || die "terraform output '$name' unavailable — run 10-apply-infra.sh first (or set \$$override_var for CI)"
+}
 
 # Registry host, e.g. lhr.ocir.io (strips the /<namespace> suffix).
 ocir_host() { tf_out ocir_registry | cut -d/ -f1; }

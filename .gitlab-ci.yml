@@ -159,5 +159,7 @@ oke_deploy:
   resource_group: zebra-prod
   script:
     # Promote the exact validated image to prod (no rebuild), then prune OCIR.
+    # Pruning is registry housekeeping (needs the oci CLI + compartment OCID,
+    # not available on every runner) — best-effort, must not fail a good deploy.
     - bash deploy/oke/scripts/40-deploy.sh "$CI_COMMIT_SHORT_SHA"
-    - KEEP="${OCIR_KEEP:-5}" bash deploy/oke/scripts/prune-ocir.sh
+    - KEEP="${OCIR_KEEP:-5}" bash deploy/oke/scripts/prune-ocir.sh || echo "WARN: OCIR prune skipped/failed (non-fatal)"
