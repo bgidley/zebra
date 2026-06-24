@@ -8,14 +8,14 @@ FROM python:3.14-slim
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/root/.local/bin:${PATH}"
 
-# Base tooling. buildah + fuse-overlayfs + netavark/aardvark-dns + crun: this
-# image doubles as the in-cluster GitLab Runner's build container
-# (deploy/oke/scripts/25-build-push.sh) — buildah needs a network backend and an
-# OCI runtime to actually run RUN steps, neither pulled in by
-# --no-install-recommends since they're only Recommends of buildah's deps.
+# Base tooling. buildah + fuse-overlayfs + netavark/aardvark-dns + nftables + crun:
+# this image doubles as the in-cluster GitLab Runner's build container
+# (deploy/oke/scripts/25-build-push.sh) — buildah needs a network backend (netavark,
+# which itself shells out to `nft`) and an OCI runtime to run RUN steps, none of
+# which are pulled in by --no-install-recommends (only Recommends of buildah's deps).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates openssh-client ripgrep jq less unzip gnupg \
-        buildah fuse-overlayfs netavark aardvark-dns crun \
+        buildah fuse-overlayfs netavark aardvark-dns nftables crun \
     && rm -rf /var/lib/apt/lists/*
 
 # uv (Python package/exec manager used across the monorepo)
