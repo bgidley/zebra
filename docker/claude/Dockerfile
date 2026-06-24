@@ -32,6 +32,10 @@ RUN KVER="$(curl -fsSL https://dl.k8s.io/release/stable.txt)" \
     && curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KVER}/bin/linux/arm64/kubectl" \
     && chmod +x /usr/local/bin/kubectl
 
+# kustomize — used by deploy/oke/scripts/{40-deploy,50-smoke,60-register-runner}.sh
+RUN apt-get update && apt-get install -y --no-install-recommends kustomize \
+    && rm -rf /var/lib/apt/lists/*
+
 # glab (GitLab CLI) + gh (GitHub CLI), arm64 — required, fetched dynamically.
 RUN arch=arm64; \
     GLAB_VER="$(curl -fsSL 'https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases' | jq -r '.[0].tag_name' | sed 's/^v//')" \
