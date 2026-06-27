@@ -1,11 +1,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: tools
+# Workloads only. The SA (claude-code/mac-claude) + RBAC live in ../../cluster-rbac
+# and are applied out-of-band by an operator (scripts/35-cluster-rbac.sh) — the CI
+# deploy runner is not permitted to manage SAs/RBAC. The deployment references the
+# claude-code SA, which the operator bootstrap creates before the first CI deploy.
 resources:
   - pvc.yaml
-  - rbac.yaml
   - deployment.yaml
-  - mac-access.yaml
 images:
   - name: zebra-claude
     newName: REGISTRY/zebra/zebra-claude

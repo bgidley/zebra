@@ -8,4 +8,8 @@ resources:
   - prod-web
   - prod-daemon
   - claude-code
-  - claude-code-cross-ns-rbac.yaml
+# NOTE: identity/permission objects (claude-code + mac-claude SAs, their
+# RoleBindings/ClusterRoleBindings, and the cross-namespace bindings) are NOT in
+# this CI-applied base. They live in ../cluster-rbac and are applied out-of-band by
+# an operator (scripts/35-cluster-rbac.sh), because the CI deploy runner
+# (oke-ci-deployer) is intentionally scoped to workloads and cannot manage RBAC.

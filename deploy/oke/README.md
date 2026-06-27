@@ -39,7 +39,7 @@ Makefile     thin wrapper over scripts
 
 ## Quick start
 1. **Onboarding** (one-time, manual): `docs/oci-onboarding.md`.
-2. **Bring up infra**: `make all` (tooling → auth → infra → kubeconfig → secrets).
+2. **Bring up infra**: `make all` (tooling → auth → infra → kubeconfig → secrets → cluster-rbac).
 3. **Build + validate + deploy**:
    ```bash
    TAG=$(BUILD_CLAUDE=1 make build TAG=$(git rev-parse --short HEAD))
@@ -51,6 +51,10 @@ Makefile     thin wrapper over scripts
 ## Design notes
 - **Build-once → smoke → promote**: the *same* `:sha` image that passes the smoke
   namespace is what `40-deploy.sh` rolls out to prod (`kustomize set image`). No rebuild.
+- **Least-privilege deploy**: `40-deploy.sh` (run by CI as `ci:gitlab-runner`) applies
+  **workloads only** (`k8s/base`). The agents' SAs + RBAC (`k8s/cluster-rbac`) are
+  applied out-of-band by an operator (`make cluster-rbac`), since the CI runner has no
+  RBAC verbs. `claude-code` deploys from `zebra-claude:latest` (`CLAUDE_TAG` to override).
 - **Smoke isolation**: smoke runs in its own namespace against a dedicated Oracle
   schema and is deleted on exit — prod schema/budget are never touched.
 - **Daemon split**: the budget daemon runs as its own `prod/zebra-daemon` Deployment

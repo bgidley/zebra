@@ -12,8 +12,12 @@ to cutover.
 ## 1. Stand up infra (no traffic yet)
 ```bash
 cd deploy/oke
-make tooling && make infra && make kubeconfig && make secrets
+make tooling && make infra && make kubeconfig && make secrets && make cluster-rbac
 ```
+`make cluster-rbac` applies the agents' identity/RBAC (`k8s/cluster-rbac/`) with the
+admin kubeconfig — a privileged, operator-only step the CI deploy runner is not
+allowed to perform. It must run before `40-deploy.sh` (the workloads reference the
+`claude-code` SA it creates).
 If the tenancy refuses the extra A1 OCPUs, temporarily resize the old VM down
 (Console → Instance → Edit shape → 2 OCPU) to free capacity, then re-run `make infra`.
 
