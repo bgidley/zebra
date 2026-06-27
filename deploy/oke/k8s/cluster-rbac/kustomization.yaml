@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Privileged identity/permission bootstrap for the in-pod agents — applied ONCE
+# by an operator with the cluster-admin kubeconfig (see scripts/35-cluster-rbac.sh),
+# NOT by the CI deploy job. The CI runner (ci:gitlab-runner / ClusterRole
+# oke-ci-deployer) is intentionally scoped to workloads and has no
+# rbac.authorization.k8s.io verbs, so it must never reconcile these objects.
+#
+# NOTE: deliberately no top-level `namespace:` — the RoleBindings here target
+# prod/ci/tools by name and the ClusterRoleBindings are cluster-scoped; a blanket
+# namespace would incorrectly rewrite them.
+resources:
+  - claude-code-rbac.yaml
+  - mac-access.yaml
+  - claude-code-cross-ns-rbac.yaml
