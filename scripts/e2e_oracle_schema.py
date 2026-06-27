@@ -59,6 +59,16 @@ def _validate(schema: str) -> str:
 
 
 def _drop_user(cur, schema: str) -> None:
+    # Kill any active sessions first — ORA-01940 if we skip this.
+    cur.execute(
+        "SELECT sid, serial# FROM v$session WHERE username = :u",
+        {"u": schema.upper()},
+    )
+    for sid, serial in cur.fetchall():
+        try:
+            cur.execute(f"ALTER SYSTEM KILL SESSION '{sid},{serial}' IMMEDIATE")
+        except oracledb.DatabaseError:
+            pass  # already gone
     try:
         cur.execute(f"DROP USER {schema} CASCADE")
     except oracledb.DatabaseError as exc:
