@@ -33,9 +33,7 @@ SMOKE_SCHEMA="E2E_SMOKE_${CI_PIPELINE_ID:-$$}"
 export E2E_SCHEMA_PASSWORD="Az9$(openssl rand -hex 13)"
 DJANGO_SECRET_KEY="$(openssl rand -hex 32)"
 
-PF_PID=""
 cleanup() {
-  [ -n "$PF_PID" ] && kill "$PF_PID" 2>/dev/null || true
   log "tearing down namespace smoke"
   kubectl delete ns smoke --ignore-not-found --wait=false
   log "dropping ephemeral schema $SMOKE_SCHEMA"
@@ -86,14 +84,13 @@ POD="$(kubectl -n smoke get pod -l app=zebra-web -o jsonpath='{.items[0].metadat
 kubectl -n smoke exec "$POD" -- python zebra-agent-web/manage.py shell -c \
   "import os; from django.contrib.auth.models import User; u,_=User.objects.get_or_create(username='smoke'); u.set_password(os.environ['SMOKE_PASSWORD']); u.save(); print('smoke user ready')"
 
-log "port-forwarding smoke service → localhost:18000"
-kubectl -n smoke port-forward svc/zebra-web 18000:80 >/dev/null 2>&1 &
-PF_PID=$!
-timeout 60 sh -c 'until curl -sf http://localhost:18000/api/health/ >/dev/null; do sleep 2; done'
+SMOKE_URL="http://zebra-web.smoke.svc.cluster.local"
+log "waiting for smoke service at $SMOKE_URL"
+timeout 60 sh -c "until curl -sf $SMOKE_URL/api/health/ >/dev/null; do sleep 2; done"
 
 log "running smoke suite"
 ( cd "$PROJECT_ROOT" \
-  && SMOKE_BASE_URL="http://localhost:18000" SMOKE_USERNAME="smoke" SMOKE_PASSWORD="$SMOKE_PASSWORD" \
+  && SMOKE_BASE_URL="$SMOKE_URL" SMOKE_USERNAME="smoke" SMOKE_PASSWORD="$SMOKE_PASSWORD" \
      uv run pytest zebra-agent-web/tests/smoke/ -v -m smoke )
 
 log "smoke passed."
