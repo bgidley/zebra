@@ -47,6 +47,14 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            # Serve HTTPS on the tailnet node, proxying to the prod ClusterIP.
+            # Tailscale auto-issues a Let's Encrypt cert for zebra-oke.tailf1e473.ts.net.
+            - name: TS_SERVE_CONFIG
+              value: /etc/tailscale-serve/config.json
+          volumeMounts:
+            - name: serve-config
+              mountPath: /etc/tailscale-serve
+              readOnly: true
           resources:
             requests:
               cpu: 50m
@@ -54,3 +62,7 @@ spec:
             limits:
               cpu: 200m
               memory: 128Mi
+      volumes:
+        - name: serve-config
+          configMap:
+            name: tailscale-serve-config

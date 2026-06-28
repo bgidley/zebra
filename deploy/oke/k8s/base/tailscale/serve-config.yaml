@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tailscale-serve-config
+  namespace: tailscale
+data:
+  config.json: |
+    {
+      "TCP": {"443": {"HTTPS": true}},
+      "Web": {
+        "zebra-oke.tailf1e473.ts.net:443": {
+          "Handlers": {"/": {"Proxy": "http://zebra-web.prod.svc.cluster.local:80"}}
+        }
+      }
+    }
