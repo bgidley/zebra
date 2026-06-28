@@ -14,7 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # which itself shells out to `nft`) and an OCI runtime to run RUN steps, none of
 # which are pulled in by --no-install-recommends (only Recommends of buildah's deps).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git curl ca-certificates openssh-client ripgrep jq less unzip gnupg \
+        git curl ca-certificates openssh-client ripgrep jq less unzip gnupg tmux \
         buildah fuse-overlayfs netavark aardvark-dns nftables crun \
     && rm -rf /var/lib/apt/lists/*
 
