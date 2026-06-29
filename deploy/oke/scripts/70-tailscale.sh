@@ -2,6 +2,10 @@
 # Deploy the Tailscale subnet router so the cluster's services/pods are reachable
 # privately over the tailnet (no public LB).
 #
+# *** NEVER apply deploy/oke/k8s/base/tailscale/ with raw kubectl — the image
+# *** field contains a REGISTRY placeholder that only this script substitutes.
+# *** Raw apply → ImagePullBackOff and loss of Tailscale cluster connectivity.
+#
 # Usage:
 #   Auth key:    TS_AUTHKEY=tskey-auth-xxxx                70-tailscale.sh
 #   OAuth (rec): TS_AUTHKEY=tskey-client-xxxx TS_TAG=tag:zebra 70-tailscale.sh
@@ -11,6 +15,11 @@
 # OAuth REQUIRES a tag, so set TS_TAG to a tag in your ACL tagOwners scoped to the
 # client. A plain auth key (tskey-auth-...) works too but expires in <=90 days.
 # Add the tag to the ACL `autoApprovers.routes` to skip manual route approval.
+#
+# State note: tailscale persists node identity + serve config in the tailscale-state
+# Secret. Changing TS_EXTRA_ARGS (especially --advertise-tags) without deleting that
+# Secret will cause "tailscale up requires --reset" on the next pod start. If that
+# happens: kubectl -n tailscale delete secret tailscale-state && re-run this script.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 require kubectl
@@ -30,12 +39,19 @@ kubectl -n tailscale create secret generic tailscale-auth \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # OCIR pull secret (the tailscale image is mirrored into OCIR).
-# shellcheck disable=SC1091
-source "$SECRETS_DIR/registry.env"
-kubectl -n tailscale create secret docker-registry ocir-pull \
-  --docker-server="$(ocir_host)" --docker-username="$OCI_USERNAME" \
-  --docker-password="$OCIR_TOKEN" --docker-email="$OCI_EMAIL" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# Skip if OCI creds aren't available — the secret may already exist from a prior run.
+if [ -z "${OCI_USERNAME:-}" ] && [ -f "$SECRETS_DIR/registry.env" ]; then
+  # shellcheck disable=SC1091
+  source "$SECRETS_DIR/registry.env"
+fi
+if [ -n "${OCI_USERNAME:-}" ]; then
+  kubectl -n tailscale create secret docker-registry ocir-pull \
+    --docker-server="$(ocir_host)" --docker-username="$OCI_USERNAME" \
+    --docker-password="$OCIR_TOKEN" --docker-email="$OCI_EMAIL" \
+    --dry-run=client -o yaml | kubectl apply -f -
+else
+  log "registry.env not found and OCI_USERNAME unset — skipping ocir-pull update (existing secret assumed valid)"
+fi
 
 # Pin the OCIR registry into the image reference, then apply.
 REGISTRY="$(tf_out ocir_registry)"
@@ -48,8 +64,7 @@ kubectl apply -k "$K8S_DIR/base/tailscale"
 kubectl -n tailscale set env deploy/tailscale-subnet-router TS_EXTRA_ARGS="$EXTRA_ARGS"
 kubectl -n tailscale rollout status deploy/tailscale-subnet-router --timeout=120s
 
-log "subnet router up (tag: ${TS_TAG:-none}). In the Tailscale admin console:"
-log "  1) approve advertised routes 10.96.0.0/16 + 10.244.0.0/16 for host 'zebra-oke'"
-log "     (or add the tag to ACL autoApprovers.routes to auto-approve)"
-log "  2) then from any tailnet device:  curl http://<prod-clusterIP>/api/health/"
-log "Find the prod ClusterIP:  kubectl -n prod get svc zebra-web -o jsonpath='{.spec.clusterIP}'"
+log "subnet router up (tag: ${TS_TAG:-none}). Access:"
+log "  HTTPS (passkeys): https://zebra-oke.tailf1e473.ts.net/"
+log "  ClusterIP (HTTP): http://$(kubectl -n prod get svc zebra-web -o jsonpath='{.spec.clusterIP}')/"
+log "If routes need approval, go to the Tailscale admin console → zebra-oke → approve routes."
