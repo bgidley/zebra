@@ -39,12 +39,19 @@ kubectl -n tailscale create secret generic tailscale-auth \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # OCIR pull secret (the tailscale image is mirrored into OCIR).
-# shellcheck disable=SC1091
-source "$SECRETS_DIR/registry.env"
-kubectl -n tailscale create secret docker-registry ocir-pull \
-  --docker-server="$(ocir_host)" --docker-username="$OCI_USERNAME" \
-  --docker-password="$OCIR_TOKEN" --docker-email="$OCI_EMAIL" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# Skip if OCI creds aren't available — the secret may already exist from a prior run.
+if [ -z "${OCI_USERNAME:-}" ] && [ -f "$SECRETS_DIR/registry.env" ]; then
+  # shellcheck disable=SC1091
+  source "$SECRETS_DIR/registry.env"
+fi
+if [ -n "${OCI_USERNAME:-}" ]; then
+  kubectl -n tailscale create secret docker-registry ocir-pull \
+    --docker-server="$(ocir_host)" --docker-username="$OCI_USERNAME" \
+    --docker-password="$OCIR_TOKEN" --docker-email="$OCI_EMAIL" \
+    --dry-run=client -o yaml | kubectl apply -f -
+else
+  log "registry.env not found and OCI_USERNAME unset — skipping ocir-pull update (existing secret assumed valid)"
+fi
 
 # Pin the OCIR registry into the image reference, then apply.
 REGISTRY="$(tf_out ocir_registry)"
