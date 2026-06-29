@@ -41,8 +41,12 @@ spec:
             # Advertise the k8s service CIDR (reach prod ClusterIP) + pod CIDR.
             - name: TS_ROUTES
               value: "10.96.0.0/16,10.244.0.0/16,10.20.0.0/16"
+            # MUST include --advertise-tags to match the persisted tailscale-state.
+            # Changing these flags without deleting tailscale-state will cause
+            # "tailscale up requires --reset" on the next pod start.
+            # 70-tailscale.sh overrides this via kubectl set env when re-deploying.
             - name: TS_EXTRA_ARGS
-              value: "--hostname=zebra-oke --accept-dns=false"
+              value: "--hostname=zebra-oke --accept-dns=false --advertise-tags=tag:zebra"
             - name: POD_IP
               valueFrom:
                 fieldRef:
