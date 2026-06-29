@@ -197,6 +197,11 @@ SESSION_COOKIE_AGE = 1209600  # 2 weeks
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
 SESSION_COOKIE_SAMESITE = "Lax"
+# Required for Django 4+ CSRF when accessed via HTTPS proxy (e.g. Tailscale serve).
+# Set CSRF_TRUSTED_ORIGINS=https://your-host.ts.net in prod.env.
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
+]
 
 # Messages
 MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"
