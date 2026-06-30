@@ -88,11 +88,11 @@ class TestSetupView:
         assert response.status_code == 200
         assert b"display_name" in response.content
 
-    def test_post_valid_redirects_to_root(self):
+    def test_post_valid_redirects_to_auth_setup(self):
         client = APIClient()
         response = client.post("/setup/", {"display_name": "Ben"})
         assert response.status_code == 302
-        assert response["Location"] == "/"
+        assert response["Location"] == "/auth/setup/?username=Ben"
 
     def test_post_empty_name_shows_error(self):
         client = APIClient()

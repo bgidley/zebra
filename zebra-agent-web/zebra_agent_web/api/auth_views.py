@@ -79,8 +79,9 @@ def begin_register(request):
     if not username:
         return JsonResponse({"error": "Username is required"}, status=400)
 
-    # If this is the first user, allow any username. Otherwise require auth.
-    if User.objects.exists() and not request.user.is_authenticated:
+    # Allow registration when no credentials exist (initial setup or recovery after RP ID change).
+    # Once at least one passkey exists, require the caller to be authenticated.
+    if WebAuthnCredential.objects.exists() and not request.user.is_authenticated:
         return JsonResponse({"error": "Authentication required"}, status=403)
 
     # Generate challenge
@@ -267,10 +268,14 @@ def do_logout(request):
 
 @login_not_required
 def setup_page(request):
-    """First-time setup page: create user and register passkey."""
-    if User.objects.exists():
+    """First-time setup page: create user and register passkey.
+
+    Also shown as recovery path when no credentials exist (e.g. after RP ID change).
+    """
+    username = request.GET.get("username", "")
+    if WebAuthnCredential.objects.exists():
         return HttpResponseRedirect("/auth/login/")
-    return render(request, "pages/auth_setup.html")
+    return render(request, "pages/auth_setup.html", {"prefill_username": username})
 
 
 @login_not_required
