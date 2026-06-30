@@ -144,8 +144,17 @@ class TestSetupPage:
         assert response.status_code == 200
         assert b"Register Passkey" in response.content
 
-    async def test_setup_redirects_to_login_when_users_exist(self, client, test_user):
-        """Setup page redirects to login when users already exist."""
+    async def test_setup_shows_form_when_users_exist_but_no_credentials(self, client, test_user):
+        """Setup page shows registration form even when users exist but no passkeys are registered.
+
+        This is the recovery path when the RP ID changes and old credentials are deleted.
+        """
+        response = await client.get("/auth/setup/")
+        assert response.status_code == 200
+        assert b"Register Passkey" in response.content
+
+    async def test_setup_redirects_to_login_when_credentials_exist(self, client, test_credential):
+        """Setup page redirects to login once at least one passkey credential exists."""
         response = await client.get("/auth/setup/")
         assert response.status_code == 302
         assert response.url == "/auth/login/"
@@ -198,14 +207,23 @@ class TestBeginRegister:
         assert "rp" in data
         assert data["rp"]["name"] == "Zebra Agent"
 
-    async def test_requires_auth_when_users_exist(self, client, test_user):
-        """When users exist, registration requires authentication."""
+    async def test_requires_auth_when_credentials_exist(self, client, test_credential):
+        """When passkey credentials exist, registration requires authentication."""
         response = await client.post(
             "/auth/begin-register/",
             {"username": "anotheruser"},
             content_type="application/json",
         )
         assert response.status_code == 403
+
+    async def test_allows_register_when_users_exist_but_no_credentials(self, client, test_user):
+        """Registration is open when no passkey credentials exist (recovery path)."""
+        response = await client.post(
+            "/auth/begin-register/",
+            {"username": "anotheruser"},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
 
 
 class TestCompleteRegister:
