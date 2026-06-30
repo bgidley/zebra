@@ -38,6 +38,15 @@ class AnthropicProvider(LLMProvider):
         "claude-3-haiku-20240307": 200000,
     }
 
+    # Newer Claude 4+ models do not accept the `temperature` parameter — the API
+    # returns a 400 invalid_request_error when it is included. Older Claude 3.x
+    # models still accept it. This set lists models that reject the parameter.
+    _NO_TEMPERATURE_MODELS = {
+        "claude-opus-4-8",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001",
+    }
+
     def __init__(
         self,
         model: str | None = None,
@@ -93,8 +102,11 @@ class AnthropicProvider(LLMProvider):
             "model": self._model,
             "messages": anthropic_messages,
             "max_tokens": max_tokens,
-            "temperature": temperature,
         }
+
+        # Newer Claude 4+ models reject the temperature parameter with a 400
+        if self._model not in self._NO_TEMPERATURE_MODELS:
+            kwargs["temperature"] = temperature
 
         if system:
             kwargs["system"] = system
@@ -125,8 +137,10 @@ class AnthropicProvider(LLMProvider):
             "model": self._model,
             "messages": anthropic_messages,
             "max_tokens": max_tokens,
-            "temperature": temperature,
         }
+
+        if self._model not in self._NO_TEMPERATURE_MODELS:
+            kwargs["temperature"] = temperature
 
         if system:
             kwargs["system"] = system
