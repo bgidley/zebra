@@ -59,7 +59,7 @@ def setup_view(request):
         display_name = request.POST.get("display_name", "").strip()
         if display_name:
             set_identity_sync(display_name)
-            return redirect("/")
+            return redirect(f"/auth/setup/?username={display_name}")
         return render(request, "pages/setup.html", {"error": "Please enter a display name."})
 
     return render(request, "pages/setup.html", {})
