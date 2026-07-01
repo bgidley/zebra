@@ -6,9 +6,6 @@ Usage:
 
 Used by scripts/zebra-feedback.sh to consult the production Zebra instance
 from the local machine without requiring web authentication.
-
-Human tasks (e.g. ethics confirmation) are auto-approved so the command
-does not block waiting for a web UI interaction.
 """
 
 import asyncio
@@ -19,12 +16,6 @@ import uuid
 from django.core.management.base import BaseCommand
 
 logger = logging.getLogger(__name__)
-
-# Task definition IDs that are safe to auto-approve in automated contexts.
-_AUTO_APPROVE_TASK_IDS = {"ethics_human_confirmation"}
-
-# Field and value used when auto-approving a confirmation task.
-_AUTO_APPROVE_OUTPUT = {"confirmed": True, "notes": "Auto-approved by run_goal command"}
 
 
 class Command(BaseCommand):
@@ -64,14 +55,10 @@ class Command(BaseCommand):
         )
 
     async def _run(self, goal: str, model: str):
-        from zebra.core.models import ProcessState, TaskResult
-
         from zebra_agent_web.api import agent_engine
-        from zebra_agent_web.api.engine import get_engine
 
         await agent_engine.ensure_initialized()
         agent_loop = agent_engine.get_agent_loop()
-        engine = get_engine()
 
         run_id = str(uuid.uuid4())
 
@@ -79,39 +66,11 @@ class Command(BaseCommand):
         _MODEL_PROVIDERS = {"kimi": "kimi"}
         provider = _MODEL_PROVIDERS.get(model)
 
-        # Temporarily override provider on the loop if needed
         original_provider = agent_loop.provider_name
         if provider:
             agent_loop.provider_name = provider
 
-        # Run process_goal in background; concurrently auto-approve any human tasks
-        goal_task = asyncio.create_task(
-            agent_loop.process_goal(goal=goal, model=model, run_id=run_id)
-        )
-
-        # Poll for READY human tasks belonging to our run and auto-complete them
-        while not goal_task.done():
-            await asyncio.sleep(2)
-            try:
-                processes = await engine.store.get_processes_by_state(ProcessState.RUNNING)
-                for proc in processes:
-                    if proc.properties.get("run_id") != run_id:
-                        continue
-                    pending = await engine.get_pending_tasks(proc.id)
-                    for task in pending:
-                        if task.task_definition_id in _AUTO_APPROVE_TASK_IDS:
-                            logger.info(
-                                "run_goal: auto-approving task %s (%s)",
-                                task.id,
-                                task.task_definition_id,
-                            )
-                            await engine.complete_task(
-                                task.id, TaskResult.ok(output=_AUTO_APPROVE_OUTPUT)
-                            )
-            except Exception:
-                pass  # don't let polling errors kill the main task
-
         try:
-            return await goal_task
+            return await agent_loop.process_goal(goal=goal, model=model, run_id=run_id)
         finally:
             agent_loop.provider_name = original_provider

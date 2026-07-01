@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 5
+version: 6
 first_task: consult_memory
 
 tasks:
@@ -214,45 +214,7 @@ tasks:
       temperature: 0.3
       output_key: ethics_post_assessment
 
-  # Step 10: Human confirmation of ethics review
-  ethics_human_confirmation:
-    name: "Ethics Human Confirmation"
-    auto: false
-    properties:
-      schema:
-        type: object
-        title: "Ethics Review Confirmation"
-        description: "Review the AI's ethics self-assessment and confirm or flag concerns."
-        required:
-          - confirmed
-        properties:
-          goal:
-            type: string
-            title: "Goal"
-            description: "The goal that was executed"
-            default: "{{goal}}"
-            readOnly: true
-          workflow_name:
-            type: string
-            title: "Workflow Used"
-            default: "{{workflow_name}}"
-            readOnly: true
-          ethics_summary:
-            type: string
-            title: "Ethics Self-Assessment"
-            description: "The AI's evaluation of its own ethical conduct"
-            default: "{{ethics_post_assessment}}"
-            readOnly: true
-          confirmed:
-            type: boolean
-            title: "I confirm the ethics assessment is acceptable"
-            default: true
-          human_concerns:
-            type: string
-            title: "Additional Concerns (if any)"
-            format: multiline
-
-  # Step 11: Incrementally update conceptual memory index
+  # Step 10: Incrementally update conceptual memory index
   update_conceptual_memory:
     name: "Update Conceptual Memory"
     action: update_conceptual_memory
@@ -354,7 +316,4 @@ routings:
     to: ethics_post_review
 
   - from: ethics_post_review
-    to: ethics_human_confirmation
-
-  - from: ethics_human_confirmation
     to: update_conceptual_memory

@@ -3,7 +3,7 @@
 Verifies that the agent_main_loop.yaml correctly wires ethics checkpoints:
 1. Input gate before workflow selection
 2. Plan review before execution
-3. Post-execution review with human confirmation
+3. Post-execution LLM review (automated, no human confirmation required)
 """
 
 from pathlib import Path
@@ -196,8 +196,8 @@ def _make_registry(ethics_gate_class):
 class TestEthicsWorkflowIntegration:
     """Test the full agent main loop with ethics gates."""
 
-    async def test_both_gates_approve_reaches_human_confirmation(self, definition):
-        """When both ethics gates approve, flow reaches the human confirmation task."""
+    async def test_both_gates_approve_completes_workflow(self, definition):
+        """When both ethics gates approve, flow runs through the LLM review and completes."""
         registry = _make_registry(StubEthicsGateApprove)
         store = InMemoryStore()
         engine = WorkflowEngine(store, registry)
@@ -208,24 +208,13 @@ class TestEthicsWorkflowIntegration:
         )
         await engine.start_process(process.id)
 
-        # Process should be waiting on the human confirmation task
-        process = await store.load_process(process.id)
-        assert process.state == ProcessState.RUNNING
-
-        # There should be a pending human task (ethics_human_confirmation)
-        pending = await engine.get_pending_tasks(process.id)
-        assert len(pending) == 1
-        task_instance = pending[0]
-        assert task_instance.task_definition_id == "ethics_human_confirmation"
-
-        # Complete the human task to finish the workflow
-        await engine.complete_task(
-            task_instance.id,
-            TaskResult.ok(output={"confirmed": True, "human_concerns": ""}),
-        )
-
+        # Process completes automatically — no human confirmation step required
         process = await store.load_process(process.id)
         assert process.state == ProcessState.COMPLETE
+
+        # No pending human tasks
+        pending = await engine.get_pending_tasks(process.id)
+        assert len(pending) == 0
 
     async def test_concerns_flagged_during_planning(self, definition):
         """flag_concerns runs in the planning phase and records concerns on the process."""
@@ -244,9 +233,8 @@ class TestEthicsWorkflowIntegration:
         concerns = process.properties.get("planning_concerns")
         assert concerns is not None
         assert concerns["concerns"][0]["severity"] == "medium"
-        # The advisory step did not block — flow proceeded to the human confirmation gate
-        pending = await engine.get_pending_tasks(process.id)
-        assert pending[0].task_definition_id == "ethics_human_confirmation"
+        # The advisory step did not block — flow completed all the way through
+        assert process.state == ProcessState.COMPLETE
 
     async def test_dilemma_escalation_pauses_then_proceeds(self, definition):
         """An escalated dilemma pauses on a human task; resolving 'proceed' runs the plan."""
@@ -280,9 +268,8 @@ class TestEthicsWorkflowIntegration:
         process = await store.load_process(process.id)
         resolution = process.properties.get("dilemma_resolution")
         assert resolution["decision"] == "proceed"
-        # Flow continued to the post-execution human confirmation gate
-        pending = await engine.get_pending_tasks(process.id)
-        assert pending[0].task_definition_id == "ethics_human_confirmation"
+        # Flow completed all the way through the post-execution LLM review
+        assert process.state == ProcessState.COMPLETE
 
     async def test_dilemma_escalation_decline_stops_at_rejection(self, definition):
         """Resolving an escalated dilemma with 'decline' routes to ethics_rejection."""
