@@ -81,11 +81,6 @@ def dev_public():
 # zebra terminal client (F34 / REQ-UI-003)
 # ---------------------------------------------------------------------------
 
-# Task definition IDs safe to auto-approve in terminal mode (same set as the
-# run_goal management command — the user is present and watching the output).
-_AUTO_APPROVE_TASK_IDS = {"ethics_human_confirmation"}
-_AUTO_APPROVE_OUTPUT = {"confirmed": True, "notes": "Auto-approved by zebra CLI"}
-
 # Model aliases that require a non-default LLM provider.
 _MODEL_PROVIDERS = {"kimi": "kimi"}
 
@@ -148,36 +143,12 @@ async def _goal_async(text: str, model: str, queue: bool, priority: int) -> int:
 
     import uuid
 
-    from zebra.core.models import ProcessState, TaskResult
-
-    from zebra_agent_web.api.engine import get_engine
-
     run_id = str(uuid.uuid4())
-    engine = get_engine()
 
-    goal_task = asyncio.create_task(
-        agent_loop.process_goal(goal=text, model=model, run_id=run_id, progress_callback=progress)
-    )
-
-    # Auto-approve terminal-safe human tasks so the loop doesn't block forever.
     try:
-        while not goal_task.done():
-            await asyncio.sleep(2)
-            try:
-                processes = await engine.store.get_processes_by_state(ProcessState.RUNNING)
-                for proc in processes:
-                    if proc.properties.get("run_id") != run_id:
-                        continue
-                    for task in await engine.get_pending_tasks(proc.id):
-                        if task.task_definition_id in _AUTO_APPROVE_TASK_IDS:
-                            print(f"  [auto-approve] {task.task_definition_id}")
-                            await engine.complete_task(
-                                task.id, TaskResult.ok(output=_AUTO_APPROVE_OUTPUT)
-                            )
-            except Exception:
-                pass  # polling errors must not kill the goal task
-
-        result = await goal_task
+        result = await agent_loop.process_goal(
+            goal=text, model=model, run_id=run_id, progress_callback=progress
+        )
     finally:
         agent_loop.provider_name = original_provider
 
