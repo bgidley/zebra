@@ -277,6 +277,49 @@ class TestAnthropicProvider:
                 with pytest.raises(ValueError, match="API key required"):
                     anthropic_provider.AnthropicProvider()
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "model,expect_temperature",
+        [
+            ("claude-opus-4-8", False),
+            ("claude-sonnet-4-6", False),
+            ("claude-haiku-4-5-20251001", False),
+            ("claude-3-opus-20240229", True),
+            ("claude-3-5-sonnet-20241022", True),
+        ],
+    )
+    async def test_temperature_omitted_for_newer_models(
+        self, mock_anthropic_module, model, expect_temperature
+    ):
+        """Newer Claude 4+ models reject the temperature parameter with HTTP 400.
+
+        Verify AnthropicProvider omits it for those models and includes it for
+        legacy Claude 3.x models that still accept it.
+        """
+        mock_module, mock_client = mock_anthropic_module
+        mock_client.messages.create.return_value.model = model
+
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.dict("sys.modules", {"anthropic": mock_module}):
+                import importlib
+
+                import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
+                importlib.reload(anthropic_provider)
+
+                provider = anthropic_provider.AnthropicProvider(model=model)
+                await provider.complete([Message.user("hi")], temperature=0.3)
+
+                call_kwargs = mock_client.messages.create.call_args.kwargs
+                if expect_temperature:
+                    assert "temperature" in call_kwargs, (
+                        f"{model} should send temperature but did not"
+                    )
+                else:
+                    assert "temperature" not in call_kwargs, (
+                        f"{model} must not send temperature (API returns HTTP 400)"
+                    )
+
 
 class TestOpenAIProvider:
     """Tests for OpenAI provider."""
