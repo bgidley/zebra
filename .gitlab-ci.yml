@@ -168,13 +168,13 @@ oke_deploy:
 oke_live_e2e:
   stage: oke_live
   <<: *oke_rules
+  tags:
+    - oke-k8s
   script:
-    - cp /home/gitlab-runner/.env .env
-    # Extract Oracle creds paren-safely — the TCPS DSN has '()' chars that python-dotenv
-    # mangles into a TNS-alias lookup and DPY-4027. Same pattern as the e2e job.
-    - export ORACLE_DSN="$(sed -n 's/^ORACLE_DSN=//p' /home/gitlab-runner/.env)"
-    - export ORACLE_USERNAME="$(sed -n 's/^ORACLE_USERNAME=//p' /home/gitlab-runner/.env)"
-    - export ORACLE_PASSWORD="$(sed -n 's/^ORACLE_PASSWORD=//p' /home/gitlab-runner/.env)"
-    - export ANTHROPIC_API_KEY="$(sed -n 's/^ANTHROPIC_API_KEY=//p' /home/gitlab-runner/.env)"
-    - sed -i 's/^ORACLE_DSN=.*/ORACLE_DSN=/' .env
+    # Pull credentials from the live prod Kubernetes secret — these are the full TCPS
+    # connection strings that the deployed pod uses, with no Oracle wallet/TNS required.
+    - export ORACLE_DSN="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ORACLE_DSN}' | base64 -d)"
+    - export ORACLE_USERNAME="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ORACLE_USERNAME}' | base64 -d)"
+    - export ORACLE_PASSWORD="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ORACLE_PASSWORD}' | base64 -d)"
+    - export ANTHROPIC_API_KEY="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ANTHROPIC_API_KEY}' | base64 -d)"
     - uv run pytest zebra-agent-web/tests/e2e_live/ -v
