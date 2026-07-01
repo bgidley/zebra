@@ -168,8 +168,6 @@ oke_deploy:
 oke_live_e2e:
   stage: oke_live
   <<: *oke_rules
-  tags:
-    - oke-k8s
   script:
     - cp /home/gitlab-runner/.env .env
     - uv run pytest zebra-agent-web/tests/e2e_live/ -v
