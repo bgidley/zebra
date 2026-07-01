@@ -170,4 +170,11 @@ oke_live_e2e:
   <<: *oke_rules
   script:
     - cp /home/gitlab-runner/.env .env
+    # Extract Oracle creds paren-safely — the TCPS DSN has '()' chars that python-dotenv
+    # mangles into a TNS-alias lookup and DPY-4027. Same pattern as the e2e job.
+    - export ORACLE_DSN="$(sed -n 's/^ORACLE_DSN=//p' /home/gitlab-runner/.env)"
+    - export ORACLE_USERNAME="$(sed -n 's/^ORACLE_USERNAME=//p' /home/gitlab-runner/.env)"
+    - export ORACLE_PASSWORD="$(sed -n 's/^ORACLE_PASSWORD=//p' /home/gitlab-runner/.env)"
+    - export ANTHROPIC_API_KEY="$(sed -n 's/^ANTHROPIC_API_KEY=//p' /home/gitlab-runner/.env)"
+    - sed -i 's/^ORACLE_DSN=.*/ORACLE_DSN=/' .env
     - uv run pytest zebra-agent-web/tests/e2e_live/ -v
