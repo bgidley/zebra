@@ -1,7 +1,6 @@
 import asyncio
 import os
 from pathlib import Path
-from unittest.mock import patch
 
 # Ensure django is set up
 import django
@@ -93,41 +92,18 @@ def workflow_engine(django_stores):
     return WorkflowEngine(django_stores.store, registry)
 
 
-@pytest.fixture(autouse=True)
-def cassette_provider(request):
-    """Patch the get_provider registry to use CassetteProvider."""
-    import zebra_tasks.llm.providers
-    import zebra_tasks.llm.providers.registry
-    from zebra_tasks.llm._testing import CassetteProvider
-
-    original_get_provider = zebra_tasks.llm.providers.registry.get_provider
-
-    def mock_get_provider(name, model=None):
-        base_provider = original_get_provider(name, model)
-
-        # Build cassette path based on test name
-        cassette_dir = Path(__file__).parent / "cassettes"
-        cassette_name = f"{request.node.name}.json"
-
-        # If running the 'test-nightly-oracle' job, we may want 'rewrite' or 'none' based on env.
-        # By default, use 'once' (record if missing).
-        record_mode = os.environ.get("VCR_RECORD_MODE", "once")
-
-        return CassetteProvider(
-            base_provider, cassette_path=cassette_dir / cassette_name, record_mode=record_mode
-        )
-
-    with patch("zebra_tasks.llm.providers.registry.get_provider", side_effect=mock_get_provider):
-        with patch("zebra_tasks.llm.providers.get_provider", side_effect=mock_get_provider):
-            yield
-
-
 @pytest.fixture(scope="function")
-def agent_loop(workflow_library, workflow_engine, django_stores, cassette_provider):
-    """Create an AgentLoop configured with Django stores and Cassette LLM."""
+def agent_loop(workflow_library, workflow_engine, django_stores):
+    """Create an AgentLoop that makes real LLM API calls.
+
+    E2E tests must exercise the full stack including real Anthropic requests so
+    that provider-level bugs (wrong kwargs, deprecated parameters, model changes)
+    are caught before deployment.  Cassette replay is opt-in for local development
+    via the CassetteProvider in zebra_tasks.llm._testing — it must never be the
+    default in CI.
+    """
     from zebra_agent.loop import AgentLoop
 
-    # It will use the patched provider from `cassette_provider` fixture
     loop = AgentLoop(
         library=workflow_library,
         engine=workflow_engine,
