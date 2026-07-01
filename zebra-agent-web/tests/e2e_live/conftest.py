@@ -88,7 +88,7 @@ def workflow_library(tmp_path, django_stores):
     library.ensure_initialized()
 
     # Copy built-in workflows from zebra-agent
-    builtin_path = Path(__file__).parent.parent.parent / "zebra-agent" / "workflows"
+    builtin_path = Path(__file__).parent.parent.parent.parent / "zebra-agent" / "workflows"
     if builtin_path.exists():
         copied, _ = library.copy_builtin_workflows(builtin_path)
         print(f"Copied {copied} built-in workflows to test library at {library_path}")
