@@ -38,15 +38,8 @@ e2e:
   # schema is dropped in after_script and re-created (drop-if-exists) on retry.
   retry: 2
   script:
-    - cp /home/gitlab-runner/.env .env
-    # Provisioner creds live in a SEPARATE runner file (.env.e2e), never the prod
-    # .env — the prod container bash-sources .env, and the DSN's '(' ')' would break
-    # that. Extract paren-safely (the DSN must not be bash-sourced).
-    - export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
-    - export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
-    - export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
-    # Blank the prod ORACLE_DSN so pytest-dotenv can't select the prod DB.
-    - sed -i 's/^ORACLE_DSN=.*/ORACLE_DSN=/' .env
+    # E2E_PROVISIONER_* are GitLab CI variables (set in project settings).
+    # On OKE Kubernetes executor they arrive as env vars — no file to source.
     - |
       if [ -n "$E2E_PROVISIONER_DSN" ] && [ -n "$E2E_PROVISIONER_USERNAME" ] && [ -n "$E2E_PROVISIONER_PASSWORD" ]; then
         # Per-pipeline ephemeral Oracle schema — real prod parity, fully isolated.
@@ -62,17 +55,14 @@ e2e:
         uv run python zebra-agent-web/manage.py migrate --noinput
         uv run pytest zebra-agent-web/tests/e2e/ -m e2e
       else
-        # Fallback (no provisioner creds on the runner): SQLite. Feature-branch flake possible.
+        # Fallback (no provisioner creds): SQLite.
         echo "E2E_PROVISIONER_* not set — falling back to SQLite e2e"
         uv run pytest zebra-agent-web/tests/e2e/ -m e2e --ds=zebra_agent_web.e2e_settings
       fi
   after_script:
     # Always drop the ephemeral schema (after_script runs even on failure/cancel).
-    # Fresh shell here, so re-extract creds and recompute the deterministic name.
+    # E2E_PROVISIONER_* come from CI variables — available in after_script too.
     - |
-      export E2E_PROVISIONER_DSN="$(sed -n 's/^E2E_PROVISIONER_DSN=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
-      export E2E_PROVISIONER_USERNAME="$(sed -n 's/^E2E_PROVISIONER_USERNAME=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
-      export E2E_PROVISIONER_PASSWORD="$(sed -n 's/^E2E_PROVISIONER_PASSWORD=//p' /home/gitlab-runner/.env.e2e 2>/dev/null)"
       if [ -n "$E2E_PROVISIONER_DSN" ]; then
         SCHEMA="E2E_$(printf '%s' "$CI_COMMIT_REF_SLUG" | tr 'a-z-' 'A-Z_' | tr -cd 'A-Z0-9_' | cut -c1-8)_${CI_PIPELINE_ID}"
         echo "Dropping ephemeral Oracle schema $SCHEMA"
