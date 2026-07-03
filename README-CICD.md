@@ -1,27 +1,31 @@
 # CI/CD
 
-Zebra uses GitLab CI/CD with a **self-hosted runner on the Oracle VM** (`ssh opc`).
-All pipeline jobs run on that VM — nothing executes on GitLab's shared runners.
+Zebra uses GitLab CI/CD with a **self-hosted Kubernetes executor on OKE** (Oracle Kubernetes Engine).
+All pipeline jobs run in-cluster — nothing executes on GitLab's shared runners.
 
 GitLab project: https://gitlab.com/gidley/zebra
 
 ## Pipeline overview
 
-Every push to `master` runs four stages in sequence:
+Every push to `master` with `OKE_ENABLED=true` runs nine stages in sequence:
 
 ```
-lint  →  unit  →  e2e  →  deploy
+lint  →  test  →  e2e  →  deploy  →  smoke  →  oke_build  →  oke_smoke  →  oke_deploy  →  oke_live
 ```
 
 | Stage | What runs | Backend | Time |
 |---|---|---|---|
 | **lint** | `ruff check .` + `ruff format --check .` | — | ~3s |
-| **unit** | `pytest -m "not e2e"` (all packages) | SQLite | ~25s |
+| **test** | `pytest -m "not e2e"` (all packages) | SQLite | ~25s |
 | **e2e** | `pytest zebra-agent-web/tests/e2e/ -m e2e` | Oracle E2E schema + cassette LLM | ~30s |
-| **deploy** | `podman-compose up -d --build` | Oracle (prod) | ~15-70s |
+| **deploy** | *(no-op when OKE_ENABLED=true)* | — | — |
+| **smoke** | *(no-op when OKE_ENABLED=true)* | — | — |
+| **oke_build** | `docker build` + `docker push` to OCIR | — | ~2–5 min |
+| **oke_smoke** | Ephemeral smoke namespace, own Oracle schema | Oracle smoke schema | ~2 min |
+| **oke_deploy** | `kubectl set image` (rolling update) + prune OCIR | Oracle (prod) | ~1 min |
+| **oke_live** | `pytest zebra-agent-web/tests/e2e_live/ -v` (real LLM + prod Oracle) | Oracle (prod) | ~10 min |
 
-The `e2e-live` job (real Anthropic API + Oracle DB) only runs on a scheduled pipeline
-— it is **not** part of the push-triggered pipeline. See [Nightly schedule](#nightly-schedule).
+The `oke_*` stages are gated on `$OKE_ENABLED == "true"` (GitLab variable on `master` protected branch).
 
 ## Architecture
 
@@ -30,38 +34,41 @@ Your laptop  ──git push──▶  gitlab.com/gidley/zebra
                                     │
                          (runner polls outbound)
                                     │
-                             Oracle VM (opc)
-                          ┌─────────────────────┐
-                          │  gitlab-runner       │  shell executor, User=opc
-                          │  ├── lint job        │
-                          │  ├── unit job        │
-                          │  ├── e2e job         │
-                          │  └── deploy job      │
-                          │       └── podman-compose up -d --build
-                          │            └── zebra_web_1 (port 8000)
-                          └─────────────────────┘
+                         OKE cluster (ns: ci)
+                    ┌──────────────────────────────┐
+                    │  gitlab-runner               │  Kubernetes executor
+                    │  ├── lint / test / e2e       │  (ephemeral pods, tag: oke-k8s)
+                    │  ├── oke_build               │
+                    │  ├── oke_smoke               │
+                    │  ├── oke_deploy              │  kubectl set image → ns:prod
+                    │  └── oke_live_e2e            │  reads creds from zebra-prod-secrets
+                    └──────────────────────────────┘
+                                    │
+                              OKE ns: prod
+                    ┌──────────────────────────────┐
+                    │  zebra-web (Daphne :8000)    │
+                    │  zebra-daemon                │  separate Deployment
+                    └──────────────────────────────┘
 ```
 
-The runner polls GitLab outbound — no inbound port needed on the VM.
+The runner runs as a Kubernetes executor — each job spawns an ephemeral pod and is torn down after.
 
 ## Secrets
 
-Sensitive values are stored as **masked, protected CI/CD variables** in
-https://gitlab.com/gidley/zebra/-/settings/ci_cd → Variables:
+Production Oracle and Anthropic credentials live in two places:
+
+1. **K8s secret** `zebra-prod-secrets` (namespace `prod`) — used by `oke_live_e2e` and the prod pods:
+   ```bash
+   kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ORACLE_DSN}' | base64 -d
+   ```
+
+2. **GitLab CI/CD variables** (https://gitlab.com/gidley/zebra/-/settings/ci_cd → Variables):
 
 | Variable | Used by |
 |---|---|
-| `ANTHROPIC_API_KEY` | e2e cassette recorder, e2e-live |
-| `ORACLE_USERNAME` | e2e-live, deploy (via .env mount) |
-| `ORACLE_PASSWORD` | e2e-live, deploy (via .env mount) |
-| `ORACLE_DSN` | e2e-live, deploy (via .env mount) |
-
-The runner injects these into every job's environment automatically.
-
-**For the deploy and e2e-live jobs**, the Oracle credentials also need to exist
-in `/home/opc/projects/zebra/.env` because `docker-compose.yml` mounts that
-file into the container at `/app/.env`. The CI variables and the `.env` file
-should be kept in sync.
+| `ANTHROPIC_API_KEY` | e2e cassette recorder |
+| `E2E_PROVISIONER_DSN` / `E2E_PROVISIONER_USERNAME` / `E2E_PROVISIONER_PASSWORD` | e2e (Oracle ephemeral schema) |
+| `OKE_ENABLED` | gates all `oke_*` jobs |
 
 ## Stage details
 
@@ -72,7 +79,7 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-### unit
+### test (unit)
 ```bash
 uv sync --all-packages --frozen
 uv run pytest -m "not e2e" --ignore=zebra-agent-web/tests/e2e_live
@@ -81,78 +88,80 @@ uv run pytest -m "not e2e" --ignore=zebra-agent-web/tests/e2e_live
 Runs against SQLite (no `ORACLE_DSN` injected). Covers all four packages.
 
 ### e2e
-```bash
-uv sync --all-packages --frozen
-cp /home/opc/projects/zebra/.env .env
-export ORACLE_DSN="$E2E_ORACLE_DSN" ORACLE_USERNAME="$E2E_ORACLE_USERNAME" ORACLE_PASSWORD="$E2E_ORACLE_PASSWORD"
-uv run python zebra-agent-web/manage.py migrate --noinput --fake-initial
-uv run python zebra-agent-web/manage.py flush --noinput
-uv run pytest zebra-agent-web/tests/e2e/ -m e2e
-```
-
-Uses the dedicated `ZEBRA_TEST` Oracle E2E schema. `ANTHROPIC_API_KEY` is still
-injected by the runner — the cassette recorder needs it when recording new LLM
-interactions (`VCR_RECORD_MODE=once`).
-
-If `E2E_ORACLE_DSN` is not set (e.g. local development without Oracle), the job
-falls back to file-based SQLite with WAL mode (`--ds=zebra_agent_web.e2e_settings`).
+Uses an **ephemeral Oracle schema** provisioned per-pipeline via `scripts/e2e_oracle_schema.py`.
+The `E2E_PROVISIONER_*` credentials create a throwaway `E2E_<branch>_<pipeline-id>` Oracle user,
+migrate into it, run the suite, and drop it in `after_script`.
 
 LLM responses are replayed from cassettes in `zebra-agent-web/tests/e2e/cassettes/`.
 To re-record, run with `VCR_RECORD_MODE=rewrite` (requires real API key).
 
-### deploy
+If `E2E_PROVISIONER_*` variables are absent (e.g. local development), falls back to SQLite
+(`--ds=zebra_agent_web.e2e_settings`).
+
+### oke_build
 ```bash
-uv sync --all-packages --frozen
-cp /home/opc/projects/zebra/.env .env   # needed for docker-compose .env mount
-podman-compose up -d --build
-podman-compose ps
+docker build -t $OCIR_REGISTRY/zebra/zebra-web:$CI_COMMIT_SHORT_SHA .
+docker push $OCIR_REGISTRY/zebra/zebra-web:$CI_COMMIT_SHORT_SHA
 ```
+Builds the multi-stage `Dockerfile` and pushes to OCIR (Oracle Container Image Registry).
 
-Builds a fresh image from `Dockerfile`, replaces the running container.
-The entrypoint (`docker/entrypoint.sh`) runs `manage.py migrate` then starts
-Daphne on port 8000.
+### oke_smoke
+Deploys the new image to an ephemeral `smoke-<sha>` namespace with its own Oracle schema,
+runs `pytest zebra-agent-web/tests/e2e/ -m e2e` against it, tears down on completion.
+Failed smoke **blocks `oke_deploy`**.
 
-`resource_group: zebra-prod` ensures only one deploy runs at a time if multiple
-merges land in quick succession.
+### oke_deploy
+```bash
+kubectl -n prod set image deployment/zebra-web zebra-web=$OCIR_REGISTRY/zebra/zebra-web:$CI_COMMIT_SHORT_SHA
+kubectl -n prod set image deployment/zebra-daemon zebra-daemon=$OCIR_REGISTRY/zebra/zebra-web:$CI_COMMIT_SHORT_SHA
+kubectl -n prod rollout status deployment/zebra-web
+kubectl -n prod rollout status deployment/zebra-daemon
+```
+Triggers a rolling update; waits for rollout to complete. `resource_group: oke-prod` ensures
+only one deploy runs at a time.
 
-## Nightly schedule
-
-The `e2e-live` job runs the real-LLM suite against real Oracle. Configure it in
-https://gitlab.com/gidley/zebra/-/pipeline_schedules:
-
-- **Description**: Nightly E2E live
-- **Interval**: `0 2 * * *` (02:00 UTC)
-- **Target branch**: master
-
-The job activates only when `$CI_PIPELINE_SOURCE == "schedule"`. The `deploy`
-job is suppressed for scheduled pipelines (its rule requires `"push"`).
+### oke_live (post-deploy smoke)
+```bash
+# Pull creds from the prod k8s secret
+export ORACLE_DSN="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ORACLE_DSN}' | base64 -d)"
+export ORACLE_USERNAME="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ORACLE_USERNAME}' | base64 -d)"
+export ORACLE_PASSWORD="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ORACLE_PASSWORD}' | base64 -d)"
+export ANTHROPIC_API_KEY="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ANTHROPIC_API_KEY}' | base64 -d)"
+uv run pytest zebra-agent-web/tests/e2e_live/ -v
+```
+Runs 12 real-LLM tests against the live prod Oracle schema. Results prove the deployed system
+works end-to-end. Runs on tag `oke-k8s` (in-cluster runner has `kubectl` access to `prod` ns).
 
 ## Runner configuration
 
-The runner is installed on the Oracle VM as a systemd service running as `User=opc`.
+The runner is deployed in OKE namespace `ci` as a Kubernetes executor.
 
 Key facts:
-- **Executor**: shell (jobs run as `opc` directly — no container isolation)
-- **Tag**: `opc-shell` (all jobs in `.gitlab-ci.yml` carry this tag)
-- **Build dir**: `/home/opc/builds/FaiafcTHZ/0/gidley/zebra/` (stable per runner+project)
-- **UV cache**: `/home/opc/.cache/uv` (shared across jobs — `uv sync` is fast after first run)
-- **Config**: `/etc/gitlab-runner/config.toml`
+- **Executor**: Kubernetes (each job = ephemeral pod)
+- **Tag**: `oke-k8s` (all OKE jobs carry this tag)
+- **Namespace**: `ci`
+- **RBAC**: can `kubectl set image` on `prod` deployments; can read `prod` secrets for `oke_live`
+- **Manifests**: `k8s/base/gitlab-runner/`
+- **Registration**: `deploy/oke/scripts/60-register-runner.sh`
 
 To check runner status:
 ```bash
-ssh opc 'systemctl status gitlab-runner'
-ssh opc 'sudo gitlab-runner verify'
+kubectl -n ci get pods -l app=gitlab-runner
+kubectl -n ci logs deploy/gitlab-runner --tail=50
 ```
 
-To re-bootstrap from scratch, see [`deploy/gitlab-runner-bootstrap.md`](deploy/gitlab-runner-bootstrap.md).
+To re-bootstrap, run `deploy/oke/scripts/60-register-runner.sh` against the cluster.
 
 ## Key files
 
 | File | Purpose |
 |---|---|
-| `.gitlab-ci.yml` | Pipeline definition |
-| `deploy/gitlab-runner-bootstrap.md` | One-shot runner install + registration |
-| `Dockerfile` | Multi-stage image build (python:3.14-slim) |
-| `docker-compose.yml` | Production container config (podman-compose compatible) |
-| `docker/entrypoint.sh` | migrate → collectstatic → daphne |
+| `.gitlab-ci.yml` | Pipeline definition (all 9 stages) |
+| `Dockerfile` | Multi-stage image build |
+| `k8s/base/gitlab-runner/` | GitLab Runner Kubernetes manifests |
+| `k8s/base/prod-web/` | `zebra-web` Deployment + Service + Ingress |
+| `k8s/base/prod-daemon/` | `zebra-daemon` Deployment (separate pod, same image) |
+| `deploy/oke/scripts/60-register-runner.sh` | One-shot runner registration |
+| `deploy/oke/scripts/e2e_oracle_schema.py` | Ephemeral E2E Oracle schema provisioner |
 | `zebra-agent-web/tests/e2e/cassettes/` | Recorded LLM interactions for e2e tests |
+| `zebra-agent-web/tests/e2e_live/` | Real-LLM live tests (run post-deploy) |

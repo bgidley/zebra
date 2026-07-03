@@ -263,7 +263,9 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 
 ### Daemon
 
-`DaemonStarterMiddleware` spawns `run_daemon_loop()` via `asyncio.create_task()` on the first request (Daphne doesn't run ASGI lifespan events). Loop: `pick_next → budget_check → start_process → poll → record metrics → repeat`. Also runnable via `python manage.py run_daemon`.
+In production (OKE), the budget daemon runs as a **separate `zebra-daemon` Deployment** (`k8s/base/prod-daemon/`) to guarantee exactly one daemon instance. It starts via `python manage.py run_daemon` (no middleware needed).
+
+In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via `asyncio.create_task()` on the first request (Daphne doesn't run ASGI lifespan events). Loop: `pick_next → budget_check → start_process → poll → record metrics → repeat`.
 
 ### Storage backends (Django ORM)
 
@@ -314,7 +316,32 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 
 ---
 
-## 7. Cross-Cutting Observations
+## 7. Deployment & CI/CD (F111)
+
+Production runs on **Oracle Kubernetes Engine (OKE)**. The old single-VM deployment was decommissioned.
+
+### Production topology (OKE)
+
+| Component | K8s resource | Notes |
+|---|---|---|
+| Web app | `deploy/zebra-web` (ns `prod`) | Daphne on :8000; LB at `79.72.65.246`, Tailscale `zebra-oke.tailf1e473.ts.net` |
+| Daemon | `deploy/zebra-daemon` (ns `prod`) | Separate pod; runs `manage.py run_daemon`; exactly one instance guaranteed |
+| GitLab Runner | `deploy/gitlab-runner` (ns `ci`) | Kubernetes executor; tag `oke-k8s` |
+| Credentials | K8s secret `zebra-prod-secrets` (ns `prod`) | Oracle DSN (full TCPS string), API keys |
+
+### CI/CD pipeline (9 stages)
+
+`lint → test → e2e → deploy(no-op) → smoke(no-op) → oke_build → oke_smoke → oke_deploy → oke_live`
+
+The `oke_*` stages gate on `$OKE_ENABLED == "true"`. `oke_live` runs 12 real-LLM tests against prod Oracle after every successful deploy. See `README-CICD.md` for full stage details.
+
+### Ethics gate change (F111)
+
+`ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`; `ethics_post_review` routes directly to `update_conceptual_memory`. This unblocked autonomous daemon processing.
+
+---
+
+## 9. Cross-Cutting Observations
 
 ### What works well
 
@@ -347,7 +374,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 
 ---
 
-## 8. Where the Code Lives (Quick Reference)
+## 10. Where the Code Lives (Quick Reference)
 
 | Concern | Path |
 |---|---|
@@ -383,7 +410,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 
 ---
 
-## 9. Gap Summary vs. Requirements
+## 11. Gap Summary vs. Requirements
 
 | Area | Current State | Requirement Reference |
 |---|---|---|
