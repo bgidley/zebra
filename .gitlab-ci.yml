@@ -13,7 +13,7 @@ stages:
 
 default:
   tags:
-    - opc-shell
+    - oke-k8s
   before_script:
     - uv sync --all-packages --frozen
 
