@@ -86,6 +86,9 @@ propose_trust_promotion = "zebra_tasks.agent.propose_trust_promotion:ProposeTrus
 load_values_profile = "zebra_tasks.agent.load_values_profile:LoadValuesProfileAction"
 extract_values_tags = "zebra_tasks.agent.extract_values_tags:ExtractValuesTagsAction"
 save_values_profile = "zebra_tasks.agent.save_values_profile:SaveValuesProfileAction"
+# Web search (F115)
+kagi_search = "zebra_tasks.web.kagi_search:KagiSearchAction"
+kagi_summarize = "zebra_tasks.web.kagi_summarize:KagiSummarizeAction"
 # Knowledge lifecycle (F32)
 decay_confidence = "zebra_tasks.knowledge.decay:DecayConfidenceAction"
 add_knowledge = "zebra_tasks.knowledge.add:AddKnowledgeAction"
