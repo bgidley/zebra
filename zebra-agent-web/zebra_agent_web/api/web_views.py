@@ -279,8 +279,18 @@ async def run_goal_form(request):
     """Display the form to run a goal."""
     await agent_engine.ensure_initialized()
     library = agent_engine.get_library()
+    metrics = agent_engine.get_metrics()
 
     workflows = await library.list_workflows()
+    recent_runs = await metrics.get_completed_runs(limit=10)
+
+    extend_from_id = request.GET.get("extend_from", "").strip()
+    extend_from_run = None
+    if extend_from_id:
+        for r in recent_runs:
+            if r.id == extend_from_id:
+                extend_from_run = r
+                break
 
     context = {
         "workflows": [
@@ -292,6 +302,8 @@ async def run_goal_form(request):
             }
             for w in workflows
         ],
+        "recent_runs": recent_runs,
+        "extend_from_run": extend_from_run,
     }
 
     return render(request, "pages/run_goal.html", context)
@@ -351,9 +363,30 @@ async def run_goal_execute(request):
 
     user_id = request.user.id if request.user.is_authenticated else None
 
+    # Resolve optional previous run context
+    previous_run_context = None
+    previous_run_id = request.POST.get("previous_run_id", "").strip()
+    if previous_run_id:
+        await agent_engine.ensure_initialized()
+        metrics = agent_engine.get_metrics()
+        prev_run = await metrics.get_run(previous_run_id)
+        if prev_run:
+            previous_run_context = {
+                "run_id": prev_run.id,
+                "goal": prev_run.goal,
+                "workflow_name": prev_run.workflow_name,
+                "output": str(prev_run.output or "")[:2000],
+            }
+
     # Start background task for goal execution
     task = asyncio.create_task(
-        _execute_goal_background(run_id, goal, model=resolved_model, user_id=user_id)
+        _execute_goal_background(
+            run_id,
+            goal,
+            model=resolved_model,
+            user_id=user_id,
+            previous_run_context=previous_run_context,
+        )
     )
     _active_tasks[run_id] = task
 
@@ -450,6 +483,21 @@ async def run_goal_queue(request):
     if deadline:
         deadline = deadline.replace("T", "T") + ":00Z" if "Z" not in deadline else deadline
 
+    # Resolve optional previous run context
+    previous_run_context = None
+    previous_run_id = request.POST.get("previous_run_id", "").strip()
+    if previous_run_id:
+        await agent_engine.ensure_initialized()
+        metrics = agent_engine.get_metrics()
+        prev_run = await metrics.get_run(previous_run_id)
+        if prev_run:
+            previous_run_context = {
+                "run_id": prev_run.id,
+                "goal": prev_run.goal,
+                "workflow_name": prev_run.workflow_name,
+                "output": str(prev_run.output or "")[:2000],
+            }
+
     from zebra_agent_web.api.goals import queue_goal
 
     try:
@@ -460,6 +508,7 @@ async def run_goal_queue(request):
             deadline=deadline or None,
             user_id=request.user.id if request.user.is_authenticated else None,
             identity=_identity_context(),
+            previous_run_context=previous_run_context,
         )
     except ValueError as e:
         return HttpResponse(f"Cannot load Agent Main Loop workflow: {e}", status=500)
@@ -488,7 +537,11 @@ async def run_goal_queue(request):
 
 
 async def _execute_goal_background(
-    run_id: str, goal: str, model: str | None = None, user_id: int | None = None
+    run_id: str,
+    goal: str,
+    model: str | None = None,
+    user_id: int | None = None,
+    previous_run_context: dict | None = None,
 ) -> None:
     """Execute goal in background, sending progress via WebSocket channel layer.
 
@@ -519,6 +572,7 @@ async def _execute_goal_background(
             run_id=run_id,
             model=model,
             user_id=user_id,
+            previous_run_context=previous_run_context,
         )
 
         # Send completion event
@@ -905,6 +959,16 @@ async def _run_detail_pending_fallback(request, run_id: str):
         "planning_concerns": parent_flow.get("planning_concerns") if parent_flow else None,
     }
     return render(request, "pages/run_pending.html", context)
+
+
+async def run_context_partial(request, run_id):
+    """Return a small preview snippet for a completed run (HTMX partial)."""
+    await agent_engine.ensure_initialized()
+    metrics = agent_engine.get_metrics()
+    run = await metrics.get_run(run_id)
+    if run is None:
+        return HttpResponse("", status=404)
+    return render(request, "partials/run_context_preview.html", {"run": run})
 
 
 async def run_detail(request, run_id):

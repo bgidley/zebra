@@ -245,8 +245,19 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
         if callback:
             await callback("creating_workflow", {"suggested_name": suggested_name})
 
-        # Build prompt
-        prompt = f"Create a workflow for this goal: {goal}\n"
+        # Build prompt — include previous run context when extending a prior goal
+        previous_run_context = context.process.properties.get("previous_run_context")
+        if previous_run_context:
+            prompt = (
+                f"## Previous run context\n"
+                f'Goal: "{previous_run_context.get("goal", "")}"\n'
+                f"Workflow used: {previous_run_context.get('workflow_name', '')}\n"
+                f"Output: {previous_run_context.get('output', '')}\n\n"
+                f"## New goal (extension / follow-up)\n"
+                f"Create a workflow for this goal: {goal}\n"
+            )
+        else:
+            prompt = f"Create a workflow for this goal: {goal}\n"
 
         if suggested_name:
             prompt += f"\nSuggested workflow name: {suggested_name}\n"
