@@ -89,7 +89,10 @@ class WorkflowCreatorAction(TaskAction):
         ),
     ]
 
-    SYSTEM_PROMPT = """You are a workflow designer for the Zebra workflow engine.
+    # Split into header + footer; the Available Actions section is injected
+    # dynamically at runtime from the action registry so new actions registered
+    # as entry points are automatically visible without editing this file.
+    _PROMPT_HEADER = """You are a workflow designer for the Zebra workflow engine.
 Create workflow definitions in YAML format.
 
 ## Workflow Structure
@@ -117,39 +120,30 @@ routings:
     to: task2_id
 ```
 
-## Available Actions
+"""
 
-### llm_call — Call an LLM with a prompt
-Properties: system_prompt, prompt, output_key, temperature, max_tokens, model
-Use {{variable}} to reference process properties or previous task outputs.
-
-The optional `model` property selects a specific Anthropic model for that task:
-- "haiku" (claude-haiku-4-20250414) — fastest and cheapest, good for simple
-  extraction or classification
-- "sonnet" (claude-sonnet-4-20250514) — balanced quality and speed (default if omitted)
-- "opus" (claude-opus-4-20250514) — highest quality, use for complex reasoning or
-  creative writing
+    _PROMPT_FOOTER = """
+## Model aliases for llm_call
+The optional `model` property on any `llm_call` task accepts these aliases:
+- "haiku" — fastest and cheapest, good for simple extraction or classification
+- "sonnet" — balanced quality and speed (default if omitted)
+- "opus" — highest quality, use for complex reasoning or creative writing
 Only set `model` when a task has clearly different requirements from the default.
-Most workflows should omit it and let the caller choose at run time.
 
-### Human input task (auto: false) — Pause for user input via a web form
-Set `auto: false` on the task (no action needed). Define form fields in
+## Human input task (auto: false) — Pause for user input via a web form
+Set `auto: false` on the task (no action field). Define form fields in
 `properties.schema` using standard JSON Schema. The engine pauses the workflow
 and the web UI renders a form for the user to fill in.
 
-Supported field types in the schema:
-- `type: string` — text input (default)
-- `type: string` + `format: multiline` — textarea for long text
-- `type: string` + `enum: [...]` — dropdown select
+Supported field types:
+- `type: string` — text input; add `format: multiline` for textarea, `enum: [...]` for dropdown
 - `type: boolean` — checkbox
 - `type: integer` or `type: number` — number input
 - `type: string` + `format: email` — email input
 
-Use `required: [field1, field2]` for mandatory fields.
-Use `minLength`, `maxLength`, `minimum`, `maximum` for validation.
-Use `description` for help text shown below the field.
+Use `required: [field1, field2]`, `minLength`, `maxLength`, `minimum`, `maximum`, `description`.
 
-Example human input task:
+Example:
 ```yaml
   get_input:
     name: "Get User Input"
@@ -172,22 +166,8 @@ Example human input task:
             default: medium
 ```
 
-### Conditional routing with enum fields
-For yes/no decisions or approval steps, use an enum field with named routes:
+For yes/no decisions, use an enum field and conditional routings:
 ```yaml
-  review:
-    name: "Review"
-    auto: false
-    properties:
-      schema:
-        type: object
-        required: [decision]
-        properties:
-          decision:
-            type: string
-            title: "Approve?"
-            enum: ["yes", "no"]
-
 routings:
   - from: review
     to: approved_task
@@ -282,9 +262,11 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
                     prompt += f"- {w}\n"
 
         try:
+            actions_section = context.engine.actions.format_for_prompt(user_facing_only=True)
+            system_prompt = self._PROMPT_HEADER + actions_section + self._PROMPT_FOOTER
             response = await provider.complete(
                 messages=[
-                    Message.system(self.SYSTEM_PROMPT),
+                    Message.system(system_prompt),
                     Message.user(prompt),
                 ],
                 temperature=0.7,  # Higher temperature for creativity

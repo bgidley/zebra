@@ -7,7 +7,7 @@ and lookup of TaskAction and ConditionAction implementations.
 from typing import TypeVar
 
 from zebra.core.exceptions import ActionNotFoundError
-from zebra.tasks.base import AlwaysTrueCondition, ConditionAction, TaskAction
+from zebra.tasks.base import ActionMetadata, AlwaysTrueCondition, ConditionAction, TaskAction
 
 T = TypeVar("T", bound=TaskAction | ConditionAction)
 
@@ -101,6 +101,53 @@ class ActionRegistry:
         can list all actions and their ``reversibility_hint`` values.
         """
         return {name: cls.reversibility_hint for name, cls in self._actions.items()}
+
+    # Internal module prefixes whose actions are loop plumbing, not user-composable.
+    _INTERNAL_PREFIXES: tuple[str, ...] = ("zebra_tasks.agent.", "zebra_tasks.knowledge.")
+
+    def describe_all(self, user_facing_only: bool = False) -> dict[str, ActionMetadata]:
+        """Return metadata for all (or only user-facing) registered actions.
+
+        Args:
+            user_facing_only: When True, exclude internal loop-plumbing actions
+                (those in zebra_tasks.agent.* and zebra_tasks.knowledge.*).
+
+        Returns:
+            Ordered dict of action name → ActionMetadata.
+        """
+        return {
+            name: cls.get_metadata()
+            for name, cls in self._actions.items()
+            if not user_facing_only or not cls.__module__.startswith(self._INTERNAL_PREFIXES)
+        }
+
+    def format_for_prompt(self, user_facing_only: bool = True) -> str:
+        """Return a markdown '## Available Actions' block for injection into LLM prompts.
+
+        Each registered (user-facing) action is listed with its description and
+        the names of its required/optional input properties.  Adding a new entry
+        point automatically makes it visible to WorkflowCreatorAction and
+        WorkflowOptimizerAction — no manual prompt editing required.
+        """
+        lines = ["## Available Actions\n"]
+        for name, meta in self.describe_all(user_facing_only=user_facing_only).items():
+            header = f"### {name}"
+            if meta.description:
+                header += f" — {meta.description}"
+            lines.append(header)
+            if meta.inputs:
+                req = [p.name for p in meta.inputs if p.required]
+                opt = [p.name for p in meta.inputs if not p.required]
+                parts = []
+                if req:
+                    parts.append(", ".join(req) + " (required)")
+                if opt:
+                    parts.append(", ".join(opt))
+                lines.append("Properties: " + "; ".join(parts))
+            if meta.outputs:
+                lines.append("Outputs: " + ", ".join(p.name for p in meta.outputs))
+            lines.append("")
+        return "\n".join(lines)
 
     # =========================================================================
     # Condition Registration

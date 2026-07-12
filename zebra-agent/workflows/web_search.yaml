@@ -1,0 +1,38 @@
+name: "Web Research"
+description: "Search the web for information on a topic and summarise the findings."
+tags: ["web", "research", "search", "internet", "kagi"]
+use_when: "The user wants to find information from the internet, look up recent events, facts, prices, news, or research any topic that requires up-to-date or external knowledge."
+version: 1
+first_task: search
+result_key: summary
+
+tasks:
+  search:
+    name: "Search the web"
+    action: kagi_search
+    auto: true
+    properties:
+      query: "{{goal}}"
+      limit: 10
+      output_key: search_results
+
+  summarise:
+    name: "Summarise results"
+    action: llm_call
+    auto: true
+    properties:
+      system_prompt: |
+        You are a research assistant. Given a user query and web search results,
+        write a clear, concise summary that directly answers the query.
+        Cite sources inline using markdown links where relevant.
+        If the results do not contain enough information, say so.
+      prompt: |
+        Query: {{goal}}
+
+        Search results:
+        {{search_results}}
+      output_key: summary
+
+routings:
+  - from: search
+    to: summarise

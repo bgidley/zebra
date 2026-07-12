@@ -142,7 +142,8 @@ class WorkflowOptimizerAction(TaskAction):
         ),
     ]
 
-    SYSTEM_PROMPT = """You are an expert workflow designer for the Zebra workflow engine.
+    # Split into header + footer; Available Actions injected dynamically at runtime.
+    _PROMPT_HEADER = """You are an expert workflow designer for the Zebra workflow engine.
 Your task is to create or modify workflow definitions based on improvement recommendations.
 
 ## Workflow Structure
@@ -170,16 +171,9 @@ routings:
     to: task2_id
 ```
 
-## Available Actions
+"""
 
-- **llm_call**: Call an LLM with a prompt
-  - Properties: system_prompt, prompt, output_key, temperature, max_tokens
-  - Use {{variable}} to reference process properties or previous outputs
-
-- **python_exec**: Execute Python code
-  - Properties: code, output_key
-  - Access props dict for process properties, set result variable
-
+    _PROMPT_FOOTER = """
 ## Guidelines
 
 1. Use descriptive task IDs (snake_case)
@@ -215,6 +209,10 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
             if provider is None:
                 return TaskResult.fail("No LLM provider available")
 
+            # Build system prompt dynamically so newly-registered actions are visible.
+            actions_section = context.engine.actions.format_for_prompt(user_facing_only=True)
+            system_prompt = self._PROMPT_HEADER + actions_section + self._PROMPT_FOOTER
+
             results = {
                 "changes_made": [],
                 "new_workflows": [],
@@ -242,7 +240,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                     continue
 
                 workflow_yaml = await self._create_new_workflow(
-                    provider, suggestion, existing_workflows
+                    provider, suggestion, existing_workflows, system_prompt
                 )
 
                 if workflow_yaml:
@@ -282,7 +280,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                 if priority.get("type") == "create":
                     # Create new workflow
                     workflow_yaml = await self._create_workflow_from_priority(
-                        provider, priority, existing_workflows
+                        provider, priority, existing_workflows, system_prompt
                     )
 
                     if workflow_yaml:
@@ -316,6 +314,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                             existing_workflows[target],
                             priority,
                             evaluation.get("workflow_evaluations", []),
+                            system_prompt,
                         )
 
                         if modified_yaml:
@@ -411,6 +410,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
         provider,
         suggestion: dict[str, Any],
         existing_workflows: dict[str, str],
+        system_prompt: str,
     ) -> str | None:
         """Create a new workflow based on a suggestion."""
         prompt = f"""Create a new workflow with the following requirements:
@@ -430,7 +430,7 @@ Rationale: {suggestion.get("rationale", "")}
 
         response = await provider.complete(
             messages=[
-                Message.system(self.SYSTEM_PROMPT),
+                Message.system(system_prompt),
                 Message.user(prompt),
             ],
             temperature=0.7,
@@ -444,6 +444,7 @@ Rationale: {suggestion.get("rationale", "")}
         provider,
         priority: dict[str, Any],
         existing_workflows: dict[str, str],
+        system_prompt: str,
     ) -> str | None:
         """Create a workflow based on an improvement priority."""
         prompt = f"""Create a new workflow to address this improvement priority:
@@ -463,7 +464,7 @@ Rationale: {priority.get("rationale", "")}
 
         response = await provider.complete(
             messages=[
-                Message.system(self.SYSTEM_PROMPT),
+                Message.system(system_prompt),
                 Message.user(prompt),
             ],
             temperature=0.7,
@@ -479,6 +480,7 @@ Rationale: {priority.get("rationale", "")}
         current_yaml: str,
         priority: dict[str, Any],
         evaluations: list[dict],
+        system_prompt: str,
     ) -> str | None:
         """Modify an existing workflow based on evaluation."""
         # Find the specific evaluation for this workflow
@@ -515,7 +517,7 @@ Maintain the same name and general purpose, but improve the implementation."""
 
         response = await provider.complete(
             messages=[
-                Message.system(self.SYSTEM_PROMPT),
+                Message.system(system_prompt),
                 Message.user(prompt),
             ],
             temperature=0.5,
