@@ -36,6 +36,15 @@ render "$K8S_DIR/base/claude-code"
 log "applying base workloads at tag $TAG"
 kustomize build "$K8S_DIR/base" | kubectl apply -f -
 
+# Patch optional API keys from CI variables into the prod secret (idempotent).
+# New keys added here flow into pods automatically via envFrom: secretRef.
+if [ -n "${KAGI_API_KEY:-}" ]; then
+  kubectl -n prod patch secret zebra-prod-secrets \
+    --type='json' \
+    -p="[{\"op\":\"add\",\"path\":\"/data/KAGI_API_KEY\",\"value\":\"$(echo -n "$KAGI_API_KEY" | base64 -w0)\"}]"
+  log "patched KAGI_API_KEY into zebra-prod-secrets"
+fi
+
 log "waiting for rollouts…"
 kubectl -n prod rollout status deploy/zebra-web --timeout=180s
 kubectl -n prod rollout status deploy/zebra-daemon --timeout=120s
