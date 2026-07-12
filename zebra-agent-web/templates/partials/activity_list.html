@@ -149,6 +149,10 @@ Context:
                         {% if group.run_id %}
                         <a href="/runs/{{ group.run_id }}/"
                            class="text-indigo-400 hover:text-indigo-300 text-xs">Details</a>
+                        {% if not group.is_running and not group.is_queued %}
+                        <a href="/run/?extend_from={{ group.run_id }}"
+                           class="text-gray-500 hover:text-gray-300 text-xs">Extend</a>
+                        {% endif %}
                         {% endif %}
                         {% if group.is_stale and group.process_ids %}
                         {% for pid in group.process_ids %}

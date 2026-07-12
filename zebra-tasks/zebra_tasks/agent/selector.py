@@ -320,8 +320,19 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
         except Exception as e:
             return TaskResult.fail(f"Failed to get LLM provider: {e}")
 
-        # Build prompt
-        prompt = f"Goal: {goal}\n\n"
+        # Build prompt — prepend previous run context when extending a prior goal
+        previous_run_context = context.process.properties.get("previous_run_context")
+        if previous_run_context:
+            prompt = (
+                f"## Previous run context\n"
+                f'Goal: "{previous_run_context.get("goal", "")}"\n'
+                f"Workflow used: {previous_run_context.get('workflow_name', '')}\n"
+                f"Output: {previous_run_context.get('output', '')}\n\n"
+                f"## New goal (extension / follow-up)\n"
+                f"{goal}\n\n"
+            )
+        else:
+            prompt = f"Goal: {goal}\n\n"
 
         # Inject memory context if available
         if memory_context:

@@ -1,0 +1,28 @@
+{% comment %}
+Parameters passed via include or HTMX fetch:
+  - run: WorkflowRun object with .id, .goal, .workflow_name, .output, .completed_at, .success
+{% endcomment %}
+<div class="mt-3 p-3 rounded bg-gray-900 border border-gray-700 text-xs space-y-1">
+    <div class="flex items-center gap-2">
+        <span class="text-gray-500">Workflow:</span>
+        <span class="text-gray-300">{{ run.workflow_name|default:"-" }}</span>
+        {% if run.success %}
+        <span class="px-1.5 py-0.5 rounded bg-green-900/60 text-green-300">success</span>
+        {% elif run.success == False %}
+        <span class="px-1.5 py-0.5 rounded bg-red-900/60 text-red-300">failed</span>
+        {% endif %}
+        {% if run.completed_at %}
+        <span class="text-gray-600 ml-auto">{{ run.completed_at|date:"M d, H:i" }}</span>
+        {% endif %}
+    </div>
+    <div>
+        <span class="text-gray-500">Goal:</span>
+        <span class="text-gray-400">{{ run.goal|truncatechars:200 }}</span>
+    </div>
+    {% if run.output %}
+    <div>
+        <span class="text-gray-500 block mb-1">Output:</span>
+        <pre class="whitespace-pre-wrap text-gray-400 max-h-32 overflow-y-auto">{{ run.output|truncatechars:500 }}</pre>
+    </div>
+    {% endif %}
+</div>
