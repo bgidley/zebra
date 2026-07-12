@@ -452,5 +452,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 | Integration provider framework | **Missing** | REQ-INT-001/002/004 |
 | Domain coverage beyond Code | **Missing** | REQ-DOM-SCHED/RESEARCH/FIN/HEALTH/HOME/CREATIVE/SOCIAL |
 | Web authentication | **Implemented** (F5 — passkey/WebAuthn) | REQ-NFR-007 |
+| Kagi web search action (`kagi_search`) | **Implemented** (F115) | — |
+| Extend/follow-up on a previous goal | **Implemented** (F116) — `previous_run_context` injected into process properties; selector/creator prompts include prior goal, workflow, and output | — |
 
 The existing system is a solid foundation for the *engine* and the *agent loop* described in the requirements, but the *policy*, *personalisation*, *proactivity*, and *multi-user* layers remain to be built.
