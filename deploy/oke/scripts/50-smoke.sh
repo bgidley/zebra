@@ -13,6 +13,7 @@ PREFIX="${OCIR_REPO_PREFIX:-zebra}"
 WEB="$REGISTRY/$PREFIX/zebra-web"
 : "${SMOKE_PASSWORD:?set SMOKE_PASSWORD}"
 : "${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY}"
+: "${KAGI_API_KEY:?set KAGI_API_KEY}"
 
 # Ephemeral Oracle schema per run (mirrors the e2e job — real prod parity, fully
 # isolated, no shared schema to collide on). Provisioner creds come from a
@@ -66,6 +67,7 @@ kubectl -n smoke create secret generic zebra-smoke-secrets \
   --from-literal=ORACLE_USERNAME="$SMOKE_SCHEMA" \
   --from-literal=ORACLE_PASSWORD="$E2E_SCHEMA_PASSWORD" \
   --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+  --from-literal=KAGI_API_KEY="$KAGI_API_KEY" \
   --from-literal=DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY" \
   --from-literal=SMOKE_PASSWORD="$SMOKE_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
