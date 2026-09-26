@@ -92,6 +92,7 @@ class DjangoMetricsStore(MetricsStore):
                     "error": run.error,
                     "output": output_str,
                     "model": run.model or "",
+                    "extends_run_id": run.extends_run_id,
                     "user_id": user_id,
                 },
             )
@@ -110,12 +111,16 @@ class DjangoMetricsStore(MetricsStore):
         await _update()
 
     async def get_run(self, run_id: str) -> WorkflowRun | None:
-        """Get a specific run by ID."""
+        """Get a specific run by ID, scoped to current user."""
 
         @sync_to_async(thread_sensitive=False)
         def _get():
+            qs = WorkflowRunModel.objects.all()
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
             try:
-                model = WorkflowRunModel.objects.get(id=run_id)
+                model = qs.get(id=run_id)
                 return self._model_to_run(model)
             except WorkflowRunModel.DoesNotExist:
                 return None
@@ -290,6 +295,7 @@ class DjangoMetricsStore(MetricsStore):
             error=model.error,
             output=output,
             model=model.model or None,
+            extends_run_id=model.extends_run_id,
         )
 
     # =========================================================================

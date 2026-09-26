@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 from zebra.core.models import ProcessState, TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.followup import with_previous_run
+
 if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
     from zebra_agent.metrics import TaskExecution
@@ -166,8 +168,10 @@ class ExecuteGoalWorkflowAction(TaskAction):
 
         try:
             # Prepare properties for the sub-workflow
+            # F116: a follow-up goal carries the previous run's context into the
+            # executed workflow, which only sees the goal.
             sub_properties = {
-                "goal": goal,
+                "goal": with_previous_run(goal, context.process.properties),
                 "__parent_process_id__": context.process.id,
                 "__parent_task_id__": task.id,
             }

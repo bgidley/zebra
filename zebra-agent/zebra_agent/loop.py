@@ -129,6 +129,10 @@ class AgentLoop:
             progress_callback: Optional async callback for progress updates.
                 Called with (event_name, data_dict) at key points.
             run_id: Optional run ID to use (for tracking from external callers)
+            model: Optional LLM model override for this run
+            user_id: Optional ID of the user who submitted the goal
+            previous_run_context: Optional summary of a previous run this goal
+                follows up on (F116), built by build_previous_run_context()
 
         Returns:
             AgentResult with output, success status, tokens used, etc.

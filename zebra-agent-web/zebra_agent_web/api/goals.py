@@ -41,6 +41,8 @@ async def queue_goal(
         user_id: Authenticated user id, or None.
         identity: Dict with user_display_name / user_identity_id (web supplies
             this from the request; the CLI omits it).
+        previous_run_context: Summary of a previous run this goal follows up on
+            (F116), or None.
 
     Returns:
         The created ProcessInstance (state CREATED).

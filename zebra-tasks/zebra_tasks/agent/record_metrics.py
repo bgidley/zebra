@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.followup import previous_run_id
+
 if TYPE_CHECKING:
     from zebra_agent.storage.interfaces import MetricsStore
 
@@ -183,6 +185,7 @@ class RecordMetricsAction(TaskAction):
                 tokens_used=tokens_used or 0,
                 error=error,
                 output=self._serialize_output(output),
+                extends_run_id=previous_run_id(context.process.properties),
             )
 
             # Record the run

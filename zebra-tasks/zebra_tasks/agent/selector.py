@@ -7,6 +7,7 @@ from typing import Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
@@ -320,19 +321,8 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
         except Exception as e:
             return TaskResult.fail(f"Failed to get LLM provider: {e}")
 
-        # Build prompt — prepend previous run context when extending a prior goal
-        previous_run_context = context.process.properties.get("previous_run_context")
-        if previous_run_context:
-            prompt = (
-                f"## Previous run context\n"
-                f'Goal: "{previous_run_context.get("goal", "")}"\n'
-                f"Workflow used: {previous_run_context.get('workflow_name', '')}\n"
-                f"Output: {previous_run_context.get('output', '')}\n\n"
-                f"## New goal (extension / follow-up)\n"
-                f"{goal}\n\n"
-            )
-        else:
-            prompt = f"Goal: {goal}\n\n"
+        # Build prompt (F116: include previous run context for follow-up goals)
+        prompt = f"Goal: {with_previous_run(goal, context.process.properties)}\n\n"
 
         # Inject memory context if available
         if memory_context:

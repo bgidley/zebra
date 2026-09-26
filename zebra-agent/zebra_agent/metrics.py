@@ -35,6 +35,7 @@ class WorkflowRun:
     error: str | None = None
     output: Any = None
     model: str | None = None  # LLM model used (e.g. "claude-sonnet-4-20250514")
+    extends_run_id: str | None = None  # F116: run this one follows up on
 
     @classmethod
     def create(cls, workflow_name: str, goal: str) -> "WorkflowRun":

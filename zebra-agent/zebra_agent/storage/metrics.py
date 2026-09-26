@@ -79,6 +79,7 @@ class InMemoryMetricsStore(MetricsStore):
                 error=run.error,
                 output=run.output,
                 model=run.model,
+                extends_run_id=run.extends_run_id,
             )
 
     async def get_run(self, run_id: str) -> WorkflowRun | None:
