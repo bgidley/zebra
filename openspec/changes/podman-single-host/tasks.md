@@ -5,8 +5,8 @@
 - [x] 1.1 `deploy/podman/bootstrap-host.sh`: growfs, uv, gitlab-runner as `opc` (concurrent 1), linger, cloudflared, config dirs
 - [x] 1.2 Run bootstrap on `coding-agent`; register runner `coding-agent-podman` (tag `opc-shell`) via API
 - [x] 1.3 Remove Tailscale from host; `deploy/podman/setup-tunnel.sh`
-- [ ] 1.4 `cloudflared tunnel login` (user) + `setup-tunnel.sh zebra.gidley.co.uk`
-- [ ] 1.5 Cloudflare Access application on `zebra.gidley.co.uk` (owner only)
+- [x] 1.4 `cloudflared tunnel login` (user) + `setup-tunnel.sh zebra.gidley.co.uk`
+- [x] 1.5 Cloudflare Access application on `zebra.gidley.co.uk` (owner only)
 
 ## 2. Deploy
 
