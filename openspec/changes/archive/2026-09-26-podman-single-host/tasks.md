@@ -21,11 +21,11 @@
 - [x] 3.2 Remove `deploy/oke/`, `docker/claude/`, `docker-compose.yml`, old runner doc, OKE design spec
 - [x] 3.3 Docs: `README-CICD.md`, `specs/podman-single-host-design.md`, `specs/zebra-as-is.md` §6–7, `AGENTS.md`, `specs/AGENTS.md`
 - [x] 3.4 Run lint + format (`uv run ruff check --fix . && uv run ruff format .`)
-- [ ] 3.5 Push branch; green `lint → test → e2e` on the new runner
+- [x] 3.5 Push branch; green `lint → test → e2e` on the new runner
 
 ## 4. Go-live
 
-- [ ] 4.1 Merge to master; `deploy` + `smoke` green against prod Oracle
-- [ ] 4.2 Verify kill switch state and a single daemon; re-register passkey on the new RP ID (behind Access)
-- [ ] 4.3 GitLab housekeeping: delete stale runners, remove OKE-only CI variables
-- [ ] 4.4 Archive this change
+- [x] 4.1 Merge to master; `deploy` + `smoke` green against prod Oracle
+- [x] 4.2 Verify kill switch state and a single daemon; re-register passkey on the new RP ID (behind Access)
+- [x] 4.3 GitLab housekeeping: delete stale runners, remove OKE-only CI variables
+- [x] 4.4 Archive this change
