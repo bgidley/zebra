@@ -7,6 +7,7 @@ without wall-clock delays.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 from zebra.core.engine import ActionRegistry, WorkflowEngine
@@ -198,7 +199,7 @@ async def test_dispatch_with_real_workflow_library(workflow_engine, tmp_path):
     assert (await run_store.get_run("real_lib_routine")).last_status == "ok"
 
 
-async def test_missing_workflow_is_skipped_not_errored(workflow_engine, tmp_path, caplog):
+async def test_missing_workflow_is_skipped_not_errored(workflow_engine, tmp_path):
     """A routine naming a workflow absent from the library is skipped, not an error."""
     from zebra_agent.library import WorkflowLibrary
 
@@ -211,9 +212,12 @@ async def test_missing_workflow_is_skipped_not_errored(workflow_engine, tmp_path
         registry=registry, store=run_store, engine=workflow_engine, clock=FakeClock(START)
     )
 
-    with caplog.at_level("WARNING", logger="zebra_agent.scheduler.loop"):
+    # Patch the module logger directly — other suites reconfigure logging, so
+    # caplog propagation is unreliable in a full-repo run.
+    with patch("zebra_agent.scheduler.loop.logger") as log:
         await loop._tick()
 
     assert await _all_processes(workflow_engine) == []
     assert (await run_store.get_run("ghost")).last_status == "ok"
-    assert "workflow 'No Such Flow' not found in library" in caplog.text
+    skip_msgs = [c.args for c in log.warning.call_args_list if "not found" in c.args[0]]
+    assert skip_msgs == [(skip_msgs[0][0], "ghost", "No Such Flow")]
