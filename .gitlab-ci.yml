@@ -4,22 +4,18 @@ stages:
   - e2e
   - deploy
   - smoke
-  # OKE migration stages (gated by $OKE_ENABLED; no-ops until the cluster is live).
-  # Ordered build -> smoke -> deploy: validate the exact image, then promote it.
-  - oke_build
-  - oke_smoke
-  - oke_deploy
-  - oke_live
 
+# Every job runs on the single prod host (OCI A1, `coding-agent`) via a GitLab
+# shell runner executing as `opc` — see deploy/podman/bootstrap-host.sh.
 default:
   tags:
-    - oke-k8s
+    - opc-shell
   before_script:
+    - export PATH="$HOME/.local/bin:$PATH"
     - uv sync --all-packages --frozen
 
 variables:
   DJANGO_SETTINGS_MODULE: zebra_agent_web.settings
-  UV_CACHE_DIR: /var/cache/uv
 
 lint:
   stage: lint
@@ -39,7 +35,6 @@ e2e:
   retry: 2
   script:
     # E2E_PROVISIONER_* are GitLab CI variables (set in project settings).
-    # On OKE Kubernetes executor they arrive as env vars — no file to source.
     - |
       if [ -n "$E2E_PROVISIONER_DSN" ] && [ -n "$E2E_PROVISIONER_USERNAME" ] && [ -n "$E2E_PROVISIONER_PASSWORD" ]; then
         # Per-pipeline ephemeral Oracle schema — real prod parity, fully isolated.
@@ -72,7 +67,7 @@ e2e:
 e2e-live:
   stage: e2e
   script:
-    - cp /home/gitlab-runner/.env .env
+    # ORACLE_* / ANTHROPIC_API_KEY arrive as GitLab CI variables.
     - VCR_RECORD_MODE=none uv run pytest zebra-agent-web/tests/e2e_live/
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
@@ -80,26 +75,13 @@ e2e-live:
 deploy:
   stage: deploy
   script:
-    # docker-compose.yml mounts ./.env into the container; the authoritative
-    # copy lives at /home/gitlab-runner/.env on the VM.
-    - cp /home/gitlab-runner/.env .env
     # Bake git version metadata into the image at build time (git not in container)
     - uv run python scripts/gen_version.py > version.json
-    - uv tool run podman-compose build --no-cache
-    - uv tool run podman-compose up -d --force-recreate
-    - uv tool run podman-compose ps
-    # Wait for the container to accept requests, then provision the smoke user
-    - timeout 60 sh -c 'until curl -sf http://localhost:8000/api/health/ > /dev/null; do sleep 2; done'
-    - >-
-      [ -z "$SMOKE_PASSWORD" ] || uv tool run podman-compose exec -e SMOKE_PASSWORD -T web
-      python zebra-agent-web/manage.py shell -c
-      "import os; from django.contrib.auth.models import User;
-      u,_=User.objects.get_or_create(username='smoke');
-      u.set_password(os.environ['SMOKE_PASSWORD']); u.save();
-      print('Smoke user ready')"
+    # Builds localhost/zebra-web:$SHA, writes ~/.config/zebra/prod.env from the CI
+    # variables, swaps the Quadlet units to the new image (health-gated, auto-rollback).
+    - bash scripts/deploy-podman.sh "$CI_COMMIT_SHORT_SHA"
   rules:
-    # VM (podman-compose) deploy — runs until OKE is switched on.
-    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push" && $OKE_ENABLED != "true"
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
   resource_group: zebra-prod
 
 smoke:
@@ -109,62 +91,5 @@ smoke:
   variables:
     SMOKE_BASE_URL: "http://localhost:8000"
   rules:
-    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push" && $OKE_ENABLED != "true"
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
       when: on_success
-
-# ===========================================================================
-# OKE pipeline (F109) — build once -> validate in an ephemeral smoke namespace
-# -> promote the SAME image to prod. Gated by $OKE_ENABLED == "true" so it stays
-# dormant until the cluster exists (F110). The VM deploy/smoke above are gated off
-# at the same time, so exactly one path runs.
-# ===========================================================================
-.oke_rules: &oke_rules
-  rules:
-    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push" && $OKE_ENABLED == "true"
-
-oke_build:
-  stage: oke_build
-  <<: *oke_rules
-  tags:
-    - oke-k8s
-  script:
-    # Build the web image once and push it to OCIR tagged with the commit SHA.
-    - uv run python scripts/gen_version.py > version.json
-    - BUILD_CLAUDE="${BUILD_CLAUDE:-0}" bash deploy/oke/scripts/25-build-push.sh "$CI_COMMIT_SHORT_SHA"
-
-oke_smoke:
-  stage: oke_smoke
-  <<: *oke_rules
-  tags:
-    - oke-k8s
-  script:
-    # Stand up an ephemeral smoke instance of :$SHA against the smoke Oracle schema,
-    # run the smoke suite, and tear the namespace down (handled inside the script).
-    - SMOKE_PASSWORD="$SMOKE_PASSWORD" bash deploy/oke/scripts/50-smoke.sh "$CI_COMMIT_SHORT_SHA"
-
-oke_deploy:
-  stage: oke_deploy
-  <<: *oke_rules
-  tags:
-    - oke-k8s
-  resource_group: zebra-prod
-  script:
-    # Promote the exact validated image to prod (no rebuild), then prune OCIR.
-    # Pruning is registry housekeeping (needs the oci CLI + compartment OCID,
-    # not available on every runner) — best-effort, must not fail a good deploy.
-    - bash deploy/oke/scripts/40-deploy.sh "$CI_COMMIT_SHORT_SHA"
-    - 'KEEP="${OCIR_KEEP:-5}" bash deploy/oke/scripts/prune-ocir.sh || echo "WARN prune skipped/failed (non-fatal)"'
-
-oke_live_e2e:
-  stage: oke_live
-  <<: *oke_rules
-  tags:
-    - oke-k8s
-  script:
-    # Pull credentials from the live prod Kubernetes secret — these are the full TCPS
-    # connection strings that the deployed pod uses, with no Oracle wallet/TNS required.
-    - export ORACLE_DSN="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ORACLE_DSN}' | base64 -d)"
-    - export ORACLE_USERNAME="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ORACLE_USERNAME}' | base64 -d)"
-    - export ORACLE_PASSWORD="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ORACLE_PASSWORD}' | base64 -d)"
-    - export ANTHROPIC_API_KEY="$(kubectl -n prod get secret zebra-prod-secrets -o jsonpath='{.data.ANTHROPIC_API_KEY}' | base64 -d)"
-    - uv run pytest zebra-agent-web/tests/e2e_live/ -v

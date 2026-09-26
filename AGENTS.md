@@ -44,7 +44,7 @@ You are a programmer who fundementally believes in Extreme Programming
 ## Version Control & CI/CD
 
 The canonical repository is on **GitLab**: https://gitlab.com/gidley/zebra (not GitHub).
-CI/CD runs on a self-hosted GitLab Runner on the Oracle VM (`ssh opc`) — see [`README-CICD.md`](README-CICD.md).
+CI/CD runs on a self-hosted GitLab shell runner on the single prod host (OCI instance `coding-agent`, user `opc`), which also runs prod under rootless Podman — see [`README-CICD.md`](README-CICD.md).
 Do not reference `.github/` workflows or GitHub Actions — they have been removed.
 
 ### Workflow: feature branch → GitLab CI → GitHub PR
@@ -125,12 +125,12 @@ bash scripts/zebra-feedback.sh <issue_number> "<feature title>" \
 
 ### Pipeline verification (MUST after every push)
 
-Pipeline stages: `lint → unit → e2e → deploy` (see [`README-CICD.md`](README-CICD.md)).
+Pipeline stages: `lint → unit → e2e → deploy → smoke` (see [`README-CICD.md`](README-CICD.md)).
 Note: the `unit` job runs in the stage named `test` in `.gitlab-ci.yml` — look for `test` in the GitLab UI.
 After every push to `master`, you MUST verify the pipeline succeeded. Pick whichever is easier:
 
 - **GitLab MCP**: list recent pipelines for `gidley/zebra`, inspect the latest pipeline for the pushed commit, and read failing job logs directly.
-- **SSH to the runner**: `ssh opc` and inspect the job workspace at `/home/opc/builds/FaiafcTHZ/0/gidley/zebra/` or tail `journalctl -u gitlab-runner -f` for the running job.
+- **On the host** (you are usually already on it): inspect the job workspace under `/home/opc/builds/`, tail `journalctl -u gitlab-runner -f`, and check prod with `systemctl --user status zebra-web zebra-daemon` / `podman logs zebra-web`.
 
 If any stage fails, **fix it before moving on** — do not leave `master` red. Treat pipeline failure
 as part of the task: diagnose from the logs, push a fix, and re-verify until green.
@@ -517,7 +517,7 @@ Using Django's `AsyncClient` with **SQLite** in pytest-django tests is a known s
 
 **Mitigations applied:**
 1. **Unit tests**: Use `:memory:` SQLite + remove `SetupRedirectMiddleware` + cache-based sessions + WAL mode for file-based tests. See `zebra_agent_web/test_settings.py` and `e2e_settings.py`.
-2. **E2E tests in CI**: Run against a **per-pipeline ephemeral Oracle schema** (real prod parity, fully isolated). The `e2e` job calls `scripts/e2e_oracle_schema.py create` to provision a throwaway Oracle user named `E2E_<branch>_<pipeline-id>` via the least-privilege `E2E_PROVISIONER` account (creds in the runner's `/home/gitlab-runner/.env.e2e` — a **separate** file from the prod `.env`, which the prod container bash-sources and would choke on the DSN parens — not GitLab variables), migrates into it, runs the suite, and drops it in `after_script`. This avoids both SQLite flakiness and shared-schema collisions between concurrent feature-branch pipelines. If `E2E_PROVISIONER_*` is absent the job falls back to SQLite (`e2e_settings`).
+2. **E2E tests in CI**: Run against a **per-pipeline ephemeral Oracle schema** (real prod parity, fully isolated). The `e2e` job calls `scripts/e2e_oracle_schema.py create` to provision a throwaway Oracle user named `E2E_<branch>_<pipeline-id>` via the least-privilege `E2E_PROVISIONER` account (creds in the `E2E_PROVISIONER_*` GitLab CI variables), migrates into it, runs the suite, and drops it in `after_script`. This avoids both SQLite flakiness and shared-schema collisions between concurrent feature-branch pipelines. If `E2E_PROVISIONER_*` is absent the job falls back to SQLite (`e2e_settings`).
 3. **`transaction=True` for async fixtures**: When `AsyncClient` tests rely on fixtures that create DB records (e.g., `test_user`), use `@pytest.mark.django_db(transaction=True)` so fixture data is committed and visible across connections/threads. Without it, the async request handler may not see uncommitted fixture data and return `403 Forbidden`.
 
 ### Test Coverage
