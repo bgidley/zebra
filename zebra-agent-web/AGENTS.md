@@ -240,6 +240,7 @@ Key settings in `settings.py`:
 | `ZEBRA_AGENT_SETTINGS.DAEMON_POLL_INTERVAL` | Seconds between daemon queue polls (default: 30) |
 | `ZEBRA_AGENT_SETTINGS.BUDGET_RESET_HOUR` | Hour (UTC) when daily budget resets (default: 0) |
 | `ZEBRA_AGENT_SETTINGS.GOAL_COST_WARNING_USD` | Per-goal soft warning threshold (default: 5.00) |
+| `ZEBRA_AGENT_SETTINGS.VALUES_TAG_PROMOTION_THRESHOLD` | Usage count at which a candidate values tag is suggested for promotion (default: 3) |
 
 ## Async Views and DRF
 
@@ -577,6 +578,8 @@ POST /api/tasks/<task_id>/complete/
 | `/api/runs/<id>/diagram/` | `run_diagram` | Get workflow diagram SVG (API) |
 | `/api/tasks/<id>/complete/` | `task_complete` | Complete a human/manual task (API) |
 | `/api/budget/` | `budget_status` | Get budget status JSON (API) |
+| `/profile/taxonomy/` | `values_taxonomy_page` | Values-tag curation: review candidates, promote/reject/demote/merge (#106) |
+| `/profile/taxonomy/action/` | `values_taxonomy_action` | Apply one curation action (POST) |
 | `/trust/` | `trust_page` | Trust management page (levels, suggestions, history) |
 | `/trust/<domain>/set/` | `trust_set_level_form` | Set domain trust level (POST, human-only) |
 | `/trust/suggestions/<id>/resolve/` | `trust_suggestion_resolve_form` | Approve/reject suggestion (POST) |

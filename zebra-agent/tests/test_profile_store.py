@@ -119,3 +119,19 @@ async def test_round_trip_through_to_dict(store: InMemoryProfileStore) -> None:
     assert round_tripped.deal_breakers_tags == ["honesty:hard"]
     assert round_tripped.version_number == saved.version_number
     assert round_tripped.id == saved.id
+
+
+async def test_record_confirmed_tags_redirects_merged_slug_to_target(
+    store: InMemoryProfileStore,
+) -> None:
+    store.seed_tag("core_values", "honesty", "Honesty")
+    store.seed_tag(
+        "core_values", "truthfulness", "Truthfulness", status="merged", merged_into="honesty"
+    )
+
+    await store.record_confirmed_tags({"core_values": [{"slug": "truthfulness"}]})
+
+    tags = store._tags["core_values"]
+    assert tags["honesty"]["usage_count"] == 1
+    assert tags["truthfulness"]["usage_count"] == 0
+    assert tags["truthfulness"]["status"] == "merged"

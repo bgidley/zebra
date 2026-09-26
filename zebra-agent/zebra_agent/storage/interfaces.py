@@ -382,7 +382,9 @@ class ProfileStore(ABC):
 
         For each ``(field, slug)`` pair: upsert a Tag row, incrementing
         ``usage_count``. New tags are created with ``status="candidate"``;
-        existing tags retain their current status.
+        existing tags retain their current status. A tag with
+        ``status="merged"`` is left untouched and the increment goes to the
+        tag named by its ``merged_into`` slug instead (#106).
 
         Args:
             field_to_tags: Mapping of field name to list of ``{slug, label}``

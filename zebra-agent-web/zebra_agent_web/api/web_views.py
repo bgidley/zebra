@@ -2260,3 +2260,68 @@ async def trust_suggestion_resolve_form(request, suggestion_id):
     return redirect(
         f"/trust/?{urlencode({'message': f'Suggestion for {suggestion.domain} {verb}'})}"
     )
+
+
+# =============================================================================
+# Values taxonomy curation (#106)
+# =============================================================================
+
+
+async def values_taxonomy_page(request):
+    """Curate values-profile tags: promote, reject, demote and merge (#106)."""
+    from zebra_agent_web import values_taxonomy as taxonomy
+
+    tags = await sync_to_async(taxonomy.list_tags, thread_sensitive=False)()
+    threshold = taxonomy.promotion_threshold()
+
+    sections = []
+    for field, label in taxonomy.ValuesTagModel.FIELD_CHOICES:
+        field_tags = [t for t in tags if t.field == field]
+        sections.append(
+            {
+                "field": field,
+                "label": label,
+                "candidates": [t for t in field_tags if t.status == "candidate"],
+                "promoted": [t for t in field_tags if t.status == "promoted"],
+                "rejected": [t for t in field_tags if t.status == "rejected"],
+                "merged": [t for t in field_tags if t.status == "merged"],
+                "merge_targets": [
+                    t for t in field_tags if t.status in {"seeded", "promoted", "candidate"}
+                ],
+                "seeded_count": sum(1 for t in field_tags if t.status == "seeded"),
+            }
+        )
+
+    context = {
+        **_identity_context(),
+        "sections": sections,
+        "threshold": threshold,
+        "suggested_count": sum(1 for t in tags if t.suggested),
+        "message": request.GET.get("message", ""),
+        "error": request.GET.get("error", ""),
+    }
+    return render(request, "pages/values_taxonomy.html", context)
+
+
+@require_POST
+async def values_taxonomy_action(request):
+    """Apply one curation action from the taxonomy page, then redirect back."""
+    from zebra_agent_web import values_taxonomy as taxonomy
+
+    action = request.POST.get("action", "")
+    field = request.POST.get("field", "")
+    slug = request.POST.get("slug", "")
+    try:
+        if action == "merge":
+            target = request.POST.get("target", "")
+            await sync_to_async(taxonomy.merge, thread_sensitive=False)(field, slug, target)
+            message = f"Merged {slug} into {target}"
+        elif action in {"promote", "reject", "demote"}:
+            operation = getattr(taxonomy, action)
+            tag = await sync_to_async(operation, thread_sensitive=False)(field, slug)
+            message = f"{tag.label} is now {tag.status}"
+        else:
+            raise taxonomy.TaxonomyError(f"Unknown action '{action}'")
+    except taxonomy.TaxonomyError as exc:
+        return redirect(f"/profile/taxonomy/?{urlencode({'error': str(exc)})}")
+    return redirect(f"/profile/taxonomy/?{urlencode({'message': message})}")
