@@ -82,6 +82,23 @@ def test_build_previous_run_context_handles_missing_output():
     assert build_previous_run_context(_run(output=None))["output"] == ""
 
 
+def test_chained_follow_ups_do_not_nest_previous_run_blocks():
+    """A follow-up of a follow-up carries only its direct predecessor's context."""
+    first_props = {"goal": "Make it shorter", "previous_run_context": PREVIOUS}
+    with_previous_run(first_props["goal"], first_props)
+    assert first_props["goal"] == "Make it shorter"  # annotation never mutates the goal
+
+    # The follow-up run is recorded with its plain goal, then extended again
+    follow_up_run = _run(id="run-2", goal=first_props["goal"], output="Revenue up 12%.")
+    second_props = {"previous_run_context": build_previous_run_context(follow_up_run)}
+
+    text = with_previous_run("Now translate it", second_props)
+
+    assert text.count("<previous_run>") == 1
+    assert "Previous goal: Make it shorter" in text
+    assert "Summarise the Q3 report" not in text
+
+
 def test_previous_run_id():
     assert previous_run_id({"previous_run_context": PREVIOUS}) == "run-1"
     assert previous_run_id({}) is None
