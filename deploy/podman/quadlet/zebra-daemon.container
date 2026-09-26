@@ -17,6 +17,8 @@ EnvironmentFile=%h/.config/zebra/prod.env
 Entrypoint=/app/.venv/bin/python
 Exec=zebra-agent-web/manage.py run_daemon
 WorkingDir=/app
+# Workflow library (built-ins + agent-created) — shared with zebra-daemon, survives redeploys.
+Volume=zebra-workflows:/root/.zebra/workflows
 PodmanArgs=--memory=768m --memory-swap=768m
 
 [Service]

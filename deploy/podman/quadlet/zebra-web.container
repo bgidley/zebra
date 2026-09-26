@@ -17,6 +17,8 @@ Environment=DJANGO_DEBUG=0 DJANGO_ALLOWED_HOSTS=* APP_PORT=8000
 # The budget daemon runs in its own unit (zebra-daemon) — never in-process.
 Environment=ZEBRA_DAEMON_AUTO_START=0
 Volume=zebra-logs:/app/zebra-agent-web/tmp
+# Workflow library (built-ins + agent-created) — shared with zebra-daemon, survives redeploys.
+Volume=zebra-workflows:/root/.zebra/workflows
 HealthCmd=python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=5)"
 HealthInterval=30s
 HealthStartPeriod=20s

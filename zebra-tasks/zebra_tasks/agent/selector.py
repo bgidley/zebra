@@ -405,6 +405,25 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
             if selection.create_new and selection.create_variant:
                 selection.create_variant = False
 
+            # The LLM may name a workflow that isn't in the library (e.g. one recalled
+            # from memory that no longer exists) — create it rather than fail at execute.
+            available_names = {w.get("name") if isinstance(w, dict) else w for w in workflows} - {
+                None
+            }
+            if (
+                available_names
+                and not selection.create_new
+                and selection.workflow_name not in available_names
+            ):
+                logger.warning(
+                    "Selected workflow %r not in library — falling back to create_new",
+                    selection.workflow_name,
+                )
+                selection.suggested_name = selection.suggested_name or selection.workflow_name
+                selection.create_new = True
+                selection.create_variant = False
+                selection.workflow_name = None
+
             # Determine next route
             if selection.create_new:
                 next_route = "create_new"
