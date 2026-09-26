@@ -6,6 +6,7 @@ import logging
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
@@ -360,13 +361,16 @@ class EthicsGateAction(TaskAction):
             _build_values_system_prompt(profile) if profile is not None else KANTIAN_SYSTEM_PROMPT
         )
 
-        # Build user prompt based on check type
+        # Build user prompt based on check type. A follow-up goal (F116) is judged
+        # together with the previous run it builds on; the audit record keeps the
+        # plain goal.
+        prompt_goal = with_previous_run(goal, context.process.properties)
         if check_type == "plan_review":
             user_prompt = PLAN_REVIEW_PROMPT.format(
-                goal=goal, plan_context=plan_context or "unknown"
+                goal=prompt_goal, plan_context=plan_context or "unknown"
             )
         else:
-            user_prompt = INPUT_GATE_PROMPT.format(goal=goal)
+            user_prompt = INPUT_GATE_PROMPT.format(goal=prompt_goal)
 
         # Get LLM provider — task property > process property > default
         provider_name = (

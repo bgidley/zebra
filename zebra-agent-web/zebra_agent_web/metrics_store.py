@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
-from django.db.models import Avg, Count, Max, Sum
+from django.db.models import Avg, Count, Max, Q, Sum
 from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
 from zebra_agent.storage.interfaces import MetricsStore
 
@@ -92,6 +92,7 @@ class DjangoMetricsStore(MetricsStore):
                     "error": run.error,
                     "output": output_str,
                     "model": run.model or "",
+                    "extends_run_id": run.extends_run_id,
                     "user_id": user_id,
                 },
             )
@@ -110,12 +111,20 @@ class DjangoMetricsStore(MetricsStore):
         await _update()
 
     async def get_run(self, run_id: str) -> WorkflowRun | None:
-        """Get a specific run by ID."""
+        """Get a specific run by ID, hiding runs owned by a different user.
+
+        Unowned runs (``user_id`` NULL — API submissions, pre-namespacing rows)
+        stay visible so run pages and status polling keep working.
+        """
 
         @sync_to_async(thread_sensitive=False)
         def _get():
+            qs = WorkflowRunModel.objects.all()
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(Q(user_id=uid) | Q(user_id__isnull=True))
             try:
-                model = WorkflowRunModel.objects.get(id=run_id)
+                model = qs.get(id=run_id)
                 return self._model_to_run(model)
             except WorkflowRunModel.DoesNotExist:
                 return None
@@ -290,6 +299,7 @@ class DjangoMetricsStore(MetricsStore):
             error=model.error,
             output=output,
             model=model.model or None,
+            extends_run_id=model.extends_run_id,
         )
 
     # =========================================================================

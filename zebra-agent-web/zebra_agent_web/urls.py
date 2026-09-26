@@ -80,6 +80,7 @@ urlpatterns = [
     path("knowledge/<str:entry_id>/delete/", web_views.knowledge_delete, name="knowledge_delete"),
     # Run detail pages
     path("runs/<str:run_id>/", web_views.run_detail, name="run_detail"),
+    path("runs/<str:run_id>/context/", web_views.run_context_partial, name="run_context_partial"),
     path("runs/<str:run_id>/rate/", web_views.run_rate, name="run_rate"),
     path("runs/<str:run_id>/feedback/", web_views.run_feedback, name="run_feedback"),
     # Ethics Audit Log (F20 / REQ-ETH-006)

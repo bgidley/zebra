@@ -23,6 +23,8 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
+from zebra_agent.metrics import WorkflowRun
+from zebra_tasks.agent.followup import build_previous_run_context
 
 from zebra_agent_web.api import agent_engine, engine
 
@@ -275,12 +277,37 @@ async def workflow_delete(request, workflow_name):
 # =============================================================================
 
 
+async def _completed_run(run_id: str | None) -> WorkflowRun | None:
+    """Return the current user's completed run with this ID, or None (F116)."""
+    run_id = (run_id or "").strip()
+    if not run_id:
+        return None
+    await agent_engine.ensure_initialized()
+    run = await agent_engine.get_metrics().get_run(run_id)
+    if run is None or run.completed_at is None:
+        return None
+    return run
+
+
+async def _previous_run_context(run_id: str | None) -> dict | None:
+    """Build the previous_run_context property for a follow-up goal (F116)."""
+    run = await _completed_run(run_id)
+    return build_previous_run_context(run) if run else None
+
+
 async def run_goal_form(request):
     """Display the form to run a goal."""
     await agent_engine.ensure_initialized()
     library = agent_engine.get_library()
+    metrics = agent_engine.get_metrics()
 
     workflows = await library.list_workflows()
+    recent_runs = await metrics.get_completed_runs(limit=10)
+
+    # "Extend" links can point at runs older than the recent list — look them up directly
+    extend_from_run = await _completed_run(request.GET.get("extend_from"))
+    if extend_from_run and all(r.id != extend_from_run.id for r in recent_runs):
+        recent_runs = [extend_from_run, *recent_runs]
 
     context = {
         "workflows": [
@@ -292,6 +319,8 @@ async def run_goal_form(request):
             }
             for w in workflows
         ],
+        "recent_runs": recent_runs,
+        "extend_from_run": extend_from_run,
     }
 
     return render(request, "pages/run_goal.html", context)
@@ -351,9 +380,17 @@ async def run_goal_execute(request):
 
     user_id = request.user.id if request.user.is_authenticated else None
 
+    previous_run_context = await _previous_run_context(request.POST.get("previous_run_id"))
+
     # Start background task for goal execution
     task = asyncio.create_task(
-        _execute_goal_background(run_id, goal, model=resolved_model, user_id=user_id)
+        _execute_goal_background(
+            run_id,
+            goal,
+            model=resolved_model,
+            user_id=user_id,
+            previous_run_context=previous_run_context,
+        )
     )
     _active_tasks[run_id] = task
 
@@ -450,6 +487,8 @@ async def run_goal_queue(request):
     if deadline:
         deadline = deadline.replace("T", "T") + ":00Z" if "Z" not in deadline else deadline
 
+    previous_run_context = await _previous_run_context(request.POST.get("previous_run_id"))
+
     from zebra_agent_web.api.goals import queue_goal
 
     try:
@@ -460,6 +499,7 @@ async def run_goal_queue(request):
             deadline=deadline or None,
             user_id=request.user.id if request.user.is_authenticated else None,
             identity=_identity_context(),
+            previous_run_context=previous_run_context,
         )
     except ValueError as e:
         return HttpResponse(f"Cannot load Agent Main Loop workflow: {e}", status=500)
@@ -488,7 +528,11 @@ async def run_goal_queue(request):
 
 
 async def _execute_goal_background(
-    run_id: str, goal: str, model: str | None = None, user_id: int | None = None
+    run_id: str,
+    goal: str,
+    model: str | None = None,
+    user_id: int | None = None,
+    previous_run_context: dict | None = None,
 ) -> None:
     """Execute goal in background, sending progress via WebSocket channel layer.
 
@@ -519,6 +563,7 @@ async def _execute_goal_background(
             run_id=run_id,
             model=model,
             user_id=user_id,
+            previous_run_context=previous_run_context,
         )
 
         # Send completion event
@@ -905,6 +950,14 @@ async def _run_detail_pending_fallback(request, run_id: str):
         "planning_concerns": parent_flow.get("planning_concerns") if parent_flow else None,
     }
     return render(request, "pages/run_pending.html", context)
+
+
+async def run_context_partial(request, run_id):
+    """Return a small preview snippet for a completed run (HTMX partial)."""
+    run = await _completed_run(run_id)
+    if run is None:
+        return HttpResponse("", status=404)
+    return render(request, "partials/run_context_preview.html", {"run": run})
 
 
 async def run_detail(request, run_id):

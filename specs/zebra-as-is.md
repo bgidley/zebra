@@ -454,5 +454,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 | Integration provider framework | **Missing** | REQ-INT-001/002/004 |
 | Domain coverage beyond Code | **Missing** | REQ-DOM-SCHED/RESEARCH/FIN/HEALTH/HOME/CREATIVE/SOCIAL |
 | Web authentication | **Implemented** (F5 — passkey/WebAuthn) | REQ-NFR-007 |
+| Kagi web search action (`kagi_search`) | **Implemented** (F115) | — |
+| Extend/follow-up on a previous goal | **Implemented** (F116) — attach one of your completed runs from the goal form or the Activity "Extend" link; `previous_run_context` process property is added to the goal by `zebra_tasks.agent.followup.with_previous_run()` for the ethics gate, selector, creators and the executed workflow (plain `goal` unchanged); `WorkflowRun.extends_run_id` records lineage; `DjangoMetricsStore.get_run` is user-scoped. See `openspec/specs/goal-follow-up/spec.md` | — |
 
 The existing system is a solid foundation for the *engine* and the *agent loop* described in the requirements, but the *policy*, *personalisation*, *proactivity*, and *multi-user* layers remain to be built.

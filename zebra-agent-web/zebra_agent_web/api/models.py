@@ -159,6 +159,13 @@ class WorkflowRunModel(models.Model):
     model = models.CharField(
         max_length=255, blank=True, default="", help_text="LLM model used for this run"
     )
+    extends_run_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="Run this one follows up on (F116)",
+    )
 
     class Meta:
         db_table = "zebra_workflow_runs"

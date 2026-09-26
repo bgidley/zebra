@@ -26,6 +26,7 @@ async def queue_goal(
     deadline: str | None = None,
     user_id: int | None = None,
     identity: dict | None = None,
+    previous_run_context: dict | None = None,
 ) -> ProcessInstance:
     """Queue a goal for budget-managed daemon execution.
 
@@ -40,6 +41,8 @@ async def queue_goal(
         user_id: Authenticated user id, or None.
         identity: Dict with user_display_name / user_identity_id (web supplies
             this from the request; the CLI omits it).
+        previous_run_context: Summary of a previous run this goal follows up on
+            (F116), or None.
 
     Returns:
         The created ProcessInstance (state CREATED).
@@ -97,6 +100,8 @@ async def queue_goal(
     }
     if deadline:
         properties["deadline"] = deadline
+    if previous_run_context:
+        properties["previous_run_context"] = previous_run_context
 
     process = await wf_engine.create_process(definition, properties=properties)
     logger.info(

@@ -6,6 +6,7 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
@@ -170,7 +171,7 @@ class WorkflowVariantCreatorAction(TaskAction):
                 "creating_variant", {"source": source_name, "suggested_name": suggested_name}
             )
 
-        prompt = f"New goal: {goal}\n"
+        prompt = f"New goal: {with_previous_run(goal, context.process.properties)}\n"
         if suggested_name:
             prompt += f"Suggested variant name: {suggested_name}\n"
         if reasoning:
