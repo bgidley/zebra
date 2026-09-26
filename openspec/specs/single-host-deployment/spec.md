@@ -1,7 +1,7 @@
 # single-host-deployment Specification
 
 ## Purpose
-TBD - created by archiving change podman-single-host. Update Purpose after archive.
+How Zebra prod and CI run on a single host under rootless Podman: the web + single-daemon units, health-gated deploy and rollback, secrets flow, blast-radius limits, and the host shell runner.
 
 ## Requirements
 

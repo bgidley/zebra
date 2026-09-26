@@ -313,7 +313,6 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 - **Workflow library search is a list filter** — no full-text, no tagging.
 - **No multi-run comparison** UI.
 - **Django models manually track engine state** — they must stay in sync with `zebra-py` schema changes.
-- **Ethics gate fails open on unparseable LLM output** (`max_tokens=800` truncates the JSON; parse error → `approved`) — [#118](https://gitlab.com/gidley/zebra/-/issues/118).
 - **Proactive routines never dispatch** — scheduler `await`s the synchronous `WorkflowLibrary.get_workflow` (only `goal_queue_tick` works) — [#119](https://gitlab.com/gidley/zebra/-/issues/119).
 
 ---

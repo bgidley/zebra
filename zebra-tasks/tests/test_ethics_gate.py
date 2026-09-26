@@ -148,7 +148,7 @@ class TestEthicsGateAction:
         assert "planned approach" in user_msg.content
 
     async def test_handles_malformed_json(self, mock_task, mock_context):
-        """Malformed JSON defaults to proceed with warning."""
+        """Malformed JSON fails closed — rejects rather than approving (#118)."""
         provider = MagicMock()
         provider.complete = AsyncMock(
             return_value=MagicMock(
@@ -168,10 +168,42 @@ class TestEthicsGateAction:
         with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
-        # Should fail open — proceed with warning
         assert result.success is True
-        assert result.next_route == "proceed"
+        assert result.next_route == "reject"
+        assert result.output["approved"] is False
         assert len(result.output["concerns"]) > 0
+        assert mock_context.process.properties["ethics_assessment"]["approved"] is False
+
+    async def test_truncated_json_fails_closed(self, mock_task, mock_context):
+        """A response cut off mid-string (max_tokens hit) rejects — the prod #118 case."""
+        truncated = json.dumps(_approved_response())[:-40]  # ends inside a string
+        provider = MagicMock()
+        provider.complete = AsyncMock(
+            return_value=MagicMock(
+                content=truncated,
+                model="test-model",
+                usage=MagicMock(input_tokens=50, output_tokens=800, total_tokens=850),
+            )
+        )
+        mock_task.properties = {"goal": "Count to 100", "check_type": "plan_review"}
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            result = await action.run(mock_task, mock_context)
+
+        assert result.next_route == "reject"
+        assert result.output["approved"] is False
+
+    async def test_response_token_cap_leaves_headroom(self, mock_task, mock_context):
+        """The LLM call allows well over 800 tokens so the JSON is not truncated."""
+        provider = _make_provider(_approved_response())
+        mock_task.properties = {"goal": "Test goal", "check_type": "input_gate"}
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            await action.run(mock_task, mock_context)
+
+        assert provider.complete.call_args.kwargs["max_tokens"] >= 2000
 
     async def test_handles_missing_provider(self, mock_task, mock_context):
         """Missing LLM provider returns failure."""
@@ -597,6 +629,27 @@ class TestEthicsGateAuditWrite:
         audit_store.append.assert_awaited_once()
         entry = audit_store.append.call_args[0][0]
         assert entry.approved is False
+
+    async def test_audit_records_unparseable_as_not_approved(self, mock_task, mock_context):
+        """An unreadable evaluation is audited as a rejection, flagged unparseable (#118)."""
+        audit_store = self._make_audit_store()
+        mock_context.extras["__ethics_audit_store__"] = audit_store
+        mock_task.properties = {"goal": "Help a user", "check_type": "input_gate", "user_id": 7}
+        mock_task.process_id = "proc-789"
+        provider = MagicMock()
+        provider.complete = AsyncMock(
+            return_value=MagicMock(content="{not json", model="m", usage=MagicMock())
+        )
+
+        action = EthicsGateAction()
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            await action.run(mock_task, mock_context)
+
+        audit_store.append.assert_awaited_once()
+        entry = audit_store.append.call_args[0][0]
+        assert entry.approved is False
+        assert entry.check_type == "kantian+unparseable"
+        assert entry.user_id == 7
 
     async def test_missing_audit_store_is_tolerated(self, mock_task, mock_context, caplog):
         """When audit store is absent the action completes normally with a warning."""

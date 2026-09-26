@@ -10,6 +10,9 @@ from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
 _MAX_GOAL_LEN = 500
+# The Kantian + values + dilemma JSON runs past 800 tokens; a truncated response is
+# unparseable, which fails closed (reject) — so leave generous headroom.
+_MAX_RESPONSE_TOKENS = 2000
 
 logger = logging.getLogger(__name__)
 
@@ -389,7 +392,7 @@ class EthicsGateAction(TaskAction):
                     Message.user(user_prompt),
                 ],
                 temperature=0.3,
-                max_tokens=800,
+                max_tokens=_MAX_RESPONSE_TOKENS,
             )
 
             content = response.content or ""
@@ -494,12 +497,20 @@ class EthicsGateAction(TaskAction):
             )
 
         except json.JSONDecodeError as e:
-            logger.warning("Ethics gate: failed to parse LLM response as JSON: %s", e)
-            # Default to proceeding when we can't parse — fail open with warning
+            logger.error("Ethics gate: failed to parse LLM response as JSON: %s", e)
+            # An evaluation we cannot read is not an approval — fail closed (reject).
+            # Not "escalate": only ethics_plan_review has an escalate routing, and the
+            # dilemma-resolution "proceed" path skips planning, so it can't serve the
+            # input gate. The user resubmits to re-run the evaluation (#118).
             fallback = {
-                "approved": True,
-                "overall_reasoning": f"Ethics evaluation returned unparseable response: {e}",
-                "concerns": ["Ethics gate could not parse LLM response — defaulting to proceed"],
+                "approved": False,
+                "overall_reasoning": (
+                    f"Ethics evaluation could not be completed — unparseable response: {e}"
+                ),
+                "concerns": [
+                    "Ethics gate could not parse the LLM response — rejecting (fail closed). "
+                    "Resubmit the goal to retry the evaluation."
+                ],
                 "values_assessment": None,
             }
             output_key = task.properties.get("output_key", "ethics_assessment")
@@ -508,12 +519,12 @@ class EthicsGateAction(TaskAction):
                 context=context,
                 process_id=task.process_id,
                 goal=goal,
-                approved=True,
+                approved=False,
                 overall_reasoning=fallback["overall_reasoning"],
-                check_type="kantian",
-                user_id=None,
+                check_type="kantian+unparseable",
+                user_id=_parse_user_id(raw_user_id),
             )
-            return TaskResult(success=True, output=fallback, next_route="proceed")
+            return TaskResult(success=True, output=fallback, next_route="reject")
 
         except Exception as e:
             return TaskResult.fail(f"Ethics evaluation failed: {e}")

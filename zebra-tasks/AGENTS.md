@@ -397,6 +397,8 @@ Evaluate a goal or plan against Kantian ethics, optionally combined with the use
 
 **Dilemma escalation (F22 / REQ-ETH-005):** when a values profile is loaded and the action is Kantian-permissible but the model flags a genuine `dilemma.detected` (value-vs-value trade-off, or Kantian-vs-value tension), the gate routes `"escalate"` instead of silently proceeding/rejecting, and writes a flat `dilemma_display` process property (human-readable both-sides text). A stated **deal-breaker** violation or a Kantian failure is a decisive `"reject"`, not a dilemma. Without a profile, `"escalate"` is never emitted (backward compatible). The combined output gains a `dilemma` object `{detected, summary, sides[], recommendation, recommendation_reasoning}`.
 
+**Fail-closed (#118):** an evaluation that cannot be parsed as JSON (e.g. truncated at the token cap) is treated as **not approved** — route `"reject"`, a concern asking the user to resubmit, and an audit entry with `approved=false`, `check_type="kantian+unparseable"`. It never routes `proceed`. The LLM call allows 2000 output tokens (`_MAX_RESPONSE_TOKENS`). Provider errors fail the task.
+
 **Store Access:** When `user_id` is present, reads `context.extras["__profile_store__"]`. Gracefully falls back to Kantian-only if the store is absent or no profile exists for the user.
 
 ### FlagConcernsAction
