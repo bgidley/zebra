@@ -89,6 +89,9 @@ save_values_profile = "zebra_tasks.agent.save_values_profile:SaveValuesProfileAc
 # Web search (F115)
 kagi_search = "zebra_tasks.web.kagi_search:KagiSearchAction"
 kagi_summarize = "zebra_tasks.web.kagi_summarize:KagiSummarizeAction"
+# Notifications (F65)
+notify_email = "zebra_tasks.notifications.smtp_email:NotifyEmailAction"
+notify_webhook = "zebra_tasks.notifications.webhook:NotifyWebhookAction"
 # Knowledge lifecycle (F32)
 decay_confidence = "zebra_tasks.knowledge.decay:DecayConfidenceAction"
 add_knowledge = "zebra_tasks.knowledge.add:AddKnowledgeAction"

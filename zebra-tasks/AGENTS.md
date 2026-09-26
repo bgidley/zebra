@@ -483,6 +483,18 @@ Queue a trust promotion suggestion for human review (F15 / REQ-TRUST-004). This 
 
 **Output:** `{submitted, suggestion_id, domain, to_level, status}`; `submitted: False` with a warning when `__trust_store__` is absent.
 
+## Notification Actions Reference (F65)
+
+Both live in `zebra_tasks/notifications/`, declare `reversibility_hint = "always_irreversible"`, resolve `{{templates}}`, and return `TaskResult.fail` (never raise) on misconfiguration or delivery errors. Secrets (SMTP password, webhook path/query) never appear in outputs or errors.
+
+### NotifyEmailAction (`notify_email`)
+
+SMTP via stdlib `smtplib` in `asyncio.to_thread`. **Properties:** `to` (string or list; defaults to `ZEBRA_NOTIFY_EMAIL_TO`), `subject`, `body` (required), `html` (optional alternative). **Env:** `ZEBRA_SMTP_HOST` (required), `ZEBRA_SMTP_PORT` (587), `ZEBRA_SMTP_SECURITY` (`starttls`/`ssl`/`none`), `ZEBRA_SMTP_USERNAME`/`ZEBRA_SMTP_PASSWORD` (login only if username set), `ZEBRA_SMTP_FROM` (defaults to username). **Output:** `{to, subject}`.
+
+### NotifyWebhookAction (`notify_webhook`)
+
+httpx POST/PUT. **Properties:** `url` (defaults to `ZEBRA_NOTIFY_WEBHOOK_URL`; http/https only), `payload` (JSON, templates resolved recursively) or `body` (raw text), `method` (`POST`/`PUT`), `headers`, `timeout` (15s). Non-2xx fails the task. **Output:** `{status_code, host}`.
+
 ## Testing Task Actions
 
 ### Test Structure

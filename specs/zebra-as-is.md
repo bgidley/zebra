@@ -121,6 +121,8 @@ A legacy Java implementation sits in `legacy/` and is archived.
 | Agent loop | `consult_memory`, `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `record_metrics`, `load_workflow_definitions`, `queue_goal` |
 | Dream cycle | `metrics_analyzer`, `workflow_evaluator`, `workflow_optimizer` |
 | Ethics | `ethics_gate` |
+| Web (F115) | `kagi_search`, `kagi_summarize` |
+| Notifications (F65) | `notify_email` (SMTP, `ZEBRA_SMTP_*` env), `notify_webhook` (HTTP POST/PUT, `ZEBRA_NOTIFY_WEBHOOK_URL`) — both `always_irreversible` |
 
 ### LLM integration
 
@@ -443,7 +445,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 | Proactive goal generation | **Missing** | REQ-PEER-001, REQ-PRIN-006 |
 | Polling scheduler (SchedulerLoop + RoutineRegistry) | **Implemented** (F27) | REQ-PRIN-008 |
 | Event-driven trigger bus | **Missing** (closed as deferred — see [f28-event-bus.md](f28-event-bus.md)) | REQ-PRIN-009 |
-| Notification system | **Missing** | REQ-UI-004 |
+| Notification system | **Partial** — outbound `notify_email` / `notify_webhook` actions (F65); no channel routing, quiet hours or retries (F30) | REQ-UI-004 |
 | Chat interface | **Missing** | REQ-UI-002 |
 | Multi-user / household support | **Missing** | REQ-USR-003/005 |
 | Encryption at rest, cloud sync, unattended keys | **Missing** | REQ-DATA-002/006 |
