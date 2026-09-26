@@ -263,7 +263,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 
 ### Daemon
 
-In production (OKE), the budget daemon runs as a **separate `zebra-daemon` Deployment** (`k8s/base/prod-daemon/`) to guarantee exactly one daemon instance. It starts via `python manage.py run_daemon` (no middleware needed).
+In production, the budget daemon runs as a **separate `zebra-daemon` Quadlet unit** (`deploy/podman/quadlet/zebra-daemon.container`) to guarantee exactly one daemon instance. It starts via `python manage.py run_daemon` (no middleware needed).
 
 In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via `asyncio.create_task()` on the first request (Daphne doesn't run ASGI lifespan events). Loop: `pick_next → budget_check → start_process → poll → record metrics → repeat`.
 
@@ -316,24 +316,26 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 
 ---
 
-## 7. Deployment & CI/CD (F111)
+## 7. Deployment & CI/CD (F117)
 
-Production runs on **Oracle Kubernetes Engine (OKE)**. The old single-VM deployment was decommissioned.
+Production runs on a **single OCI A1 instance** (`coding-agent`, Oracle Linux 9, 2 OCPU / 10 GB) under **rootless Podman**, managed by systemd Quadlet units. The OKE cluster (F108–F111) was lost and deleted in Sept 2026. See [podman-single-host-design.md](podman-single-host-design.md).
 
-### Production topology (OKE)
+### Production topology
 
-| Component | K8s resource | Notes |
+| Component | Where | Notes |
 |---|---|---|
-| Web app | `deploy/zebra-web` (ns `prod`) | Daphne on :8000; LB at `79.72.65.246`, Tailscale `zebra-oke.tailf1e473.ts.net` |
-| Daemon | `deploy/zebra-daemon` (ns `prod`) | Separate pod; runs `manage.py run_daemon`; exactly one instance guaranteed |
-| GitLab Runner | `deploy/gitlab-runner` (ns `ci`) | Kubernetes executor; tag `oke-k8s` |
-| Credentials | K8s secret `zebra-prod-secrets` (ns `prod`) | Oracle DSN (full TCPS string), API keys |
+| Web app | Quadlet `zebra-web` (`deploy/podman/quadlet/`) | Daphne on `127.0.0.1:8000`; health-gated start; 1.5 GB cap; public at `https://zebra.gidley.co.uk` via Cloudflare Tunnel + Cloudflare Access |
+| Daemon | Quadlet `zebra-daemon` | Same image; `manage.py run_daemon`; exactly one instance; 768 MB cap |
+| Image | `localhost/zebra-web:<sha>` / `:prod` / `:previous` | Built on the host, no registry; last 5 kept |
+| GitLab Runner | systemd `gitlab-runner`, shell executor as `opc` | tag `opc-shell`, `concurrent = 1` |
+| Credentials | GitLab CI variables → `~/.config/zebra/prod.env` (0600) | Written by `scripts/deploy-podman.sh`; non-secret settings in `~/.config/zebra/site.env` |
+| Database | Oracle ADB `Zebra` (free tier, TLS, no wallet) | Unchanged by the move |
 
-### CI/CD pipeline (9 stages)
+Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 
-`lint → test → e2e → deploy(no-op) → smoke(no-op) → oke_build → oke_smoke → oke_deploy → oke_live`
+### CI/CD pipeline
 
-The `oke_*` stages gate on `$OKE_ENABLED == "true"`. `oke_live` runs 12 real-LLM tests against prod Oracle after every successful deploy. See `README-CICD.md` for full stage details.
+`lint → test → e2e → deploy → smoke` (deploy/smoke on `master` pushes only; `e2e-live` on schedules). `deploy` runs `scripts/deploy-podman.sh $SHA`: build → stop daemon → retag `:prod` → restart web (blocks until healthy) → start daemon; auto-rollback to `:previous` on failure. See `README-CICD.md`.
 
 ### Ethics gate change (F111)
 

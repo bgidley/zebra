@@ -1,0 +1,35 @@
+# Zebra web (Daphne) — rootless Podman Quadlet unit, installed to
+# ~/.config/containers/systemd/ by scripts/deploy-podman.sh.
+#
+# Runs the image entrypoint: migrate + collectstatic + daphne on :8000.
+# Bound to loopback only; public access is via the Cloudflare Tunnel (cloudflared.service).
+[Unit]
+Description=Zebra web (Daphne)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=localhost/zebra-web:prod
+ContainerName=zebra-web
+PublishPort=127.0.0.1:8000:8000
+EnvironmentFile=%h/.config/zebra/prod.env
+Environment=DJANGO_DEBUG=0 DJANGO_ALLOWED_HOSTS=* APP_PORT=8000
+# The budget daemon runs in its own unit (zebra-daemon) — never in-process.
+Environment=ZEBRA_DAEMON_AUTO_START=0
+Volume=zebra-logs:/app/zebra-agent-web/tmp
+HealthCmd=python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=5)"
+HealthInterval=30s
+HealthStartPeriod=20s
+HealthRetries=3
+# `systemctl start` blocks until the health check passes (or TimeoutStartSec).
+Notify=healthy
+# Cap memory so a runaway container cannot OOM the host (runner, sshd, agent).
+PodmanArgs=--memory=1536m --memory-swap=1536m
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

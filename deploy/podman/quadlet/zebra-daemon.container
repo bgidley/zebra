@@ -1,0 +1,27 @@
+# Zebra budget daemon — rootless Podman Quadlet unit, installed to
+# ~/.config/containers/systemd/ by scripts/deploy-podman.sh.
+#
+# Exactly ONE daemon may ever run against the prod Oracle DB (two would
+# double-execute queued goals). A single systemd unit guarantees that; the
+# deploy stops it before swapping images and never overlaps old and new.
+[Unit]
+Description=Zebra budget daemon
+# Web runs migrations on start — the daemon must not start against an old schema.
+Wants=zebra-web.service
+After=zebra-web.service
+
+[Container]
+Image=localhost/zebra-web:prod
+ContainerName=zebra-daemon
+EnvironmentFile=%h/.config/zebra/prod.env
+Entrypoint=/app/.venv/bin/python
+Exec=zebra-agent-web/manage.py run_daemon
+WorkingDir=/app
+PodmanArgs=--memory=768m --memory-swap=768m
+
+[Service]
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
