@@ -70,10 +70,10 @@ async def test_routine_fires_and_tags_process(workflow_engine):
     wf_def = _make_noop_definition(wf_name)
 
     # Inject a mock library that returns our definition
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import MagicMock
 
     library = MagicMock()
-    library.get_workflow = AsyncMock(return_value=wf_def)
+    library.get_workflow = MagicMock(return_value=wf_def)
     workflow_engine.extras["__workflow_library__"] = library
 
     routine = Routine(name=routine_name, schedule={"every": "1m"}, workflow=wf_name)
@@ -124,11 +124,11 @@ async def test_first_tick_fires_immediately(workflow_engine):
     routine_name = "immediate_routine"
     wf_name = "Immediate Workflow"
 
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import MagicMock
 
     wf_def = _make_noop_definition(wf_name)
     library = MagicMock()
-    library.get_workflow = AsyncMock(return_value=wf_def)
+    library.get_workflow = MagicMock(return_value=wf_def)
     workflow_engine.extras["__workflow_library__"] = library
 
     routine = Routine(name=routine_name, schedule={"every": "5m"}, workflow=wf_name)
@@ -146,3 +146,74 @@ async def test_first_tick_fires_immediately(workflow_engine):
     assert any(p.properties and p.properties.get("__routine__") == routine_name for p in created), (
         "Expected routine process to be created on first tick"
     )
+
+
+_NOOP_YAML = """\
+name: "Library Workflow"
+description: "Single noop task"
+first_task: t1
+tasks:
+  t1:
+    name: "Noop Task"
+    action: noop
+    auto: true
+"""
+
+
+async def _all_processes(engine) -> list:
+    procs = []
+    for state in (ProcessState.CREATED, ProcessState.RUNNING, ProcessState.COMPLETE):
+        procs.extend(await engine.store.get_processes_by_state(state))
+    return procs
+
+
+async def test_dispatch_with_real_workflow_library(workflow_engine, tmp_path):
+    """A real (synchronous) WorkflowLibrary resolves the routine's workflow by name.
+
+    Regression for #119: the loop awaited the synchronous ``get_workflow`` so every
+    proactive routine failed with "object can't be awaited" — hidden by async mocks.
+    """
+    from zebra_agent.library import WorkflowLibrary
+
+    library = WorkflowLibrary(tmp_path)
+    library.add_workflow(_NOOP_YAML)
+    workflow_engine.extras["__workflow_library__"] = library
+
+    registry = RoutineRegistry()
+    registry.register(
+        Routine(name="real_lib_routine", schedule={"every": "5m"}, workflow="Library Workflow")
+    )
+    run_store = InMemoryRoutineRunStore()
+    loop = SchedulerLoop(
+        registry=registry, store=run_store, engine=workflow_engine, clock=FakeClock(START)
+    )
+
+    await loop._tick()
+
+    procs = await _all_processes(workflow_engine)
+    assert len(procs) == 1
+    assert procs[0].properties.get("__routine__") == "real_lib_routine"
+    # The dispatched workflow actually ran to completion (noop task is auto)
+    assert procs[0].state == ProcessState.COMPLETE
+    assert (await run_store.get_run("real_lib_routine")).last_status == "ok"
+
+
+async def test_missing_workflow_is_skipped_not_errored(workflow_engine, tmp_path, caplog):
+    """A routine naming a workflow absent from the library is skipped, not an error."""
+    from zebra_agent.library import WorkflowLibrary
+
+    workflow_engine.extras["__workflow_library__"] = WorkflowLibrary(tmp_path)
+
+    registry = RoutineRegistry()
+    registry.register(Routine(name="ghost", schedule={"every": "5m"}, workflow="No Such Flow"))
+    run_store = InMemoryRoutineRunStore()
+    loop = SchedulerLoop(
+        registry=registry, store=run_store, engine=workflow_engine, clock=FakeClock(START)
+    )
+
+    with caplog.at_level("WARNING", logger="zebra_agent.scheduler.loop"):
+        await loop._tick()
+
+    assert await _all_processes(workflow_engine) == []
+    assert (await run_store.get_run("ghost")).last_status == "ok"
+    assert "workflow 'No Such Flow' not found in library" in caplog.text

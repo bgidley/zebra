@@ -92,7 +92,7 @@ class TestSchedulerLoopTick:
 
         engine = _make_engine()
         library = MagicMock()
-        library.get_workflow = AsyncMock(return_value=MagicMock(name="my_wf"))
+        library.get_workflow = MagicMock(return_value=MagicMock(name="my_wf"))
         engine.extras["__workflow_library__"] = library
 
         loop = _make_loop(registry, store, engine, clock)
@@ -160,7 +160,7 @@ class TestSchedulerLoopTick:
 
         engine = _make_engine()
         library = MagicMock()
-        library.get_workflow = AsyncMock(return_value=MagicMock(name="wf"))
+        library.get_workflow = MagicMock(return_value=MagicMock(name="wf"))
         engine.extras["__workflow_library__"] = library
 
         loop = _make_loop(registry, store, engine, clock)
@@ -177,7 +177,7 @@ class TestSchedulerLoopTick:
 
         engine = _make_engine()
         library = MagicMock()
-        library.get_workflow = AsyncMock(return_value=MagicMock(name="wf"))
+        library.get_workflow = MagicMock(return_value=MagicMock(name="wf"))
         engine.extras["__workflow_library__"] = library
 
         loop = _make_loop(registry, store, engine, clock)
@@ -204,7 +204,7 @@ class TestSchedulerLoopTick:
 
         engine = _make_engine()
         library = MagicMock()
-        library.get_workflow = AsyncMock(return_value=MagicMock(name="wf"))
+        library.get_workflow = MagicMock(return_value=MagicMock(name="wf"))
         engine.extras["__workflow_library__"] = library
 
         loop = _make_loop(registry, store, engine, clock)

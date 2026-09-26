@@ -137,8 +137,9 @@ class SchedulerLoop:
             )
             return
 
-        definition = await library.get_workflow(routine.workflow)
-        if definition is None:
+        try:
+            definition = library.get_workflow(routine.workflow)
+        except ValueError:
             logger.warning(
                 "[scheduler:skip] %s — workflow %r not found in library",
                 routine.name,
