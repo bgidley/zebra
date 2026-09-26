@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from zebra.core.engine import WorkflowEngine
-from zebra.core.models import ProcessState
+from zebra.core.models import ProcessState, TaskState
 
 from zebra_agent.library import WorkflowLibrary
 from zebra_agent.storage.interfaces import (
@@ -223,7 +223,9 @@ class AgentLoop:
             if process.state == ProcessState.COMPLETE:
                 break
             elif process.state == ProcessState.FAILED:
-                error = process.properties.get("__error__", "Workflow failed")
+                error = process.properties.get("__error__") or (
+                    await self._failed_task_errors(process.id)
+                )
                 return {
                     "workflow_name": process.properties.get("workflow_name", "unknown"),
                     "output": None,
@@ -247,14 +249,28 @@ class AgentLoop:
 
         # Extract results from process properties
         execution_result = process.properties.get("execution_result", {})
-
-        return {
+        result = {
             "workflow_name": process.properties.get("workflow_name", "unknown"),
             "output": execution_result.get("output"),
             "success": execution_result.get("success", False),
             "tokens_used": execution_result.get("tokens_used", 0),
             "created_new": process.properties.get("created_new", False),
         }
+        # A task failure ends the process COMPLETE (no active tasks remain) without an
+        # execution_result — surface the failed tasks' errors instead of a silent None.
+        if not execution_result:
+            result["error"] = await self._failed_task_errors(process.id)
+        return result
+
+    async def _failed_task_errors(self, process_id: str) -> str:
+        """Summarise the errors of a process's FAILED tasks, for AgentResult.error."""
+        tasks = await self.engine.store.load_tasks_for_process(process_id)
+        errors = [
+            f"{t.task_definition_id}: {t.error or 'failed (no error recorded)'}"
+            for t in tasks
+            if t.state == TaskState.FAILED
+        ]
+        return "; ".join(errors) or "Workflow failed"
 
     async def record_rating(self, run_id: str, rating: int) -> None:
         """Record a user rating for a run."""

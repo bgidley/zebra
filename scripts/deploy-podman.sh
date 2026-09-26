@@ -22,7 +22,8 @@ HOLD_FILE="$CONF_DIR/hold-daemon"    # touch to deploy web only (maintenance); r
 QUADLET_DIR="$HOME/.config/containers/systemd"
 KEEP_IMAGES="${KEEP_IMAGES:-5}"
 # Secrets copied from GitLab CI variables into prod.env when present in the environment.
-SECRET_VARS=(ORACLE_DSN ORACLE_USERNAME ORACLE_PASSWORD ANTHROPIC_API_KEY KAGI_API_KEY)
+SECRET_VARS=(ORACLE_DSN ORACLE_USERNAME ORACLE_PASSWORD ANTHROPIC_API_KEY KAGI_API_KEY
+             KIMI_API_KEY KIMI_BASE_URL)
 
 # CI jobs run via `su` without a login session; point systemctl at opc's user manager.
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
