@@ -2,15 +2,17 @@
 
 ## 1. Host
 
-- [x] 1.1 `deploy/podman/bootstrap-host.sh`: growfs, uv, gitlab-runner as `opc` (concurrent 1), linger, Tailscale, config dirs
+- [x] 1.1 `deploy/podman/bootstrap-host.sh`: growfs, uv, gitlab-runner as `opc` (concurrent 1), linger, cloudflared, config dirs
 - [x] 1.2 Run bootstrap on `coding-agent`; register runner `coding-agent-podman` (tag `opc-shell`) via API
-- [ ] 1.3 `tailscale up --hostname=zebra-oke` + `tailscale serve` (interactive — user)
+- [x] 1.3 Remove Tailscale from host; `deploy/podman/setup-tunnel.sh`
+- [ ] 1.4 `cloudflared tunnel login` (user) + `setup-tunnel.sh zebra.gidley.co.uk`
+- [ ] 1.5 Cloudflare Access application on `zebra.gidley.co.uk` (owner only)
 
 ## 2. Deploy
 
 - [x] 2.1 Quadlet units `zebra-web` (health-gated, loopback, mem cap) and `zebra-daemon` (single, after web)
 - [x] 2.2 `scripts/deploy-podman.sh`: env from CI vars, build, promote, rollback, prune, smoke user
-- [x] 2.3 `site.env.example` (WebAuthn origin preserved as `zebra-oke`)
+- [x] 2.3 `site.env.example` (WebAuthn/CSRF origin `https://zebra.gidley.co.uk`)
 - [x] 2.4 Test: dry-run deploy on SQLite — healthy promote, daemon ordering, `--rollback`; torn down
 
 ## 3. Pipeline & cleanup
@@ -24,6 +26,6 @@
 ## 4. Go-live
 
 - [ ] 4.1 Merge to master; `deploy` + `smoke` green against prod Oracle
-- [ ] 4.2 Verify kill switch state and a single daemon; `https://zebra-oke.tailf1e473.ts.net` login with existing passkey
+- [ ] 4.2 Verify kill switch state and a single daemon; re-register passkey on the new RP ID (behind Access)
 - [ ] 4.3 GitLab housekeeping: delete stale runners, remove OKE-only CI variables
 - [ ] 4.4 Archive this change

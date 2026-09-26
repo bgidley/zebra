@@ -29,7 +29,7 @@ from zebra_agent_web.logging_config import configure_logging  # noqa: E402
 
 configure_logging(json_logs=not DEBUG)
 
-# In DEBUG mode, allow all hosts for easier development (e.g., Tailscale access)
+# In DEBUG mode, allow all hosts for easier development (e.g., access via a tunnel)
 if DEBUG:
     ALLOWED_HOSTS = ["*"]
 
@@ -197,8 +197,8 @@ SESSION_COOKIE_AGE = 1209600  # 2 weeks
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
 SESSION_COOKIE_SAMESITE = "Lax"
-# Required for Django 4+ CSRF when accessed via HTTPS proxy (e.g. Tailscale serve).
-# Set CSRF_TRUSTED_ORIGINS=https://your-host.ts.net in prod.env.
+# Required for Django 4+ CSRF when accessed via HTTPS proxy (e.g. Cloudflare Tunnel).
+# Set CSRF_TRUSTED_ORIGINS=https://your-host in site.env.
 CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
 ]

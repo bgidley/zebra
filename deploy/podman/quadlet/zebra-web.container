@@ -2,7 +2,7 @@
 # ~/.config/containers/systemd/ by scripts/deploy-podman.sh.
 #
 # Runs the image entrypoint: migrate + collectstatic + daphne on :8000.
-# Bound to loopback only; public access is via `tailscale serve` on the host.
+# Bound to loopback only; public access is via the Cloudflare Tunnel (cloudflared.service).
 [Unit]
 Description=Zebra web (Daphne)
 Wants=network-online.target

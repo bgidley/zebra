@@ -9,7 +9,7 @@
 # On an unhealthy web the previous image is re-promoted and the script fails.
 #
 # Safety: this script only ever touches the zebra-web / zebra-daemon user units.
-# It never restarts the GitLab runner, sshd, Tailscale or host networking.
+# It never restarts the GitLab runner, sshd, cloudflared or host networking.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

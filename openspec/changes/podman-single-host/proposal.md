@@ -7,7 +7,8 @@ The OKE cluster that ran Zebra (F108–F111) was lost: the agent deployed itself
 - Prod runs as two rootless Podman **Quadlet** units on one host: `zebra-web` (Daphne, loopback only, health-gated) and exactly one `zebra-daemon`.
 - New `scripts/deploy-podman.sh`: build `localhost/zebra-web:<sha>` locally (no registry), health-gated promote with automatic rollback, image pruning.
 - Secrets flow from GitLab CI variables into a 0600 env file on each deploy; non-secret settings live in `site.env`.
-- New idempotent `deploy/podman/bootstrap-host.sh` (uv, GitLab shell runner as `opc`, linger, Tailscale, root FS growth).
+- New idempotent `deploy/podman/bootstrap-host.sh` (uv, GitLab shell runner as `opc`, linger, cloudflared, root FS growth).
+- Public access at `zebra.gidley.co.uk` via Cloudflare Tunnel behind Cloudflare Access, replacing Tailscale; passkeys re-registered for the new RP ID.
 - `.gitlab-ci.yml`: all jobs tagged `opc-shell`; `oke_*` jobs and `OKE_ENABLED` gating removed. **BREAKING** for the pipeline topology.
 - Remove `deploy/oke/`, `docker/claude/`, `docker-compose.yml`, the old runner doc and the OKE design spec.
 

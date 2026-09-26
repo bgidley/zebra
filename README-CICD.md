@@ -40,13 +40,13 @@ laptop ──git push──▶ gitlab.com/gidley/zebra
    systemd --user (linger)          ~/.config/containers/systemd/
      zebra-web.service     Daphne, 127.0.0.1:8000, health-gated, 1.5 GB cap
      zebra-daemon.service  manage.py run_daemon — exactly one, 768 MB cap
-   tailscaled              tailscale serve :443 → 127.0.0.1:8000
-                           (https://zebra-oke.tailf1e473.ts.net)
+   cloudflared.service     Cloudflare Tunnel (outbound only) → 127.0.0.1:8000
+                           https://zebra.gidley.co.uk, behind Cloudflare Access
    Oracle ADB "Zebra"      remote, TLS DSN, no wallet
 ```
 
 **Blast radius rule**: the deploy only ever restarts the `zebra-web` / `zebra-daemon` user
-units. It never touches the runner, sshd, Tailscale or host networking, and containers are
+units. It never touches the runner, sshd, cloudflared or host networking, and containers are
 memory-capped so a runaway app cannot OOM the host the agent and runner live on.
 
 ## Deploy (`scripts/deploy-podman.sh`)
@@ -93,8 +93,8 @@ git clone https://gitlab.com/gidley/zebra.git ~/code/zebra && cd ~/code/zebra
 RUNNER_TOKEN=$(glab api -X POST user/runners -f runner_type=project_type \
   -f project_id=77537461 -f tag_list=opc-shell -F run_untagged=false | jq -r .token) \
   deploy/podman/bootstrap-host.sh
-sudo tailscale up --hostname=zebra-oke
-sudo tailscale serve --bg --https=443 http://127.0.0.1:8000
+cloudflared tunnel login                     # interactive: authorise the gidley.co.uk zone
+deploy/podman/setup-tunnel.sh zebra.gidley.co.uk  # named tunnel "zebra" + DNS + system service
 ```
 
 Then re-run the latest `master` pipeline (or push) to deploy.
@@ -105,7 +105,8 @@ Then re-run the latest `master` pipeline (or push) to deploy.
 |---|---|
 | `.gitlab-ci.yml` | Pipeline definition |
 | `Dockerfile`, `docker/entrypoint.sh` | Image build; entrypoint migrates + starts Daphne |
-| `deploy/podman/bootstrap-host.sh` | Idempotent host setup (uv, runner, linger, Tailscale, growfs) |
+| `deploy/podman/bootstrap-host.sh` | Idempotent host setup (uv, runner, linger, cloudflared, growfs) |
+| `deploy/podman/setup-tunnel.sh` | Cloudflare Tunnel: hostname → `127.0.0.1:8000`, system service |
 | `deploy/podman/quadlet/` | `zebra-web` / `zebra-daemon` Quadlet units |
 | `deploy/podman/site.env.example` | Non-secret prod settings template |
 | `scripts/deploy-podman.sh` | Build + health-gated promote + rollback |

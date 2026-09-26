@@ -324,7 +324,7 @@ Production runs on a **single OCI A1 instance** (`coding-agent`, Oracle Linux 9,
 
 | Component | Where | Notes |
 |---|---|---|
-| Web app | Quadlet `zebra-web` (`deploy/podman/quadlet/`) | Daphne on `127.0.0.1:8000`; health-gated start; 1.5 GB cap; public via `tailscale serve` as `zebra-oke.tailf1e473.ts.net` |
+| Web app | Quadlet `zebra-web` (`deploy/podman/quadlet/`) | Daphne on `127.0.0.1:8000`; health-gated start; 1.5 GB cap; public at `https://zebra.gidley.co.uk` via Cloudflare Tunnel + Cloudflare Access |
 | Daemon | Quadlet `zebra-daemon` | Same image; `manage.py run_daemon`; exactly one instance; 768 MB cap |
 | Image | `localhost/zebra-web:<sha>` / `:prod` / `:previous` | Built on the host, no registry; last 5 kept |
 | GitLab Runner | systemd `gitlab-runner`, shell executor as `opc` | tag `opc-shell`, `concurrent = 1` |

@@ -6,7 +6,7 @@
 #   - uv (for opc)
 #   - gitlab-runner, running jobs as opc (not the gitlab-runner user), concurrency 1
 #   - systemd linger for opc so user units (Quadlet containers) run without a login
-#   - Tailscale (package only; `sudo tailscale up` is interactive — see README)
+#   - cloudflared (package only; tunnel setup is deploy/podman/setup-tunnel.sh)
 #
 # Usage (as opc, which has sudo):
 #   deploy/podman/bootstrap-host.sh                       # install / repair
@@ -14,7 +14,6 @@
 set -euo pipefail
 
 RUN_USER="${RUN_USER:-opc}"
-RUNNER_TAG="${RUNNER_TAG:-opc-shell}"
 RUNNER_DESC="${RUNNER_DESC:-$(hostname -s)-podman}"
 
 log() { printf '\n== %s\n' "$*"; }
@@ -69,12 +68,11 @@ sudo systemctl restart gitlab-runner
 log "Linger for $RUN_USER (user units survive logout / start at boot)"
 sudo loginctl enable-linger "$RUN_USER"
 
-log "Tailscale"
-if ! command -v tailscale >/dev/null; then
-  sudo dnf config-manager --add-repo https://pkgs.tailscale.com/stable/oracle/9/tailscale.repo
-  sudo dnf install -y -q tailscale
+log "cloudflared"
+if ! command -v cloudflared >/dev/null; then
+  sudo dnf config-manager --add-repo https://pkg.cloudflare.com/cloudflared-ascii.repo
+  sudo dnf install -y -q cloudflared
 fi
-sudo systemctl enable --now tailscaled
 
 log "Zebra config dir"
 install -d -m 700 "$HOME/.config/zebra" "$HOME/.config/containers/systemd"
@@ -86,8 +84,9 @@ fi
 log "Done"
 cat <<EOF
 Next steps (manual, once):
-  sudo tailscale up --hostname=zebra-oke        # interactive auth
-  sudo tailscale serve --bg --https=443 http://127.0.0.1:8000
+  cloudflared tunnel login                       # interactive: pick the Cloudflare zone
+  deploy/podman/setup-tunnel.sh <hostname>       # e.g. zebra.example.com
+  edit ~/.config/zebra/site.env                  # set the WebAuthn/CSRF origin to <hostname>
 Then push to master: the deploy job writes ~/.config/zebra/prod.env from GitLab CI
 variables, installs the Quadlet units and starts zebra-web + zebra-daemon.
 EOF

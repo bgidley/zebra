@@ -41,11 +41,11 @@ The deploy SHALL write `~/.config/zebra/prod.env` with mode 0600 from CI variabl
 - **AND** `DJANGO_SECRET_KEY` is unchanged from the previous deploy
 
 ### Requirement: Deploy blast radius is limited to the app units
-The deploy SHALL only start, stop or restart the `zebra-web` and `zebra-daemon` user units. It MUST NOT restart the GitLab runner, sshd, Tailscale or host networking, and app containers MUST be memory-capped.
+The deploy SHALL only start, stop or restart the `zebra-web` and `zebra-daemon` user units. It MUST NOT restart the GitLab runner, sshd, cloudflared or host networking, and app containers MUST be memory-capped.
 
 #### Scenario: Failed deploy leaves control plane intact
 - **WHEN** a deploy fails at any step
-- **THEN** the GitLab runner, SSH and Tailscale remain reachable
+- **THEN** the GitLab runner, SSH and the Cloudflare Tunnel remain up
 
 ### Requirement: CI runs on a host shell runner
 All pipeline jobs SHALL run on a GitLab shell runner on the prod host, executing as `opc`, tagged `opc-shell`, with `concurrent = 1`. `deploy/podman/bootstrap-host.sh` SHALL idempotently install and register it.
