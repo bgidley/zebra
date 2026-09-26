@@ -179,6 +179,12 @@ class DjangoProfileStore(ProfileStore):
                         description = tag.get("description", "")
 
                         existing = ValuesTagModel.objects.filter(field=field, slug=slug).first()
+                        if existing is not None and existing.status == "merged":
+                            # Count toward the surviving tag; the merged row stays frozen.
+                            ValuesTagModel.objects.filter(
+                                field=field, slug=existing.merged_into
+                            ).update(usage_count=F("usage_count") + 1)
+                            continue
                         if existing is None:
                             ValuesTagModel.objects.create(
                                 id=str(uuid.uuid4()),

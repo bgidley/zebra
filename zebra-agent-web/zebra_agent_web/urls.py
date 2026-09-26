@@ -52,6 +52,13 @@ urlpatterns = [
     path("tasks/<str:task_id>/submit/", web_views.human_task_submit, name="human_task_submit"),
     # Values Profile (F18) — starts the wizard for capture or edit
     path("profile/values/", web_views.values_profile_wizard, name="values_profile_wizard"),
+    # Values taxonomy curation (#106)
+    path("profile/taxonomy/", web_views.values_taxonomy_page, name="values_taxonomy"),
+    path(
+        "profile/taxonomy/action/",
+        web_views.values_taxonomy_action,
+        name="values_taxonomy_action",
+    ),
     # Trust management (F15, F16, F17)
     path("trust/", web_views.trust_page, name="trust_page"),
     path("trust/pause-all/", web_views.trust_pause_all_form, name="trust_pause_all_form"),

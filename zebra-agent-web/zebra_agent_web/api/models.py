@@ -401,6 +401,8 @@ class ValuesTagModel(models.Model):
     lifecycle. ``seeded`` tags come from the bootstrap fixture; ``candidate``
     tags are accumulated as users confirm new tags in the wizard's review
     step; ``promoted`` tags have been curated up to first-class status.
+    Curators may also mark tags ``rejected`` or ``merged`` (into the tag named
+    by ``merged_into``) — see ``zebra_agent_web.values_taxonomy`` (#106).
     """
 
     FIELD_CHOICES = [
@@ -413,6 +415,8 @@ class ValuesTagModel(models.Model):
         ("seeded", "Seeded"),
         ("promoted", "Promoted"),
         ("candidate", "Candidate"),
+        ("rejected", "Rejected"),
+        ("merged", "Merged"),
     ]
 
     id = models.CharField(max_length=255, primary_key=True)
@@ -424,6 +428,7 @@ class ValuesTagModel(models.Model):
     usage_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     promoted_at = models.DateTimeField(blank=True, null=True)
+    merged_into = models.CharField(max_length=100, blank=True, null=True)
 
     class Meta:
         db_table = "zebra_values_tags"

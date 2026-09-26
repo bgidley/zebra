@@ -1,3 +1,10 @@
+# values-taxonomy Specification
+
+## Purpose
+The field-scoped values-tag taxonomy behind the values profile (F18): tag lifecycle, curation, how approved tags anchor LLM extraction, and bootstrap.
+
+## Requirements
+
 ### Requirement: Field-scoped tag taxonomy
 
 The system SHALL maintain a `Tag` table where each row is scoped to exactly one of four fields: `core_values`, `ethical_positions`, `priorities`, `deal_breakers`. The pair `(field, slug)` SHALL be unique.

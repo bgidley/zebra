@@ -88,6 +88,13 @@ class InMemoryProfileStore(ProfileStore):
                 slug = tag["slug"]
                 label = tag.get("label", slug)
                 description = tag.get("description", "")
+                existing = field_tags.get(slug)
+                if existing is not None and existing["status"] == "merged":
+                    # Count toward the surviving tag; the merged row stays frozen.
+                    target = field_tags.get(existing.get("merged_into") or "")
+                    if target is not None:
+                        target["usage_count"] += 1
+                    continue
                 if slug in field_tags:
                     field_tags[slug]["usage_count"] += 1
                     # Refresh label/description if caller provided them
@@ -111,6 +118,7 @@ class InMemoryProfileStore(ProfileStore):
         label: str,
         description: str = "",
         status: str = "seeded",
+        merged_into: str | None = None,
     ) -> None:
         """Test helper: insert a tag without going through the candidate path."""
         field_tags = self._tags.setdefault(field, {})
@@ -120,4 +128,5 @@ class InMemoryProfileStore(ProfileStore):
             "description": description,
             "status": status,
             "usage_count": 0,
+            "merged_into": merged_into,
         }
