@@ -1,3 +1,8 @@
+# ethics-gate-values-integration Specification
+
+## Purpose
+How the Kantian ethics gate evaluates goals and plans, optionally informed by the user's values profile: precedence, assessment schema, logging, and fail-closed handling.
+
 ## Requirements
 
 ### Requirement: Values profile is optionally incorporated into ethics evaluation
@@ -79,3 +84,21 @@ The action SHALL log both the Kantian and values verdicts at INFO level, so the 
 
 - **WHEN** a Kantian-only ethics gate completes evaluation
 - **THEN** the log at INFO level contains the Kantian `approved` flag and `overall_reasoning`, without reference to a values assessment
+
+### Requirement: Unreadable ethics evaluations fail closed
+When the ethics gate cannot parse the LLM's evaluation as JSON (including a response truncated by the token limit), it SHALL treat the goal as not approved: output `approved: false`, route `reject`, and include a concern advising the user to resubmit. It MUST NOT route `proceed`. The audit entry MUST record `approved = false` with `check_type = "kantian+unparseable"`.
+
+#### Scenario: Truncated response is rejected
+- **WHEN** the LLM response is cut off mid-JSON and cannot be parsed
+- **THEN** the gate routes `reject` with `approved: false`
+
+#### Scenario: Unparseable evaluation is audited as not approved
+- **WHEN** the gate cannot parse the evaluation and an audit store is present
+- **THEN** one audit entry is written with `approved = false`, `check_type = "kantian+unparseable"` and the task's `user_id`
+
+### Requirement: Ethics evaluation has sufficient response headroom
+The ethics gate SHALL request at least 2000 output tokens so the combined Kantian, values and dilemma assessment is not truncated.
+
+#### Scenario: Token cap
+- **WHEN** the gate calls the LLM provider
+- **THEN** `max_tokens` is at least 2000
