@@ -47,6 +47,7 @@ Invariants:
 | `DJANGO_SECRET_KEY` | generated once → `~/.config/zebra/django_secret_key` |
 | WebAuthn origin, CSRF, budget, model | `~/.config/zebra/site.env` (from `deploy/podman/site.env.example`) |
 | `KEEP_IMAGES` | deploy script env, default 5 |
+| Workflow library | named volume `zebra-workflows` → `/root/.zebra/workflows` (web + daemon), so agent-created workflows survive redeploys |
 
 Access: `https://zebra.gidley.co.uk` via a named Cloudflare Tunnel (`zebra`, system service
 `cloudflared`, set up by `deploy/podman/setup-tunnel.sh`) to `127.0.0.1:8000` — outbound
