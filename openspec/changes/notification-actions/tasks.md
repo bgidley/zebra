@@ -15,4 +15,4 @@
 ## 3. Docs & delivery
 
 - [x] 3.1 `zebra-tasks/AGENTS.md`, `specs/zebra-as-is.md` catalogue + gap table
-- [ ] 3.2 Zebra feedback; push; green pipeline; merge; archive this change
+- [x] 3.2 Zebra feedback; push; green pipeline; merge; archive this change
