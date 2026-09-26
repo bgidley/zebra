@@ -36,10 +36,14 @@ ingress:
     service: $ORIGIN
   - service: http_status:404
 EOF
-cloudflared tunnel ingress validate --config /etc/cloudflared/config.yml
+sudo cloudflared tunnel --config /etc/cloudflared/config.yml ingress validate
 
-if ! systemctl list-unit-files cloudflared.service >/dev/null 2>&1 \
-   || ! systemctl cat cloudflared.service >/dev/null 2>&1; then
+# A token-based unit (dashboard-managed tunnel) ignores config.yml — replace it.
+if systemctl cat cloudflared.service 2>/dev/null | grep -q -- '--token'; then
+  sudo systemctl stop cloudflared || true
+  sudo cloudflared service uninstall
+fi
+if ! systemctl cat cloudflared.service >/dev/null 2>&1; then
   sudo cloudflared service install
 fi
 sudo systemctl enable cloudflared

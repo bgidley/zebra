@@ -18,6 +18,7 @@ CONF_DIR="$HOME/.config/zebra"
 ENV_FILE="$CONF_DIR/prod.env"
 SITE_FILE="$CONF_DIR/site.env"       # hand-maintained, non-secret (WebAuthn origin, budget...)
 SECRET_KEY_FILE="$CONF_DIR/django_secret_key"
+HOLD_FILE="$CONF_DIR/hold-daemon"    # touch to deploy web only (maintenance); rm + start to resume
 QUADLET_DIR="$HOME/.config/containers/systemd"
 KEEP_IMAGES="${KEEP_IMAGES:-5}"
 # Secrets copied from GitLab CI variables into prod.env when present in the environment.
@@ -116,7 +117,11 @@ main() {
   [ -n "$prev" ] && podman tag "$prev" "$IMAGE:previous"
 
   if promote "$IMAGE:$tag" && health; then
-    sctl start zebra-daemon.service  # boot-time start comes from the units' [Install]
+    if [ -f "$HOLD_FILE" ]; then
+      log "Daemon held ($HOLD_FILE exists) — not starting zebra-daemon"
+    else
+      sctl start zebra-daemon.service  # boot-time start comes from the units' [Install]
+    fi
     provision_smoke_user
     prune_images
     log "Deployed $IMAGE:$tag"

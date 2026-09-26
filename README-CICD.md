@@ -68,6 +68,8 @@ Manual operations (on the host, as `opc`):
 systemctl --user status zebra-web zebra-daemon
 podman logs -f zebra-web            # or: journalctl --user -u zebra-web -f
 scripts/deploy-podman.sh --rollback # re-promote :previous
+touch ~/.config/zebra/hold-daemon   # future deploys leave the daemon stopped
+rm ~/.config/zebra/hold-daemon && systemctl --user start zebra-daemon   # resume
 podman exec zebra-web python zebra-agent-web/manage.py kill_switch --status
 ```
 
