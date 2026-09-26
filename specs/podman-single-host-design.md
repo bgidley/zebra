@@ -64,3 +64,5 @@ re-registered via the app's credential-recovery path, performed behind Access.
 - The ADB access list includes `0.0.0.0/0` plus stale OKE VCN entries; it should be narrowed.
 - `ORACLE_*` CI variables are unprotected, so they reach feature-branch jobs too.
 - No scheduled `e2e-live` pipeline exists yet.
+- No alerting: an OOM-killed or crash-looping container is only visible via systemd/journal
+  (systemd restarts it). Consider a Cloudflare health check or uptime monitor on `/api/health/`.
