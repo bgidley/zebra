@@ -499,6 +499,9 @@ class EthicsGateAction(TaskAction):
         except json.JSONDecodeError as e:
             logger.error("Ethics gate: failed to parse LLM response as JSON: %s", e)
             # An evaluation we cannot read is not an approval — fail closed (reject).
+            # Not "escalate": only ethics_plan_review has an escalate routing, and the
+            # dilemma-resolution "proceed" path skips planning, so it can't serve the
+            # input gate. The user resubmits to re-run the evaluation (#118).
             fallback = {
                 "approved": False,
                 "overall_reasoning": (

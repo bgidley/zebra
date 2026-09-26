@@ -15,4 +15,4 @@
 ## 3. Docs & delivery
 
 - [x] 3.1 `zebra-tasks/AGENTS.md` EthicsGateAction note; `specs/zebra-as-is.md` weakness removed
-- [ ] 3.2 Zebra feedback; push branch; green pipeline; merge; archive this change
+- [x] 3.2 Zebra feedback; push branch; green pipeline; merge; archive this change
