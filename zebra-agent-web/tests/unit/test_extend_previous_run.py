@@ -84,6 +84,26 @@ async def test_get_run_is_scoped_to_current_user(user_a, user_b):
 
 
 @pytest.mark.django_db(transaction=True)
+async def test_get_run_keeps_unowned_runs_visible(user_a):
+    """API-submitted and legacy runs have no owner; their pages must not 404."""
+
+    @sync_to_async
+    def _create():
+        WorkflowRunModel.objects.create(
+            id="f116-unowned",
+            workflow_name="wf",
+            goal="g",
+            started_at=datetime.now(UTC),
+            user_id=None,
+        )
+
+    await _create()
+
+    with _AsUser(user_a):
+        assert (await DjangoMetricsStore().get_run("f116-unowned")).id == "f116-unowned"
+
+
+@pytest.mark.django_db(transaction=True)
 async def test_record_run_persists_extends_run_id(user_a):
     store = DjangoMetricsStore()
     run = WorkflowRun(

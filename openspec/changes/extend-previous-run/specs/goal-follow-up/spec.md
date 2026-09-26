@@ -39,9 +39,14 @@ A run created from a follow-up goal SHALL record `extends_run_id` = the extended
 
 ### Requirement: Run lookups are scoped to the requesting user
 
-`DjangoMetricsStore.get_run` SHALL return only runs owned by the current request's user. When no user is set (daemon or system context), it SHALL be unfiltered.
+`DjangoMetricsStore.get_run` SHALL NOT return a run owned by a different user than the current request's user. Unowned runs (`user_id` NULL, e.g. API submissions or rows that predate user namespacing) SHALL remain visible. When no user is set (daemon or system context), it SHALL be unfiltered.
 
 #### Scenario: Cross-user lookup
 
 - **WHEN** user A requests a run owned by user B
 - **THEN** `get_run` returns `None`
+
+#### Scenario: Unowned run stays visible
+
+- **WHEN** a logged-in user requests a run with no owner
+- **THEN** `get_run` returns it
