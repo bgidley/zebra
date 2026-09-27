@@ -68,6 +68,7 @@ Manual operations (on the host, as `opc`):
 ```bash
 systemctl --user status zebra-web zebra-daemon
 podman logs -f zebra-web            # or: journalctl --user -u zebra-web -f
+podman exec zebra-web tail -f zebra-agent-web/tmp/zebra.log   # rotating file logs (volume zebra-logs)
 scripts/deploy-podman.sh --rollback # re-promote :previous
 touch ~/.config/zebra/hold-daemon   # future deploys leave the daemon stopped
 rm ~/.config/zebra/hold-daemon && systemctl --user start zebra-daemon   # resume

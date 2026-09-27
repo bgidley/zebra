@@ -38,7 +38,7 @@ At most one `zebra-daemon` container SHALL run at any time. The deploy MUST stop
 - **AND** the script exits non-zero, failing the pipeline
 
 ### Requirement: Secrets sourced from GitLab CI variables
-The deploy SHALL write `~/.config/zebra/prod.env` with mode 0600 from CI variables (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`), a host-persistent generated `DJANGO_SECRET_KEY`, and the non-secret `site.env`. Secrets MUST NOT be committed to the repository.
+The deploy SHALL write `~/.config/zebra/prod.env` with mode 0600 from CI variables (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`, `KIMI_*`, `ZEBRA_SMTP_*`, `ZEBRA_NOTIFY_WEBHOOK_URL`), a host-persistent generated `DJANGO_SECRET_KEY`, and the non-secret `site.env`. Secrets MUST NOT be committed to the repository.
 
 #### Scenario: Env file regenerated on deploy
 - **WHEN** the deploy job runs with `ORACLE_DSN` in its environment
