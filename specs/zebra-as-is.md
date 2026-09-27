@@ -334,6 +334,7 @@ Production runs on a **single OCI A1 instance** (`coding-agent`, Oracle Linux 9,
 | Web app | Quadlet `zebra-web` (`deploy/podman/quadlet/`) | Daphne on `127.0.0.1:8000`; health-gated start; 1.5 GB cap; public at `https://zebra.gidley.co.uk` via Cloudflare Tunnel + Cloudflare Access |
 | Daemon | Quadlet `zebra-daemon` | Same image; `manage.py run_daemon`; exactly one instance; 768 MB cap |
 | Workflow library | Podman volume `zebra-workflows` | Shared by web + daemon; persists agent-created workflows |
+| App logs | Podman volume `zebra-logs` → `/app/zebra-agent-web/tmp` | Web only; rotating `zebra.log` / `django.log` (5 × 5 MB); daemon logs go to the journal |
 | Image | `localhost/zebra-web:<sha>` / `:prod` / `:previous` | Built on the host, no registry; last 5 kept |
 | GitLab Runner | systemd `gitlab-runner`, shell executor as `opc` | tag `opc-shell`, `concurrent = 1` |
 | Credentials | GitLab CI variables → `~/.config/zebra/prod.env` (0600) | Written by `scripts/deploy-podman.sh`; non-secret settings in `~/.config/zebra/site.env` |

@@ -43,11 +43,13 @@ Invariants:
 
 | Item | Location |
 |---|---|
-| Secrets (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`, `ZEBRA_SMTP_*`) | GitLab CI variables → `~/.config/zebra/prod.env` (0600, regenerated per deploy) |
+| Secrets (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`, `KIMI_*`, `ZEBRA_SMTP_*`, `ZEBRA_NOTIFY_WEBHOOK_URL`) | GitLab CI variables → `~/.config/zebra/prod.env` (0600, regenerated per deploy) |
+| `SMOKE_PASSWORD` | GitLab CI variable, not written to `prod.env` — the deploy uses it to (re)create the `smoke` user; the `smoke` job logs in with it |
 | `DJANGO_SECRET_KEY` | generated once → `~/.config/zebra/django_secret_key` |
 | WebAuthn origin, CSRF, budget, model | `~/.config/zebra/site.env` (from `deploy/podman/site.env.example`) |
 | `KEEP_IMAGES` | deploy script env, default 5 |
 | Workflow library | named volume `zebra-workflows` → `/root/.zebra/workflows` (web + daemon), so agent-created workflows survive redeploys |
+| App logs | named volume `zebra-logs` → `/app/zebra-agent-web/tmp` (web only): rotating `zebra.log` / `django.log`, 5 × 5 MB each, survive redeploys. Daemon logs go to the journal only |
 
 Access: `https://zebra.gidley.co.uk` via a named Cloudflare Tunnel (`zebra`, system service
 `cloudflared`, set up by `deploy/podman/setup-tunnel.sh`) to `127.0.0.1:8000` — outbound
