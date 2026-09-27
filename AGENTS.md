@@ -123,6 +123,18 @@ bash scripts/zebra-feedback.sh <issue_number> "<feature title>" \
 - If you disagree, note it briefly in the commit message.
 - If Zebra is unreachable, the script exits 0 with a notice; add `(Zebra feedback skipped — server unreachable)` to the commit.
 
+### Forks, worktrees & background agents (MUST merge their own work)
+
+Agents working in a fork, git worktree, or background session **must merge their changes back to
+`master` themselves** following the workflow above (branch → GitLab CI green → merge → push both
+remotes → verify pipeline). Do not stop at a pushed branch and leave the merge for someone else —
+unmerged worktree branches get lost when the session is cleaned up.
+
+If the merge cannot be done (merge conflicts you can't resolve safely, a red pipeline you can't
+fix, missing credentials/access, or the change is risky or ambiguous), **stop and ask the user for
+input/permission** before proceeding — explain what blocked the merge and what you propose. Never
+force-push or discard others' work to get a merge through.
+
 ### Pipeline verification (MUST after every push)
 
 Pipeline stages: `lint → unit → e2e → deploy → smoke` (see [`README-CICD.md`](README-CICD.md)).
