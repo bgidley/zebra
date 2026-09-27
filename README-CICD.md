@@ -52,7 +52,8 @@ memory-capped so a runaway app cannot OOM the host the agent and runner live on.
 ## Deploy (`scripts/deploy-podman.sh`)
 
 1. Writes `~/.config/zebra/prod.env` (0600) from the job's CI variables
-   (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`, `KIMI_*`), a persistent generated
+   (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`, `KIMI_*`, `ZEBRA_SMTP_*`,
+   `ZEBRA_NOTIFY_WEBHOOK_URL`), a persistent generated
    `DJANGO_SECRET_KEY`, and the non-secret `~/.config/zebra/site.env`.
 2. `podman build -t localhost/zebra-web:$SHA .`
 3. Installs `deploy/podman/quadlet/*.container` and reloads systemd.
@@ -83,6 +84,8 @@ source of truth; the host copy is regenerated on every deploy.
 | `ORACLE_DSN` / `ORACLE_USERNAME` / `ORACLE_PASSWORD` | prod containers, `e2e-live` |
 | `ANTHROPIC_API_KEY`, `KAGI_API_KEY` | prod containers, e2e cassette recording |
 | `KIMI_API_KEY` (+ optional `KIMI_BASE_URL`) | prod containers — `--model kimi` (default for `scripts/zebra-feedback.sh`) |
+| `ZEBRA_SMTP_USERNAME` / `ZEBRA_SMTP_PASSWORD` | prod containers — `notify_email` via OCI Email Delivery (an OCI user SMTP credential; host/sender live in `site.env`) |
+| `ZEBRA_NOTIFY_WEBHOOK_URL` (optional) | prod containers — default target for `notify_webhook` |
 | `SMOKE_PASSWORD` | deploy (creates `smoke` user), `smoke` |
 | `E2E_PROVISIONER_DSN` / `_USERNAME` / `_PASSWORD` | `e2e` ephemeral Oracle schema (SQLite fallback when unset) |
 

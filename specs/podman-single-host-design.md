@@ -43,7 +43,7 @@ Invariants:
 
 | Item | Location |
 |---|---|
-| Secrets (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`) | GitLab CI variables → `~/.config/zebra/prod.env` (0600, regenerated per deploy) |
+| Secrets (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`, `ZEBRA_SMTP_*`) | GitLab CI variables → `~/.config/zebra/prod.env` (0600, regenerated per deploy) |
 | `DJANGO_SECRET_KEY` | generated once → `~/.config/zebra/django_secret_key` |
 | WebAuthn origin, CSRF, budget, model | `~/.config/zebra/site.env` (from `deploy/podman/site.env.example`) |
 | `KEEP_IMAGES` | deploy script env, default 5 |
