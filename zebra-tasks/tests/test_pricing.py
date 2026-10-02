@@ -21,14 +21,30 @@ class TestGetPricing:
     def test_haiku_pricing(self):
         """Haiku has lower pricing."""
         pricing = get_pricing("claude-haiku-4-5-20251001")
-        assert pricing["input"] == 0.80
-        assert pricing["output"] == 4.00
+        assert pricing["input"] == 1.00
+        assert pricing["output"] == 5.00
 
     def test_opus_pricing(self):
         """Opus has higher pricing."""
-        pricing = get_pricing("claude-opus-4-7")
-        assert pricing["input"] == 15.00
-        assert pricing["output"] == 75.00
+        pricing = get_pricing("claude-opus-5-5")
+        assert pricing["input"] == 4.00
+        assert pricing["output"] == 20.00
+
+    def test_opus_4_8_has_own_entry(self):
+        """Opus 4.8 previously fell through to the Sonnet-tier default."""
+        assert get_pricing("claude-opus-4-8") == {"input": 5.00, "output": 25.00}
+
+    def test_sonnet_5_5_pricing(self):
+        pricing = get_pricing("claude-sonnet-5-5")
+        assert pricing["input"] == 2.00
+        assert pricing["output"] == 10.00
+
+    def test_every_alias_target_is_priced(self):
+        """Each friendly alias resolves to a model with an explicit price entry."""
+        from zebra_tasks.llm.models import ANTHROPIC_MODELS
+
+        for alias, model_id in ANTHROPIC_MODELS.items():
+            assert model_id in ANTHROPIC_PRICING, f"{alias} -> {model_id} has no pricing"
 
     def test_unknown_model_returns_default(self):
         """Unknown model falls back to DEFAULT_PRICING (sonnet-tier)."""
@@ -66,13 +82,13 @@ class TestCalculateCost:
     def test_haiku_cost(self):
         """Haiku is cheapest."""
         cost = calculate_cost("claude-haiku-4-5-20251001", 10000, 5000)
-        expected = (10000 * 0.80 + 5000 * 4.00) / 1_000_000
+        expected = (10000 * 1.00 + 5000 * 5.00) / 1_000_000
         assert abs(cost - expected) < 1e-10
 
     def test_opus_cost(self):
         """Opus is most expensive."""
-        cost = calculate_cost("claude-opus-4-7", 10000, 5000)
-        expected = (10000 * 15.00 + 5000 * 75.00) / 1_000_000
+        cost = calculate_cost("claude-opus-5-5", 10000, 5000)
+        expected = (10000 * 4.00 + 5000 * 20.00) / 1_000_000
         assert abs(cost - expected) < 1e-10
 
     def test_none_model_uses_default(self):
