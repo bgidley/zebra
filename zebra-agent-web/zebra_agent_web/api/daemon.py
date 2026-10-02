@@ -106,8 +106,11 @@ async def run_daemon_loop(
     # Recover any processes that were RUNNING when the daemon last stopped.
     # resume_all_processes() resets RUNNING tasks back to READY (or flags
     # non-idempotent ones for manual review) so they are not stuck forever.
+    # Tasks interrupted too often fail their process instead (#130).
     try:
-        resumed = await wf_engine.resume_all_processes()
+        resumed = await wf_engine.resume_all_processes(
+            max_interrupted_attempts=agent_settings.get("RECOVERY_MAX_INTERRUPTED_ATTEMPTS", 3)
+        )
         if resumed:
             logger.info("Daemon startup: resumed %d interrupted process(es)", len(resumed))
     except Exception:

@@ -5,7 +5,8 @@ Context:
   groups - list of activity groups, each with:
     run_id, goal, workflow_name, started_at, completed_at, success,
     tokens_used, user_rating, is_running, is_queued, is_stale,
-    section, tasks, has_human_tasks, human_task_ids, process_ids
+    section, tasks, has_human_tasks, human_task_ids, process_ids,
+    review_tasks
   human_only - boolean, current filter state
   show_completed - boolean, current filter state
   group_by - "status" or "date"
@@ -126,6 +127,10 @@ Context:
                             {{ group.tasks|length }} task{{ group.tasks|length|pluralize }}
                         </button>
                         {% endif %}
+                        {% if group.review_tasks %}
+                        <span title="Interrupted by a restart; retry or fail it below"
+                              class="flex-shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50">review needed</span>
+                        {% endif %}
                         {% if group.human_task_ids %}
                         <a href="{% url 'human_task_form' task_id=group.human_task_ids.0 %}"
                            title="Open the input form"
@@ -174,6 +179,15 @@ Context:
                     </div>
                 </td>
             </tr>
+
+            {% comment %} Tasks awaiting manual review after recovery (#130), always visible {% endcomment %}
+            {% if group.review_tasks %}
+            <tr>
+                <td colspan="7" class="bg-gray-800/60 px-8 py-2">
+                    {% include "partials/review_tasks.html" with review_tasks=group.review_tasks %}
+                </td>
+            </tr>
+            {% endif %}
 
             {% comment %} Expandable tasks sub-row {% endcomment %}
             {% if group.tasks %}

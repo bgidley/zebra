@@ -36,6 +36,9 @@ from zebra.tasks.registry import ActionRegistry
 
 logger = logging.getLogger(__name__)
 
+#: Task property set by recovery on interrupted non-idempotent tasks (#130).
+MANUAL_REVIEW_FLAG = "__requires_manual_review__"
+
 
 class WorkflowEngine:
     """Main workflow engine that controls process execution.
@@ -411,6 +414,52 @@ class WorkflowEngine:
             await self.store.save_process(process)
 
         return await self.transition_task(task_id)
+
+    async def retry_task(self, task_id: str, execute: bool = True) -> TaskInstance:
+        """Retry a task that recovery flagged for manual review (#130).
+
+        ``resume_all_processes`` leaves interrupted non-idempotent tasks in
+        RUNNING with ``__requires_manual_review__`` set. A human who has checked
+        the task's side effects can call this to re-run it: the flag is cleared,
+        the task moves RUNNING -> READY and (if *execute*) the process's pending
+        auto tasks are run, which re-executes the task.
+
+        Args:
+            task_id: ID of the flagged task.
+            execute: When False, only reset the task to READY and leave
+                execution to the caller (e.g. a background worker calling
+                ``transition_task``).
+
+        Returns:
+            The task as reset to READY (before execution).
+
+        Raises:
+            TaskNotFoundError: If the task doesn't exist.
+            InvalidStateTransitionError: If the task is not RUNNING with the
+                manual-review flag, or its process is not RUNNING.
+        """
+        task = await self._load_task(task_id)
+        process = await self._load_process(task.process_id)
+
+        if task.state != TaskState.RUNNING or not task.properties.get(MANUAL_REVIEW_FLAG):
+            raise InvalidStateTransitionError(
+                f"Task {task_id} is not awaiting manual review (state {task.state.value})"
+            )
+        if process.state != ProcessState.RUNNING:
+            raise InvalidStateTransitionError(
+                f"Process {process.id} is in state {process.state.value}, expected running"
+            )
+
+        props = {k: v for k, v in task.properties.items() if k != MANUAL_REVIEW_FLAG}
+        task = task.model_copy(
+            update={"state": TaskState.READY, "properties": props, "updated_at": datetime.now(UTC)}
+        )
+        await self.store.save_task(task)
+        logger.info("Task %s cleared from manual review; retrying", task_id)
+
+        if execute:
+            await self._process_pending_auto_tasks(process)
+        return task
 
     # =========================================================================
     # Internal Methods
@@ -1058,12 +1107,21 @@ class WorkflowEngine:
     # Query Methods
     # =========================================================================
 
-    async def resume_all_processes(self) -> list[ProcessInstance]:
+    async def resume_all_processes(
+        self, max_interrupted_attempts: int | None = None
+    ) -> list[ProcessInstance]:
         """Resume all processes that were interrupted while RUNNING.
 
         This method should be called on engine startup to recover from crashes
         or restarts. It finds all processes in RUNNING state (not PAUSED) and
         resumes their execution.
+
+        Args:
+            max_interrupted_attempts: If set, a task found RUNNING whose
+                ``execution_attempt`` (interruption count) reaches this value
+                fails its process with a clear ``__error__`` instead of being
+                reset or flagged for manual review again (#130). ``None``
+                disables the cap.
 
         Returns:
             List of process instances that were resumed
@@ -1103,6 +1161,7 @@ class WorkflowEngine:
                         f"Process {process.id} has {len(running_tasks)} tasks in RUNNING state"
                     )
                     # Handle interrupted tasks based on idempotency
+                    capped_reason: str | None = None
                     for task in running_tasks:
                         # Increment execution attempt counter
                         task = task.model_copy(
@@ -1118,6 +1177,18 @@ class WorkflowEngine:
                         if task_def.synchronized:
                             await self._reconcile_sync_task(task, process)
                             continue
+
+                        if (
+                            max_interrupted_attempts is not None
+                            and task.execution_attempt >= max_interrupted_attempts
+                        ):
+                            capped_reason = (
+                                f"Task '{task_def.name}' ({task.id}) was interrupted "
+                                f"{task.execution_attempt} times (limit "
+                                f"{max_interrupted_attempts}); recovery gave up instead of "
+                                "retrying or flagging it for manual review again."
+                            )
+                            break
 
                         # Check if task can be safely re-executed
                         if await self._is_task_idempotent(task, process):
@@ -1135,13 +1206,18 @@ class WorkflowEngine:
                             )
                         else:
                             # Non-idempotent task, flag for manual review
-                            task.properties["__requires_manual_review__"] = True
+                            task.properties[MANUAL_REVIEW_FLAG] = True
                             await self.store.save_task(task)
                             logger.warning(
                                 f"Task {task.id} has non-idempotent side effects and was "
                                 f"interrupted (attempt {task.execution_attempt}). "
                                 "Flagged for manual review."
                             )
+
+                    if capped_reason:
+                        logger.error("Failing process %s: %s", process.id, capped_reason)
+                        await self.fail_process(process.id, capped_reason)
+                        continue
 
                 # Process is already in RUNNING state, just need to trigger execution
                 # Re-enter the task processing loop to continue where we left off

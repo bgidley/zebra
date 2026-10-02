@@ -230,6 +230,11 @@ ZEBRA_AGENT_SETTINGS = {
     "VALUES_TAG_PROMOTION_THRESHOLD": int(
         os.environ.get("ZEBRA_VALUES_TAG_PROMOTION_THRESHOLD", "3")
     ),
+    # Recovery fails a process once one of its tasks has been interrupted this many
+    # times, instead of flagging it for manual review forever (#130).
+    "RECOVERY_MAX_INTERRUPTED_ATTEMPTS": int(
+        os.environ.get("ZEBRA_RECOVERY_MAX_INTERRUPTED_ATTEMPTS", "3")
+    ),
     # Auto-start the budget daemon inside the ASGI server process.
     # Set to False (or ZEBRA_DAEMON_AUTO_START=0) to disable and use
     # the standalone ``python manage.py run_daemon`` command instead.

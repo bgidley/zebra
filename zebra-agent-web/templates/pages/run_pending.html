@@ -125,6 +125,9 @@
         {% endif %}
     </div>
 
+    <!-- Tasks awaiting manual review after recovery (#130) -->
+    {% include "partials/review_tasks.html" %}
+
     <!-- Error details -->
     {% if error %}
     <div class="bg-red-900/30 rounded-lg border border-red-800 p-6">

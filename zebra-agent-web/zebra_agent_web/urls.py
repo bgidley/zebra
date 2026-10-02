@@ -50,6 +50,9 @@ urlpatterns = [
     # Human Tasks (form pages still accessible directly)
     path("tasks/<str:task_id>/", web_views.human_task_form, name="human_task_form"),
     path("tasks/<str:task_id>/submit/", web_views.human_task_submit, name="human_task_submit"),
+    # Tasks flagged for manual review by recovery (#130)
+    path("tasks/<str:task_id>/retry/", web_views.review_task_retry, name="review_task_retry"),
+    path("tasks/<str:task_id>/fail/", web_views.review_task_fail, name="review_task_fail"),
     # Values Profile (F18) — starts the wizard for capture or edit
     path("profile/values/", web_views.values_profile_wizard, name="values_profile_wizard"),
     # Values taxonomy curation (#106)

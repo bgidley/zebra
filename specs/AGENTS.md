@@ -15,7 +15,7 @@ This directory contains requirements and design specifications for Zebra.
 | [f4-f5-identity-auth.md](f4-f5-identity-auth.md) | F4+F5: Single-user identity setup flow + passkey (WebAuthn) web authentication | Implemented |
 | [f6-user-id-namespacing.md](f6-user-id-namespacing.md) | F6: user_id columns on all Django store tables, `CurrentUserMiddleware` ContextVar propagation | Implemented |
 | [f7-credential-store.md](f7-credential-store.md) | F7: OS keychain credential store — `CredentialStore` ABC, keyring + file backends, CLI commands | Implemented |
-| [f8-crash-recovery.md](f8-crash-recovery.md) | F8: Crash recovery contract — write-ahead guarantees, daemon startup `resume_all_processes`, 11-test matrix | Implemented |
+| [f8-crash-recovery.md](f8-crash-recovery.md) | F8: Crash recovery contract — write-ahead guarantees, daemon startup `resume_all_processes`, 11-test matrix; manual-review retry/fail + interrupted-attempt cap (#130) | Implemented |
 | [f9-data-export.md](f9-data-export.md) | F9: Data export — ZIP archive CLI + `GET /api/export/` + dashboard button | Implemented |
 | [f10-data-deletion.md](f10-data-deletion.md) | F10: Data deletion — soft/hard delete, `DELETE /api/user-data/`, management command | Implemented |
 | [f21-concern-flagging.md](f21-concern-flagging.md) | F21: Proactive concern flagging — advisory `flag_concerns` action in the planning phase, surfaced on run detail | Implemented |

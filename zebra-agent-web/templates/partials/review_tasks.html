@@ -1,0 +1,36 @@
+{% comment %}
+Tasks flagged for manual review by engine recovery (#130), with Retry / Fail.
+
+Context:
+  review_tasks - list of dicts: id, task_name, process_id, run_id,
+                 execution_attempt, flagged_at
+{% endcomment %}
+{% if review_tasks %}
+<div class="bg-amber-900/20 rounded-lg border border-amber-700/60 p-4 space-y-2" data-review-tasks>
+    <h3 class="text-sm font-semibold text-amber-300 uppercase tracking-wider">Needs manual review</h3>
+    <p class="text-xs text-amber-200/80">
+        A restart interrupted {{ review_tasks|length|pluralize:"this task,these tasks" }} after
+        {{ review_tasks|length|pluralize:"it,they" }} may already have had side effects, so the
+        run is paused. Check for partial work, then retry the task or fail the run.
+    </p>
+    {% for t in review_tasks %}
+    <div data-review-task="{{ t.id }}"
+         class="flex flex-wrap items-center justify-between gap-2 py-1.5 px-3 rounded bg-gray-800 border border-gray-700">
+        <div class="min-w-0">
+            <span class="text-sm text-white font-medium">{{ t.task_name }}</span>
+            <span class="text-xs text-gray-400 ml-2">interrupted {{ t.execution_attempt }}&times;{% if t.flagged_at %} &middot; flagged {{ t.flagged_at|date:"M d, H:i" }}{% endif %}</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button hx-post="{% url 'review_task_retry' task_id=t.id %}"
+                    hx-target="closest [data-review-task]" hx-swap="innerHTML"
+                    hx-confirm="Re-run '{{ t.task_name }}'? Its side effects may happen twice."
+                    class="px-2 py-0.5 text-xs font-medium rounded bg-indigo-900/80 text-indigo-200 hover:bg-indigo-800 transition-colors">Retry</button>
+            <button hx-post="{% url 'review_task_fail' task_id=t.id %}"
+                    hx-target="closest [data-review-task]" hx-swap="innerHTML"
+                    hx-confirm="Fail this run?"
+                    class="px-2 py-0.5 text-xs font-medium rounded bg-red-900/80 text-red-300 hover:bg-red-800 transition-colors">Fail</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

@@ -39,6 +39,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/engine.py` | Engine integration |
 | `zebra_agent_web/api/agent_engine.py` | Agent engine wrapper (creates BudgetManager + injection) |
 | `zebra_agent_web/api/daemon.py` | Shared daemon loop (`run_daemon_loop()`) |
+| `zebra_agent_web/api/manual_review.py` | Find / retry / fail tasks flagged `__requires_manual_review__` by recovery (#130) |
 | `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
 | `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory) |
 | `zebra_agent_web/metrics_store.py` | DjangoMetricsStore (MetricsStore for metrics) |
@@ -240,6 +241,7 @@ Key settings in `settings.py`:
 | `ZEBRA_AGENT_SETTINGS.DAEMON_POLL_INTERVAL` | Seconds between daemon queue polls (default: 30) |
 | `ZEBRA_AGENT_SETTINGS.BUDGET_RESET_HOUR` | Hour (UTC) when daily budget resets (default: 0) |
 | `ZEBRA_AGENT_SETTINGS.GOAL_COST_WARNING_USD` | Per-goal soft warning threshold (default: 5.00) |
+| `ZEBRA_AGENT_SETTINGS.RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | Daemon-startup recovery fails a process once one of its tasks has been interrupted this many times, instead of flagging it for manual review again (default: 3, #130) |
 | `ZEBRA_AGENT_SETTINGS.VALUES_TAG_PROMOTION_THRESHOLD` | Usage count at which a candidate values tag is suggested for promotion (default: 3) |
 
 ## Async Views and DRF
@@ -578,6 +580,11 @@ POST /api/tasks/<task_id>/complete/
 | `/api/processes/<id>/pending-tasks/` | `process_pending_tasks` | Get pending human tasks with schema (API) |
 | `/api/runs/<id>/diagram/` | `run_diagram` | Get workflow diagram SVG (API) |
 | `/api/tasks/<id>/complete/` | `task_complete` | Complete a human/manual task (API) |
+| `/tasks/<id>/retry/` | `review_task_retry` | Retry a task flagged for manual review by recovery (POST, HTMX, #130) |
+| `/tasks/<id>/fail/` | `review_task_fail` | Fail the run owning a flagged task (POST, HTMX) |
+| `/api/review-tasks/` | `review_tasks_list` | Tasks flagged for manual review, `?run_id=` filter (API) |
+| `/api/tasks/<id>/retry/` | `task_retry` | Retry a flagged task; 202, re-runs in background (API, POST) |
+| `/api/tasks/<id>/fail/` | `task_fail` | Fail a flagged task's process + ancestors, optional `reason` (API, POST) |
 | `/api/budget/` | `budget_status` | Get budget status JSON (API) |
 | `/profile/taxonomy/` | `values_taxonomy_page` | Values-tag curation: review candidates, promote/reject/demote/merge (#106) |
 | `/profile/taxonomy/action/` | `values_taxonomy_action` | Apply one curation action (POST) |

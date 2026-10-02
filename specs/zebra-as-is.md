@@ -103,7 +103,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 - **MCP server advertised in the README but not present** in `zebra-py/zebra/mcp/` — the requirements spec (Appendix B) references this path, but no code lives there today.
 - **Template language is weak** — no expressions beyond dotted key lookup.
-- **No retry / backoff** in the engine. An `execution_attempts` counter exists but no recovery policy.
+- **No retry / backoff** in the engine. `execution_attempt` counts recovery interruptions: interrupted non-idempotent tasks are flagged `__requires_manual_review__` and can be retried (`WorkflowEngine.retry_task`) or failed from the activity / run detail pages and REST API; recovery fails a process once a task hits `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` (default 3). See [f8-crash-recovery.md](f8-crash-recovery.md) (#130).
 - **Postgres backend is thinner than SQLite** — less test coverage, feature-completeness unclear.
 
 ---
