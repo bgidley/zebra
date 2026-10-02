@@ -664,7 +664,7 @@ Users can choose between Claude Haiku, Sonnet, and Opus at multiple levels:
 
 Model resolution: task property > process property (`__llm_model__`) > server default > provider default.
 
-Valid model aliases: `haiku`, `sonnet`, `opus` (resolved to full model IDs like `claude-sonnet-4-20250514`).
+Valid model aliases: `haiku`, `sonnet`, `opus` (resolved to full model IDs like `claude-sonnet-5-5`).
 
 ### Orphaned Process Visibility
 

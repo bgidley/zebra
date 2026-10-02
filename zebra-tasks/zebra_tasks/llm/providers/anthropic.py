@@ -22,12 +22,14 @@ class AnthropicProvider(LLMProvider):
     Set ANTHROPIC_API_KEY environment variable or pass api_key.
     """
 
-    DEFAULT_MODEL = "claude-sonnet-4-6"
+    DEFAULT_MODEL = "claude-sonnet-5-5"
 
-    # Model context windows (current Claude 4.x IDs)
+    # Model context windows
     CONTEXT_WINDOWS = {
-        "claude-opus-4-8": 200000,
-        "claude-sonnet-4-6": 200000,
+        "claude-opus-5-5": 1000000,
+        "claude-sonnet-5-5": 1000000,
+        "claude-opus-4-8": 1000000,
+        "claude-sonnet-4-6": 1000000,
         "claude-haiku-4-5-20251001": 200000,
         # Legacy IDs retained for graceful fallback
         "claude-opus-4-20250514": 200000,
@@ -38,14 +40,9 @@ class AnthropicProvider(LLMProvider):
         "claude-3-haiku-20240307": 200000,
     }
 
-    # Newer Claude 4+ models do not accept the `temperature` parameter — the API
-    # returns a 400 invalid_request_error when it is included. Older Claude 3.x
-    # models still accept it. This set lists models that reject the parameter.
-    _NO_TEMPERATURE_MODELS = {
-        "claude-opus-4-8",
-        "claude-sonnet-4-6",
-        "claude-haiku-4-5-20251001",
-    }
+    # Only legacy Claude 3.x models accept a non-default `temperature`; Claude 4+
+    # (and 5.x) models return a 400 invalid_request_error when it is included.
+    _TEMPERATURE_MODEL_PREFIX = "claude-3"
 
     def __init__(
         self,
@@ -85,6 +82,9 @@ class AnthropicProvider(LLMProvider):
     def max_context_tokens(self) -> int:
         return self.CONTEXT_WINDOWS.get(self._model, 200000)
 
+    def _accepts_temperature(self) -> bool:
+        return self._model.startswith(self._TEMPERATURE_MODEL_PREFIX)
+
     async def complete(
         self,
         messages: list[Message],
@@ -104,8 +104,8 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": max_tokens,
         }
 
-        # Newer Claude 4+ models reject the temperature parameter with a 400
-        if self._model not in self._NO_TEMPERATURE_MODELS:
+        # Claude 4+ models reject the temperature parameter with a 400
+        if self._accepts_temperature():
             kwargs["temperature"] = temperature
 
         if system:
@@ -139,7 +139,7 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": max_tokens,
         }
 
-        if self._model not in self._NO_TEMPERATURE_MODELS:
+        if self._accepts_temperature():
             kwargs["temperature"] = temperature
 
         if system:

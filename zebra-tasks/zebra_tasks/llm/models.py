@@ -3,17 +3,17 @@
 # Mapping of friendly names to Anthropic API model IDs.
 ANTHROPIC_MODELS: dict[str, str] = {
     "haiku": "claude-haiku-4-5-20251001",
-    "sonnet": "claude-sonnet-4-6",
-    "opus": "claude-opus-4-8",
+    "sonnet": "claude-sonnet-5-5",
+    "opus": "claude-opus-5-5",
 }
 
 # Kimi model aliases
 KIMI_MODELS: dict[str, str] = {
-    "kimi-8k": "moonshot-v1-8k",
-    "kimi-32k": "moonshot-v1-32k",
-    "kimi-128k": "moonshot-v1-128k",
-    "kimi": "moonshot-v1-32k",
-    "kimi-auto": "moonshot-v1-auto",
+    "kimi": "kimi-k3",
+    "kimi-k3": "kimi-k3",
+    "kimi-k2.6": "kimi-k2.6",
+    "kimi-code": "kimi-k2.7-code",
+    "kimi-code-fast": "kimi-k2.7-code-highspeed",
 }
 
 # Ordered list of friendly names for UI dropdowns / API validation.
@@ -35,7 +35,7 @@ def resolve_model_name(name: str | None) -> str | None:
 
 
 def friendly_model_name(api_model_id: str | None) -> str:
-    """Reverse lookup: ``"claude-sonnet-4-20250514"`` → ``"sonnet"``.
+    """Reverse lookup: ``"claude-sonnet-5-5"`` → ``"sonnet"``.
 
     Returns the friendly name if found, otherwise returns the raw ID.
     Falls back to ``"sonnet"`` for ``None``.

@@ -281,6 +281,8 @@ class TestAnthropicProvider:
     @pytest.mark.parametrize(
         "model,expect_temperature",
         [
+            ("claude-opus-5-5", False),
+            ("claude-sonnet-5-5", False),
             ("claude-opus-4-8", False),
             ("claude-sonnet-4-6", False),
             ("claude-haiku-4-5-20251001", False),
@@ -291,7 +293,7 @@ class TestAnthropicProvider:
     async def test_temperature_omitted_for_newer_models(
         self, mock_anthropic_module, model, expect_temperature
     ):
-        """Newer Claude 4+ models reject the temperature parameter with HTTP 400.
+        """Claude 4+ and 5.x models reject the temperature parameter with HTTP 400.
 
         Verify AnthropicProvider omits it for those models and includes it for
         legacy Claude 3.x models that still accept it.
@@ -423,6 +425,80 @@ class TestOpenAIProvider:
 
                 with pytest.raises(ValueError, match="API key required"):
                     openai_provider.OpenAIProvider()
+
+    @pytest.mark.asyncio
+    async def test_openai_sends_temperature(self, mock_openai_module):
+        """OpenAI models still receive the caller's temperature."""
+        mock_module, mock_client, _ = mock_openai_module
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch.dict("sys.modules", {"openai": mock_module}):
+                import importlib
+
+                import zebra_tasks.llm.providers.openai as openai_provider
+
+                importlib.reload(openai_provider)
+
+                provider = openai_provider.OpenAIProvider()
+                await provider.complete([Message.user("hi")], temperature=0.3)
+
+                assert mock_client.chat.completions.create.call_args.kwargs["temperature"] == 0.3
+
+
+class TestKimiProvider:
+    """Tests for the Kimi (Moonshot) provider."""
+
+    @pytest.fixture
+    def mock_kimi_module(self):
+        mock_message = MagicMock(content="hi", tool_calls=None)
+        mock_response = MagicMock(
+            choices=[MagicMock(message=mock_message, finish_reason="stop")],
+            usage=MagicMock(prompt_tokens=10, completion_tokens=5),
+            model="kimi-k3",
+        )
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        mock_module = MagicMock()
+        mock_module.AsyncOpenAI = MagicMock(return_value=mock_client)
+        return mock_module, mock_client
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "alias,expected_model",
+        [
+            (None, "kimi-k3"),
+            ("kimi", "kimi-k3"),
+            ("kimi-code", "kimi-k2.7-code"),
+            ("kimi-k2.6", "kimi-k2.6"),
+        ],
+    )
+    async def test_alias_resolution_and_no_temperature(
+        self, mock_kimi_module, alias, expected_model
+    ):
+        """Aliases resolve to current Kimi models; temperature is never sent.
+
+        Every current Kimi model rejects any temperature other than 1 with HTTP 400.
+        """
+        mock_module, mock_client = mock_kimi_module
+
+        with patch.dict("os.environ", {"KIMI_API_KEY": "test-key"}):
+            with patch.dict("sys.modules", {"openai": mock_module}):
+                import importlib
+
+                import zebra_tasks.llm.providers.kimi as kimi_provider
+                import zebra_tasks.llm.providers.openai as openai_provider
+
+                importlib.reload(openai_provider)
+                importlib.reload(kimi_provider)
+
+                provider = kimi_provider.KimiProvider(model=alias)
+                assert provider.model == expected_model
+
+                await provider.complete([Message.user("hi")], temperature=0.3)
+
+                call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+                assert call_kwargs["model"] == expected_model
+                assert "temperature" not in call_kwargs
 
 
 class TestToolDefinition:

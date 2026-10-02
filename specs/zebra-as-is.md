@@ -126,8 +126,10 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 ### LLM integration
 
-- Provider abstraction supports **Anthropic Claude** (primary) and **OpenAI**, registered lazily via a factory registry.
-- Pricing table hardcoded in `pricing.py` (per-1M-token Anthropic rates); Sonnet defaults for unknowns.
+- Provider abstraction supports **Anthropic Claude** (primary), **OpenAI**, and **Kimi** (Moonshot, OpenAI-compatible), registered lazily via a factory registry.
+- Model aliases (`models.py`): `opus` → `claude-opus-5-5`, `sonnet` → `claude-sonnet-5-5` (provider default), `haiku` → `claude-haiku-4-5-20251001`; `kimi` → `kimi-k3`, `kimi-code` → `kimi-k2.7-code`, `kimi-code-fast` → `kimi-k2.7-code-highspeed`, `kimi-k2.6`. Prod sets `ZEBRA_LLM_MODEL=opus`.
+- `temperature` is only sent to legacy `claude-3*` models (Claude 4+/5.x return 400) and never to Kimi (current models accept only 1). Claude 5.5 and Kimi models always think; reasoning tokens count against `max_tokens`.
+- Pricing table hardcoded in `pricing.py` (per-1M-token Anthropic rates); Sonnet-tier defaults for unknowns — every alias target must have an entry (tested).
 - Every call updates process properties: `__total_cost__`, `__total_tokens__`, `__token_history__`.
 - Soft budget warnings via an injected `__budget_manager__` (non-blocking).
 

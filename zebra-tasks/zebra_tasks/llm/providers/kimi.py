@@ -23,19 +23,18 @@ class KimiProvider(OpenAIProvider):
     Set KIMI_API_KEY environment variable or pass api_key.
     """
 
-    DEFAULT_MODEL = "moonshot-v1-32k"
+    DEFAULT_MODEL = "kimi-k3"
     BASE_URL = "https://api.moonshot.ai/v1"
 
     CONTEXT_WINDOWS = {
-        "moonshot-v1-8k": 8000,
-        "moonshot-v1-32k": 32000,
-        "moonshot-v1-128k": 128000,
-        "moonshot-v1-auto": 128000,
-        # Kimi k1.5 / k2 series (latest)
-        "kimi-k1.5-8k": 8000,
-        "kimi-k1.5-32k": 32000,
-        "kimi-k2": 128000,
+        "kimi-k3": 1048576,
+        "kimi-k2.6": 262144,
+        "kimi-k2.7-code": 262144,
+        "kimi-k2.7-code-highspeed": 262144,
     }
+
+    # Current Kimi models are reasoning models that only accept temperature=1.
+    SEND_TEMPERATURE = False
 
     def __init__(
         self,
@@ -71,4 +70,4 @@ class KimiProvider(OpenAIProvider):
 
     @property
     def max_context_tokens(self) -> int:
-        return self.CONTEXT_WINDOWS.get(self._model, 32000)
+        return self.CONTEXT_WINDOWS.get(self._model, 262144)

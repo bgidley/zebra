@@ -25,6 +25,9 @@ class OpenAIProvider(LLMProvider):
 
     DEFAULT_MODEL = "gpt-4o"
 
+    # Subclasses whose models reject a caller-supplied temperature set this False.
+    SEND_TEMPERATURE = True
+
     # Model context windows
     CONTEXT_WINDOWS = {
         "gpt-4o": 128000,
@@ -89,8 +92,10 @@ class OpenAIProvider(LLMProvider):
             "model": self._model,
             "messages": openai_messages,
             "max_tokens": max_tokens,
-            "temperature": temperature,
         }
+
+        if self.SEND_TEMPERATURE:
+            kwargs["temperature"] = temperature
 
         if stop_sequences:
             kwargs["stop"] = stop_sequences
@@ -119,9 +124,11 @@ class OpenAIProvider(LLMProvider):
             "model": self._model,
             "messages": openai_messages,
             "max_tokens": max_tokens,
-            "temperature": temperature,
             "stream": True,
         }
+
+        if self.SEND_TEMPERATURE:
+            kwargs["temperature"] = temperature
 
         if tools:
             kwargs["tools"] = self._convert_tools(tools)
