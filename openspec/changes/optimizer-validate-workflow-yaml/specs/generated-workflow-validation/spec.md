@@ -1,0 +1,36 @@
+## ADDED Requirements
+
+### Requirement: Optimizer validates workflows before saving
+The `workflow_optimizer` action SHALL parse each created or modified workflow with the library loader, run `check_generated_workflow`, and verify that every task action is registered (when the action registry is reachable) before saving it. Invalid workflows SHALL NOT be saved and SHALL NOT appear in `changes_made`, `new_workflows` or `modified_workflows`; they SHALL be reported in `failed_changes` with a reason.
+
+#### Scenario: Structurally invalid YAML
+- **WHEN** the LLM returns YAML whose routing references a missing task
+- **THEN** no file is written to the library
+- **AND** `changes_made` is empty and `failed_changes` contains the workflow with the validation error
+
+#### Scenario: Unregistered action
+- **WHEN** the generated workflow uses an action that is not in the engine's action registry
+- **THEN** the change is rejected and reported in `failed_changes`
+
+#### Scenario: Valid change alongside an invalid one
+- **WHEN** one suggestion yields valid YAML and another yields invalid YAML
+- **THEN** the valid workflow is saved and listed in `changes_made`
+- **AND** the invalid one is listed only in `failed_changes`
+
+### Requirement: Optimizer retries truncated output once
+When the optimizer's LLM response is truncated (`finish_reason` is `max_tokens` or `length`), the optimizer SHALL retry once with double the token budget, and SHALL reject the change if the retry is also truncated.
+
+#### Scenario: Truncated then complete
+- **WHEN** the first response is truncated and the retry is complete and valid
+- **THEN** the workflow from the retry is saved and listed in `changes_made`
+
+#### Scenario: Truncated twice
+- **WHEN** both responses are truncated
+- **THEN** nothing is saved and `failed_changes` reports truncation
+
+### Requirement: Dream summary reports failed changes
+The dream cycle summary prompt SHALL include `failed_changes` and SHALL instruct the LLM not to describe failed changes as applied.
+
+#### Scenario: Optimizer rejected a rewrite
+- **WHEN** `optimization_results.failed_changes` is non-empty
+- **THEN** the summary prompt lists those failures separately from the changes made

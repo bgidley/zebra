@@ -13,7 +13,7 @@ from zebra_tasks.llm.providers import get_provider
 # Generated workflows embed JSON Schemas for human forms, so they are long.
 GENERATED_WORKFLOW_MAX_TOKENS = 8000
 
-_TRUNCATED_FINISH_REASONS = {"max_tokens", "length"}
+TRUNCATED_FINISH_REASONS = {"max_tokens", "length"}
 
 
 def check_generated_workflow(response: LLMResponse, definition: ProcessDefinition) -> str | None:
@@ -23,7 +23,7 @@ def check_generated_workflow(response: LLMResponse, definition: ProcessDefinitio
     cut off), yielding a definition whose first task has no outbound routes —
     the process then completes after one task. Catch that before it runs.
     """
-    if response.finish_reason in _TRUNCATED_FINISH_REASONS:
+    if response.finish_reason in TRUNCATED_FINISH_REASONS:
         return "LLM output was truncated (hit max_tokens)"
     errors = validate_definition(definition)
     if errors:

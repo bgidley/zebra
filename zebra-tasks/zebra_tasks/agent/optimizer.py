@@ -1,14 +1,26 @@
 """WorkflowOptimizerAction - Create and optimize workflows based on evaluation."""
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
+from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.llm.base import Message
+from zebra_tasks.agent.creator import (
+    GENERATED_WORKFLOW_MAX_TOKENS,
+    TRUNCATED_FINISH_REASONS,
+    check_generated_workflow,
+)
+from zebra_tasks.llm.base import LLMResponse, Message
+
+logger = logging.getLogger(__name__)
+
+# Extra attempts (at double the token budget) when the LLM output is truncated.
+TRUNCATION_RETRIES = 1
 
 # Matches a pure template reference like "{{some_key}}"
 _PURE_TEMPLATE_RE = re.compile(r"^\{\{(\w+)\}\}$")
@@ -34,6 +46,8 @@ class WorkflowOptimizerAction(TaskAction):
         - new_workflows: New workflow definitions created
         - modified_workflows: Existing workflows that were modified
         - skipped: Changes that were skipped and why
+        - failed_changes: Changes rejected because the generated YAML was
+          truncated or invalid (never saved, never listed in changes_made)
 
     Example workflow usage:
         ```yaml
@@ -135,6 +149,15 @@ class WorkflowOptimizerAction(TaskAction):
             required=True,
         ),
         ParameterDef(
+            name="failed_changes",
+            type="list[dict]",
+            description=(
+                "Changes rejected because the generated workflow was truncated or invalid; "
+                "these were not saved"
+            ),
+            required=True,
+        ),
+        ParameterDef(
             name="dry_run",
             type="bool",
             description="Whether this was a dry run",
@@ -218,6 +241,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                 "new_workflows": [],
                 "modified_workflows": [],
                 "skipped": [],
+                "failed_changes": [],
                 "dry_run": dry_run,
             }
 
@@ -229,41 +253,41 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
 
             # Handle new workflow suggestions first
             for suggestion in new_suggestions:
+                name = suggestion.get("name", "new_workflow")
                 if changes_count >= max_changes:
                     results["skipped"].append(
                         {
                             "type": "new_workflow",
-                            "name": suggestion.get("name"),
+                            "name": name,
                             "reason": "max_changes limit reached",
                         }
                     )
                     continue
 
-                workflow_yaml = await self._create_new_workflow(
-                    provider, suggestion, existing_workflows, system_prompt
+                workflow_yaml, error = await self._create_new_workflow(
+                    provider, suggestion, existing_workflows, system_prompt, context
                 )
+                if error:
+                    self._record_failure(results, "create", name, error)
+                    continue
 
-                if workflow_yaml:
-                    name = suggestion.get("name", "new_workflow")
-                    results["new_workflows"].append(
-                        {
-                            "name": name,
-                            "yaml": workflow_yaml,
-                            "reason": suggestion.get("rationale", ""),
-                        }
-                    )
-
-                    if not dry_run and library_path:
-                        self._save_workflow(library_path, name, workflow_yaml)
-
-                    results["changes_made"].append(
-                        {
-                            "type": "create",
-                            "workflow": name,
-                            "description": suggestion.get("description", ""),
-                        }
-                    )
-                    changes_count += 1
+                results["new_workflows"].append(
+                    {
+                        "name": name,
+                        "yaml": workflow_yaml,
+                        "reason": suggestion.get("rationale", ""),
+                    }
+                )
+                if not dry_run and library_path:
+                    self._save_workflow(library_path, name, workflow_yaml)
+                results["changes_made"].append(
+                    {
+                        "type": "create",
+                        "workflow": name,
+                        "description": suggestion.get("description", ""),
+                    }
+                )
+                changes_count += 1
 
             # Handle improvements to existing workflows
             for priority in priorities:
@@ -278,67 +302,35 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                     continue
 
                 if priority.get("type") == "create":
-                    # Create new workflow
-                    workflow_yaml = await self._create_workflow_from_priority(
-                        provider, priority, existing_workflows, system_prompt
+                    name = priority.get("target", "new_workflow")
+                    workflow_yaml, error = await self._create_workflow_from_priority(
+                        provider, priority, existing_workflows, system_prompt, context
                     )
+                    if error:
+                        self._record_failure(results, "create", name, error)
+                        continue
 
-                    if workflow_yaml:
-                        name = priority.get("target", "new_workflow")
-                        results["new_workflows"].append(
-                            {
-                                "name": name,
-                                "yaml": workflow_yaml,
-                                "reason": priority.get("rationale", ""),
-                            }
-                        )
-
-                        if not dry_run and library_path:
-                            self._save_workflow(library_path, name, workflow_yaml)
-
-                        results["changes_made"].append(
-                            {
-                                "type": "create",
-                                "workflow": name,
-                                "action": priority.get("action", ""),
-                            }
-                        )
-                        changes_count += 1
+                    results["new_workflows"].append(
+                        {
+                            "name": name,
+                            "yaml": workflow_yaml,
+                            "reason": priority.get("rationale", ""),
+                        }
+                    )
+                    if not dry_run and library_path:
+                        self._save_workflow(library_path, name, workflow_yaml)
+                    results["changes_made"].append(
+                        {
+                            "type": "create",
+                            "workflow": name,
+                            "action": priority.get("action", ""),
+                        }
+                    )
+                    changes_count += 1
 
                 elif priority.get("type") in ("fix", "enhance"):
                     target = priority.get("target")
-                    if target in existing_workflows:
-                        modified_yaml = await self._modify_workflow(
-                            provider,
-                            target,
-                            existing_workflows[target],
-                            priority,
-                            evaluation.get("workflow_evaluations", []),
-                            system_prompt,
-                        )
-
-                        if modified_yaml:
-                            results["modified_workflows"].append(
-                                {
-                                    "name": target,
-                                    "original_yaml": existing_workflows[target],
-                                    "modified_yaml": modified_yaml,
-                                    "reason": priority.get("rationale", ""),
-                                }
-                            )
-
-                            if not dry_run and library_path:
-                                self._save_workflow(library_path, target, modified_yaml)
-
-                            results["changes_made"].append(
-                                {
-                                    "type": "modify",
-                                    "workflow": target,
-                                    "action": priority.get("action", ""),
-                                }
-                            )
-                            changes_count += 1
-                    else:
+                    if target not in existing_workflows:
                         results["skipped"].append(
                             {
                                 "type": priority.get("type"),
@@ -346,6 +338,39 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                                 "reason": "workflow not found in existing_workflows",
                             }
                         )
+                        continue
+
+                    modified_yaml, error = await self._modify_workflow(
+                        provider,
+                        target,
+                        existing_workflows[target],
+                        priority,
+                        evaluation.get("workflow_evaluations", []),
+                        system_prompt,
+                        context,
+                    )
+                    if error:
+                        self._record_failure(results, "modify", target, error)
+                        continue
+
+                    results["modified_workflows"].append(
+                        {
+                            "name": target,
+                            "original_yaml": existing_workflows[target],
+                            "modified_yaml": modified_yaml,
+                            "reason": priority.get("rationale", ""),
+                        }
+                    )
+                    if not dry_run and library_path:
+                        self._save_workflow(library_path, target, modified_yaml)
+                    results["changes_made"].append(
+                        {
+                            "type": "modify",
+                            "workflow": target,
+                            "action": priority.get("action", ""),
+                        }
+                    )
+                    changes_count += 1
 
             # Store result
             context.set_process_property(output_key, results)
@@ -411,7 +436,8 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
         suggestion: dict[str, Any],
         existing_workflows: dict[str, str],
         system_prompt: str,
-    ) -> str | None:
+        context: ExecutionContext,
+    ) -> tuple[str | None, str | None]:
         """Create a new workflow based on a suggestion."""
         prompt = f"""Create a new workflow with the following requirements:
 
@@ -428,16 +454,9 @@ Rationale: {suggestion.get("rationale", "")}
 
         prompt += "\nCreate a complete, valid YAML workflow definition."
 
-        response = await provider.complete(
-            messages=[
-                Message.system(system_prompt),
-                Message.user(prompt),
-            ],
-            temperature=0.7,
-            max_tokens=2000,
+        return await self._generate_workflow_yaml(
+            provider, system_prompt, prompt, temperature=0.7, context=context
         )
-
-        return self._clean_yaml_response(response.content)
 
     async def _create_workflow_from_priority(
         self,
@@ -445,7 +464,8 @@ Rationale: {suggestion.get("rationale", "")}
         priority: dict[str, Any],
         existing_workflows: dict[str, str],
         system_prompt: str,
-    ) -> str | None:
+        context: ExecutionContext,
+    ) -> tuple[str | None, str | None]:
         """Create a workflow based on an improvement priority."""
         prompt = f"""Create a new workflow to address this improvement priority:
 
@@ -462,16 +482,9 @@ Rationale: {priority.get("rationale", "")}
 
         prompt += "\nCreate a complete, valid YAML workflow definition."
 
-        response = await provider.complete(
-            messages=[
-                Message.system(system_prompt),
-                Message.user(prompt),
-            ],
-            temperature=0.7,
-            max_tokens=2000,
+        return await self._generate_workflow_yaml(
+            provider, system_prompt, prompt, temperature=0.7, context=context
         )
-
-        return self._clean_yaml_response(response.content)
 
     async def _modify_workflow(
         self,
@@ -481,7 +494,8 @@ Rationale: {priority.get("rationale", "")}
         priority: dict[str, Any],
         evaluations: list[dict],
         system_prompt: str,
-    ) -> str | None:
+        context: ExecutionContext,
+    ) -> tuple[str | None, str | None]:
         """Modify an existing workflow based on evaluation."""
         # Find the specific evaluation for this workflow
         workflow_eval = None
@@ -515,37 +529,108 @@ Evaluation findings:
 Provide the complete modified YAML workflow. Keep what works, fix what doesn't.
 Maintain the same name and general purpose, but improve the implementation."""
 
-        response = await provider.complete(
-            messages=[
-                Message.system(system_prompt),
-                Message.user(prompt),
-            ],
-            temperature=0.5,
-            max_tokens=2000,
+        return await self._generate_workflow_yaml(
+            provider, system_prompt, prompt, temperature=0.5, context=context
         )
 
-        return self._clean_yaml_response(response.content)
-
     def _clean_yaml_response(self, content: str | None) -> str | None:
-        """Clean YAML from LLM response."""
+        """Strip markdown code fences from an LLM response.
+
+        Tolerates an unterminated fence (a symptom of truncation) by taking
+        everything after the opening fence; validation then rejects it.
+        """
         if not content:
             return None
 
-        # Remove markdown code blocks
-        if "```yaml" in content:
-            start = content.index("```yaml") + 7
-            end = content.index("```", start)
-            content = content[start:end].strip()
-        elif "```yml" in content:
-            start = content.index("```yml") + 6
-            end = content.index("```", start)
-            content = content[start:end].strip()
-        elif "```" in content:
-            start = content.index("```") + 3
-            end = content.index("```", start)
-            content = content[start:end].strip()
+        for fence in ("```yaml", "```yml", "```"):
+            start = content.find(fence)
+            if start == -1:
+                continue
+            start += len(fence)
+            end = content.find("```", start)
+            content = content[start:] if end == -1 else content[start:end]
+            break
 
-        return content.strip()
+        return content.strip() or None
+
+    async def _generate_workflow_yaml(
+        self,
+        provider,
+        system_prompt: str,
+        prompt: str,
+        temperature: float,
+        context: ExecutionContext,
+    ) -> tuple[str | None, str | None]:
+        """Ask the LLM for a workflow and validate it.
+
+        Retries once with double the token budget when the response is
+        truncated. Returns ``(yaml, None)`` on success or ``(None, reason)``
+        when the output must not be saved.
+        """
+        messages = [Message.system(system_prompt), Message.user(prompt)]
+        max_tokens = GENERATED_WORKFLOW_MAX_TOKENS
+        response = None
+        for attempt in range(1 + TRUNCATION_RETRIES):
+            try:
+                response = await provider.complete(
+                    messages=messages, temperature=temperature, max_tokens=max_tokens
+                )
+            except Exception as e:
+                return None, f"LLM call failed: {e}"
+            if response.finish_reason not in TRUNCATED_FINISH_REASONS:
+                break
+            logger.warning(
+                "workflow_optimizer: LLM output truncated at max_tokens=%d (attempt %d)",
+                max_tokens,
+                attempt + 1,
+            )
+            max_tokens *= 2
+
+        yaml_content = self._clean_yaml_response(response.content)
+        error = self._validate_workflow_yaml(response, yaml_content, context)
+        if error:
+            return None, error
+        return yaml_content, None
+
+    def _validate_workflow_yaml(
+        self, response: LLMResponse, yaml_content: str | None, context: ExecutionContext
+    ) -> str | None:
+        """Return why a generated workflow is unusable, or None if it is valid.
+
+        Uses the same loader as the workflow library, then the shared generator
+        checks (truncation, ``validate_definition``), then the action registry.
+        """
+        if not yaml_content:
+            return "LLM returned no workflow YAML"
+        try:
+            definition = load_definition_from_yaml(yaml_content)
+        except Exception as e:
+            if response.finish_reason in TRUNCATED_FINISH_REASONS:
+                return f"LLM output was truncated (hit max_tokens): {e}"
+            return f"Invalid workflow YAML: {e}"
+
+        problem = check_generated_workflow(response, definition)
+        if problem:
+            return problem
+
+        registry = getattr(getattr(context, "engine", None), "actions", None)
+        if registry is not None:
+            unknown = sorted(
+                {
+                    t.action
+                    for t in definition.tasks.values()
+                    if t.action and not registry.has_action(t.action)
+                }
+            )
+            if unknown:
+                return f"Unregistered action(s): {', '.join(unknown)}"
+        return None
+
+    @staticmethod
+    def _record_failure(results: dict[str, Any], change_type: str, name: str, reason: str):
+        """Record a rejected change so it is reported but never claimed as made."""
+        logger.warning("workflow_optimizer rejected %s of %r: %s", change_type, name, reason)
+        results["failed_changes"].append({"type": change_type, "workflow": name, "reason": reason})
 
     def _save_workflow(self, library_path: str, name: str, yaml_content: str) -> None:
         """Save a workflow to the library."""

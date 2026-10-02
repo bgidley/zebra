@@ -604,6 +604,231 @@ class TestWorkflowOptimizerAction:
         assert "opt_result" in mock_context.process.properties
 
 
+class TestWorkflowOptimizerValidation:
+    """The optimizer must never save or claim truncated/invalid workflows (#128)."""
+
+    # A real prod failure shape: cut off mid-string inside a task property.
+    _TRUNCATED_YAML = _SIMPLE_YAML.replace(
+        'prompt: "{{goal}}"', 'prompt: "Calculate the FIRE number for {{goa'
+    )
+    _BAD_ROUTING_YAML = _SIMPLE_YAML + "routings:\n  - from: step1\n    to: missing_task\n"
+    _UNKNOWN_ACTION_YAML = _SIMPLE_YAML.replace("action: llm_call", "action: no_such_action")
+
+    @staticmethod
+    def _response(content: str, finish_reason: str = "end_turn") -> LLMResponse:
+        return LLMResponse(
+            content=content,
+            tool_calls=None,
+            finish_reason=finish_reason,
+            usage=TokenUsage(input_tokens=10, output_tokens=20),
+            model="test-model",
+        )
+
+    def _setup(self, mock_task, mock_context, tmp_path, responses, evaluation):
+        provider = MagicMock()
+        provider.complete = AsyncMock(side_effect=responses)
+        mock_context.process.properties["__llm_provider__"] = provider
+        mock_context.engine.actions.has_action = MagicMock(
+            side_effect=lambda name: name in {"llm_call"}
+        )
+        mock_task.properties = {
+            "evaluation": evaluation,
+            "existing_workflows": {"FIRE Retirement Calculator": _SIMPLE_YAML},
+            "dry_run": False,
+            "workflow_library_path": str(tmp_path),
+        }
+        return provider
+
+    @staticmethod
+    def _fix_evaluation() -> dict:
+        return {
+            "improvement_priorities": [
+                {
+                    "type": "fix",
+                    "target": "FIRE Retirement Calculator",
+                    "action": "fix root cause",
+                    "rationale": "fails",
+                }
+            ],
+            "new_workflow_suggestions": [],
+            "workflow_evaluations": [],
+        }
+
+    async def test_truncated_twice_is_rejected_and_not_saved(
+        self, mock_task, mock_context, tmp_path
+    ):
+        from zebra_tasks.agent.creator import GENERATED_WORKFLOW_MAX_TOKENS
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        provider = self._setup(
+            mock_task,
+            mock_context,
+            tmp_path,
+            [
+                self._response(self._TRUNCATED_YAML, "max_tokens"),
+                self._response(self._TRUNCATED_YAML, "max_tokens"),
+            ],
+            self._fix_evaluation(),
+        )
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.output["changes_made"] == []
+        assert result.output["modified_workflows"] == []
+        failed = result.output["failed_changes"]
+        assert len(failed) == 1
+        assert failed[0]["workflow"] == "FIRE Retirement Calculator"
+        assert failed[0]["type"] == "modify"
+        assert "truncated" in failed[0]["reason"]
+        assert list(tmp_path.iterdir()) == []
+        budgets = [c.kwargs["max_tokens"] for c in provider.complete.call_args_list]
+        assert budgets == [GENERATED_WORKFLOW_MAX_TOKENS, GENERATED_WORKFLOW_MAX_TOKENS * 2]
+
+    async def test_truncated_then_complete_retry_is_saved(self, mock_task, mock_context, tmp_path):
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        provider = self._setup(
+            mock_task,
+            mock_context,
+            tmp_path,
+            [
+                self._response(self._TRUNCATED_YAML, "max_tokens"),
+                self._response(_SIMPLE_YAML, "end_turn"),
+            ],
+            self._fix_evaluation(),
+        )
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert provider.complete.await_count == 2
+        assert result.output["failed_changes"] == []
+        assert [c["workflow"] for c in result.output["changes_made"]] == [
+            "FIRE Retirement Calculator"
+        ]
+        assert len(list(tmp_path.glob("*.yaml"))) == 1
+
+    async def test_structurally_invalid_yaml_is_rejected(self, mock_task, mock_context, tmp_path):
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        self._setup(
+            mock_task,
+            mock_context,
+            tmp_path,
+            [self._response(self._BAD_ROUTING_YAML)],
+            self._fix_evaluation(),
+        )
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert result.output["changes_made"] == []
+        failed = result.output["failed_changes"]
+        assert len(failed) == 1
+        assert "missing_task" in failed[0]["reason"]
+        assert list(tmp_path.iterdir()) == []
+
+    async def test_unparseable_yaml_is_rejected(self, mock_task, mock_context, tmp_path):
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        # Truncated mid-string but provider did not report max_tokens: YAML parse fails.
+        self._setup(
+            mock_task,
+            mock_context,
+            tmp_path,
+            [self._response(self._TRUNCATED_YAML)],
+            self._fix_evaluation(),
+        )
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert result.output["changes_made"] == []
+        assert "Invalid workflow YAML" in result.output["failed_changes"][0]["reason"]
+        assert list(tmp_path.iterdir()) == []
+
+    async def test_workflow_without_tasks_is_rejected(self, mock_task, mock_context, tmp_path):
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        self._setup(
+            mock_task,
+            mock_context,
+            tmp_path,
+            [self._response("name: Empty\ndescription: nothing\ntasks: {}\n")],
+            self._fix_evaluation(),
+        )
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert result.output["changes_made"] == []
+        assert "At least one task" in result.output["failed_changes"][0]["reason"]
+        assert list(tmp_path.iterdir()) == []
+
+    async def test_unregistered_action_is_rejected(self, mock_task, mock_context, tmp_path):
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        self._setup(
+            mock_task,
+            mock_context,
+            tmp_path,
+            [self._response(self._UNKNOWN_ACTION_YAML)],
+            self._fix_evaluation(),
+        )
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert result.output["changes_made"] == []
+        assert "no_such_action" in result.output["failed_changes"][0]["reason"]
+        assert list(tmp_path.iterdir()) == []
+
+    async def test_valid_and_invalid_changes_reported_separately(
+        self, mock_task, mock_context, tmp_path
+    ):
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        evaluation = self._fix_evaluation()
+        evaluation["new_workflow_suggestions"] = [
+            {"name": "New Workflow", "description": "x", "use_case": "y", "rationale": "z"}
+        ]
+        self._setup(
+            mock_task,
+            mock_context,
+            tmp_path,
+            [
+                self._response(_SIMPLE_YAML),  # new workflow: valid
+                self._response("```yaml\n" + self._BAD_ROUTING_YAML),  # unterminated fence
+            ],
+            evaluation,
+        )
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.output["changes_made"] == [
+            {"type": "create", "workflow": "New Workflow", "description": "x"}
+        ]
+        assert [w["name"] for w in result.output["new_workflows"]] == ["New Workflow"]
+        assert result.output["modified_workflows"] == []
+        assert [f["workflow"] for f in result.output["failed_changes"]] == [
+            "FIRE Retirement Calculator"
+        ]
+        assert [p.name for p in tmp_path.glob("*.yaml")] == ["new_workflow.yaml"]
+
+    async def test_llm_error_recorded_as_failed_change(self, mock_task, mock_context, tmp_path):
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        self._setup(
+            mock_task,
+            mock_context,
+            tmp_path,
+            [RuntimeError("max_tokens too large for model")],
+            self._fix_evaluation(),
+        )
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert result.success is True
+        assert "LLM call failed" in result.output["failed_changes"][0]["reason"]
+
+
 # ===========================================================================
 # WorkflowVariantCreatorAction
 # ===========================================================================

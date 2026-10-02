@@ -2,7 +2,7 @@ name: "Dream Cycle"
 description: "Self-improvement cycle that analyzes performance, evaluates workflows, and optimizes the system"
 tags: ["system", "optimization", "self-improvement", "dream"]
 use_when: "Use this workflow periodically (e.g., daily) to review and improve the agent's capabilities"
-version: 2
+version: 3
 first_task: analyze_metrics
 
 tasks:
@@ -67,14 +67,18 @@ tasks:
         Key issues: {{evaluation.overall_assessment.key_issues}}
 
         ### Optimization Results
-        Changes made: {{optimization_results.changes_made}}
+        Changes made (validated and saved): {{optimization_results.changes_made}}
         New workflows created: {{optimization_results.new_workflows}}
         Modified workflows: {{optimization_results.modified_workflows}}
+        Failed changes (rejected, NOT saved): {{optimization_results.failed_changes}}
 
         Provide a brief summary (3-5 sentences) of:
         1. Current system health
-        2. Key improvements made
-        3. Recommendations for future focus
+        2. Key improvements made — only those listed under "Changes made"
+        3. Any failed changes and why they were rejected
+        4. Recommendations for future focus
+
+        Never describe a failed change as applied or as having fixed anything.
       temperature: 0.5
       max_tokens: 500
       output_key: dream_summary
