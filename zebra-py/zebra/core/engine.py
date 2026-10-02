@@ -358,7 +358,14 @@ class WorkflowEngine:
             ]
 
             if not active_tasks:
-                await self._complete_process(process)
+                # A FAILED task never routes, so if one remains the workflow did
+                # not finish its work — fail the process rather than complete it
+                # (#131). Handled failures route via next_route and complete.
+                failed_task = next((t for t in tasks if t.state == TaskState.FAILED), None)
+                if failed_task is not None:
+                    await self._fail_process_for_task(process, failed_task)
+                else:
+                    await self._complete_process(process)
 
         return all_created_tasks
 
@@ -705,6 +712,34 @@ class WorkflowEngine:
         )
         await self.store.save_process(process)
         logger.info(f"Process {process.id} completed")
+
+    async def _fail_process_for_task(self, process: ProcessInstance, task: TaskInstance) -> None:
+        """Mark a process FAILED because *task* failed with no route onward.
+
+        Sets ``__error__`` to the task's error and ``__failed_task__`` to its
+        definition id. The destruct action is not run (mirrors ``fail_process``).
+        """
+        error = task.error or f"Task '{task.task_definition_id}' failed"
+        now = datetime.now(UTC)
+        props = dict(process.properties)
+        props["__error__"] = error
+        props["__failed_task__"] = task.task_definition_id
+        process = process.model_copy(
+            update={
+                "state": ProcessState.FAILED,
+                "properties": props,
+                "updated_at": now,
+                "completed_at": now,
+            }
+        )
+        await self.store.save_process(process)
+        logger.warning(
+            "Process %s failed: task %s (%s) failed: %s",
+            process.id,
+            task.id,
+            task.task_definition_id,
+            error,
+        )
 
     async def _run_process_construct(
         self, process: ProcessInstance, definition: ProcessDefinition
