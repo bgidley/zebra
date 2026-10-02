@@ -65,3 +65,9 @@ class TestVersionEndpoint:
         response = client.get("/api/version/")
 
         assert response.status_code == 200
+
+    def test_not_cacheable(self):
+        # Browsers (notably Safari) must not reuse a stale version after a deploy
+        response = Client().get("/api/version/")
+
+        assert "no-store" in response["Cache-Control"]

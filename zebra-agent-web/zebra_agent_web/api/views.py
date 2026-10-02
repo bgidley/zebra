@@ -14,6 +14,7 @@ from datetime import UTC
 from asgiref.sync import async_to_sync, sync_to_async
 from django.contrib.auth.decorators import login_not_required
 from django.http import JsonResponse
+from django.views.decorators.cache import never_cache
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -1145,6 +1146,7 @@ def delete_user_data(request):
 
 
 @login_not_required
+@never_cache
 def version_info(request):
     """Return git version metadata baked into the image at build time."""
     return JsonResponse(_VERSION)
