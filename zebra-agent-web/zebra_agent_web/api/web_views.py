@@ -72,6 +72,75 @@ def setup_view(request):
 # Dashboard
 # =============================================================================
 
+RUNNING_ACTIVITIES_LIMIT = 10
+
+
+async def _running_activities(store, limit: int = RUNNING_ACTIVITIES_LIMIT) -> list[dict]:
+    """Summarise currently-running goals for the dashboard (#126).
+
+    Every RUNNING process (including sub-processes) is grouped under its
+    top-level root process. For each root we report the goal, workflow,
+    start time, cost so far, the tasks currently in flight across the whole
+    process tree, and whether any of them is a human task awaiting input.
+
+    Returns:
+        One dict per running root process, oldest first, capped at ``limit``.
+    """
+    from zebra.core.models import TaskState
+
+    running = await store.get_running_processes()
+    by_id = {p.id: p for p in running}
+
+    def _root_id(process) -> str:
+        seen = set()
+        while process.parent_process_id in by_id and process.id not in seen:
+            seen.add(process.id)
+            process = by_id[process.parent_process_id]
+        return process.id
+
+    trees: dict[str, list] = {}
+    for process in running:
+        trees.setdefault(_root_id(process), []).append(process)
+
+    # Only goals whose root is itself running and top-level are shown; a
+    # running child of a non-running parent is stale state, not an activity.
+    roots = sorted(
+        (by_id[rid] for rid in trees if not by_id[rid].parent_process_id),
+        key=lambda p: p.created_at,
+    )[:limit]
+
+    activities = []
+    for root in roots:
+        props = root.properties or {}
+        tasks = []
+        human_task_id = None
+        for process in trees[root.id]:
+            definition = await store.load_definition(process.definition_id)
+            for task in await store.load_tasks_for_process(process.id):
+                if task.state not in (TaskState.READY, TaskState.RUNNING):
+                    continue
+                task_def = definition.tasks.get(task.task_definition_id) if definition else None
+                is_human = bool(task_def and not task_def.auto and task.state == TaskState.READY)
+                if is_human and human_task_id is None:
+                    human_task_id = task.id
+                tasks.append(task_def.name if task_def else task.task_definition_id)
+
+        goal = props.get("goal") or root.definition_id
+        activities.append(
+            {
+                "process_id": root.id,
+                "run_id": props.get("run_id"),
+                "goal": goal[:80] + "..." if len(goal) > 80 else goal,
+                "workflow_name": props.get("__workflow_name__") or root.definition_id,
+                "started_at": root.created_at,
+                "cost": float(props.get("__total_cost__") or 0.0),
+                "current_tasks": list(dict.fromkeys(tasks)),
+                "awaiting_human": human_task_id is not None,
+                "human_task_id": human_task_id,
+            }
+        )
+    return activities
+
 
 async def dashboard(request):
     """Agent dashboard with overview of workflows and recent activity."""
@@ -119,10 +188,20 @@ async def dashboard(request):
         except RuntimeError:
             pass  # Trust store not initialized
 
+    # Running activities (#126) — goals currently executing, not just finished runs
+    running_activities = []
+    try:
+        await engine.ensure_initialized()
+        running_activities = await _running_activities(engine.get_store())
+    except Exception:
+        logger.warning("Could not load running activities for dashboard", exc_info=True)
+
     context = {
         **_identity_context(),
         "workflows_count": len(workflows),
         "total_runs": total_runs,
+        "running_count": len(running_activities),
+        "running_activities": running_activities,
         "success_rate": f"{success_rate:.0%}",
         "budget": budget_status,
         "trust_levels": trust_levels,

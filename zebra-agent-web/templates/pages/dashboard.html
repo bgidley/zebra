@@ -31,7 +31,8 @@
     </div>
     
     <!-- Stats Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {% include "components/stat_card.html" with title="Running" value=running_count href="/activity/" color="amber" icon="play" %}
         {% include "components/stat_card.html" with title="Workflows" value=workflows_count href="/workflows/" color="indigo" icon="library" %}
         {% include "components/stat_card.html" with title="Total Runs" value=total_runs href="/activity/?show_completed=true" color="blue" icon="play" %}
         <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
@@ -46,6 +47,43 @@
                     </svg>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Running Activities (#126) -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700" data-testid="running-activities">
+        <div class="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-white">Running Activities</h2>
+            <a href="/activity/" class="text-sm text-indigo-400 hover:text-indigo-300">View all</a>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for a in running_activities %}
+            <div class="flex items-center justify-between px-6 py-4 hover:bg-gray-750">
+                <a href="{% if a.run_id %}/runs/{{ a.run_id }}/{% else %}/activity/{% endif %}" class="min-w-0 flex-1">
+                    <p class="text-white font-medium truncate">{{ a.goal }}</p>
+                    <p class="text-sm text-gray-400 truncate">
+                        {{ a.workflow_name }}
+                        {% if a.current_tasks %}&middot; {{ a.current_tasks|join:", " }}{% endif %}
+                    </p>
+                </a>
+                <div class="ml-4 flex items-center gap-3 shrink-0 text-right">
+                    {% if a.awaiting_human %}
+                    <a href="/tasks/{{ a.human_task_id }}/"
+                       class="px-2 py-1 text-xs font-medium rounded bg-amber-900 text-amber-300 hover:bg-amber-800">awaiting input</a>
+                    {% else %}
+                    <span class="px-2 py-1 text-xs font-medium rounded bg-blue-900 text-blue-300">running</span>
+                    {% endif %}
+                    <div>
+                        <p class="text-sm text-white">{{ a.started_at|timesince }}</p>
+                        <p class="text-xs text-gray-400">${{ a.cost|floatformat:4 }}</p>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="px-6 py-8 text-center text-gray-500">
+                <p>Nothing running</p>
+            </div>
+            {% endfor %}
         </div>
     </div>
 
