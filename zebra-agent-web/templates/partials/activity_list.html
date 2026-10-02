@@ -5,7 +5,7 @@ Context:
   groups - list of activity groups, each with:
     run_id, goal, workflow_name, started_at, completed_at, success,
     tokens_used, user_rating, is_running, is_queued, is_stale,
-    section, tasks, has_human_tasks, process_ids
+    section, tasks, has_human_tasks, human_task_ids, process_ids
   human_only - boolean, current filter state
   show_completed - boolean, current filter state
   group_by - "status" or "date"
@@ -126,8 +126,10 @@ Context:
                             {{ group.tasks|length }} task{{ group.tasks|length|pluralize }}
                         </button>
                         {% endif %}
-                        {% if group.has_human_tasks %}
-                        <span class="flex-shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50">input needed</span>
+                        {% if group.human_task_ids %}
+                        <a href="{% url 'human_task_form' task_id=group.human_task_ids.0 %}"
+                           title="Open the input form"
+                           class="flex-shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 hover:bg-amber-800/60 hover:text-amber-200 transition-colors">input needed{% if group.human_task_ids|length > 1 %} ({{ group.human_task_ids|length }}){% endif %}</a>
                         {% endif %}
                     </div>
                 </td>
@@ -146,6 +148,10 @@ Context:
                 {% comment %} Actions {% endcomment %}
                 <td class="px-3 py-2">
                     <div class="flex items-center gap-2">
+                        {% if group.human_task_ids %}
+                        <a href="{% url 'human_task_form' task_id=group.human_task_ids.0 %}"
+                           class="text-amber-300 hover:text-amber-200 text-xs font-medium whitespace-nowrap">Provide input</a>
+                        {% endif %}
                         {% if group.run_id %}
                         <a href="/runs/{{ group.run_id }}/"
                            class="text-indigo-400 hover:text-indigo-300 text-xs">Details</a>
