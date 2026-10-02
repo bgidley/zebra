@@ -66,7 +66,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 ### State machines
 
-- **Process lifecycle**: `CREATED → RUNNING → COMPLETE` (with `PAUSED`, `FAILED`).
+- **Process lifecycle**: `CREATED → RUNNING → COMPLETE` (with `PAUSED`, `FAILED`). When no active tasks remain and any task is `FAILED` (returned `TaskResult.fail` / raised, so never routed), the process ends `FAILED` with `__error__` = the task's error and `__failed_task__` = its definition id (#131); only an all-`COMPLETE` drain ends `COMPLETE`. Handled failures (success + `next_route`) route and complete normally.
 - **Task lifecycle**: `PENDING → AWAITING_SYNC → READY → RUNNING → COMPLETE` / `FAILED`.
 - **Flow of Execution (FOE)**: tracks parallel branches. Serial routings inherit the parent FOE; parallel routings fork new FOEs. Synchronised (`synchronized: true`) tasks wait for all incoming FOEs via backward-reachability.
 

@@ -122,8 +122,9 @@ class TestActionNotFoundInRun:
 
         # Task should have failed; check process state
         process = await engine.store.load_process(process.id)
-        # Process should complete (task failed with no routing)
-        assert process.state in {ProcessState.COMPLETE, ProcessState.FAILED, ProcessState.RUNNING}
+        # Task failed with no routing onward -> process FAILED (#131)
+        assert process.state == ProcessState.FAILED
+        assert "not found" in process.properties["__error__"]
 
 
 class TestActionExceptionInRun:
@@ -152,9 +153,10 @@ class TestActionExceptionInRun:
         process = await engine.create_process(definition)
         await engine.start_process(process.id)
 
-        # Process should complete after task failure
+        # An unhandled task failure fails the process (#131)
         process = await engine.store.load_process(process.id)
-        assert process.state == ProcessState.COMPLETE
+        assert process.state == ProcessState.FAILED
+        assert process.properties["__error__"] == "Action failed!"
 
 
 class TestConditionNotFound:
@@ -822,9 +824,10 @@ class TestCompleteTaskWithFailure:
         result = TaskResult(success=False, error="Something went wrong")
         await engine.complete_task(task.id, result)
 
-        # Process should complete (no more active tasks)
+        # A failed task with no route onward fails the process (#131)
         process = await engine.store.load_process(process.id)
-        assert process.state == ProcessState.COMPLETE
+        assert process.state == ProcessState.FAILED
+        assert process.properties["__error__"] == "Something went wrong"
 
 
 class TestResumeWithAutoTasks:
