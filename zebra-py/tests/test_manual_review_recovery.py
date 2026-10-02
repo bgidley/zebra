@@ -190,3 +190,18 @@ async def test_recovery_without_cap_keeps_flagging(engine, definition):
     assert flagged.execution_attempt == 5
     assert flagged.properties[MANUAL_REVIEW_FLAG] is True
     assert (await engine.store.load_process(process.id)).state == ProcessState.RUNNING
+
+
+async def test_retry_does_not_reset_interruption_count(engine, definition):
+    """The cap is cumulative: a retried task interrupted again still counts earlier restarts."""
+    process, task = await _interrupted_process(engine, definition)
+    await engine.resume_all_processes(max_interrupted_attempts=3)
+    await engine.resume_all_processes(max_interrupted_attempts=3)
+
+    # Human retries, and the re-run is interrupted again
+    with pytest.raises(SimulatedCrash):
+        await engine.retry_task(task.id)
+    assert (await engine.store.load_task(task.id)).execution_attempt == 2
+
+    assert await engine.resume_all_processes(max_interrupted_attempts=3) == []
+    assert (await engine.store.load_process(process.id)).state == ProcessState.FAILED

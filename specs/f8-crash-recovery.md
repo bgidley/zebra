@@ -64,7 +64,8 @@ Flagged tasks stay RUNNING (the process cannot progress) until a human acts:
 - **Web helper** `zebra_agent_web/api/manual_review.py`: `find_review_tasks(store, run_id=None)`
   (resolves each task's run by walking up the process tree), `retry_review_task` (reset
   synchronously via `retry_task(execute=False)`, re-execute `transition_task` on a background
-  thread), `fail_review_task` (fails the task's process **and all non-terminal ancestors**, since a
+  thread; a per-server in-flight set rejects a concurrent second retry of the same task with
+  409), `fail_review_task` (fails the task's process **and all non-terminal ancestors**, since a
   parent's `execute_workflow` task would otherwise wait forever).
 - **UI**: activity view shows a "review needed" badge plus an always-visible Retry / Fail row for
   running groups; run detail (`run_detail.html` and `run_pending.html`) shows the same panel

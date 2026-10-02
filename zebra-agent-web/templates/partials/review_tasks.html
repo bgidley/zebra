@@ -23,10 +23,12 @@ Context:
         <div class="flex items-center gap-2">
             <button hx-post="{% url 'review_task_retry' task_id=t.id %}"
                     hx-target="closest [data-review-task]" hx-swap="innerHTML"
+                    hx-disabled-elt="this"
                     hx-confirm="Re-run '{{ t.task_name }}'? Its side effects may happen twice."
                     class="px-2 py-0.5 text-xs font-medium rounded bg-indigo-900/80 text-indigo-200 hover:bg-indigo-800 transition-colors">Retry</button>
             <button hx-post="{% url 'review_task_fail' task_id=t.id %}"
                     hx-target="closest [data-review-task]" hx-swap="innerHTML"
+                    hx-disabled-elt="this"
                     hx-confirm="Fail this run?"
                     class="px-2 py-0.5 text-xs font-medium rounded bg-red-900/80 text-red-300 hover:bg-red-800 transition-colors">Fail</button>
         </div>

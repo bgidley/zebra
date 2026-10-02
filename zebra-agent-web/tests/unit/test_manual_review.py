@@ -295,3 +295,27 @@ def test_recovery_cap_setting_default():
     from django.conf import settings
 
     assert settings.ZEBRA_AGENT_SETTINGS["RECOVERY_MAX_INTERRUPTED_ATTEMPTS"] == 3
+
+
+async def test_concurrent_retry_is_rejected(wf_engine, background, monkeypatch):
+    _, task = await _flagged(wf_engine)
+    # Simulate another request's retry of this task still being in flight
+    monkeypatch.setattr(manual_review, "_in_flight", {task.id})
+
+    from zebra.core.exceptions import InvalidStateTransitionError
+
+    with pytest.raises(InvalidStateTransitionError, match="already being retried"):
+        await manual_review.retry_review_task(wf_engine, task.id)
+
+    still_flagged = await wf_engine.store.load_task(task.id)
+    assert still_flagged.properties[MANUAL_REVIEW_FLAG] is True
+    assert background == []
+
+
+async def test_failed_reset_releases_in_flight_guard(wf_engine, background):
+    from zebra.core.exceptions import TaskNotFoundError
+
+    with pytest.raises(TaskNotFoundError):
+        await manual_review.retry_review_task(wf_engine, "missing-task")
+
+    assert "missing-task" not in manual_review._in_flight

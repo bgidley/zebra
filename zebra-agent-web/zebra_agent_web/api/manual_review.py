@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 
 _TERMINAL = {ProcessState.COMPLETE, ProcessState.FAILED}
 
+# Task IDs whose retry is in progress in this server process (shared by the
+# ASGI loop and DRF worker threads, hence the lock).
+_in_flight: set[str] = set()
+_in_flight_guard = threading.Lock()
+
 
 async def find_review_tasks(store: StateStore, run_id: str | None = None) -> list[dict]:
     """Return tasks flagged for manual review, optionally only those of *run_id*.
@@ -75,9 +80,19 @@ async def retry_review_task(wf_engine: WorkflowEngine, task_id: str) -> TaskInst
     """Reset a flagged task to READY and re-run it in the background.
 
     The reset happens synchronously so callers get errors immediately; the
-    (possibly long) re-execution runs on a background thread.
+    (possibly long) re-execution runs on a background thread. A task already
+    being retried by this server is rejected, so a double-click can't run its
+    side effects twice.
     """
-    task = await wf_engine.retry_task(task_id, execute=False)
+    with _in_flight_guard:
+        if task_id in _in_flight:
+            raise InvalidStateTransitionError(f"Task {task_id} is already being retried")
+        _in_flight.add(task_id)
+    try:
+        task = await wf_engine.retry_task(task_id, execute=False)
+    except BaseException:
+        _in_flight.discard(task_id)
+        raise
     _run_in_background(wf_engine, task.id)
     return task
 
@@ -127,5 +142,7 @@ def _run_in_background(wf_engine: WorkflowEngine, task_id: str) -> None:
             asyncio.run(wf_engine.transition_task(task_id))
         except Exception:
             logger.exception("Background retry of task %s failed", task_id)
+        finally:
+            _in_flight.discard(task_id)
 
     threading.Thread(target=_thread, daemon=True, name=f"retry-{task_id[:8]}").start()

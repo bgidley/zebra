@@ -9,7 +9,9 @@ it instead of re-running it. The flag had no consumer.
 - **Retry is an engine method** (`retry_task`) so the state transition (RUNNING → READY, flag
   cleared) respects the state machine and is reusable outside the web app. `execute=False` lets
   the web layer reset synchronously (errors reported immediately as 404/409) and re-execute on a
-  background thread, since the task's action may run for minutes.
+  background thread, since the task's action may run for minutes. An in-flight set (thread-locked)
+  rejects a second retry of the same task while one is running, so a double-click can't run side
+  effects twice; buttons also use `hx-disabled-elt`.
 - **Fail ends the run**: the web/API Fail action calls the existing `fail_process` on the task's
   process and every non-terminal ancestor. Failing only the child would leave the parent's
   `execute_workflow` task waiting forever. No new engine task-level fail — avoids overlapping #131.
