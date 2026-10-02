@@ -563,7 +563,7 @@ POST /api/tasks/<task_id>/complete/
 
 | URL | View | Purpose |
 |-----|------|---------|
-| `/` | `dashboard` | Main dashboard (includes budget status card) |
+| `/` | `dashboard` | Main dashboard (running activities panel, budget status card) |
 | `/run/` | `run_goal_form` | Goal input form (includes priority/deadline/queue options) |
 | `/run/execute/` | `run_goal_execute` | Start goal execution |
 | `/run/queue/` | `run_goal_queue` | Queue goal for deferred daemon execution |

@@ -257,7 +257,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 
 | Path | Purpose |
 |---|---|
-| `/` | Dashboard: budget, workflow count, success rate |
+| `/` | Dashboard: running activities (in-flight goals, current tasks, awaiting-input flag, cost — #126), budget, workflow count, success rate |
 | `/run/` | Goal submission (priority, deadline, queue, model) |
 | `/activity/` | Recent runs (handles orphaned processes) |
 | `/runs/<id>/` | Run detail with SVG workflow diagram |
