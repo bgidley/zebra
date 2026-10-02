@@ -6,6 +6,7 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.creator import GENERATED_WORKFLOW_MAX_TOKENS, check_generated_workflow
 from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
@@ -185,7 +186,7 @@ class WorkflowVariantCreatorAction(TaskAction):
                     Message.user(prompt),
                 ],
                 temperature=0.5,
-                max_tokens=2500,
+                max_tokens=GENERATED_WORKFLOW_MAX_TOKENS,
             )
 
             yaml_content = self._extract_yaml(response.content or "")
@@ -194,6 +195,10 @@ class WorkflowVariantCreatorAction(TaskAction):
                 definition = load_definition_from_yaml(yaml_content)
             except Exception as e:
                 return TaskResult.fail(f"Generated invalid variant YAML: {e}")
+
+            problem = check_generated_workflow(response, definition)
+            if problem:
+                return TaskResult.fail(f"Generated invalid variant: {problem}")
 
             # Save to library
             if library is not None:

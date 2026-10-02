@@ -2,13 +2,33 @@
 
 import re
 
-from zebra.core.models import TaskInstance, TaskResult
-from zebra.definitions.loader import load_definition_from_yaml
+from zebra.core.models import ProcessDefinition, TaskInstance, TaskResult
+from zebra.definitions.loader import load_definition_from_yaml, validate_definition
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import with_previous_run
-from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.base import LLMResponse, Message
 from zebra_tasks.llm.providers import get_provider
+
+# Generated workflows embed JSON Schemas for human forms, so they are long.
+GENERATED_WORKFLOW_MAX_TOKENS = 8000
+
+_TRUNCATED_FINISH_REASONS = {"max_tokens", "length"}
+
+
+def check_generated_workflow(response: LLMResponse, definition: ProcessDefinition) -> str | None:
+    """Return an error if a generated workflow is truncated or structurally broken.
+
+    A truncated YAML response can still parse (e.g. the ``routings`` block is
+    cut off), yielding a definition whose first task has no outbound routes —
+    the process then completes after one task. Catch that before it runs.
+    """
+    if response.finish_reason in _TRUNCATED_FINISH_REASONS:
+        return "LLM output was truncated (hit max_tokens)"
+    errors = validate_definition(definition)
+    if errors:
+        return "; ".join(errors)
+    return None
 
 
 class WorkflowCreatorAction(TaskAction):
@@ -272,7 +292,7 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
                     Message.user(prompt),
                 ],
                 temperature=0.7,  # Higher temperature for creativity
-                max_tokens=2000,
+                max_tokens=GENERATED_WORKFLOW_MAX_TOKENS,
             )
 
             yaml_content = response.content or ""
@@ -285,6 +305,10 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
                 definition = load_definition_from_yaml(yaml_content)
             except Exception as e:
                 return TaskResult.fail(f"Generated invalid workflow YAML: {e}")
+
+            problem = check_generated_workflow(response, definition)
+            if problem:
+                return TaskResult.fail(f"Generated invalid workflow: {problem}")
 
             # Add workflow to library if available (via context.extras - engine-level injection)
             library = context.extras.get("__workflow_library__")
