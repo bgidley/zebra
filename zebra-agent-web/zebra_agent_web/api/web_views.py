@@ -298,10 +298,8 @@ async def _previous_run_context(run_id: str | None) -> dict | None:
 async def run_goal_form(request):
     """Display the form to run a goal."""
     await agent_engine.ensure_initialized()
-    library = agent_engine.get_library()
     metrics = agent_engine.get_metrics()
 
-    workflows = await library.list_workflows()
     recent_runs = await metrics.get_completed_runs(limit=10)
 
     # "Extend" links can point at runs older than the recent list — look them up directly
@@ -310,15 +308,6 @@ async def run_goal_form(request):
         recent_runs = [extend_from_run, *recent_runs]
 
     context = {
-        "workflows": [
-            {
-                "name": w.name,
-                "description": w.description,
-                "tags": w.tags,
-                "success_rate": f"{w.success_rate:.0%}" if w.use_count > 0 else "N/A",
-            }
-            for w in workflows
-        ],
         "recent_runs": recent_runs,
         "extend_from_run": extend_from_run,
     }

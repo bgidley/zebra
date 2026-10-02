@@ -176,3 +176,17 @@ async def test_extend_link_preselects_run_older_than_recent_list(user_a, fake_ag
     context = render.call_args.args[2]
     assert context["extend_from_run"].id == "f116-old"
     assert context["recent_runs"][0].id == "f116-old"
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_run_goal_form_has_no_workflow_list(user_a, fake_agent_engine):
+    """F125: the Run Goal page no longer lists the workflow library."""
+    request = RequestFactory().get("/run/")
+    request.user = user_a
+
+    with _AsUser(user_a):
+        response = await web_views.run_goal_form(request)
+
+    assert response.status_code == 200
+    assert b"Available Workflows" not in response.content
+    fake_agent_engine.get_library.return_value.list_workflows.assert_not_called()
