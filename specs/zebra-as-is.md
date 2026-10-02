@@ -118,7 +118,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 | Subtasks | `subworkflow`, `wait_subworkflow`, `parallel_subworkflows` |
 | Filesystem | `file_read`, `file_write`, `file_copy`, `file_move`, `file_delete`, `file_search`, `file_exists`, `file_info` (9 actions) |
 | Compute | `python_exec` (sandboxed) |
-| Agent loop | `consult_memory`, `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `record_metrics`, `load_workflow_definitions`, `queue_goal` |
+| Agent loop | `consult_memory`, `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (8000) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML before saving (#122) |
 | Dream cycle | `metrics_analyzer`, `workflow_evaluator`, `workflow_optimizer` |
 | Ethics | `ethics_gate` |
 | Web (F115) | `kagi_search`, `kagi_summarize` |

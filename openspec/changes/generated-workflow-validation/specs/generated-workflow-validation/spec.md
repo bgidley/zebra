@@ -1,0 +1,21 @@
+## ADDED Requirements
+
+### Requirement: Generated workflows must not be truncated
+Workflow generator actions SHALL request at most `GENERATED_WORKFLOW_MAX_TOKENS` output tokens and SHALL fail without saving the workflow when the LLM response was cut off by the token limit.
+
+#### Scenario: LLM output hits max tokens
+- **WHEN** the generator receives a response with `finish_reason` `max_tokens` or `length`
+- **THEN** the task fails with an error mentioning truncation
+- **AND** the workflow is not added to the library
+
+### Requirement: Generated workflows must be structurally valid
+Workflow generator actions SHALL run `validate_definition` on the parsed definition and SHALL fail without saving the workflow when it reports errors.
+
+#### Scenario: Generated workflow has an orphaned task
+- **WHEN** the generated YAML parses but a non-first task has no incoming routing
+- **THEN** the task fails with the validation error
+- **AND** the workflow is not added to the library and `workflow_name` is not set
+
+#### Scenario: Generated workflow is valid
+- **WHEN** the generated YAML is complete and every task is reachable
+- **THEN** the workflow is saved to the library and selected for execution
