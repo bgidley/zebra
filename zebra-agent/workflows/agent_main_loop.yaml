@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 6
+version: 7
 first_task: consult_memory
 
 tasks:
@@ -153,6 +153,9 @@ tasks:
     action: execute_goal_workflow
     auto: true
     properties:
+      # F129: safe to re-run after crash recovery — the action re-attaches to the
+      # child process it already spawned instead of creating a duplicate.
+      idempotent: true
       workflow_name: "{{workflow_name}}"
       goal: "{{goal}}"
       timeout: 120

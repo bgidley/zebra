@@ -24,6 +24,10 @@ The daemon SHALL pass `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` (default 3).
 - **WHEN** a task is found RUNNING by recovery for the 3rd time with a cap of 3
 - **THEN** its process is FAILED and `__error__` says the task was interrupted 3 times
 
+#### Scenario: Idempotent goal execution still counts toward the cap
+- **WHEN** a goal's idempotent `execute_workflow` task (#129) is interrupted for the 3rd time with a cap of 3
+- **THEN** recovery fails the goal's process instead of re-running the task again, without spawning a duplicate child
+
 #### Scenario: No cap keeps flagging
 - **WHEN** recovery runs repeatedly without a cap
 - **THEN** the task stays RUNNING and flagged and its process stays RUNNING

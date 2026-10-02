@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from zebra.core.models import ProcessState, TaskInstance, TaskResult
+from zebra.core.models import ProcessInstance, ProcessState, TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import with_previous_run
@@ -16,6 +16,9 @@ if TYPE_CHECKING:
     from zebra_agent.metrics import TaskExecution
 
 logger = logging.getLogger(__name__)
+
+# Task property recording the child process this task spawned (F129 re-attach).
+CHILD_PROCESS_ID_KEY = "__child_process_id__"
 
 
 class ExecuteGoalWorkflowAction(TaskAction):
@@ -167,36 +170,19 @@ class ExecuteGoalWorkflowAction(TaskAction):
             return TaskResult.fail(f"Failed to load workflow: {e}")
 
         try:
-            # Prepare properties for the sub-workflow
-            # F116: a follow-up goal carries the previous run's context into the
-            # executed workflow, which only sees the goal.
-            sub_properties = {
-                "goal": with_previous_run(goal, context.process.properties),
-                "__parent_process_id__": context.process.id,
-                "__parent_task_id__": task.id,
-            }
-
-            # Copy LLM provider settings from parent
-            if "__llm_provider_name__" in context.process.properties:
-                sub_properties["__llm_provider_name__"] = context.process.properties[
-                    "__llm_provider_name__"
-                ]
-            if "__llm_model__" in context.process.properties:
-                sub_properties["__llm_model__"] = context.process.properties["__llm_model__"]
-
-            # Create sub-process
-            sub_process = await context.engine.create_process(
-                definition,
-                properties=sub_properties,
-            )
-
-            # Link as child process
-            sub_process.parent_process_id = context.process.id
-            sub_process.parent_task_id = task.id
-            await context.store.save_process(sub_process)
-
-            # Start sub-process
-            await context.engine.start_process(sub_process.id)
+            # F129: re-attach to a child spawned by an earlier, interrupted run of
+            # this task instead of creating a duplicate — makes re-running safe.
+            sub_process = await self._find_existing_child(task, context)
+            if sub_process is not None:
+                logger.info(
+                    "ExecuteGoalWorkflowAction re-attaching to child %s (state=%s)",
+                    sub_process.id,
+                    sub_process.state.value,
+                )
+                if sub_process.state == ProcessState.CREATED:
+                    await context.engine.start_process(sub_process.id)
+            else:
+                sub_process = await self._spawn_child(task, context, definition, goal)
 
             # Emit progress event: workflow starting
             callback = context.extras.get("__progress_callback__")
@@ -263,6 +249,69 @@ class ExecuteGoalWorkflowAction(TaskAction):
             }
             context.set_process_property(output_key, error_result)
             return TaskResult.fail(f"Workflow execution failed: {e}")
+
+    async def _find_existing_child(
+        self, task: TaskInstance, context: ExecutionContext
+    ) -> ProcessInstance | None:
+        """Return the child process an earlier run of this task spawned, if any.
+
+        The child id is recorded on the task (``__child_process_id__``) before the
+        child starts. It is only trusted while the child is still linked to this
+        parent process and task (``parent_process_id`` / ``parent_task_id``).
+        """
+        child_id = task.properties.get(CHILD_PROCESS_ID_KEY)
+        if not child_id:
+            return None
+        child = await context.store.load_process(child_id)
+        if child is None:
+            return None
+        if child.parent_process_id != context.process.id or child.parent_task_id != task.id:
+            logger.warning(
+                "Recorded child %s is not linked to task %s; spawning a new child",
+                child_id,
+                task.id,
+            )
+            return None
+        return child
+
+    async def _spawn_child(
+        self,
+        task: TaskInstance,
+        context: ExecutionContext,
+        definition: Any,
+        goal: str,
+    ) -> ProcessInstance:
+        """Create, link, record and start a new child process for this task."""
+        # F116: a follow-up goal carries the previous run's context into the
+        # executed workflow, which only sees the goal.
+        sub_properties = {
+            "goal": with_previous_run(goal, context.process.properties),
+            "__parent_process_id__": context.process.id,
+            "__parent_task_id__": task.id,
+        }
+
+        # Copy LLM provider settings from parent
+        if "__llm_provider_name__" in context.process.properties:
+            sub_properties["__llm_provider_name__"] = context.process.properties[
+                "__llm_provider_name__"
+            ]
+        if "__llm_model__" in context.process.properties:
+            sub_properties["__llm_model__"] = context.process.properties["__llm_model__"]
+
+        sub_process = await context.engine.create_process(definition, properties=sub_properties)
+
+        # Link as child process
+        sub_process.parent_process_id = context.process.id
+        sub_process.parent_task_id = task.id
+        await context.store.save_process(sub_process)
+
+        # F129: record the child on the task *before* starting it, so a re-run
+        # after an interruption re-attaches instead of spawning a duplicate.
+        task.properties[CHILD_PROCESS_ID_KEY] = sub_process.id
+        await context.store.save_task(task)
+
+        await context.engine.start_process(sub_process.id)
+        return sub_process
 
     async def _wait_for_completion(
         self,

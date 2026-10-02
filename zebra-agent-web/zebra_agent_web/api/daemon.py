@@ -105,20 +105,43 @@ async def run_daemon_loop(
 
     # Recover any processes that were RUNNING when the daemon last stopped.
     # resume_all_processes() resets RUNNING tasks back to READY (or flags
-    # non-idempotent ones for manual review) so they are not stuck forever.
-    # Tasks interrupted too often fail their process instead (#130).
+    # non-idempotent ones for manual review) and re-drives them — which runs the
+    # rest of each recovered goal inline. F129: run it as a background task so a
+    # long recovered goal doesn't hold up the scheduler loop. Tasks interrupted
+    # too often fail their process instead of being retried/flagged (#130).
+    recovery = asyncio.create_task(
+        recover_interrupted(
+            wf_engine,
+            max_interrupted_attempts=agent_settings.get("RECOVERY_MAX_INTERRUPTED_ATTEMPTS", 3),
+        ),
+        name="daemon-recovery",
+    )
+
     try:
-        resumed = await wf_engine.resume_all_processes(
-            max_interrupted_attempts=agent_settings.get("RECOVERY_MAX_INTERRUPTED_ATTEMPTS", 3)
+        await scheduler_loop.run()
+    finally:
+        if not recovery.done():
+            recovery.cancel()
+
+    logger.info("Daemon stopped.")
+
+
+async def recover_interrupted(engine, max_interrupted_attempts: int | None = None) -> None:
+    """Resume processes interrupted by the last shutdown; never raises.
+
+    Args:
+        engine: The workflow engine.
+        max_interrupted_attempts: Recovery cap passed to ``resume_all_processes``
+            (#130); ``None`` disables it.
+    """
+    try:
+        resumed = await engine.resume_all_processes(
+            max_interrupted_attempts=max_interrupted_attempts
         )
         if resumed:
             logger.info("Daemon startup: resumed %d interrupted process(es)", len(resumed))
     except Exception:
         logger.exception("Daemon startup: error during process recovery — continuing")
-
-    await scheduler_loop.run()
-
-    logger.info("Daemon stopped.")
 
 
 async def _tick(

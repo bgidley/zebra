@@ -205,6 +205,24 @@ async def test_resume_all_processes_multiple_processes(engine):
 
 
 @pytest.mark.asyncio
+async def test_resume_all_processes_recovers_children_before_parents(engine, simple_definition):
+    """F129: a re-run parent task re-attaching to its child needs the child driven first."""
+    parent = await engine.start_process((await engine.create_process(simple_definition)).id)
+    child = await engine.create_process(simple_definition)
+    child = child.model_copy(update={"parent_process_id": parent.id})
+    await engine.store.save_process(child)
+    await engine.start_process(child.id)
+    grandchild = await engine.create_process(simple_definition)
+    grandchild = grandchild.model_copy(update={"parent_process_id": child.id})
+    await engine.store.save_process(grandchild)
+    await engine.start_process(grandchild.id)
+
+    resumed = await engine.resume_all_processes()
+
+    assert [p.id for p in resumed] == [grandchild.id, child.id, parent.id]
+
+
+@pytest.mark.asyncio
 async def test_resume_all_processes_handles_errors_gracefully(engine, simple_definition):
     """Test that errors in one process don't stop recovery of others."""
     # Create multiple processes

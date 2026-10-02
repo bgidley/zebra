@@ -274,6 +274,8 @@ In production, the budget daemon runs as a **separate `zebra-daemon` Quadlet uni
 
 In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via `asyncio.create_task()` on the first request (Daphne doesn't run ASGI lifespan events). Loop: `pick_next → budget_check → start_process → poll → record metrics → repeat`.
 
+**Startup recovery (F8, #129)**: on start the daemon runs `engine.resume_all_processes()` as a *background* asyncio task (`recover_interrupted`) so re-driving recovered goals never delays the scheduler loop. Recovery goes children-first. The Agent Main Loop's `execute_workflow` task is `idempotent: true` and `execute_goal_workflow` records `__child_process_id__` on its task, so a goal whose driver died (e.g. an `/api/goals/` web thread killed by a redeploy) is reset to READY and re-attaches to its existing child workflow instead of being flagged for manual review or spawning a duplicate. Each such interruption still counts toward `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` (#130, passed to `recover_interrupted`), so a goal interrupted 3 times auto-fails. See [f8-crash-recovery.md](f8-crash-recovery.md).
+
 ### Storage backends (Django ORM)
 
 - `DjangoStore` (workflow state — `ProcessInstanceModel`, `TaskInstanceModel`, `FlowOfExecutionModel`)

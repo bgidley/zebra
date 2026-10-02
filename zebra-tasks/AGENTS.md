@@ -294,6 +294,8 @@ Execute a workflow by name and capture its output.
 
 **Store Access:** Reads `__workflow_library__` from `context.extras` (engine-level dependency injection).
 
+**Resumable (#129):** records the child process id on its task (`__child_process_id__`) before starting it; a re-run (e.g. after crash recovery) re-attaches to that child while it is still linked via `parent_process_id`/`parent_task_id`, instead of spawning a duplicate. Declare the task `idempotent: true` so recovery re-runs it.
+
 ### AssessAndRecordAction (formerly RecordMetricsAction)
 
 LLM-powered assessment of workflow run + record to metrics store + write memory entry.

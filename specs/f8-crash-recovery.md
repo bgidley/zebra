@@ -29,25 +29,25 @@ Every state transition in `WorkflowEngine` follows persist-before-signal:
 
 ## Daemon startup recovery
 
-`run_daemon_loop()` calls `engine.resume_all_processes()` immediately after initialisation, before the scheduler loop starts:
-
-```python
-resumed = await wf_engine.resume_all_processes(
-    max_interrupted_attempts=agent_settings.get("RECOVERY_MAX_INTERRUPTED_ATTEMPTS", 3)
-)
-if resumed:
-    logger.info("Daemon startup: resumed %d interrupted process(es)", len(resumed))
-```
+`run_daemon_loop()` starts `recover_interrupted(engine, max_interrupted_attempts=...)` (a wrapper around `engine.resume_all_processes()` that logs and swallows errors) as a **background asyncio task** right after initialisation, then runs the scheduler loop; an unfinished recovery is cancelled when the daemon stops (#129). Recovery re-drives each recovered goal inline, so awaiting it would block the goal queue for the whole duration of every recovered goal. The daemon passes `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` (default 3) as the cap (#130).
 
 `resume_all_processes()` (in `zebra-py/zebra/core/engine.py`):
-- Finds all RUNNING processes.
+- Finds all RUNNING processes and orders them **children first** (deepest `parent_process_id` chain first, #129), so a re-run parent task that re-attaches to a child finds it already driven.
 - For each, loads tasks and increments each RUNNING task's `execution_attempt` (interruption count).
 - **Cap (#130)**: if a task's `execution_attempt` reaches `max_interrupted_attempts`, the whole
   process is failed via `fail_process` with an `__error__` naming the task and count — no more
-  reset/flag cycles. `None` (engine default) disables the cap; the daemon passes the setting.
+  reset/flag cycles. `None` (engine default) disables the cap. The cap also applies to
+  idempotent tasks, including `execute_workflow` (idempotent since #129): **a long goal whose
+  `execute_workflow` task is interrupted 3 times auto-fails** (accepted combined behaviour).
 - Otherwise resets RUNNING tasks:
-  - Task with `__idempotency_token__` but no result → **flagged** with `__requires_manual_review__=True` (non-idempotent, human must decide).
+  - Task definition with `properties.idempotent: true` → reset to READY.
+  - Task with `__idempotency_token__` (i.e. it started) → **flagged** with `__requires_manual_review__=True` (non-idempotent, human must decide).
   - Task without token → reset to READY (safe to re-execute).
+- Re-drives READY auto tasks (`_process_pending_auto_tasks`).
+
+### Resumable goal execution (#129)
+
+`execute_goal_workflow` records the spawned child's id on its task (`__child_process_id__`) *before* starting it. On a re-run it re-attaches to that child if it is still linked (`parent_process_id` + `parent_task_id`): CREATED → start and wait, RUNNING → wait, COMPLETE/FAILED → collect immediately. The Agent Main Loop's `execute_workflow` task is declared `idempotent: true`, so a goal whose driver died (e.g. an `/api/goals/` web thread killed by a redeploy) recovers without a duplicate child. Design rationale: `openspec/changes/resumable-goal-execution/design.md`.
 - Cleans up orphaned FOEs (FOEs with no associated tasks).
 - Returns the list of recovered processes.
 
