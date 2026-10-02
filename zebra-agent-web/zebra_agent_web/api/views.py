@@ -21,7 +21,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from zebra.core.models import TaskResult
 
-from zebra_agent_web.api import agent_engine, engine
+from zebra_agent_web.api import agent_engine, engine, manual_review
 from zebra_agent_web.api.serializers import (
     CompleteTaskRequestSerializer,
     CreateWorkflowRequestSerializer,
@@ -961,6 +961,95 @@ def task_complete(request, task_id):
     except Exception as e:
         logger.exception("Failed to complete task")
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ===========================================================================
+# Manual review of tasks flagged by recovery (#130)
+# ===========================================================================
+
+
+def _review_error_response(e: Exception, task_id: str) -> Response:
+    from zebra.core.exceptions import InvalidStateTransitionError, TaskNotFoundError
+
+    if isinstance(e, TaskNotFoundError):
+        return Response({"error": f"Task '{task_id}' not found"}, status=status.HTTP_404_NOT_FOUND)
+    if isinstance(e, InvalidStateTransitionError):
+        return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
+    logger.exception("Manual review action failed for task %s", task_id)
+    return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+def review_tasks_list(request):
+    """List tasks that recovery flagged for manual review.
+
+    Query params:
+        run_id: only tasks belonging to this run.
+    """
+
+    async def _list():
+        await engine.ensure_initialized()
+        return await manual_review.find_review_tasks(
+            engine.get_store(), run_id=request.query_params.get("run_id")
+        )
+
+    tasks = async_to_sync(_list)()
+    for t in tasks:
+        t["flagged_at"] = t["flagged_at"].isoformat() if t["flagged_at"] else None
+    return Response(tasks)
+
+
+@api_view(["POST"])
+def task_retry(request, task_id):
+    """Retry a task flagged for manual review.
+
+    The task is reset RUNNING -> READY immediately and re-executed in the
+    background.
+
+    Returns:
+        202: {"retrying": true, "task_id": "...", "state": "ready"}
+        404: Task not found
+        409: Task is not awaiting manual review / process not running
+    """
+
+    async def _retry():
+        await engine.ensure_initialized()
+        return await manual_review.retry_review_task(engine.get_engine(), task_id)
+
+    try:
+        task = async_to_sync(_retry)()
+    except Exception as e:
+        return _review_error_response(e, task_id)
+    return Response(
+        {"retrying": True, "task_id": task.id, "state": task.state.value},
+        status=status.HTTP_202_ACCEPTED,
+    )
+
+
+@api_view(["POST"])
+def task_fail(request, task_id):
+    """Fail the run owning a task flagged for manual review.
+
+    Request body (optional): {"reason": "..."} — stored as ``__error__``.
+
+    Returns:
+        200: {"failed": true, "task_id": "...", "failed_process_ids": [...]}
+        404: Task not found
+        409: Task is not awaiting manual review
+    """
+    reason = None
+    if request.data and isinstance(request.data, dict):
+        reason = request.data.get("reason") or None
+
+    async def _fail():
+        await engine.ensure_initialized()
+        return await manual_review.fail_review_task(engine.get_engine(), task_id, reason)
+
+    try:
+        failed_ids = async_to_sync(_fail)()
+    except Exception as e:
+        return _review_error_response(e, task_id)
+    return Response({"failed": True, "task_id": task_id, "failed_process_ids": failed_ids})
 
 
 # ===========================================================================

@@ -216,3 +216,34 @@ async def test_recovery_resumes_interrupted_goal_without_duplicate_child(engine,
     assert parent.properties["execution_result"]["output"] == "42"
     assert len(await _children(store)) == 1
     assert AnswerAction.calls == 1
+
+
+async def test_goal_interrupted_three_times_auto_fails(engine, store):
+    """#129 + #130: execute_workflow is idempotent, so recovery re-runs it — but each
+    interruption still counts toward the recovery cap, and the 3rd fails the goal."""
+    parent, child, task = await _interrupted_goal(engine, store)
+
+    # Interruptions 1 and 2: recovery re-attaches to the child, then is killed again.
+    for attempt in (1, 2):
+        recovery = asyncio.create_task(engine.resume_all_processes(max_interrupted_attempts=3))
+        await asyncio.sleep(0.1)
+        assert not recovery.done()  # re-attached and waiting on the child
+        recovery.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await recovery
+        reloaded = await store.load_task(task.id)
+        assert reloaded.state == TaskState.RUNNING
+        assert reloaded.execution_attempt == attempt
+
+    # Interruption 3 hits the cap: the goal fails instead of being re-run again.
+    resumed = await asyncio.wait_for(
+        engine.resume_all_processes(max_interrupted_attempts=3), timeout=3
+    )
+
+    assert parent.id not in {p.id for p in resumed}
+    failed = await store.load_process(parent.id)
+    assert failed.state == ProcessState.FAILED
+    assert "Execute Goal Workflow" in failed.properties["__error__"]
+    assert "interrupted 3 times" in failed.properties["__error__"]
+    assert len(await _children(store)) == 1  # never spawned a duplicate child
+    assert AnswerAction.calls == 0

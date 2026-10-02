@@ -21,12 +21,13 @@ from channels.layers import get_channel_layer
 from django.contrib.auth.decorators import login_not_required
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from django.utils.html import escape
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
 from zebra_agent.metrics import WorkflowRun
 from zebra_tasks.agent.followup import build_previous_run_context
 
-from zebra_agent_web.api import agent_engine, engine
+from zebra_agent_web.api import agent_engine, engine, manual_review
 
 logger = logging.getLogger(__name__)
 
@@ -1016,6 +1017,7 @@ async def _run_detail_pending_fallback(request, run_id: str):
         "task_outputs": task_outputs,
         "parent_flow": parent_flow,
         "planning_concerns": parent_flow.get("planning_concerns") if parent_flow else None,
+        "review_tasks": await _review_tasks_for_run(wf_engine.store, run_id),
     }
     return render(request, "pages/run_pending.html", context)
 
@@ -1148,6 +1150,7 @@ async def run_detail(request, run_id):
         "task_executions": formatted_executions,
         "parent_flow": parent_flow,
         "planning_concerns": parent_flow.get("planning_concerns") if parent_flow else None,
+        "review_tasks": await _review_tasks_for_run(store, run_id),
     }
 
     return render(request, "pages/run_detail.html", context)
@@ -1203,6 +1206,65 @@ async def run_feedback(request, run_id):
     except Exception as e:
         logger.exception("Failed to save feedback for run %s", run_id)
         return HttpResponse(f"Error: {e}", status=400)
+
+
+# =============================================================================
+# Manual review of tasks flagged by recovery (#130)
+# =============================================================================
+
+
+async def _review_tasks_for_run(store, run_id: str) -> list[dict]:
+    """Tasks of *run_id* awaiting manual review; empty on any store error."""
+    try:
+        return await manual_review.find_review_tasks(store, run_id=run_id)
+    except Exception:
+        logger.debug("Could not load review tasks for run %s", run_id, exc_info=True)
+        return []
+
+
+def _review_response(request, message: str, css: str, status: int = 200) -> HttpResponse:
+    if request.headers.get("HX-Request") or status != 200:
+        return HttpResponse(f'<span class="text-xs {css}">{escape(message)}</span>', status=status)
+    return redirect("activity")
+
+
+async def _review_action(request, task_id: str, action) -> HttpResponse | None:
+    """Run *action*; map engine errors to an HTTP error response (None on success)."""
+    from zebra.core.exceptions import InvalidStateTransitionError, TaskNotFoundError
+
+    try:
+        await action()
+    except TaskNotFoundError:
+        return _review_response(request, "Task not found", "text-red-400", status=404)
+    except InvalidStateTransitionError as e:
+        return _review_response(request, str(e), "text-red-400", status=409)
+    except Exception as e:
+        logger.exception("Manual review action failed for task %s", task_id)
+        return _review_response(request, f"Error: {e}", "text-red-400", status=500)
+    return None
+
+
+@require_POST
+async def review_task_retry(request, task_id):
+    """Retry a task flagged for manual review (HTMX)."""
+    await engine.ensure_initialized()
+    wf_engine = engine.get_engine()
+    error = await _review_action(
+        request, task_id, lambda: manual_review.retry_review_task(wf_engine, task_id)
+    )
+    return error or _review_response(request, "Retrying — task re-queued", "text-green-400")
+
+
+@require_POST
+async def review_task_fail(request, task_id):
+    """Fail the run owning a task flagged for manual review (HTMX)."""
+    await engine.ensure_initialized()
+    wf_engine = engine.get_engine()
+    reason = request.POST.get("reason", "").strip() or None
+    error = await _review_action(
+        request, task_id, lambda: manual_review.fail_review_task(wf_engine, task_id, reason)
+    )
+    return error or _review_response(request, "Run failed", "text-red-300")
 
 
 # =============================================================================
@@ -1611,6 +1673,18 @@ async def activity(request):
     # on every HTMX poll, so the badge itself must be a link — #127).
     for group in activity_groups:
         group["human_task_ids"] = [t["id"] for t in group["tasks"] if t["is_human"]]
+
+    # Tasks recovery flagged for manual review get Retry / Fail controls (#130).
+    review_by_run: dict[str | None, list[dict]] = {}
+    try:
+        for review_task in await manual_review.find_review_tasks(store):
+            review_by_run.setdefault(review_task["run_id"], []).append(review_task)
+    except Exception:
+        logger.debug("Could not load tasks awaiting manual review", exc_info=True)
+    for group in activity_groups:
+        group["review_tasks"] = (
+            review_by_run.get(group["run_id"], []) if group["is_running"] else []
+        )
 
     has_running = any(g["is_running"] for g in activity_groups)
     has_queued = any(g.get("is_queued") for g in activity_groups)

@@ -652,6 +652,7 @@ See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking fl
 | `BUDGET_RESET_HOUR` | `ZEBRA_BUDGET_RESET_HOUR` | 0 | Hour (UTC) when daily budget resets |
 | `GOAL_COST_WARNING_USD` | `ZEBRA_GOAL_COST_WARNING_USD` | 5.00 | Per-goal soft warning threshold |
 | `DAEMON_AUTO_START` | `ZEBRA_DAEMON_AUTO_START` | true | Auto-start daemon in ASGI server |
+| `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | `ZEBRA_RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | 3 | Recovery fails a process once a task has been interrupted this many times (#130) |
 
 ### Configurable LLM Model Selection
 

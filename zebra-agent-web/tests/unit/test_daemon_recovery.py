@@ -17,7 +17,7 @@ async def test_scheduler_loop_starts_while_recovery_still_running():
     recovery_cancelled = asyncio.Event()
     loop_ran_during_recovery: list[bool] = []
 
-    async def slow_resume():
+    async def slow_resume(**kwargs):
         recovery_started.set()
         try:
             await asyncio.Event().wait()  # a long recovered goal
@@ -58,3 +58,12 @@ async def test_recover_interrupted_swallows_errors():
     await recover_interrupted(engine)  # must not raise
 
     engine.resume_all_processes.assert_awaited_once()
+
+
+async def test_recover_interrupted_passes_recovery_cap():
+    engine = MagicMock()
+    engine.resume_all_processes = AsyncMock(return_value=[])
+
+    await recover_interrupted(engine, max_interrupted_attempts=3)
+
+    engine.resume_all_processes.assert_awaited_once_with(max_interrupted_attempts=3)

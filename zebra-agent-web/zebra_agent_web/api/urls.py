@@ -61,6 +61,10 @@ urlpatterns = [
     ),
     path("tasks/<str:task_id>/", views.task_detail, name="api_task_detail"),
     path("tasks/<str:task_id>/complete/", views.task_complete, name="api_task_complete"),
+    # Tasks flagged for manual review by recovery (#130)
+    path("review-tasks/", views.review_tasks_list, name="api_review_tasks_list"),
+    path("tasks/<str:task_id>/retry/", views.task_retry, name="api_task_retry"),
+    path("tasks/<str:task_id>/fail/", views.task_fail, name="api_task_fail"),
     # Process lifecycle
     path(
         "processes/<str:process_id>/cancel/",

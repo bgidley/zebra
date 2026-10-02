@@ -103,7 +103,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 - **MCP server advertised in the README but not present** in `zebra-py/zebra/mcp/` — the requirements spec (Appendix B) references this path, but no code lives there today.
 - **Template language is weak** — no expressions beyond dotted key lookup.
-- **No retry / backoff** in the engine. An `execution_attempts` counter exists but no recovery policy.
+- **No retry / backoff** in the engine. `execution_attempt` counts recovery interruptions: interrupted non-idempotent tasks are flagged `__requires_manual_review__` and can be retried (`WorkflowEngine.retry_task`) or failed from the activity / run detail pages and REST API; recovery fails a process once a task hits `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` (default 3). See [f8-crash-recovery.md](f8-crash-recovery.md) (#130).
 - **Postgres backend is thinner than SQLite** — less test coverage, feature-completeness unclear.
 
 ---
@@ -274,7 +274,7 @@ In production, the budget daemon runs as a **separate `zebra-daemon` Quadlet uni
 
 In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via `asyncio.create_task()` on the first request (Daphne doesn't run ASGI lifespan events). Loop: `pick_next → budget_check → start_process → poll → record metrics → repeat`.
 
-**Startup recovery (F8, #129)**: on start the daemon runs `engine.resume_all_processes()` as a *background* asyncio task (`recover_interrupted`) so re-driving recovered goals never delays the scheduler loop. Recovery goes children-first. The Agent Main Loop's `execute_workflow` task is `idempotent: true` and `execute_goal_workflow` records `__child_process_id__` on its task, so a goal whose driver died (e.g. an `/api/goals/` web thread killed by a redeploy) is reset to READY and re-attaches to its existing child workflow instead of being flagged for manual review or spawning a duplicate. See [f8-crash-recovery.md](f8-crash-recovery.md).
+**Startup recovery (F8, #129)**: on start the daemon runs `engine.resume_all_processes()` as a *background* asyncio task (`recover_interrupted`) so re-driving recovered goals never delays the scheduler loop. Recovery goes children-first. The Agent Main Loop's `execute_workflow` task is `idempotent: true` and `execute_goal_workflow` records `__child_process_id__` on its task, so a goal whose driver died (e.g. an `/api/goals/` web thread killed by a redeploy) is reset to READY and re-attaches to its existing child workflow instead of being flagged for manual review or spawning a duplicate. Each such interruption still counts toward `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` (#130, passed to `recover_interrupted`), so a goal interrupted 3 times auto-fails. See [f8-crash-recovery.md](f8-crash-recovery.md).
 
 ### Storage backends (Django ORM)
 
