@@ -56,3 +56,10 @@ like a queued goal, so the simpler change is sufficient.
   tasks may both complete. Only one daemon should run (existing operational rule).
 - Recovery of an in-flight child's own interrupted LLM task is unchanged (flagged for review, #130);
   the parent then times out waiting (default 120s) and fails rather than hanging.
+
+## Review notes
+
+Zebra feedback (sonnet, 2026-10-02) suggested a dedicated child-link column, an advisory lock
+against concurrent daemons, and a recovery timeout. Not adopted: task properties are persisted by
+every `StateStore` (no schema change needed); exactly one daemon runs by design (see Risks); and
+the re-attached wait is already bounded by the action's `timeout` (default 120s).
