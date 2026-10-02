@@ -130,35 +130,5 @@
     
     <!-- Result Container -->
     <div id="result-container"></div>
-    
-    <!-- Available Workflows -->
-    {% if workflows %}
-    <div class="bg-gray-800 rounded-lg border border-gray-700">
-        <div class="px-6 py-4 border-b border-gray-700">
-            <h2 class="text-lg font-semibold text-white">Available Workflows</h2>
-            <p class="text-sm text-gray-400 mt-1">The agent will choose from these based on your goal</p>
-        </div>
-        <div class="divide-y divide-gray-700">
-            {% for workflow in workflows %}
-            <div class="px-6 py-4">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-white font-medium">{{ workflow.name }}</p>
-                        <p class="text-sm text-gray-400">{{ workflow.description }}</p>
-                    </div>
-                    <span class="text-sm text-gray-500">{{ workflow.success_rate }} success</span>
-                </div>
-                {% if workflow.tags %}
-                <div class="flex gap-2 mt-2">
-                    {% for tag in workflow.tags %}
-                    <span class="px-2 py-0.5 text-xs rounded bg-gray-700 text-gray-300">{{ tag }}</span>
-                    {% endfor %}
-                </div>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
 </div>
 {% endblock %}
