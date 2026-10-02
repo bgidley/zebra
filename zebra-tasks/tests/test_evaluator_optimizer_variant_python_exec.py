@@ -745,6 +745,23 @@ class TestWorkflowOptimizerValidation:
         assert "Invalid workflow YAML" in result.output["failed_changes"][0]["reason"]
         assert list(tmp_path.iterdir()) == []
 
+    async def test_workflow_without_tasks_is_rejected(self, mock_task, mock_context, tmp_path):
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        self._setup(
+            mock_task,
+            mock_context,
+            tmp_path,
+            [self._response("name: Empty\ndescription: nothing\ntasks: {}\n")],
+            self._fix_evaluation(),
+        )
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert result.output["changes_made"] == []
+        assert "At least one task" in result.output["failed_changes"][0]["reason"]
+        assert list(tmp_path.iterdir()) == []
+
     async def test_unregistered_action_is_rejected(self, mock_task, mock_context, tmp_path):
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 
