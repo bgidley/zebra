@@ -1,7 +1,7 @@
 # crash-recovery-manual-review Specification
 
 ## Purpose
-TBD - created by archiving change manual-review-recovery. Update Purpose after archive.
+How tasks flagged for manual review after an interrupted, non-idempotent execution are resolved: Retry/Fail from the web UI and REST API, and an interrupted-attempt cap that fails the run instead of leaving it stuck (#130).
 
 ## Requirements
 

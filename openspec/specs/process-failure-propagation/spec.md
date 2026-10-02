@@ -1,7 +1,7 @@
 # process-failure-propagation Specification
 
 ## Purpose
-TBD - created by archiving change task-failure-fails-process. Update Purpose after archive.
+How the engine propagates an unhandled task failure to its process: a process whose remaining tasks have finished with at least one FAILED task ends FAILED with the task's error recorded, never COMPLETE (#131).
 
 ## Requirements
 

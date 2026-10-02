@@ -1,7 +1,7 @@
 # goal-crash-recovery Specification
 
 ## Purpose
-TBD - created by archiving change resumable-goal-execution. Update Purpose after archive.
+How an in-flight goal survives a web or daemon restart: execute_workflow re-attaches to its recorded child process instead of spawning a new one, recovery drives children before parents, and daemon startup recovery runs in the background (#129).
 
 ## Requirements
 
