@@ -166,7 +166,7 @@ consult_memory
 
 ### Dream cycle (`dream_cycle.yaml`)
 
-Self-improvement loop: `metrics_analyzer` → `workflow_evaluator` → `workflow_optimizer`. Runs over the last N days of metrics; can propose edits to stored workflows.
+Self-improvement loop: `metrics_analyzer` → `workflow_evaluator` → `workflow_optimizer`. Runs over the last N days of metrics; can propose edits to stored workflows. `workflow_optimizer` parses and validates every created/modified workflow before saving it (library loader, `check_generated_workflow`, registered actions). It caps output at `GENERATED_WORKFLOW_MAX_TOKENS` and retries a truncated response once at 2x. Rejected changes are not saved and go to `failed_changes` instead of `changes_made`; the v3 summary prompt reports them as not applied (#128).
 
 ### Memory
 
@@ -234,7 +234,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 ### Weaknesses
 
 - **Standalone CLI loses all state on exit** — no SQLite default; only in-memory stores.
-- **Dream cycle is experimentally powerful but unvalidated** — LLM-driven mutations aren't gated by tests.
+- **Dream cycle is experimentally powerful but only structurally validated**: LLM-driven mutations must parse and pass `validate_definition` and the action registry check (#128), but they are not gated by behavioural tests.
 - **No trust model exists.** Requirements describe SUPERVISED / SEMI-AUTONOMOUS / AUTONOMOUS; implementation has none of this.
 - ~~**No values profile** — ethics is generic Kantian, not personalised.~~ Resolved by F18 (data + UI) and F19 (ethics-gate consumption, REQ-ETH-003).
 - ~~**No personal knowledge store** — only the three workflow-focused tiers.~~ Resolved by F31 (store, CRUD UI, agent loop integration) and F32 (lifecycle: decay, verification, contradiction detection, soft-delete).
