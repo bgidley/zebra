@@ -1,6 +1,6 @@
 ## 1. Reproduce
 
-- [x] 1.1 Failing tests in `zebra-py/tests/test_task_failure.py`: auto fail, raise, after `complete_task`, after `resume_all_processes`, human task failed, handled-routing control
+- [x] 1.1 Failing tests in `zebra-py/tests/test_task_failure.py`: auto fail, raise, parallel branch, after `complete_task`, after `resume_all_processes`, human task failed, handled-routing control
 
 ## 2. Implementation
 

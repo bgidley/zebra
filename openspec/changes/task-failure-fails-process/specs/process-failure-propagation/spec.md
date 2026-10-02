@@ -24,6 +24,11 @@ failed task's definition id. Tasks downstream of the failed task SHALL NOT run.
 - **WHEN** `resume_all_processes` runs while the process waits on a human task, and after the human task is completed the next auto task fails
 - **THEN** the process is `FAILED` with the auto task's error
 
+#### Scenario: Parallel branch fails while a sibling is still open
+- **WHEN** one parallel branch's auto task fails while a sibling branch waits on a human task
+- **THEN** the process stays `RUNNING` with no `__error__` until the sibling completes
+- **AND** then the process is `FAILED` with the failed branch task's error
+
 #### Scenario: Human task completed with a failure result
 - **WHEN** a human task is completed via `complete_task` with `TaskResult.fail("user rejected")`
 - **THEN** the process is `FAILED` with `__error__` = `"user rejected"`

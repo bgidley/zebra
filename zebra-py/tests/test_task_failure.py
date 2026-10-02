@@ -189,3 +189,33 @@ async def test_successful_serial_workflow_still_completes(engine):
     process = await engine.store.load_process(process.id)
     assert process.state == ProcessState.COMPLETE
     assert "__error__" not in process.properties
+
+
+async def test_parallel_branch_failure_fails_process_after_siblings_drain(engine):
+    """A failed branch doesn't abort siblings; process FAILS once they drain."""
+    defn = ProcessDefinition(
+        id="parallel",
+        name="Parallel",
+        first_task_id="split",
+        tasks={
+            "split": TaskDefinition(id="split", name="Split", action="ok"),
+            "calc": TaskDefinition(id="calc", name="Calc", action="fail"),
+            "ask": TaskDefinition(id="ask", name="Ask", auto=False),
+        },
+        routings=[
+            RoutingDefinition(id="r1", source_task_id="split", dest_task_id="calc", parallel=True),
+            RoutingDefinition(id="r2", source_task_id="split", dest_task_id="ask", parallel=True),
+        ],
+    )
+    process = await engine.create_process(defn)
+    await engine.start_process(process.id)
+
+    # Mid-drain: calc FAILED but the human branch is still open -> RUNNING, no error yet
+    mid = await engine.store.load_process(process.id)
+    assert mid.state == ProcessState.RUNNING
+    assert "__error__" not in mid.properties
+
+    (ask,) = await engine.get_pending_tasks(process.id)
+    await engine.complete_task(ask.id, TaskResult.ok(output="done"))
+
+    await _assert_failed(engine, process.id, "NameError: name 'x' is not defined")
