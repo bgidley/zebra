@@ -44,6 +44,11 @@ class AnthropicProvider(LLMProvider):
     # (and 5.x) models return a 400 invalid_request_error when it is included.
     _TEMPERATURE_MODEL_PREFIX = "claude-3"
 
+    # Claude 5.x models always think, and thinking tokens count against
+    # `max_tokens`; a small cap can be spent entirely on thinking, leaving no
+    # text. Output is billed per token generated, so a higher cap is free.
+    _MIN_MAX_TOKENS = 1024
+
     def __init__(
         self,
         model: str | None = None,
@@ -85,6 +90,11 @@ class AnthropicProvider(LLMProvider):
     def _accepts_temperature(self) -> bool:
         return self._model.startswith(self._TEMPERATURE_MODEL_PREFIX)
 
+    def _effective_max_tokens(self, max_tokens: int) -> int:
+        if self._accepts_temperature():
+            return max_tokens
+        return max(max_tokens, self._MIN_MAX_TOKENS)
+
     async def complete(
         self,
         messages: list[Message],
@@ -101,7 +111,7 @@ class AnthropicProvider(LLMProvider):
         kwargs = {
             "model": self._model,
             "messages": anthropic_messages,
-            "max_tokens": max_tokens,
+            "max_tokens": self._effective_max_tokens(max_tokens),
         }
 
         # Claude 4+ models reject the temperature parameter with a 400
@@ -136,7 +146,7 @@ class AnthropicProvider(LLMProvider):
         kwargs = {
             "model": self._model,
             "messages": anthropic_messages,
-            "max_tokens": max_tokens,
+            "max_tokens": self._effective_max_tokens(max_tokens),
         }
 
         if self._accepts_temperature():

@@ -30,6 +30,10 @@ class TestGetPricing:
         assert pricing["input"] == 4.00
         assert pricing["output"] == 20.00
 
+    def test_opus_4_8_has_own_entry(self):
+        """Opus 4.8 previously fell through to the Sonnet-tier default."""
+        assert get_pricing("claude-opus-4-8") == {"input": 5.00, "output": 25.00}
+
     def test_sonnet_5_5_pricing(self):
         pricing = get_pricing("claude-sonnet-5-5")
         assert pricing["input"] == 2.00

@@ -42,15 +42,16 @@ class TestAnthropicIntegration:
         provider = get_provider("anthropic")
         response = await provider.complete(
             [
-                Message.system("You are a helpful assistant. Always respond in exactly 3 words."),
+                Message.system("Whatever the user asks, reply with only the single word: banana"),
                 Message.user("What is 2+2?"),
             ],
             max_tokens=50,
         )
 
         assert response.content is not None
-        # Should be a short response due to system prompt
-        assert len(response.content.split()) <= 10
+        # The system prompt overrides the user question
+        assert "banana" in response.content.lower()
+        assert len(response.content.split()) <= 3
 
     @pytest.mark.asyncio
     async def test_streaming(self):

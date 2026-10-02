@@ -322,6 +322,34 @@ class TestAnthropicProvider:
                         f"{model} must not send temperature (API returns HTTP 400)"
                     )
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "model,requested,expected",
+        [
+            ("claude-opus-5-5", 150, 1024),
+            ("claude-opus-5-5", 4000, 4000),
+            ("claude-3-opus-20240229", 150, 150),
+        ],
+    )
+    async def test_max_tokens_floor_for_thinking_models(
+        self, mock_anthropic_module, model, requested, expected
+    ):
+        """Small caps are raised so always-on thinking cannot consume the whole budget."""
+        mock_module, mock_client = mock_anthropic_module
+
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.dict("sys.modules", {"anthropic": mock_module}):
+                import importlib
+
+                import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
+                importlib.reload(anthropic_provider)
+
+                provider = anthropic_provider.AnthropicProvider(model=model)
+                await provider.complete([Message.user("hi")], max_tokens=requested)
+
+                assert mock_client.messages.create.call_args.kwargs["max_tokens"] == expected
+
 
 class TestOpenAIProvider:
     """Tests for OpenAI provider."""
