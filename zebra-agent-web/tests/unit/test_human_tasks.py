@@ -325,6 +325,22 @@ class TestPendingTasksList:
         assert b"Ask User" in response.content
         assert b"Awaiting Input" in response.content
 
+    async def test_input_needed_badge_links_to_task_form(self, client, wf_engine):
+        """The 'input needed' badge and a row action link straight to the form.
+
+        Regression test for #127: the badge was plain text and the only link sat in a
+        collapsed sub-row that the 5s HTMX poll kept re-collapsing.
+        """
+        defn = _simple_human_task_definition()
+        _, pending = await _start_workflow(wf_engine, defn)
+        form_url = f"/tasks/{pending[0].id}/"
+
+        response = await client.get("/activity/")
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert html.count(f'href="{form_url}"') >= 3  # badge, action, sub-row
+        assert "Provide input" in html
+
     async def test_htmx_returns_partial(self, client, wf_engine):
         """With HX-Request header, returns the partial template only."""
         defn = _simple_human_task_definition()

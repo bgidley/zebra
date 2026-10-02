@@ -1607,6 +1607,11 @@ async def activity(request):
             else:
                 group["section"] = "recent"
 
+    # Direct links to pending human task forms (the expandable sub-row collapses
+    # on every HTMX poll, so the badge itself must be a link — #127).
+    for group in activity_groups:
+        group["human_task_ids"] = [t["id"] for t in group["tasks"] if t["is_human"]]
+
     has_running = any(g["is_running"] for g in activity_groups)
     has_queued = any(g.get("is_queued") for g in activity_groups)
 
