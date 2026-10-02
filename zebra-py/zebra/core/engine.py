@@ -37,6 +37,23 @@ from zebra.tasks.registry import ActionRegistry
 logger = logging.getLogger(__name__)
 
 
+def _children_first(processes: list[ProcessInstance]) -> list[ProcessInstance]:
+    """Order processes deepest-first by their parent chain within *processes*.
+
+    Stable, so processes at the same depth keep their original order.
+    """
+    by_id = {p.id: p for p in processes}
+
+    def depth(process: ProcessInstance) -> int:
+        d = 0
+        while process.parent_process_id in by_id and d < len(by_id):
+            process = by_id[process.parent_process_id]
+            d += 1
+        return d
+
+    return sorted(processes, key=depth, reverse=True)
+
+
 class WorkflowEngine:
     """Main workflow engine that controls process execution.
 
@@ -1079,6 +1096,10 @@ class WorkflowEngine:
             return resumed_processes
 
         logger.info(f"Found {len(running_processes)} processes to recover")
+
+        # F129: recover children before their parents, so a re-run parent task that
+        # re-attaches to a child process finds the child already driven forward.
+        running_processes = _children_first(running_processes)
 
         for process in running_processes:
             try:

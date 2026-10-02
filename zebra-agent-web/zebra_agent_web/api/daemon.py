@@ -105,17 +105,28 @@ async def run_daemon_loop(
 
     # Recover any processes that were RUNNING when the daemon last stopped.
     # resume_all_processes() resets RUNNING tasks back to READY (or flags
-    # non-idempotent ones for manual review) so they are not stuck forever.
+    # non-idempotent ones for manual review) and re-drives them — which runs the
+    # rest of each recovered goal inline. F129: run it as a background task so a
+    # long recovered goal doesn't hold up the scheduler loop.
+    recovery = asyncio.create_task(recover_interrupted(wf_engine), name="daemon-recovery")
+
     try:
-        resumed = await wf_engine.resume_all_processes()
+        await scheduler_loop.run()
+    finally:
+        if not recovery.done():
+            recovery.cancel()
+
+    logger.info("Daemon stopped.")
+
+
+async def recover_interrupted(engine) -> None:
+    """Resume processes interrupted by the last shutdown; never raises."""
+    try:
+        resumed = await engine.resume_all_processes()
         if resumed:
             logger.info("Daemon startup: resumed %d interrupted process(es)", len(resumed))
     except Exception:
         logger.exception("Daemon startup: error during process recovery — continuing")
-
-    await scheduler_loop.run()
-
-    logger.info("Daemon stopped.")
 
 
 async def _tick(

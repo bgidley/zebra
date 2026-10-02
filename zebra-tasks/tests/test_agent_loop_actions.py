@@ -503,6 +503,7 @@ class TestExecuteGoalWorkflowAction:
         store = MagicMock()
         store.load_process = AsyncMock()
         store.save_process = AsyncMock()
+        store.save_task = AsyncMock()  # F129: child id is recorded on the task
         return store
 
     async def test_no_workflow_name(self, mock_task, mock_context):
