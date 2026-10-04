@@ -32,7 +32,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/memory_check.py` | MemoryCheckAction - memory compaction check |
 | `zebra_tasks/agent/execute_workflow.py` | ExecuteGoalWorkflowAction - run workflow by name |
 | `zebra_tasks/agent/record_metrics.py` | RecordMetricsAction - record run to metrics |
-| `zebra_tasks/agent/followup.py` | `with_previous_run()` / `build_previous_run_context()` - follow-up goal context (F116) |
+| `zebra_tasks/agent/followup.py` | `with_previous_run()` / `build_previous_run_context()` / `load_previous_run_context()` - follow-up and continuation context with task progress + chain summary (F116, F134) |
 | `zebra_tasks/agent/update_memory.py` | UpdateMemoryAction - add memory entry |
 | `zebra_tasks/agent/analyzer.py` | MetricsAnalyzerAction - analyze workflow metrics |
 | `zebra_tasks/agent/evaluator.py` | WorkflowEvaluatorAction - LLM workflow evaluation |

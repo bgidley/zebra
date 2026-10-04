@@ -24,6 +24,7 @@ from zebra.core.models import TaskResult
 from zebra_agent_web.api import agent_engine, engine, manual_review
 from zebra_agent_web.api.serializers import (
     CompleteTaskRequestSerializer,
+    ContinueRunRequestSerializer,
     CreateWorkflowRequestSerializer,
     EthicsAuditEntrySerializer,
     ExecuteGoalRequestSerializer,
@@ -540,6 +541,66 @@ def run_rate(request, run_id):
     if result is None:
         return Response({"error": f"Run '{run_id}' not found"}, status=status.HTTP_404_NOT_FOUND)
     return Response({"run_id": run_id, "rating": rating})
+
+
+@api_view(["POST"])
+def run_continue(request, run_id):
+    """Continue a finished run with a progress comment (F134).
+
+    Queues the continuation for the budget daemon (durable across redeploys)
+    with the previous run's context, task progress and chain summary.
+
+    Returns 202 Accepted with::
+
+        {"process_id": "...", "run_id": "<new run>", "continues_run_id": "...",
+         "status": "queued"}
+    """
+    req_serializer = ContinueRunRequestSerializer(data=request.data)
+    if not req_serializer.is_valid():
+        return Response(req_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    data = req_serializer.validated_data
+    user_id = request.user.id if request.user.is_authenticated else None
+
+    async def _continue():
+        from zebra_tasks.agent.followup import load_previous_run_context
+
+        from zebra_agent_web.api.goals import queue_goal
+
+        await agent_engine.ensure_initialized()
+        metrics = agent_engine.get_metrics()
+        run = await metrics.get_run(run_id)
+        context = await load_previous_run_context(metrics, run_id)
+        if run is None or context is None:
+            return None
+        return await queue_goal(
+            run.goal,
+            model=data.get("model") or None,
+            priority=data["priority"],
+            user_id=user_id,
+            previous_run_context=context,
+            continuation_comment=data["comment"],
+        )
+
+    try:
+        process = async_to_sync(_continue)()
+    except Exception as e:
+        logger.exception("Failed to continue run %s", run_id)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    if process is None:
+        return Response(
+            {"error": f"Run '{run_id}' not found or still in progress"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    return Response(
+        {
+            "process_id": process.id,
+            "run_id": process.properties.get("run_id"),
+            "continues_run_id": run_id,
+            "status": "queued",
+        },
+        status=status.HTTP_202_ACCEPTED,
+    )
 
 
 def _run_status_impl(run_id):

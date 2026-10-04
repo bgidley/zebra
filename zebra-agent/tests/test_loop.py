@@ -675,6 +675,55 @@ routings: []
         assert "Memory Compact Short" in names
 
 
+class TestProcessGoalContinuation:
+    """F134: continuation properties are set on the Agent Main Loop process."""
+
+    async def _captured(self, library, mock_engine, metrics, yaml_text, **kwargs) -> dict:
+        (library.library_path / "agent_main_loop.yaml").write_text(yaml_text)
+        captured: dict = {}
+        done = MagicMock()
+        done.id = "process-1"
+        done.state = ProcessState.COMPLETE
+        done.properties = {
+            "workflow_name": "W",
+            "execution_result": {"success": True, "output": "ok", "tokens_used": 1},
+        }
+
+        async def capture(definition, properties=None):
+            captured.update(properties or {})
+            return done
+
+        mock_engine.create_process = AsyncMock(side_effect=capture)
+        mock_engine.start_process = AsyncMock()
+        mock_engine.store.load_process = AsyncMock(return_value=done)
+        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics)
+        await loop.process_goal("g", **kwargs)
+        return captured
+
+    async def test_comment_stored_with_previous_run(
+        self, library, mock_engine, metrics, agent_main_loop_yaml
+    ):
+        ctx = {"run_id": "r1", "goal": "g", "workflow_name": "W", "success": False}
+        props = await self._captured(
+            library,
+            mock_engine,
+            metrics,
+            agent_main_loop_yaml,
+            previous_run_context=ctx,
+            continuation_comment="pick up at step 3",
+        )
+        assert props["previous_run_context"] == ctx
+        assert props["continuation_comment"] == "pick up at step 3"
+
+    async def test_comment_ignored_without_previous_run(
+        self, library, mock_engine, metrics, agent_main_loop_yaml
+    ):
+        props = await self._captured(
+            library, mock_engine, metrics, agent_main_loop_yaml, continuation_comment="x"
+        )
+        assert "continuation_comment" not in props
+
+
 class TestProcessGoalSurfacesTaskErrors:
     """A failed task must surface its error in AgentResult (#120)."""
 
