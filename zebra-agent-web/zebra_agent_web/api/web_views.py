@@ -1145,6 +1145,8 @@ async def run_detail(request, run_id):
             "started_at": run.started_at,
             "completed_at": run.completed_at,
             "model": friendly_model_name(run.model),
+            "continuation_decision": run.continuation_decision,
+            "continuation_rationale": run.continuation_rationale,
         },
         "workflow_svg": workflow_svg,
         "task_executions": formatted_executions,
