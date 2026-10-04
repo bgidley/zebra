@@ -12,6 +12,15 @@ import json
 from typing import Any
 
 PREVIOUS_RUN_CONTEXT_KEY = "previous_run_context"
+# F134/F135 continuation properties, copied onto the WorkflowRun record.
+CONTINUATION_COMMENT_KEY = "continuation_comment"
+CONTINUATION_DECISION_KEY = "continuation_decision"
+CONTINUATION_RATIONALE_KEY = "continuation_rationale"
+CONTINUATION_KEYS = (
+    CONTINUATION_COMMENT_KEY,
+    CONTINUATION_DECISION_KEY,
+    CONTINUATION_RATIONALE_KEY,
+)
 MAX_PREVIOUS_GOAL_CHARS = 1000
 MAX_PREVIOUS_OUTPUT_CHARS = 2000
 
@@ -44,6 +53,18 @@ def previous_run_id(properties: dict[str, Any]) -> str | None:
     if isinstance(ctx, dict):
         return ctx.get("run_id") or None
     return None
+
+
+def continuation_fields(properties: dict[str, Any]) -> dict[str, str | None]:
+    """Return the continuation fields to store on a WorkflowRun (F134/F135).
+
+    Args:
+        properties: Process properties.
+
+    Returns:
+        Dict keyed by WorkflowRun field name; values are None when unset.
+    """
+    return {key: (properties.get(key) or None) for key in CONTINUATION_KEYS}
 
 
 def with_previous_run(goal: str, properties: dict[str, Any]) -> str:

@@ -294,6 +294,46 @@ class MetricsStore(ABC):
         """Get recent runs for a specific workflow."""
         ...
 
+    async def get_run_chain(self, run_id: str, max_depth: int = 50) -> list[WorkflowRun]:
+        """Return the continuation chain ending at *run_id*, oldest first (F134).
+
+        Walks ``extends_run_id`` back to the root run. Missing links end the
+        walk, so a chain whose root was deleted starts at the oldest known run.
+
+        Args:
+            run_id: The run whose ancestry to return.
+            max_depth: Safety cap against cycles or very long chains.
+
+        Returns:
+            Runs from root to *run_id* inclusive; empty if *run_id* is unknown.
+        """
+        chain: list[WorkflowRun] = []
+        seen: set[str] = set()
+        current = await self.get_run(run_id)
+        while current is not None and current.id not in seen and len(chain) < max_depth:
+            chain.append(current)
+            seen.add(current.id)
+            if not current.extends_run_id:
+                break
+            current = await self.get_run(current.extends_run_id)
+        chain.reverse()
+        return chain
+
+    async def get_continuations_since(
+        self, cutoff: datetime, limit: int = 500
+    ) -> list[WorkflowRun]:
+        """Return runs started since *cutoff* that continue a previous run (F136).
+
+        Args:
+            cutoff: Only include runs with started_at >= cutoff.
+            limit: Maximum number of runs to scan.
+
+        Returns:
+            Continuation runs (``extends_run_id`` set), newest first.
+        """
+        runs = await self.get_runs_since(cutoff, limit=limit)
+        return [r for r in runs if r.extends_run_id]
+
     @abstractmethod
     async def get_total_cost_since(self, since: datetime) -> float:
         """Return the total USD cost of all runs completed since *since*.

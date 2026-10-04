@@ -6,7 +6,7 @@ import logging
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.agent.followup import previous_run_id
+from zebra_tasks.agent.followup import continuation_fields, previous_run_id
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
@@ -229,6 +229,7 @@ Respond with JSON only:
                     completed_at=datetime.now(UTC),
                     model=context.process.properties.get("__llm_model__"),
                     extends_run_id=previous_run_id(context.process.properties),
+                    **continuation_fields(context.process.properties),
                 )
                 await metrics_store.record_run(run)
 

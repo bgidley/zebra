@@ -122,6 +122,36 @@ async def test_record_run_persists_extends_run_id(user_a):
     assert loaded.extends_run_id == "f116-original"
 
 
+@pytest.mark.django_db(transaction=True)
+async def test_record_run_persists_continuation_fields_and_chain(user_a):
+    store = DjangoMetricsStore()
+    now = datetime.now(UTC)
+    root = WorkflowRun(id="f134-root", workflow_name="Research", goal="g", started_at=now)
+    cont = WorkflowRun(
+        id="f134-cont",
+        workflow_name="Research",
+        goal="g",
+        started_at=now,
+        extends_run_id="f134-root",
+        continuation_comment="Stopped after step 2",
+        continuation_decision="new_workflow",
+        continuation_rationale="No library workflow covers the rest",
+    )
+
+    with _AsUser(user_a):
+        await store.record_run(root)
+        await store.record_run(cont)
+        loaded = await store.get_run("f134-cont")
+        chain = await store.get_run_chain("f134-cont")
+        continuations = await store.get_continuations_since(now - timedelta(minutes=1))
+
+    assert loaded.continuation_comment == "Stopped after step 2"
+    assert loaded.continuation_decision == "new_workflow"
+    assert loaded.continuation_rationale == "No library workflow covers the rest"
+    assert [r.id for r in chain] == ["f134-root", "f134-cont"]
+    assert [r.id for r in continuations] == ["f134-cont"]
+
+
 # --- views -------------------------------------------------------------------
 
 

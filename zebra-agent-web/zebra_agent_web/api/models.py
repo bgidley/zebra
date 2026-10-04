@@ -166,6 +166,18 @@ class WorkflowRunModel(models.Model):
         db_index=True,
         help_text="Run this one follows up on (F116)",
     )
+    continuation_comment = models.TextField(
+        blank=True, null=True, help_text="User's progress comment when continuing a run (F134)"
+    )
+    continuation_decision = models.CharField(
+        max_length=32,
+        blank=True,
+        null=True,
+        help_text="same_workflow | existing_workflow | new_workflow (F135)",
+    )
+    continuation_rationale = models.TextField(
+        blank=True, null=True, help_text="Why the continuation route was chosen (F135)"
+    )
 
     class Meta:
         db_table = "zebra_workflow_runs"
