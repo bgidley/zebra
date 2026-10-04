@@ -19,3 +19,14 @@ def test_summary_reports_failed_optimizer_changes():
 
     assert "{{optimization_results.failed_changes}}" in prompt
     assert "Never describe a failed change as applied" in prompt
+
+
+def test_summary_reports_continuations():
+    """The summary has a Continuations section fed by the analyzer and optimizer (#136)."""
+    data = yaml.safe_load(_DREAM_CYCLE.read_text())
+    prompt = data["tasks"]["generate_summary"]["properties"]["prompt"]
+
+    assert "### Continuations" in prompt
+    assert "{{metrics_analysis.continuation_analysis.total_continuations}}" in prompt
+    assert "{{metrics_analysis.continuation_analysis.top_continued}}" in prompt
+    assert "{{optimization_results.continuation_changes}}" in prompt

@@ -129,6 +129,8 @@ Be specific and actionable in your recommendations. Focus on:
 - Patterns in unsuccessful goals
 - Workflow design issues
 - Missing capabilities
+- Continued goals: a workflow users had to continue did not fully satisfy them;
+  use their comments and the steps they added afterwards to improve it
 
 Respond with JSON only:
 {
@@ -204,6 +206,9 @@ Respond with JSON only:
             # Parse response
             content = response.content or ""
             evaluation = self._parse_response(content)
+            self._merge_continuation_proposals(
+                evaluation, metrics_analysis, workflow_definitions or {}
+            )
 
             # Store result
             context.set_process_property(output_key, evaluation)
@@ -287,9 +292,12 @@ Respond with JSON only:
             prompt_parts.append(
                 f"- {ws['workflow_name']}: {ws['total_runs']} runs, "
                 f"{ws['success_rate'] * 100:.0f}% success, "
+                f"{ws.get('continuation_rate', 0) * 100:.0f}% continued, "
                 f"avg rating: {ws.get('avg_rating', 'N/A')}"
             )
         prompt_parts.append("")
+
+        prompt_parts.extend(self._continuation_section(metrics_analysis))
 
         # Add low performers
         low_performers = metrics_analysis.get("low_performers", [])
@@ -342,6 +350,71 @@ Respond with JSON only:
         )
 
         return "\n".join(prompt_parts)
+
+    @staticmethod
+    def _continuation_section(metrics_analysis: dict[str, Any]) -> list[str]:
+        """Render continuation findings (F136) for the evaluation prompt."""
+        ca = metrics_analysis.get("continuation_analysis") or {}
+        if not ca.get("total_continuations"):
+            return []
+        parts = [
+            "### Continued Goals (user had to carry on after the workflow finished)",
+            f"Total continuations: {ca['total_continuations']}",
+        ]
+        for fc in ca.get("frequently_continued", []):
+            parts.append(
+                f"- {fc['workflow_name']}: continued {fc['continuation_count']} times, "
+                f"into {fc.get('continued_into', {})}, decisions {fc.get('decisions', {})}"
+            )
+            for comment in fc.get("comments", []):
+                parts.append(f'  - user said: "{comment}"')
+            if fc.get("added_steps"):
+                parts.append(f"  - steps added afterwards: {', '.join(fc['added_steps'])}")
+        for gap in ca.get("capability_gaps", []):
+            parts.append(
+                f"- Missing capability after {gap['original_workflow']}: a new workflow "
+                f"'{gap['continuation_workflow']}' was needed "
+                f"({gap.get('comment') or gap.get('rationale') or 'no comment'})"
+            )
+        if ca.get("proposals"):
+            parts.append("Continuation-driven proposals (already queued for the optimizer):")
+            for p in ca["proposals"]:
+                parts.append(f"- {p['type']} {p['target']}: {p['action']}")
+        parts.append("")
+        return parts
+
+    @staticmethod
+    def _merge_continuation_proposals(
+        evaluation: dict[str, Any],
+        metrics_analysis: dict[str, Any],
+        workflow_definitions: dict[str, Any],
+    ) -> None:
+        """Prepend continuation proposals to improvement_priorities (F136).
+
+        Guarantees the deterministic proposals reach the optimizer even when the
+        LLM leaves them out. A promote proposal for a workflow that is not in the
+        library becomes a ``create``. Skips any (type, target) the LLM already chose.
+        """
+        ca = metrics_analysis.get("continuation_analysis") or {}
+        proposals = ca.get("proposals") or []
+        if not proposals:
+            return
+        llm_priorities = evaluation.get("improvement_priorities") or []
+        existing = {(p.get("type"), p.get("target")) for p in llm_priorities}
+        merged = []
+        for proposal in proposals:
+            p = dict(proposal)
+            if p.get("kind") == "promote" and p["target"] not in workflow_definitions:
+                p["type"] = "create"
+            if (p["type"], p["target"]) in existing:
+                continue
+            existing.add((p["type"], p["target"]))
+            merged.append(p)
+        combined = merged + list(llm_priorities)
+        for i, p in enumerate(combined, start=1):
+            p["priority"] = i
+        evaluation["improvement_priorities"] = combined
+        evaluation["continuation_proposals"] = merged
 
     def _parse_response(self, content: str) -> dict[str, Any]:
         """Parse the LLM response."""

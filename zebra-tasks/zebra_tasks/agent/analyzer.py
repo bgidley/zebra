@@ -4,11 +4,19 @@ Uses the MetricsStore interface from engine.extras to query run data,
 ensuring compatibility with all storage backends (InMemory, Django ORM, etc.).
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
+
+from zebra_tasks.agent.continuation_analysis import (
+    analyze_continuations,
+    empty_continuation_analysis,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class MetricsAnalyzerAction(TaskAction):
@@ -27,16 +35,19 @@ class MetricsAnalyzerAction(TaskAction):
     Properties:
         days_to_analyze: Number of days to look back (default: 7)
         min_runs_for_analysis: Minimum runs needed to analyze a workflow (default: 3)
+        min_continuations_for_proposal: Continuations of a workflow needed before
+            proposing to extend it (default: 2)
         output_key: Where to store analysis (default: "metrics_analysis")
 
     Output includes:
-        - workflow_stats: Per-workflow statistics
+        - workflow_stats: Per-workflow statistics (incl. continuation_rate)
         - low_performers: Workflows with success rate < 70%
         - high_performers: Workflows with success rate >= 90%
         - unrated_runs_count: Number of runs without user ratings
         - failure_patterns: Common failure reasons
         - usage_trends: Workflow usage over time
         - recommendations: Initial recommendations based on metrics
+        - continuation_analysis: Continuation chains, patterns and proposals (F136)
 
     Example workflow usage:
         ```yaml
@@ -67,6 +78,13 @@ class MetricsAnalyzerAction(TaskAction):
             description="Minimum runs needed to analyze a workflow",
             required=False,
             default=3,
+        ),
+        ParameterDef(
+            name="min_continuations_for_proposal",
+            type="int",
+            description="Continuations of a workflow needed before proposing to extend it",
+            required=False,
+            default=2,
         ),
         ParameterDef(
             name="output_key",
@@ -138,6 +156,15 @@ class MetricsAnalyzerAction(TaskAction):
             description="Initial recommendations based on metrics",
             required=True,
         ),
+        ParameterDef(
+            name="continuation_analysis",
+            type="dict",
+            description=(
+                "Continuation chains, frequently continued workflows, capability gaps, "
+                "added steps and continuation-driven improvement proposals"
+            ),
+            required=True,
+        ),
     ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
@@ -150,17 +177,18 @@ class MetricsAnalyzerAction(TaskAction):
 
         days = task.properties.get("days_to_analyze", 7)
         min_runs = task.properties.get("min_runs_for_analysis", 3)
+        min_continuations = task.properties.get("min_continuations_for_proposal", 2)
         output_key = task.properties.get("output_key", "metrics_analysis")
 
         try:
-            analysis = await self._analyze_metrics(metrics_store, days, min_runs)
+            analysis = await self._analyze_metrics(metrics_store, days, min_runs, min_continuations)
             context.set_process_property(output_key, analysis)
             return TaskResult.ok(output=analysis)
         except Exception as e:
             return TaskResult.fail(f"Metrics analysis failed: {str(e)}")
 
     async def _analyze_metrics(
-        self, metrics_store: Any, days: int, min_runs: int
+        self, metrics_store: Any, days: int, min_runs: int, min_continuations: int = 2
     ) -> dict[str, Any]:
         """Perform the actual metrics analysis using the MetricsStore interface."""
         cutoff_date = datetime.now() - timedelta(days=days)
@@ -171,6 +199,11 @@ class MetricsAnalyzerAction(TaskAction):
 
         # Convert runs to dicts for downstream processing
         run_dicts = self._runs_to_dicts(recent_runs)
+
+        continuation_analysis = await self._gather_continuations(
+            metrics_store, cutoff_date, min_continuations
+        )
+        continued_ids = set(continuation_analysis["continued_run_ids"])
 
         # Build per-workflow stats from the all_stats response,
         # filtered to only workflows active in the analysis period
@@ -186,6 +219,7 @@ class MetricsAnalyzerAction(TaskAction):
                 avg_rating = sum(ratings) / len(ratings) if ratings else None
                 avg_tokens = sum(r["tokens_used"] for r in period_runs) / total if total > 0 else 0
                 last_used = max(r["started_at"] for r in period_runs) if period_runs else None
+                continued = sum(1 for r in period_runs if r["id"] in continued_ids)
 
                 workflow_stats.append(
                     {
@@ -196,6 +230,8 @@ class MetricsAnalyzerAction(TaskAction):
                         "avg_rating": avg_rating,
                         "avg_tokens": avg_tokens,
                         "last_used": last_used,
+                        "continued_runs": continued,
+                        "continuation_rate": continued / total if total > 0 else 0,
                     }
                 )
 
@@ -223,6 +259,12 @@ class MetricsAnalyzerAction(TaskAction):
         recommendations = self._generate_recommendations(
             workflow_stats, low_performers, failure_patterns, usage_trends
         )
+        for fc in reversed(continuation_analysis["top_continued"][:3]):
+            recommendations.insert(
+                0,
+                f"'{fc['workflow_name']}' was continued {fc['count']} times - "
+                "review why users needed to carry on",
+            )
 
         return {
             "analysis_period_days": days,
@@ -235,7 +277,20 @@ class MetricsAnalyzerAction(TaskAction):
             "failure_patterns": failure_patterns,
             "usage_trends": usage_trends,
             "recommendations": recommendations,
+            "continuation_analysis": continuation_analysis,
         }
+
+    async def _gather_continuations(
+        self, metrics_store: Any, cutoff: datetime, min_continuations: int
+    ) -> dict[str, Any]:
+        """Analyse continuation chains; never fail the wider analysis (F136)."""
+        try:
+            return await analyze_continuations(
+                metrics_store, cutoff, min_continuations_for_proposal=min_continuations
+            )
+        except Exception as e:
+            logger.warning("Continuation analysis skipped: %s", e)
+            return empty_continuation_analysis()
 
     def _runs_to_dicts(self, runs: list) -> list[dict[str, Any]]:
         """Convert WorkflowRun dataclass instances to plain dicts."""

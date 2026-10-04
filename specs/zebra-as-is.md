@@ -168,6 +168,8 @@ consult_memory
 
 Self-improvement loop: `metrics_analyzer` → `workflow_evaluator` → `workflow_optimizer`. Runs over the last N days of metrics; can propose edits to stored workflows. `workflow_optimizer` parses and validates every created/modified workflow before saving it (library loader, `check_generated_workflow`, registered actions). It caps output at `GENERATED_WORKFLOW_MAX_TOKENS` and retries a truncated response once at 2x. Rejected changes are not saved and go to `failed_changes` instead of `changes_made`; the v3 summary prompt reports them as not applied (#128).
 
+- **F136 continuation analysis**: `metrics_analyzer` walks continuation chains in the window (`get_continuations_since` → `get_run_chain` → `get_task_executions`, logic in `zebra_tasks/agent/continuation_analysis.py`) and emits `continuation_analysis` (chains, frequently continued workflows, `new_workflow` capability gaps, added steps, `source: continuation` proposals) plus per-workflow `continuation_rate`. The evaluator merges those proposals into `improvement_priorities`; the optimizer applies them first, through the #128 validation, and reports `continuation_changes`. The v4 summary has a "Continuations" section. Lineage fields may be `None`; store errors degrade to an empty block. The continuation rate is not yet shown in the web UI.
+
 ### Memory
 
 Three-tier model (matches the design in REQ-DATA-004):
