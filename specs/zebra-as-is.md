@@ -346,6 +346,7 @@ In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via
 - `DjangoStore` (workflow state — `ProcessInstanceModel`, `TaskInstanceModel`, `FlowOfExecutionModel`)
 - `DjangoMemoryStore`, `DjangoMetricsStore`
 - Works against SQLite, PostgreSQL, Oracle (Oracle is the integration-test target).
+- Oracle uses `zebra_agent_web.db_backends.oracle`, a thin subclass of Django's backend whose `ensure_connection()` pings a connection that has seen an error and reconnects if Oracle closed it. Needed because ORM calls run in `sync_to_async(thread_sensitive=False)` workers and the daemon, where Django's request-signal `close_old_connections()` never fires — without it a dropped session wedged prod until restart (#133).
 
 ### Forms
 

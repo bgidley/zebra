@@ -114,7 +114,7 @@ CHANNEL_LAYERS = {
 if os.environ.get("ORACLE_DSN"):
     DATABASES = {
         "default": {
-            "ENGINE": "django.db.backends.oracle",
+            "ENGINE": "zebra_agent_web.db_backends.oracle",
             "NAME": os.environ.get("ORACLE_DSN", ""),
             "USER": os.environ.get("ORACLE_USERNAME", ""),
             "PASSWORD": os.environ.get("ORACLE_PASSWORD", ""),
