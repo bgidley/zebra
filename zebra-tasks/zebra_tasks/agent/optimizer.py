@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 # Extra attempts (at double the token budget) when the LLM output is truncated.
 TRUNCATION_RETRIES = 1
 
+# Priority ``source`` marking continuation-driven proposals (F136).
+CONTINUATION = "continuation"
+
 # Matches a pure template reference like "{{some_key}}"
 _PURE_TEMPLATE_RE = re.compile(r"^\{\{(\w+)\}\}$")
 
@@ -48,6 +51,8 @@ class WorkflowOptimizerAction(TaskAction):
         - skipped: Changes that were skipped and why
         - failed_changes: Changes rejected because the generated YAML was
           truncated or invalid (never saved, never listed in changes_made)
+        - continuation_changes: Outcome of continuation-driven priorities
+          (``source: continuation``), which are applied before other changes
 
     Example workflow usage:
         ```yaml
@@ -158,6 +163,14 @@ class WorkflowOptimizerAction(TaskAction):
             required=True,
         ),
         ParameterDef(
+            name="continuation_changes",
+            type="list[dict]",
+            description=(
+                "Outcome (made/failed/skipped) of each continuation-driven priority (F136)"
+            ),
+            required=True,
+        ),
+        ParameterDef(
             name="dry_run",
             type="bool",
             description="Whether this was a dry run",
@@ -242,16 +255,30 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                 "modified_workflows": [],
                 "skipped": [],
                 "failed_changes": [],
+                "continuation_changes": [],
                 "dry_run": dry_run,
             }
 
-            # Process improvement priorities
+            # Process improvement priorities. Continuation-driven ones (F136) go first:
+            # they are concrete, user-evidenced fixes.
             priorities = evaluation.get("improvement_priorities", [])
             new_suggestions = evaluation.get("new_workflow_suggestions", [])
+            continuation_priorities = [p for p in priorities if p.get("source") == CONTINUATION]
+            other_priorities = [p for p in priorities if p.get("source") != CONTINUATION]
 
             changes_count = 0
+            apply_args = (provider, evaluation, existing_workflows, system_prompt, context)
 
-            # Handle new workflow suggestions first
+            for priority in continuation_priorities:
+                if changes_count >= max_changes:
+                    self._skip_priority(results, priority, "max_changes limit reached")
+                    continue
+                if await self._apply_priority(
+                    results, priority, *apply_args, dry_run=dry_run, library_path=library_path
+                ):
+                    changes_count += 1
+
+            # Then new workflow suggestions
             for suggestion in new_suggestions:
                 name = suggestion.get("name", "new_workflow")
                 if changes_count >= max_changes:
@@ -289,87 +316,14 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                 )
                 changes_count += 1
 
-            # Handle improvements to existing workflows
-            for priority in priorities:
+            # Then the remaining improvements
+            for priority in other_priorities:
                 if changes_count >= max_changes:
-                    results["skipped"].append(
-                        {
-                            "type": priority.get("type"),
-                            "target": priority.get("target"),
-                            "reason": "max_changes limit reached",
-                        }
-                    )
+                    self._skip_priority(results, priority, "max_changes limit reached")
                     continue
-
-                if priority.get("type") == "create":
-                    name = priority.get("target", "new_workflow")
-                    workflow_yaml, error = await self._create_workflow_from_priority(
-                        provider, priority, existing_workflows, system_prompt, context
-                    )
-                    if error:
-                        self._record_failure(results, "create", name, error)
-                        continue
-
-                    results["new_workflows"].append(
-                        {
-                            "name": name,
-                            "yaml": workflow_yaml,
-                            "reason": priority.get("rationale", ""),
-                        }
-                    )
-                    if not dry_run and library_path:
-                        self._save_workflow(library_path, name, workflow_yaml)
-                    results["changes_made"].append(
-                        {
-                            "type": "create",
-                            "workflow": name,
-                            "action": priority.get("action", ""),
-                        }
-                    )
-                    changes_count += 1
-
-                elif priority.get("type") in ("fix", "enhance"):
-                    target = priority.get("target")
-                    if target not in existing_workflows:
-                        results["skipped"].append(
-                            {
-                                "type": priority.get("type"),
-                                "target": target,
-                                "reason": "workflow not found in existing_workflows",
-                            }
-                        )
-                        continue
-
-                    modified_yaml, error = await self._modify_workflow(
-                        provider,
-                        target,
-                        existing_workflows[target],
-                        priority,
-                        evaluation.get("workflow_evaluations", []),
-                        system_prompt,
-                        context,
-                    )
-                    if error:
-                        self._record_failure(results, "modify", target, error)
-                        continue
-
-                    results["modified_workflows"].append(
-                        {
-                            "name": target,
-                            "original_yaml": existing_workflows[target],
-                            "modified_yaml": modified_yaml,
-                            "reason": priority.get("rationale", ""),
-                        }
-                    )
-                    if not dry_run and library_path:
-                        self._save_workflow(library_path, target, modified_yaml)
-                    results["changes_made"].append(
-                        {
-                            "type": "modify",
-                            "workflow": target,
-                            "action": priority.get("action", ""),
-                        }
-                    )
+                if await self._apply_priority(
+                    results, priority, *apply_args, dry_run=dry_run, library_path=library_path
+                ):
                     changes_count += 1
 
             # Store result
@@ -625,6 +579,106 @@ Maintain the same name and general purpose, but improve the implementation."""
             if unknown:
                 return f"Unregistered action(s): {', '.join(unknown)}"
         return None
+
+    async def _apply_priority(
+        self,
+        results: dict[str, Any],
+        priority: dict[str, Any],
+        provider,
+        evaluation: dict[str, Any],
+        existing_workflows: dict[str, str],
+        system_prompt: str,
+        context: ExecutionContext,
+        *,
+        dry_run: bool,
+        library_path: str | None,
+    ) -> bool:
+        """Generate, validate and (unless dry run) save one priority's change.
+
+        Returns True when a change was made (counts toward ``max_changes``).
+        """
+        ptype = priority.get("type")
+        if ptype == "create":
+            name = priority.get("target", "new_workflow")
+            workflow_yaml, error = await self._create_workflow_from_priority(
+                provider, priority, existing_workflows, system_prompt, context
+            )
+            if error:
+                self._record_failure(results, "create", name, error)
+                self._track_continuation(results, priority, "failed", error)
+                return False
+            results["new_workflows"].append(
+                {"name": name, "yaml": workflow_yaml, "reason": priority.get("rationale", "")}
+            )
+            if not dry_run and library_path:
+                self._save_workflow(library_path, name, workflow_yaml)
+            self._record_change(results, priority, "create", name)
+            return True
+
+        if ptype in ("fix", "enhance"):
+            target = priority.get("target")
+            if target not in existing_workflows:
+                self._skip_priority(results, priority, "workflow not found in existing_workflows")
+                return False
+            modified_yaml, error = await self._modify_workflow(
+                provider,
+                target,
+                existing_workflows[target],
+                priority,
+                evaluation.get("workflow_evaluations", []),
+                system_prompt,
+                context,
+            )
+            if error:
+                self._record_failure(results, "modify", target, error)
+                self._track_continuation(results, priority, "failed", error)
+                return False
+            results["modified_workflows"].append(
+                {
+                    "name": target,
+                    "original_yaml": existing_workflows[target],
+                    "modified_yaml": modified_yaml,
+                    "reason": priority.get("rationale", ""),
+                }
+            )
+            if not dry_run and library_path:
+                self._save_workflow(library_path, target, modified_yaml)
+            self._record_change(results, priority, "modify", target)
+            return True
+
+        return False
+
+    def _record_change(
+        self, results: dict[str, Any], priority: dict[str, Any], change_type: str, name: str
+    ) -> None:
+        change = {"type": change_type, "workflow": name, "action": priority.get("action", "")}
+        if priority.get("source"):
+            change["source"] = priority["source"]
+        results["changes_made"].append(change)
+        self._track_continuation(results, priority, "made")
+
+    def _skip_priority(self, results: dict[str, Any], priority: dict[str, Any], reason: str):
+        results["skipped"].append(
+            {"type": priority.get("type"), "target": priority.get("target"), "reason": reason}
+        )
+        self._track_continuation(results, priority, "skipped", reason)
+
+    @staticmethod
+    def _track_continuation(
+        results: dict[str, Any], priority: dict[str, Any], status: str, reason: str = ""
+    ) -> None:
+        """Record the outcome of a continuation-driven priority for the summary (F136)."""
+        if priority.get("source") != CONTINUATION:
+            return
+        results["continuation_changes"].append(
+            {
+                "type": priority.get("type"),
+                "kind": priority.get("kind"),
+                "workflow": priority.get("target"),
+                "status": status,
+                "reason": reason,
+            }
+        )
 
     @staticmethod
     def _record_failure(results: dict[str, Any], change_type: str, name: str, reason: str):
