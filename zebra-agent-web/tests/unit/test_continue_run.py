@@ -125,6 +125,16 @@ async def test_continue_404_for_other_users_or_unfinished_run(user_a, user_b, fa
 
 
 @pytest.mark.django_db(transaction=True)
+async def test_continue_blank_comment_on_other_users_run_is_404(user_a, user_b, fake_agent_engine):
+    await _create_run("f134-theirs-blank", user_b.id)
+    with _AsUser(user_a):
+        response = await web_views.run_continue(
+            _post("f134-theirs-blank", user_a, comment=""), "f134-theirs-blank"
+        )
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db(transaction=True)
 async def test_continue_now_starts_background_run_with_comment_and_progress(
     user_a, fake_agent_engine
 ):

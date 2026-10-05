@@ -547,14 +547,16 @@ async def run_continue(request, run_id):
     The continuation keeps the original goal text; the comment, task-level
     progress and chain summary travel in process properties.
     """
-    comment = request.POST.get("comment", "").strip()
-    if not comment:
-        return HttpResponse("A comment on where it got to is required", status=400)
-
+    # Resolve the run before validating input so another user's run is a 404
+    # either way, rather than leaking its existence through a 400.
     previous_run = await _completed_run(run_id)
     previous_run_context = await _previous_run_context(run_id) if previous_run else None
     if previous_run is None or previous_run_context is None:
         return HttpResponse("Run not found or still in progress", status=404)
+
+    comment = request.POST.get("comment", "").strip()
+    if not comment:
+        return HttpResponse("A comment on where it got to is required", status=400)
     goal = previous_run.goal
 
     model_name = request.POST.get("model", "").strip() or None
