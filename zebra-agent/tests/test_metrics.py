@@ -748,3 +748,54 @@ class TestGetTaskExecutions:
         """Test getting task executions for nonexistent run."""
         executions = await metrics.get_task_executions("nonexistent-run-id")
         assert executions == []
+
+
+class TestContinuationChain:
+    """Tests for continuation lineage queries (F134/F136)."""
+
+    async def _chain(self, metrics) -> list[WorkflowRun]:
+        root = WorkflowRun.create("Research", "Find sources")
+        mid = WorkflowRun.create("Research", "Find sources")
+        mid.extends_run_id = root.id
+        mid.continuation_comment = "Only found two; need five"
+        mid.continuation_decision = "same_workflow"
+        leaf = WorkflowRun.create("Summarise", "Find sources")
+        leaf.extends_run_id = mid.id
+        leaf.continuation_decision = "existing_workflow"
+        leaf.continuation_rationale = "Remaining work is summarising"
+        for run in (root, mid, leaf):
+            await metrics.record_run(run)
+        return [root, mid, leaf]
+
+    async def test_get_run_chain_oldest_first(self, metrics):
+        root, mid, leaf = await self._chain(metrics)
+        chain = await metrics.get_run_chain(leaf.id)
+        assert [r.id for r in chain] == [root.id, mid.id, leaf.id]
+
+    async def test_get_run_chain_root_only(self, metrics):
+        root, _, _ = await self._chain(metrics)
+        assert [r.id for r in await metrics.get_run_chain(root.id)] == [root.id]
+
+    async def test_get_run_chain_unknown(self, metrics):
+        assert await metrics.get_run_chain("missing") == []
+
+    async def test_get_run_chain_stops_at_cycle(self, metrics):
+        a = WorkflowRun.create("W", "g")
+        b = WorkflowRun.create("W", "g")
+        a.extends_run_id, b.extends_run_id = b.id, a.id
+        await metrics.record_run(a)
+        await metrics.record_run(b)
+        assert len(await metrics.get_run_chain(a.id)) == 2
+
+    async def test_get_continuations_since(self, metrics):
+        root, mid, leaf = await self._chain(metrics)
+        runs = await metrics.get_continuations_since(datetime(2000, 1, 1, tzinfo=UTC))
+        assert {r.id for r in runs} == {mid.id, leaf.id}
+
+    async def test_continuation_fields_survive_rating_update(self, metrics):
+        _, mid, _ = await self._chain(metrics)
+        await metrics.update_rating(mid.id, 4)
+        got = await metrics.get_run(mid.id)
+        assert got.user_rating == 4
+        assert got.continuation_comment == "Only found two; need five"
+        assert got.continuation_decision == "same_workflow"

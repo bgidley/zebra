@@ -573,6 +573,8 @@ POST /api/tasks/<task_id>/complete/
 | `/runs/in-progress/` | `in_progress_runs` | Currently running goals |
 | `/runs/<id>/` | `run_detail` | Run details with diagram (includes cost column) |
 | `/runs/<id>/context/` | `run_context_partial` | HTMX preview of one of your completed runs for "Extend a previous run" (F116) |
+| `/runs/<id>/continue/` | `run_continue` | Continue a finished run with a progress comment; `mode=now\|queue` (POST, HTMX, F134) |
+| `/api/runs/<id>/continue/` | `run_continue` | Queue a continuation `{comment, model?, priority?}`; 202 (API, POST, F134) |
 | `/workflows/` | `workflow_library` | Workflow library |
 | `/tasks/` | `pending_tasks` | Pending human tasks list |
 | `/tasks/<id>/` | `human_task_form` | Human task form page |

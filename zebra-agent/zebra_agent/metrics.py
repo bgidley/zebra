@@ -36,6 +36,10 @@ class WorkflowRun:
     output: Any = None
     model: str | None = None  # LLM model used (e.g. "claude-sonnet-4-20250514")
     extends_run_id: str | None = None  # F116: run this one follows up on
+    # F134/F135: continuation of a previous run (extends_run_id is the predecessor)
+    continuation_comment: str | None = None  # user's "where it got to / what next"
+    continuation_decision: str | None = None  # same_workflow|existing_workflow|new_workflow
+    continuation_rationale: str | None = None  # why the assessor chose that route
 
     @classmethod
     def create(cls, workflow_name: str, goal: str) -> "WorkflowRun":

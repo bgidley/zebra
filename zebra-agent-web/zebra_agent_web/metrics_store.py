@@ -93,6 +93,9 @@ class DjangoMetricsStore(MetricsStore):
                     "output": output_str,
                     "model": run.model or "",
                     "extends_run_id": run.extends_run_id,
+                    "continuation_comment": run.continuation_comment,
+                    "continuation_decision": run.continuation_decision,
+                    "continuation_rationale": run.continuation_rationale,
                     "user_id": user_id,
                 },
             )
@@ -300,6 +303,9 @@ class DjangoMetricsStore(MetricsStore):
             output=output,
             model=model.model or None,
             extends_run_id=model.extends_run_id,
+            continuation_comment=model.continuation_comment,
+            continuation_decision=model.continuation_decision,
+            continuation_rationale=model.continuation_rationale,
         )
 
     # =========================================================================

@@ -120,3 +120,26 @@ async def test_queue_goal_rejects_empty_goal(mock_machinery):
 
     with pytest.raises(ValueError, match="Goal is required"):
         await queue_goal("   ")
+
+
+async def test_queue_goal_stores_continuation_with_previous_run(mock_machinery):
+    """F134: continuation_comment travels with previous_run_context."""
+    from zebra_agent_web.api.goals import queue_goal
+
+    ctx = {"run_id": "r1", "goal": "g", "workflow_name": "W", "success": False, "output": ""}
+    await queue_goal("g", previous_run_context=ctx, continuation_comment="keep going")
+
+    props = mock_machinery["wf_engine"].create_process.call_args.kwargs["properties"]
+    assert props["previous_run_context"] == ctx
+    assert props["continuation_comment"] == "keep going"
+
+
+async def test_queue_goal_ignores_comment_without_previous_run(mock_machinery):
+    """A stray comment without a previous run is not a continuation."""
+    from zebra_agent_web.api.goals import queue_goal
+
+    await queue_goal("g", continuation_comment="keep going")
+
+    props = mock_machinery["wf_engine"].create_process.call_args.kwargs["properties"]
+    assert "continuation_comment" not in props
+    assert "previous_run_context" not in props

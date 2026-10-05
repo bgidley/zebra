@@ -34,6 +34,10 @@ e2e:
   # schema is dropped in after_script and re-created (drop-if-exists) on retry.
   retry: 2
   script:
+    # Per-job workflow library. The shell runner shares $HOME across branches, so
+    # the default ~/.zebra/workflows would let one branch's newer built-in YAML
+    # (copied only on version bump) leak into another branch's e2e run.
+    - export ZEBRA_LIBRARY_PATH="$CI_PROJECT_DIR/.ci-workflows" && rm -rf "$ZEBRA_LIBRARY_PATH"
     # E2E_PROVISIONER_* are GitLab CI variables (set in project settings).
     - |
       if [ -n "$E2E_PROVISIONER_DSN" ] && [ -n "$E2E_PROVISIONER_USERNAME" ] && [ -n "$E2E_PROVISIONER_PASSWORD" ]; then

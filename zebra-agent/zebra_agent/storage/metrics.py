@@ -6,6 +6,7 @@ Data is lost when the process exits - suitable for testing and ephemeral use cas
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -60,27 +61,7 @@ class InMemoryMetricsStore(MetricsStore):
         await self._ensure_initialized()
         if run_id in self._runs:
             run = self._runs[run_id]
-            # Import here to avoid circular import
-            from zebra_agent.metrics import WorkflowRun
-
-            # Create a new run with updated rating (dataclass is immutable pattern)
-            self._runs[run_id] = WorkflowRun(
-                id=run.id,
-                workflow_name=run.workflow_name,
-                goal=run.goal,
-                started_at=run.started_at,
-                completed_at=run.completed_at,
-                success=run.success,
-                user_rating=rating,
-                tokens_used=run.tokens_used,
-                input_tokens=run.input_tokens,
-                output_tokens=run.output_tokens,
-                cost=run.cost,
-                error=run.error,
-                output=run.output,
-                model=run.model,
-                extends_run_id=run.extends_run_id,
-            )
+            self._runs[run_id] = dataclasses.replace(run, user_rating=rating)
 
     async def get_run(self, run_id: str) -> WorkflowRun | None:
         """Get a specific run by ID."""
