@@ -95,6 +95,25 @@ class ExecuteGoalRequestSerializer(serializers.Serializer):
     )
 
 
+class ContinueRunRequestSerializer(serializers.Serializer):
+    """Request serializer for continuing a finished run (F134)."""
+
+    comment = serializers.CharField(
+        help_text="Where the previous run got to and what should happen next"
+    )
+    model = serializers.ChoiceField(
+        choices=["haiku", "sonnet", "opus"],
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        default=None,
+        help_text="LLM model: haiku, sonnet, opus (default: server setting)",
+    )
+    priority = serializers.IntegerField(
+        required=False, default=3, min_value=1, max_value=5, help_text="1 (highest) to 5"
+    )
+
+
 class CreateWorkflowRequestSerializer(serializers.Serializer):
     """Request serializer for creating a workflow from YAML."""
 

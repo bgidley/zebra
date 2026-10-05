@@ -120,15 +120,19 @@
             <h2 class="text-lg font-semibold text-white">Goal</h2>
         </div>
         <div class="p-6 text-gray-200">{{ run.goal }}</div>
-        {% if run.extends_run_id %}
+        {% if run.extends_run_id and not run_chain %}
         <div class="px-6 pb-4 text-sm text-gray-400">
             Follow-up to <a href="/runs/{{ run.extends_run_id }}/" class="text-indigo-400 hover:text-indigo-300">a previous run</a>
         </div>
         {% endif %}
     </div>
 
+    <!-- Continuation chain (F134) -->
+    {% include "partials/run_chain.html" %}
+
     <!-- Planning Concerns (F21 — proactive, advisory) -->
     {% include "partials/planning_concerns.html" %}
+    {% include "partials/_continuation_decision.html" %}
 
     <!-- Parent Orchestration Flow -->
     {% if parent_flow %}
@@ -420,7 +424,10 @@
         <div class="p-6 text-red-300">{{ run.error }}</div>
     </div>
     {% endif %}
-    
+
+    <!-- Continue this run (F134) -->
+    {% include "partials/run_continue.html" %}
+
     <!-- Rating (if not rated) -->
     {% if not run.user_rating %}
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">

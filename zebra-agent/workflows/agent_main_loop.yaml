@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 7
+version: 8
 first_task: consult_memory
 
 tasks:
@@ -33,6 +33,19 @@ tasks:
       goal: "{{goal}}"
       check_type: "input_gate"
       output_key: ethics_input_assessment
+
+  # Step 3a: Continuation assessment (F135) - for goals continuing a previous run,
+  # decide whether to re-run the same workflow, select another existing one, or
+  # create a new one. Goals without previous_run_context pass straight through
+  # ("not_continuation") with no LLM call.
+  assess_continuation:
+    name: "Assess Continuation"
+    action: continuation_assessor
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      available_workflows: "{{available_workflows}}"
+      output_key: continuation_assessment
 
   # Step 4: Select best workflow (informed by memory shortlist and personal knowledge)
   select_workflow:
@@ -245,7 +258,7 @@ routings:
 
   # Ethics input gate routing
   - from: ethics_input_gate
-    to: select_workflow
+    to: assess_continuation
     condition: route_name
     name: "proceed"
 
@@ -253,6 +266,27 @@ routings:
     to: ethics_rejection
     condition: route_name
     name: "reject"
+
+  # Continuation assessment routing (F135)
+  - from: assess_continuation
+    to: select_workflow
+    condition: route_name
+    name: "not_continuation"
+
+  - from: assess_continuation
+    to: select_workflow
+    condition: route_name
+    name: "existing_workflow"
+
+  - from: assess_continuation
+    to: flag_concerns
+    condition: route_name
+    name: "same_workflow"
+
+  - from: assess_continuation
+    to: create_workflow
+    condition: route_name
+    name: "new_workflow"
 
   # Workflow selection routing based on selector next_route
   - from: select_workflow

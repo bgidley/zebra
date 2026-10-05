@@ -27,6 +27,7 @@ async def queue_goal(
     user_id: int | None = None,
     identity: dict | None = None,
     previous_run_context: dict | None = None,
+    continuation_comment: str | None = None,
 ) -> ProcessInstance:
     """Queue a goal for budget-managed daemon execution.
 
@@ -43,6 +44,8 @@ async def queue_goal(
             this from the request; the CLI omits it).
         previous_run_context: Summary of a previous run this goal follows up on
             (F116), or None.
+        continuation_comment: User comment on where the previous run got to
+            and what to do next (F134); only stored with previous_run_context.
 
     Returns:
         The created ProcessInstance (state CREATED).
@@ -102,6 +105,8 @@ async def queue_goal(
         properties["deadline"] = deadline
     if previous_run_context:
         properties["previous_run_context"] = previous_run_context
+        if continuation_comment:
+            properties["continuation_comment"] = continuation_comment
 
     process = await wf_engine.create_process(definition, properties=properties)
     logger.info(
