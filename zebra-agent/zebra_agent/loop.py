@@ -112,6 +112,7 @@ class AgentLoop:
         model: str | None = None,
         user_id: int | None = None,
         previous_run_context: dict | None = None,
+        continuation_comment: str | None = None,
     ) -> AgentResult:
         """
         Process a user goal through the agent loop workflow.
@@ -133,6 +134,9 @@ class AgentLoop:
             user_id: Optional ID of the user who submitted the goal
             previous_run_context: Optional summary of a previous run this goal
                 follows up on (F116), built by build_previous_run_context()
+            continuation_comment: Optional user comment on where the previous
+                run got to and what to do next (F134); requires
+                previous_run_context.
 
         Returns:
             AgentResult with output, success status, tokens used, etc.
@@ -179,6 +183,8 @@ class AgentLoop:
         }
         if previous_run_context:
             properties["previous_run_context"] = previous_run_context
+            if continuation_comment:
+                properties["continuation_comment"] = continuation_comment
 
         await emit("started", {"run_id": run_id, "goal": goal})
 

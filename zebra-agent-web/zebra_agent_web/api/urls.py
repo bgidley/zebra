@@ -26,6 +26,7 @@ urlpatterns = [
     path("runs/", views.runs_list, name="api_runs_list"),
     path("runs/<str:run_id>/", views.run_detail, name="api_run_detail"),
     path("runs/<str:run_id>/rate/", views.run_rate, name="api_run_rate"),
+    path("runs/<str:run_id>/continue/", views.run_continue, name="api_run_continue"),
     path("runs/<str:run_id>/status/", views.run_status, name="api_run_status"),
     path("runs/<str:run_id>/diagram/", views.run_diagram, name="api_run_diagram"),
     # Budget

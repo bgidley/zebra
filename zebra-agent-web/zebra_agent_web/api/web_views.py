@@ -25,7 +25,7 @@ from django.utils.html import escape
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
 from zebra_agent.metrics import WorkflowRun
-from zebra_tasks.agent.followup import build_previous_run_context
+from zebra_tasks.agent.followup import load_previous_run_context
 
 from zebra_agent_web.api import agent_engine, engine, manual_review
 
@@ -370,9 +370,72 @@ async def _completed_run(run_id: str | None) -> WorkflowRun | None:
 
 
 async def _previous_run_context(run_id: str | None) -> dict | None:
-    """Build the previous_run_context property for a follow-up goal (F116)."""
-    run = await _completed_run(run_id)
-    return build_previous_run_context(run) if run else None
+    """Build the previous_run_context property for a follow-up goal (F116/F134).
+
+    Includes task-level progress and a compact continuation-chain summary.
+    """
+    await agent_engine.ensure_initialized()
+    return await load_previous_run_context(agent_engine.get_metrics(), run_id)
+
+
+async def _run_chain(metrics, run: WorkflowRun) -> list[dict[str, Any]]:
+    """Return the continuation chain through *run* for display (F134).
+
+    Ancestors come from ``get_run_chain``; continuations of *run* (and theirs)
+    are found among runs started since *run*. Returns [] when *run* is not
+    part of a chain.
+    """
+    try:
+        chain = await metrics.get_run_chain(run.id)
+        later = await metrics.get_continuations_since(run.started_at)
+    except Exception:
+        logger.debug("Could not load continuation chain for run %s", run.id, exc_info=True)
+        return []
+    known = {r.id for r in chain}
+    frontier = {run.id}
+    descendants: list[WorkflowRun] = []
+    while frontier:
+        children = [r for r in later if r.extends_run_id in frontier and r.id not in known]
+        known.update(r.id for r in children)
+        descendants.extend(children)
+        frontier = {r.id for r in children}
+    chain = chain + sorted(descendants, key=lambda r: r.started_at)
+    if len(chain) < 2:
+        return []
+    return [
+        {
+            "id": r.id,
+            "position": i,
+            "workflow_name": r.workflow_name,
+            "success": r.success,
+            "started_at": r.started_at,
+            "is_current": r.id == run.id,
+            "comment": r.continuation_comment,
+            "decision": r.continuation_decision,
+            "rationale": r.continuation_rationale,
+        }
+        for i, r in enumerate(chain)
+    ]
+
+
+def _queued_html(process_id: str, priority: int, deadline: str | None) -> str:
+    """Success partial shown after a goal is queued for the daemon."""
+    return (
+        f'<div class="bg-green-900/30 border border-green-700 rounded-lg p-6 text-center">'
+        f'<svg class="mx-auto h-10 w-10 text-green-400 mb-3" fill="none"'
+        f' viewBox="0 0 24 24" stroke="currentColor">'
+        f'<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"'
+        f' d="M5 13l4 4L19 7" />'
+        f"</svg>"
+        f'<h3 class="text-lg font-semibold text-green-300">Goal Queued</h3>'
+        f'<p class="text-sm text-gray-400 mt-1">Priority {priority}'
+        f"{' | Deadline: ' + deadline if deadline else ''}</p>"
+        f'<p class="text-xs text-gray-500 mt-2">Process ID: {process_id[:12]}... '
+        f"The budget daemon will start this goal when budget allows.</p>"
+        f'<a href="/activity/" class="inline-block mt-3 text-indigo-400'
+        f' hover:text-indigo-300 text-sm">View Activity</a>'
+        f"</div>"
+    )
 
 
 async def run_goal_form(request):
@@ -469,6 +532,76 @@ async def run_goal_execute(request):
     # Return processing UI immediately
     context = {"run_id": run_id, "goal": goal}
 
+    if request.headers.get("HX-Request"):
+        return render(request, "partials/goal_processing.html", context)
+    return render(request, "pages/goal_processing.html", context)
+
+
+@require_http_methods(["POST"])
+async def run_continue(request, run_id):
+    """Continue a finished run with a progress comment (F134).
+
+    POST fields: ``comment`` (required — where it got to / what next),
+    ``mode`` (``now`` runs immediately, ``queue`` hands it to the daemon),
+    optional ``model`` and ``priority``. Works for successful and failed runs.
+    The continuation keeps the original goal text; the comment, task-level
+    progress and chain summary travel in process properties.
+    """
+    # Resolve the run before validating input so another user's run is a 404
+    # either way, rather than leaking its existence through a 400.
+    previous_run = await _completed_run(run_id)
+    previous_run_context = await _previous_run_context(run_id) if previous_run else None
+    if previous_run is None or previous_run_context is None:
+        return HttpResponse("Run not found or still in progress", status=404)
+
+    comment = request.POST.get("comment", "").strip()
+    if not comment:
+        return HttpResponse("A comment on where it got to is required", status=400)
+    goal = previous_run.goal
+
+    model_name = request.POST.get("model", "").strip() or None
+    user_id = request.user.id if request.user.is_authenticated else None
+
+    if request.POST.get("mode", "now") == "queue":
+        try:
+            priority = max(1, min(5, int(request.POST.get("priority", "3"))))
+        except (TypeError, ValueError):
+            priority = 3
+
+        from zebra_agent_web.api.goals import queue_goal
+
+        try:
+            process = await queue_goal(
+                goal,
+                model=model_name,
+                priority=priority,
+                user_id=user_id,
+                identity=_identity_context(),
+                previous_run_context=previous_run_context,
+                continuation_comment=comment,
+            )
+        except Exception as e:
+            logger.exception("Failed to queue continuation of run %s", run_id)
+            return HttpResponse(f"Failed to queue continuation: {e}", status=500)
+        return HttpResponse(_queued_html(process.id, priority, None))
+
+    from zebra_tasks.llm.models import resolve_model_name
+
+    new_run_id = str(uuid.uuid4())
+    task = asyncio.create_task(
+        _execute_goal_background(
+            new_run_id,
+            goal,
+            model=resolve_model_name(model_name) if model_name else None,
+            user_id=user_id,
+            previous_run_context=previous_run_context,
+            continuation_comment=comment,
+        )
+    )
+    _active_tasks[new_run_id] = task
+    task.add_done_callback(lambda t: _active_tasks.pop(new_run_id, None))
+
+    context = {"run_id": new_run_id, "goal": goal}
     if request.headers.get("HX-Request"):
         return render(request, "partials/goal_processing.html", context)
     return render(request, "pages/goal_processing.html", context)
@@ -576,24 +709,7 @@ async def run_goal_queue(request):
         logger.exception("Failed to queue goal")
         return HttpResponse(f"Failed to queue goal: {e}", status=500)
 
-    # Return a success partial
-    html = (
-        f'<div class="bg-green-900/30 border border-green-700 rounded-lg p-6 text-center">'
-        f'<svg class="mx-auto h-10 w-10 text-green-400 mb-3" fill="none"'
-        f' viewBox="0 0 24 24" stroke="currentColor">'
-        f'<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"'
-        f' d="M5 13l4 4L19 7" />'
-        f"</svg>"
-        f'<h3 class="text-lg font-semibold text-green-300">Goal Queued</h3>'
-        f'<p class="text-sm text-gray-400 mt-1">Priority {priority}'
-        f"{' | Deadline: ' + deadline if deadline else ''}</p>"
-        f'<p class="text-xs text-gray-500 mt-2">Process ID: {process.id[:12]}... '
-        f"The budget daemon will start this goal when budget allows.</p>"
-        f'<a href="/activity/" class="inline-block mt-3 text-indigo-400'
-        f' hover:text-indigo-300 text-sm">View Activity</a>'
-        f"</div>"
-    )
-    return HttpResponse(html)
+    return HttpResponse(_queued_html(process.id, priority, deadline))
 
 
 async def _execute_goal_background(
@@ -602,6 +718,7 @@ async def _execute_goal_background(
     model: str | None = None,
     user_id: int | None = None,
     previous_run_context: dict | None = None,
+    continuation_comment: str | None = None,
 ) -> None:
     """Execute goal in background, sending progress via WebSocket channel layer.
 
@@ -633,6 +750,7 @@ async def _execute_goal_background(
             model=model,
             user_id=user_id,
             previous_run_context=previous_run_context,
+            continuation_comment=continuation_comment,
         )
 
         # Send completion event
@@ -1145,9 +1263,12 @@ async def run_detail(request, run_id):
             "started_at": run.started_at,
             "completed_at": run.completed_at,
             "model": friendly_model_name(run.model),
+            "extends_run_id": run.extends_run_id,
+            "continuation_comment": run.continuation_comment,
             "continuation_decision": run.continuation_decision,
             "continuation_rationale": run.continuation_rationale,
         },
+        "run_chain": await _run_chain(metrics, run),
         "workflow_svg": workflow_svg,
         "task_executions": formatted_executions,
         "parent_flow": parent_flow,
