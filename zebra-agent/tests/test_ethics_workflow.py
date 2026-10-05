@@ -6,7 +6,9 @@ Verifies that the agent_main_loop.yaml correctly wires ethics checkpoints:
 3. Post-execution LLM review (automated, no human confirmation required)
 """
 
+import json
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from zebra.core.engine import WorkflowEngine
@@ -15,6 +17,7 @@ from zebra.definitions.loader import load_definition_from_yaml
 from zebra.storage.memory import InMemoryStore
 from zebra.tasks.base import TaskAction
 from zebra.tasks.registry import ActionRegistry
+from zebra_tasks.agent.continuation_assessor import ContinuationAssessorAction
 from zebra_tasks.agent.record_dilemma_resolution import RecordDilemmaResolutionAction
 
 # ---------------------------------------------------------------------------
@@ -176,6 +179,8 @@ def _make_registry(ethics_gate_class):
     registry.register_action("consult_memory", StubConsultMemory)
     registry.register_action("consult_knowledge", StubConsultKnowledge)
     registry.register_action("ethics_gate", ethics_gate_class)
+    # F135: real assessor — passes non-continuation goals straight through (no LLM)
+    registry.register_action("continuation_assessor", ContinuationAssessorAction)
     registry.register_action("flag_concerns", StubFlagConcerns)
     registry.register_action("record_dilemma_resolution", RecordDilemmaResolutionAction)
     registry.register_action("workflow_selector", StubWorkflowSelector)
@@ -375,3 +380,112 @@ class TestEthicsWorkflowIntegration:
         assert "ethics_plan_assessment" in process.properties
         assert process.properties["ethics_input_assessment"]["approved"] is True
         assert process.properties["ethics_plan_assessment"]["approved"] is True
+
+
+# ---------------------------------------------------------------------------
+# F135: continuation assessment routing through the real main loop
+# ---------------------------------------------------------------------------
+
+
+class _Library:
+    """WorkflowLibrary stand-in: knows only the given workflow names."""
+
+    def __init__(self, names):
+        self._names = set(names)
+
+    def get_workflow(self, name):
+        if name not in self._names:
+            raise ValueError(name)
+        return name
+
+
+def _llm_returning(payload: dict):
+    response = MagicMock()
+    response.content = json.dumps(payload)
+    provider = MagicMock()
+    provider.complete = AsyncMock(return_value=response)
+    return provider
+
+
+_PREVIOUS = {
+    "run_id": "run-prev",
+    "goal": "Draft a blog post",
+    "workflow_name": "Writer",
+    "success": True,
+    "output": "Draft v1",
+}
+
+
+class TestContinuationRouting:
+    """The assessor sits between the input gate and selection (F135)."""
+
+    async def _run(self, definition, properties, provider=None, library=("Writer",)):
+        registry = _make_registry(StubEthicsGateApprove)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry, extras={"__workflow_library__": _Library(library)})
+        process = await engine.create_process(definition, properties=properties)
+        with patch(
+            "zebra_tasks.agent.continuation_assessor.get_provider",
+            return_value=provider or _llm_returning({}),
+        ) as get_provider:
+            await engine.start_process(process.id)
+        process = await store.load_process(process.id)
+        assert process.state == ProcessState.COMPLETE
+        return process.properties, get_provider
+
+    async def test_non_continuation_goal_bypasses_assessment(self, definition):
+        props, get_provider = await self._run(
+            definition, {"goal": "Write a poem", "available_workflows": []}
+        )
+        get_provider.assert_not_called()
+        assert "continuation_decision" not in props
+        assert "__task_output_select_workflow" in props
+        assert props["workflow_name"] == "Test Workflow"
+
+    async def test_same_workflow_skips_selection(self, definition):
+        provider = _llm_returning({"decision": "same_workflow", "rationale": "One more pass"})
+        props, _ = await self._run(
+            definition,
+            {"goal": "Polish it", "available_workflows": [], "previous_run_context": _PREVIOUS},
+            provider,
+        )
+        assert props["continuation_decision"] == "same_workflow"
+        assert props["continuation_rationale"] == "One more pass"
+        assert "__task_output_select_workflow" not in props
+        assert props["workflow_name"] == "Writer"
+        assert "__task_output_execute_workflow" in props
+
+    async def test_existing_workflow_runs_selector(self, definition):
+        provider = _llm_returning({"decision": "existing_workflow", "rationale": "Needs review"})
+        props, _ = await self._run(
+            definition,
+            {"goal": "Review it", "available_workflows": [], "previous_run_context": _PREVIOUS},
+            provider,
+        )
+        assert props["continuation_decision"] == "existing_workflow"
+        assert "__task_output_select_workflow" in props
+        assert "__task_output_create_workflow" not in props
+
+    async def test_new_workflow_runs_creator(self, definition):
+        provider = _llm_returning(
+            {"decision": "new_workflow", "rationale": "Novel", "suggested_name": "Publisher"}
+        )
+        props, _ = await self._run(
+            definition,
+            {"goal": "Publish it", "available_workflows": [], "previous_run_context": _PREVIOUS},
+            provider,
+        )
+        assert props["continuation_decision"] == "new_workflow"
+        assert "__task_output_select_workflow" not in props
+        assert "__task_output_create_workflow" in props
+
+    async def test_same_workflow_missing_falls_back_to_selector(self, definition):
+        provider = _llm_returning({"decision": "same_workflow", "rationale": "Again"})
+        props, _ = await self._run(
+            definition,
+            {"goal": "Polish it", "available_workflows": [], "previous_run_context": _PREVIOUS},
+            provider,
+            library=(),
+        )
+        assert props["continuation_decision"] == "existing_workflow"
+        assert "__task_output_select_workflow" in props
