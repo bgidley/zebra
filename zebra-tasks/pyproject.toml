@@ -81,6 +81,9 @@ ethics_gate = "zebra_tasks.agent.ethics_gate:EthicsGateAction"
 flag_concerns = "zebra_tasks.agent.flag_concerns:FlagConcernsAction"
 # Agent - Dilemma escalation (F22)
 record_dilemma_resolution = "zebra_tasks.agent.record_dilemma_resolution:RecordDilemmaResolutionAction"
+# Agent - Ethics outcome recording (#143)
+record_ethics_review = "zebra_tasks.agent.record_ethics_review:RecordEthicsReviewAction"
+record_ethics_rejection = "zebra_tasks.agent.record_ethics_rejection:RecordEthicsRejectionAction"
 # Agent - Trust gate (F13)
 trust_gate = "zebra_tasks.agent.trust_gate:TrustGateAction"
 propose_trust_promotion = "zebra_tasks.agent.propose_trust_promotion:ProposeTrustPromotionAction"
@@ -90,7 +93,7 @@ extract_values_tags = "zebra_tasks.agent.extract_values_tags:ExtractValuesTagsAc
 save_values_profile = "zebra_tasks.agent.save_values_profile:SaveValuesProfileAction"
 # Web search (F115)
 kagi_search = "zebra_tasks.web.kagi_search:KagiSearchAction"
-kagi_summarize = "zebra_tasks.web.kagi_summarize:KagiSummarizeAction"
+kagi_extract = "zebra_tasks.web.kagi_extract:KagiExtractAction"
 # Notifications (F65)
 notify_email = "zebra_tasks.notifications.smtp_email:NotifyEmailAction"
 notify_webhook = "zebra_tasks.notifications.webhook:NotifyWebhookAction"
