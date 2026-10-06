@@ -211,7 +211,7 @@ Minimal: `/list`, `/stats`, `/help`, `/quit`. Launch with `zebra-agent` / `pytho
 
 Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, post-execution review. Implementation is LLM-prompt-based Kantian reasoning (universalizability, rational beings as ends, autonomy). The post-execution review is advisory and automated (no human confirmation since F111).
 
-**Ethics outcome recording (#143, loop v9).** Every ethics verdict is now durable and visible:
+**Ethics outcome recording (#143, loop v10).** Every ethics verdict is now durable and visible:
 - `record_ethics_review` normalises `ethics_post_assessment` to `{ethical, overall_reasoning, concerns, recommendations}` and appends an `EthicsAuditEntry` with `check_type="post_review"`. An unparseable review fails closed (`ethical=false`).
 - The review runs *after* `update_conceptual_memory`, so a failed review no longer skips the memory update.
 - The terminal `ethics_rejection` task runs `record_ethics_rejection`. It stores `ethics_rejection = {gate, reasoning, concerns}`, where `gate` is `input_gate`, `plan_review` or `dilemma_resolution`. It writes no audit entry, because the gate already did.
@@ -367,7 +367,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 
 ### Ethics gate change (F111)
 
-`ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`. This unblocked autonomous daemon processing. (Since v9 / #143 it runs after `update_conceptual_memory` and is followed by `record_ethics_review`.)
+`ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`. This unblocked autonomous daemon processing. (Since v10 / #143 it runs after `update_conceptual_memory` and is followed by `record_ethics_review`.)
 
 ---
 

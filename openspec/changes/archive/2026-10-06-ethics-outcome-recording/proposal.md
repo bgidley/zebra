@@ -9,7 +9,7 @@ Two ethics paths in the Agent Main Loop produce no durable, visible outcome (Git
 
 - New task action `record_ethics_review`: normalises `ethics_post_assessment` and appends an `EthicsAuditEntry` with `check_type="post_review"`.
 - New task action `record_ethics_rejection` on the `ethics_rejection` task: identifies the rejecting gate (`input_gate`, `plan_review`, or `dilemma_resolution`) and stores `ethics_rejection = {gate, reasoning, concerns}` on the process. No new audit write — every gate verdict is already audited.
-- `agent_main_loop.yaml` (v9): reorder the tail to `assess_and_record → update_conceptual_memory → ethics_post_review → record_ethics_review` so the memory update no longer depends on the review.
+- `agent_main_loop.yaml` (v10): reorder the tail to `assess_and_record → update_conceptual_memory → ethics_post_review → record_ethics_review` so the memory update no longer depends on the review.
 - `AgentResult` gains `ethics_rejection: dict | None`; `error` carries the rejection reason instead of "Workflow failed".
 - Run detail / pending pages show an "Ethics" panel: rejection reason, or post-review verdict with concerns and recommendations.
 

@@ -6,7 +6,7 @@
 
 ## 2. Workflow
 
-- [x] 2.1 `agent_main_loop.yaml` v9: reorder tail, add `record_ethics_review`, give `ethics_rejection` its action
+- [x] 2.1 `agent_main_loop.yaml` v10: reorder tail, add `record_ethics_review`, give `ethics_rejection` its action
 - [x] 2.2 Extend `zebra-agent/tests/test_ethics_workflow.py` for rejection gates and post-review ordering
 
 ## 3. Surfacing
