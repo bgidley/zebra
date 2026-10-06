@@ -36,4 +36,4 @@ Branch: `f138/workflow-history-task` (convention `fN/short-description`). Commit
 - [x] 6.1 Run lint and format (`uv run ruff check --fix . && uv run ruff format .`) and verify `uv run ruff check .` is clean
 - [x] 6.2 Run the full suite (`uv run pytest`) and verify it is green
 - [x] 6.3 Submit to Zebra feedback (prod `run_goal`, sonnet) and apply any genuine gaps; verify the feedback is addressed or rebutted in the commit message
-- [ ] 6.4 Hand the branch to `cicd-manager` for CI, archive and merge (`Closes #138`); verify the master pipeline is green
+- [x] 6.4 Hand the branch to `cicd-manager` for CI, archive and merge (`Closes #138`); verify the master pipeline is green
