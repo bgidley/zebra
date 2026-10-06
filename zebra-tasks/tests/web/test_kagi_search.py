@@ -10,29 +10,24 @@ from zebra_tasks.web.kagi_search import KagiSearchAction
 FAKE_KEY = "test-kagi-key"
 
 MOCK_SEARCH_RESPONSE = {
-    "meta": {"id": "abc", "node": "us-east"},
-    "data": [
-        {
-            "t": 0,
-            "rank": 1,
-            "url": "https://example.com/article",
-            "title": "Example Article",
-            "snippet": "This is a snippet about the topic.",
-            "published": "2024-01-01T00:00:00Z",
-        },
-        {
-            "t": 0,
-            "rank": 2,
-            "url": "https://another.com/page",
-            "title": "Another Page",
-            "snippet": "Another snippet.",
-            "published": None,
-        },
-        {
-            "t": 1,  # related searches — should be excluded
-            "list": ["related query 1", "related query 2"],
-        },
-    ],
+    "meta": {"trace": "abc", "node": "us-east", "ms": 100},
+    "data": {
+        "search": [
+            {
+                "url": "https://example.com/article",
+                "title": "Example Article",
+                "snippet": "This is a snippet about the topic.",
+                "time": "2024-01-01T00:00:00Z",
+            },
+            {
+                "url": "https://another.com/page",
+                "title": "Another Page",
+                "snippet": "Another snippet.",
+            },
+        ],
+        # non-web categories — should be excluded
+        "video": [{"url": "https://video.example.com/v", "title": "A video"}],
+    },
 }
 
 
@@ -67,7 +62,7 @@ async def test_search_returns_results(action, mock_context, monkeypatch):
     mock_client = MagicMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
-    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.post = AsyncMock(return_value=mock_response)
 
     task = make_task({"query": "test query", "limit": 5})
 
@@ -75,20 +70,23 @@ async def test_search_returns_results(action, mock_context, monkeypatch):
         result = await action.run(task, mock_context)
 
     assert result.success
-    assert result.output["total"] == 2  # t=1 item excluded
+    assert result.output["total"] == 2  # video results excluded
     assert result.output["query"] == "test query"
     results = result.output["results"]
     assert results[0]["rank"] == 1
     assert results[0]["url"] == "https://example.com/article"
     assert results[0]["title"] == "Example Article"
+    assert results[0]["published"] == "2024-01-01T00:00:00Z"
     assert results[1]["rank"] == 2
+    assert results[1]["published"] is None
 
     # Verify API call params
-    mock_client.get.assert_called_once()
-    call_kwargs = mock_client.get.call_args
-    assert call_kwargs.kwargs["params"]["q"] == "test query"
-    assert call_kwargs.kwargs["params"]["limit"] == 5
-    assert FAKE_KEY in call_kwargs.kwargs["headers"]["Authorization"]
+    mock_client.post.assert_called_once()
+    call_kwargs = mock_client.post.call_args
+    assert call_kwargs.args[0] == "https://kagi.com/api/v1/search"
+    assert call_kwargs.kwargs["json"]["query"] == "test query"
+    assert call_kwargs.kwargs["json"]["limit"] == 5
+    assert call_kwargs.kwargs["headers"]["Authorization"] == f"Bearer {FAKE_KEY}"
 
 
 async def test_search_stores_in_process_property(action, mock_context, monkeypatch):
@@ -98,7 +96,7 @@ async def test_search_stores_in_process_property(action, mock_context, monkeypat
     mock_client = MagicMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
-    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.post = AsyncMock(return_value=mock_response)
 
     task = make_task({"query": "hello", "output_key": "my_results"})
 
@@ -127,11 +125,11 @@ async def test_search_fails_without_api_key(action, mock_context, monkeypatch):
 async def test_search_clamps_limit(action, mock_context, monkeypatch):
     monkeypatch.setenv("KAGI_API_KEY", FAKE_KEY)
 
-    mock_response = make_mock_response({"data": []})
+    mock_response = make_mock_response({"data": {"search": []}})
     mock_client = MagicMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
-    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.post = AsyncMock(return_value=mock_response)
 
     # Limit 200 should be clamped to 100
     task = make_task({"query": "test", "limit": 200})
@@ -139,8 +137,8 @@ async def test_search_clamps_limit(action, mock_context, monkeypatch):
     with patch("zebra_tasks.web.kagi_search.httpx.AsyncClient", return_value=mock_client):
         await action.run(task, mock_context)
 
-    call_kwargs = mock_client.get.call_args
-    assert call_kwargs.kwargs["params"]["limit"] == 100
+    call_kwargs = mock_client.post.call_args
+    assert call_kwargs.kwargs["json"]["limit"] == 100
 
 
 async def test_search_handles_http_error(action, mock_context, monkeypatch):
@@ -155,7 +153,7 @@ async def test_search_handles_http_error(action, mock_context, monkeypatch):
     error_response = MagicMock()
     error_response.status_code = 429
     error_response.text = "rate limited"
-    mock_client.get = AsyncMock(
+    mock_client.post = AsyncMock(
         side_effect=httpx.HTTPStatusError(
             "rate limited", request=MagicMock(), response=error_response
         )
@@ -175,11 +173,11 @@ async def test_search_template_resolution(action, mock_context, monkeypatch):
 
     mock_context.process.properties["goal"] = "climate change"
 
-    mock_response = make_mock_response({"data": []})
+    mock_response = make_mock_response({"data": {"search": []}})
     mock_client = MagicMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
-    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.post = AsyncMock(return_value=mock_response)
 
     task = make_task({"query": "{{goal}}"})
 
@@ -188,3 +186,39 @@ async def test_search_template_resolution(action, mock_context, monkeypatch):
 
     assert result.success
     assert result.output["query"] == "climate change"
+
+
+async def test_search_truncates_to_limit(action, mock_context, monkeypatch):
+    """v1 limit is advisory per category, so the action enforces it itself."""
+    monkeypatch.setenv("KAGI_API_KEY", FAKE_KEY)
+
+    mock_response = make_mock_response(MOCK_SEARCH_RESPONSE)
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.post = AsyncMock(return_value=mock_response)
+
+    task = make_task({"query": "test", "limit": 1})
+
+    with patch("zebra_tasks.web.kagi_search.httpx.AsyncClient", return_value=mock_client):
+        result = await action.run(task, mock_context)
+
+    assert result.output["total"] == 1
+    assert result.output["results"][0]["url"] == "https://example.com/article"
+
+
+async def test_search_without_web_results(action, mock_context, monkeypatch):
+    """Responses with only non-web categories (no data.search) yield zero results."""
+    monkeypatch.setenv("KAGI_API_KEY", FAKE_KEY)
+
+    mock_response = make_mock_response({"meta": {}, "data": {"news": [{"url": "u", "title": "t"}]}})
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.post = AsyncMock(return_value=mock_response)
+
+    with patch("zebra_tasks.web.kagi_search.httpx.AsyncClient", return_value=mock_client):
+        result = await action.run(make_task({"query": "test"}), mock_context)
+
+    assert result.success
+    assert result.output["total"] == 0
