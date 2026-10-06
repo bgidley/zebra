@@ -6,7 +6,7 @@ When a goal's workflow fails, `execute_goal_workflow` returns `TaskResult.fail`,
 
 - `execute_goal_workflow` gains an opt-in `continue_on_failure` property. When true and the child workflow fails (child FAILED, timeout, or execution error), the action completes successfully with `success: false` and the error in its output instead of failing the task. Default stays false, so existing callers and #131 behaviour are unchanged.
 - New `propagate_failure` task action: fails with the given `error` when `success` is false, succeeds otherwise.
-- Agent Main Loop (v9): `execute_workflow` sets `continue_on_failure: true`; `assess_and_record` receives `error`; a new terminal `report_outcome` task (action `propagate_failure`) after `update_conceptual_memory` fails with the child's error, so the process still ends FAILED with the child's `__error__` — but only after the failure was recorded and learned from.
+- Agent Main Loop (v10): `execute_workflow` sets `continue_on_failure: true`; `assess_and_record` receives `error`; a new terminal `report_outcome` task (action `propagate_failure`) after `update_conceptual_memory` fails with the child's error, so the process still ends FAILED with the child's `__error__` — but only after the failure was recorded and learned from.
 - `AgentLoop` surfaces `execution_result.error` in `AgentResult.error` for completed processes.
 
 ## Capabilities
