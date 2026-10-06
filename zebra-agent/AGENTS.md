@@ -306,17 +306,11 @@ These workflows are internal to the agent and excluded from LLM selection:
 | `Dream Cycle` | `dream_cycle.yaml` | Self-improvement: analyze, evaluate, optimize workflows |
 | `Create Goal` | `create_goal.yaml` | Human input → queue goal as CREATED process |
 
-System workflows are identified by name in `loop.py`:
-
-```python
-def _is_system_workflow(self, name: str) -> bool:
-    system_workflows = {
-        "Agent Main Loop",
-        "Dream Cycle",
-        "Create Goal",
-    }
-    return name in system_workflows
-```
+System workflows are identified by the `system` tag in their YAML (`tags: [..., "system"]`) —
+tag any new internal workflow. `list_goal_workflows(library)` in `library.py` is the single
+builder of the selector's `available_workflows` and excludes them; every goal entry point
+(`AgentLoop.process_goal`, the web `queue_goal` helper, the `queue_goal` action) and the
+selector itself use it (#144).
 
 The Dream Cycle can be triggered explicitly via:
 - `AgentLoop.run_dream_cycle()` in Python

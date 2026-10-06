@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 8
+version: 9
 first_task: consult_memory
 
 tasks:
@@ -87,7 +87,6 @@ tasks:
   flag_concerns:
     name: "Flag Planning Concerns"
     action: flag_concerns
-    synchronized: true
     auto: true
     properties:
       goal: "{{goal}}"

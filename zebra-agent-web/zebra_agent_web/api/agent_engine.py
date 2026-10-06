@@ -50,6 +50,11 @@ def _get_agent_settings() -> dict:
     )
 
 
+def get_llm_provider_name() -> str:
+    """Return the configured LLM provider name (``LLM_PROVIDER``, default anthropic)."""
+    return _get_agent_settings().get("LLM_PROVIDER", "anthropic")
+
+
 def initialize() -> None:
     """Initialize the Zebra agent components.
 
@@ -181,7 +186,7 @@ async def _async_init() -> None:
         memory=_memory,
         profile=_profile,
         knowledge=_knowledge,
-        provider=agent_settings.get("LLM_PROVIDER", "anthropic"),
+        provider=get_llm_provider_name(),
         model=agent_settings.get("LLM_MODEL"),
     )
 

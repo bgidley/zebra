@@ -186,7 +186,9 @@ Three-tier model (matches the design in REQ-DATA-004):
 
 ### Workflow library
 
-`WorkflowLibrary` loads YAMLs from `~/.zebra-agent/workflows/`, caches them, flags system workflows (main loop, dream, create_goal), tracks success rate and use count.
+`WorkflowLibrary` loads YAMLs from `~/.zebra-agent/workflows/`, caches them, tracks success rate and use count. Workflows tagged `system` are internal and never offered for goals.
+
+`list_goal_workflows(library)` (`zebra_agent/library.py`) is the single builder of the selector's candidates: one dict per non-`system` workflow (`name`, `description`, `tags`, `success_rate` float, `use_count`, `use_when`). `AgentLoop.process_goal`, the web/daemon `api/goals.queue_goal` helper and the `queue_goal` action all use it for `available_workflows`. At selection time `workflow_selector` rebuilds the list from the live `__workflow_library__` (falling back to the queued property), so queued goals see workflows added since; the prompt shows "N/A" success for never-run workflows (#144).
 
 ### Budget
 
