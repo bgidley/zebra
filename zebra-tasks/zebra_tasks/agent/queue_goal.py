@@ -91,20 +91,10 @@ class QueueGoalAction(TaskAction):
         except ValueError as e:
             return TaskResult.fail(f"Cannot load Agent Main Loop workflow: {e}")
 
-        # Gather available workflows (same as AgentLoop.process_goal does)
-        workflows = await library.list_workflows()
-        available = [
-            {
-                "name": w.name,
-                "description": w.description,
-                "tags": w.tags,
-                "success_rate": f"{w.success_rate:.0%}" if w.use_count > 0 else "N/A",
-                "use_count": w.use_count,
-                "use_when": w.use_when,
-            }
-            for w in workflows
-            if "system" not in (w.tags or [])
-        ]
+        # Gather available workflows (same builder as AgentLoop.process_goal)
+        from zebra_agent.library import list_goal_workflows
+
+        available = await list_goal_workflows(library)
 
         # Build process properties
         run_id = str(uuid.uuid4())
