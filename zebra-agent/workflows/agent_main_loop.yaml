@@ -87,7 +87,6 @@ tasks:
   flag_concerns:
     name: "Flag Planning Concerns"
     action: flag_concerns
-    synchronized: true
     auto: true
     properties:
       goal: "{{goal}}"

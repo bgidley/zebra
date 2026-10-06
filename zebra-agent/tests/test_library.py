@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from zebra_agent.library import WorkflowInfo, WorkflowLibrary
+from zebra_agent.library import WorkflowInfo, WorkflowLibrary, list_goal_workflows
 from zebra_agent.metrics import WorkflowRun
 
 
@@ -130,6 +130,57 @@ class TestWorkflowLibraryInitialization:
         library = WorkflowLibrary(nested_path, metrics)
         library.ensure_initialized()
         assert nested_path.exists()
+
+
+def _workflow_yaml(name: str, tags: list[str]) -> str:
+    return f"""name: "{name}"
+description: "{name} description"
+tags: {tags}
+use_when: "use {name}"
+version: 1
+first_task: task1
+tasks:
+  task1:
+    name: "Task"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: "test"
+      output_key: result
+routings: []
+"""
+
+
+class TestListGoalWorkflows:
+    """list_goal_workflows: the single builder of the selector's candidates (#144)."""
+
+    async def test_excludes_system_tagged_workflows(self, library):
+        (library.library_path / "a.yaml").write_text(_workflow_yaml("Answer Question", ["qa"]))
+        (library.library_path / "b.yaml").write_text(
+            _workflow_yaml("Knowledge Decay", ["knowledge", "system"])
+        )
+
+        names = [w["name"] for w in await list_goal_workflows(library)]
+
+        assert names == ["Answer Question"]
+
+    async def test_entry_shape(self, library):
+        (library.library_path / "a.yaml").write_text(_workflow_yaml("Answer Question", ["qa"]))
+
+        [entry] = await list_goal_workflows(library)
+
+        assert entry == {
+            "name": "Answer Question",
+            "description": "Answer Question description",
+            "tags": ["qa"],
+            "success_rate": 0.0,
+            "use_count": 0,
+            "use_when": "use Answer Question",
+        }
+        assert isinstance(entry["success_rate"], float)
+
+    async def test_empty_library(self, library):
+        assert await list_goal_workflows(library) == []
 
 
 class TestListWorkflows:

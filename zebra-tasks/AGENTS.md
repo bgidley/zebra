@@ -234,7 +234,7 @@ LLM-powered workflow selection from available workflows.
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `goal` | string | - | User's goal to match |
-| `available_workflows` | list | - | List of workflow metadata dicts |
+| `available_workflows` | list | - | Workflow metadata dicts; fallback only — when `__workflow_library__` is in `context.extras` the selector rebuilds the list via `zebra_agent.library.list_goal_workflows` (#144) |
 | `output_key` | string | "selection" | Where to store selection result |
 
 **Output:**

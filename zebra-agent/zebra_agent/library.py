@@ -38,6 +38,38 @@ class WorkflowInfo:
         }
 
 
+SYSTEM_TAG = "system"
+
+
+async def list_goal_workflows(library: "WorkflowLibrary") -> list[dict[str, Any]]:
+    """List the workflows a goal may be routed to, as selector-ready dicts.
+
+    This is the single source of the Agent Main Loop's ``available_workflows``:
+    every entry point that creates a goal process, and the workflow selector
+    itself, build the list here. Workflows tagged ``system`` are excluded.
+
+    Args:
+        library: The workflow library to list.
+
+    Returns:
+        One dict per goal workflow with ``name``, ``description``, ``tags``,
+        ``success_rate`` (float 0.0-1.0), ``use_count`` and ``use_when``.
+    """
+    workflows = await library.list_workflows()
+    return [
+        {
+            "name": w.name,
+            "description": w.description,
+            "tags": w.tags,
+            "success_rate": w.success_rate,
+            "use_count": w.use_count,
+            "use_when": w.use_when,
+        }
+        for w in workflows
+        if SYSTEM_TAG not in (w.tags or [])
+    ]
+
+
 class WorkflowLibrary:
     """
     Manages a library of workflow definitions.

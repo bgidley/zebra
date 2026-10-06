@@ -199,56 +199,6 @@ class TestAgentLoopInitialization:
         assert loop.model == "claude-3-opus"
 
 
-class TestIsSystemWorkflow:
-    """Tests for _is_system_workflow method."""
-
-    def test_agent_main_loop_is_system(self, library, mock_engine, metrics):
-        """Test that Agent Main Loop is identified as system workflow."""
-        loop = AgentLoop(
-            library=library,
-            engine=mock_engine,
-            metrics=metrics,
-            provider="anthropic",
-        )
-        assert loop._is_system_workflow("Agent Main Loop") is True
-
-    def test_memory_compact_not_system(self, library, mock_engine, metrics):
-        """Test that old memory compact workflows are no longer system workflows.
-
-        The compaction step was removed in the new loop design; compaction
-        is now replaced by the incremental conceptual memory update.
-        """
-        loop = AgentLoop(
-            library=library,
-            engine=mock_engine,
-            metrics=metrics,
-            provider="anthropic",
-        )
-        assert loop._is_system_workflow("Memory Compact Short") is False
-        assert loop._is_system_workflow("Memory Compact Long") is False
-
-    def test_regular_workflow_not_system(self, library, mock_engine, metrics):
-        """Test that regular workflows are not system workflows."""
-        loop = AgentLoop(
-            library=library,
-            engine=mock_engine,
-            metrics=metrics,
-            provider="anthropic",
-        )
-        assert loop._is_system_workflow("Test Workflow") is False
-        assert loop._is_system_workflow("Code Review") is False
-
-    def test_values_profile_wizard_is_system(self, library, mock_engine, metrics):
-        """The F18 values-profile wizard is internal — never a candidate for goals."""
-        loop = AgentLoop(
-            library=library,
-            engine=mock_engine,
-            metrics=metrics,
-            provider="anthropic",
-        )
-        assert loop._is_system_workflow("Values Profile Wizard") is True
-
-
 class TestRecordRating:
     """Tests for recording ratings."""
 
@@ -631,6 +581,12 @@ routings: []
 """
         (library.library_path / "compact.yaml").write_text(compact_yaml)
 
+        # A system-tagged workflow that was missing from the old hard-coded name list (#144)
+        decay_yaml = compact_yaml.replace('"Memory Compact Short"', '"Knowledge Decay"').replace(
+            'tags: ["internal"]', 'tags: ["knowledge", "system"]'
+        )
+        (library.library_path / "decay.yaml").write_text(decay_yaml)
+
         captured_properties = {}
 
         async def capture_create_process(definition, properties=None):
@@ -673,6 +629,9 @@ routings: []
         # Memory Compact Short/Long are no longer system workflows in the new design
         # (the compaction step is replaced by incremental conceptual memory updates)
         assert "Memory Compact Short" in names
+        # Filtering is by the `system` tag, not a hard-coded name list (#144)
+        assert "Knowledge Decay" not in names
+        assert all(isinstance(w["success_rate"], float) for w in available)
 
 
 class TestProcessGoalContinuation:
