@@ -2,12 +2,12 @@
 
 This module implements the agent loop as a Zebra workflow. The AgentLoop class
 is a thin wrapper that runs the "Agent Main Loop" workflow, which handles:
-1. Memory compaction check
-2. Workflow selection via LLM
-3. Workflow creation (if needed)
-4. Workflow execution
-5. Metrics recording
-6. Memory updates
+1. Memory and personal-knowledge consultation
+2. Ethics input gate
+3. Workflow selection via LLM (creating a workflow or variant if needed)
+4. Concern flagging and ethics plan review
+5. Workflow execution
+6. Assessment, metrics recording and memory updates
 """
 
 import asyncio
@@ -22,7 +22,7 @@ from typing import Any
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState, TaskState
 
-from zebra_agent.library import WorkflowLibrary
+from zebra_agent.library import WorkflowLibrary, list_goal_workflows
 from zebra_agent.storage.interfaces import (
     MemoryStore,
     MetricsStore,
@@ -118,12 +118,13 @@ class AgentLoop:
         Process a user goal through the agent loop workflow.
 
         Runs the "Agent Main Loop" workflow which handles:
-        1. Check if memory needs compaction (runs compaction subworkflows if needed)
-        2. Select best workflow for the goal using LLM
-        3. Create new workflow if no good match exists
-        4. Execute the selected/created workflow
-        5. Record metrics for the run
-        6. Update agent memory with the interaction
+        1. Consult memory and the personal knowledge store
+        2. Ethics input gate
+        3. Select best workflow for the goal using LLM
+        4. Create new workflow (or variant) if no good match exists
+        5. Flag concerns and run the ethics plan review
+        6. Execute the selected/created workflow
+        7. Assess, record metrics and update memory
 
         Args:
             goal: The user's goal/request
@@ -154,20 +155,8 @@ class AgentLoop:
         # Load the main agent loop workflow
         definition = self.library.get_workflow("Agent Main Loop")
 
-        # Prepare available workflows for the selector (exclude system workflows)
-        workflows = await self.library.list_workflows()
-        available_workflows = [
-            {
-                "name": w.name,
-                "description": w.description,
-                "tags": w.tags,
-                "success_rate": w.success_rate,
-                "use_count": w.use_count,
-                "use_when": w.use_when,
-            }
-            for w in workflows
-            if not self._is_system_workflow(w.name)
-        ]
+        # Prepare available workflows for the selector (excludes system workflows)
+        available_workflows = await list_goal_workflows(self.library)
 
         # Prepare initial properties for the workflow
         # Note: Stores are passed via engine.extras (set in __init__) since they're
@@ -526,14 +515,3 @@ class AgentLoop:
 
         finally:
             self.engine.extras.pop("__progress_callback__", None)
-
-    def _is_system_workflow(self, name: str) -> bool:
-        """Check if a workflow is a system/internal workflow."""
-        system_workflows = {
-            "Agent Main Loop",
-            "Dream Cycle",
-            "Create Goal",
-            "Values Profile Wizard",
-            "Compact Memory",
-        }
-        return name in system_workflows
