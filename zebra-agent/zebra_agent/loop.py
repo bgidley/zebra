@@ -275,11 +275,10 @@ class AgentLoop:
         # An ethics gate rejected the goal — report which gate and why (#143).
         rejection = process.properties.get("ethics_rejection")
         if isinstance(rejection, dict):
+            from zebra_tasks.agent.record_ethics_rejection import format_ethics_rejection
+
             result["ethics_rejection"] = rejection
-            result["error"] = (
-                f"Rejected by ethics {rejection.get('gate', 'gate')}: "
-                f"{rejection.get('reasoning', '')}"
-            )
+            result["error"] = format_ethics_rejection(rejection)
         # A task failure ends the process COMPLETE (no active tasks remain) without an
         # execution_result — surface the failed tasks' errors instead of a silent None.
         elif not execution_result:

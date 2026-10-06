@@ -15,6 +15,11 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 logger = logging.getLogger(__name__)
 
 
+def format_ethics_rejection(rejection: dict[str, Any]) -> str:
+    """One-line error message for a rejection record (used by AgentLoop and the web UI)."""
+    return f"Rejected by ethics {rejection.get('gate', 'gate')}: {rejection.get('reasoning', '')}"
+
+
 def infer_rejection(props: dict[str, Any]) -> dict[str, Any]:
     """Work out which gate rejected the goal from the main-loop process properties.
 

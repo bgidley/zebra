@@ -215,7 +215,7 @@ Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, po
 - The terminal `ethics_rejection` task runs `record_ethics_rejection`. It stores `ethics_rejection = {gate, reasoning, concerns}`, where `gate` is `input_gate`, `plan_review` or `dilemma_resolution`. It writes no audit entry, because the gate already did.
 - `AgentResult.ethics_rejection` carries the record, and `error` reads `Rejected by ethics <gate>: <reasoning>`.
 - The run pages (`partials/ethics_outcome.html`) show the rejection or the post-review.
-- Rejected goals still write no metrics `WorkflowRun`, so per-workflow success rates are unaffected. See `openspec/changes/ethics-outcome-recording/`.
+- Rejected goals still write no metrics `WorkflowRun`, so per-workflow success rates are unaffected. See `openspec/specs/ethics-outcome-recording/spec.md`.
 
 `EthicsGateAction` accepts an optional `user_id` input. When provided and `__profile_store__` is available in `context.extras`, the gate loads the user's current `ValuesProfile` and incorporates it into a combined evaluation prompt. Kantian rejection always takes precedence (values can only restrict further). The stored assessment includes a `values_assessment` key (`null` for Kantian-only runs). Verdict log lines show both Kantian and values flags when a profile was consulted.
 

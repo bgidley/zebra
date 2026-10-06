@@ -1137,7 +1137,9 @@ async def _run_detail_pending_fallback(request, run_id: str):
     error = props.get("__error__")
     rejection = props.get("ethics_rejection")
     if not error and isinstance(rejection, dict):
-        error = f"Rejected by ethics {rejection.get('gate')}: {rejection.get('reasoning', '')}"
+        from zebra_tasks.agent.record_ethics_rejection import format_ethics_rejection
+
+        error = format_ethics_rejection(rejection)
     success = False
 
     # Build parent orchestration flow context
