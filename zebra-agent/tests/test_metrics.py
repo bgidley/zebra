@@ -856,3 +856,29 @@ class TestSearchRuns:
             await metrics.record_run(WorkflowRun.create("W", f"goal {i}"))
         assert len(await metrics.search_runs(limit=10000)) == 200
         assert len(await metrics.search_runs()) == 20
+
+
+class TestContinuationRate:
+    """Per-workflow continuation rate (#137)."""
+
+    async def test_stats_count_runs_that_were_continued(self, metrics):
+        a = WorkflowRun.create("Research", "g1")
+        b = WorkflowRun.create("Research", "g2")
+        c = WorkflowRun.create("Research", "g3")
+        cont = WorkflowRun.create("Summarise", "g1")
+        cont.extends_run_id = a.id
+        cont2 = WorkflowRun.create("Research", "g1")  # a continued twice: still one run
+        cont2.extends_run_id = a.id
+        for run in (a, b, c, cont, cont2):
+            await metrics.record_run(run)
+
+        stats = await metrics.get_stats("Research")
+        assert stats.total_runs == 4
+        assert stats.continued_runs == 1
+        assert stats.continuation_rate == 0.25
+        by_name = {s.workflow_name: s for s in await metrics.get_all_stats()}
+        assert by_name["Research"].continued_runs == 1
+        assert by_name["Summarise"].continued_runs == 0
+
+    def test_rate_zero_without_runs(self):
+        assert WorkflowStats(workflow_name="W").continuation_rate == 0.0

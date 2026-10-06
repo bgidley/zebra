@@ -114,6 +114,7 @@ class WorkflowStats:
     successful_runs: int = 0
     avg_rating: float | None = None
     last_used: datetime | None = None
+    continued_runs: int = 0  # runs that a later run continues (extends_run_id → this run)
 
     @property
     def success_rate(self) -> float:
@@ -121,6 +122,13 @@ class WorkflowStats:
         if self.total_runs == 0:
             return 0.0
         return self.successful_runs / self.total_runs
+
+    @property
+    def continuation_rate(self) -> float:
+        """Fraction of runs the user had to continue (0.0 to 1.0) — F136/#137."""
+        if self.total_runs == 0:
+            return 0.0
+        return self.continued_runs / self.total_runs
 
 
 def __getattr__(name: str):

@@ -29,6 +29,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Runs that some later run continues (its extends_run_id points here) — #137.
+# Querysets are lazy, so this is evaluated as a subquery inside each aggregate.
+_CONTINUED_COUNT = Count(
+    "id",
+    filter=Q(
+        id__in=WorkflowRunModel.objects.filter(extends_run_id__isnull=False).values(
+            "extends_run_id"
+        )
+    ),
+)
+
 
 class DjangoMetricsStore(MetricsStore):
     """Django ORM implementation for agent metrics tracking.
@@ -154,6 +165,7 @@ class DjangoMetricsStore(MetricsStore):
                 aggs = queryset.aggregate(
                     avg_rating=Avg("user_rating"),
                     last_used=Max("started_at"),
+                    continued_runs=_CONTINUED_COUNT,
                 )
                 return WorkflowStats(
                     workflow_name=workflow_name,
@@ -161,6 +173,7 @@ class DjangoMetricsStore(MetricsStore):
                     successful_runs=successful,
                     avg_rating=float(aggs["avg_rating"]) if aggs["avg_rating"] else None,
                     last_used=aggs["last_used"],
+                    continued_runs=aggs["continued_runs"] or 0,
                 )
 
             return WorkflowStats(workflow_name=workflow_name)
@@ -183,6 +196,7 @@ class DjangoMetricsStore(MetricsStore):
                     successful_runs=Sum("success"),
                     avg_rating=Avg("user_rating"),
                     last_used=Max("started_at"),
+                    continued_runs=_CONTINUED_COUNT,
                 )
                 .order_by("-total_runs")
             )
@@ -196,6 +210,7 @@ class DjangoMetricsStore(MetricsStore):
                         successful_runs=row["successful_runs"] or 0,
                         avg_rating=float(row["avg_rating"]) if row["avg_rating"] else None,
                         last_used=row["last_used"],
+                        continued_runs=row["continued_runs"] or 0,
                     )
                 )
 

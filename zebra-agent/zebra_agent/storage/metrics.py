@@ -92,12 +92,16 @@ class InMemoryMetricsStore(MetricsStore):
 
         last_used = max(r.started_at for r in runs)
 
+        continued_ids = {r.extends_run_id for r in self._runs.values() if r.extends_run_id}
+        continued_runs = sum(1 for r in runs if r.id in continued_ids)
+
         return WorkflowStats(
             workflow_name=workflow_name,
             total_runs=total_runs,
             successful_runs=successful_runs,
             avg_rating=avg_rating,
             last_used=last_used,
+            continued_runs=continued_runs,
         )
 
     async def get_all_stats(self) -> list[WorkflowStats]:

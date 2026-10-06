@@ -244,6 +244,8 @@ async def workflow_detail(request, workflow_name):
                 "total_runs": stats.total_runs,
                 "successful_runs": stats.successful_runs,
                 "success_rate": stats.success_rate,
+                "continued_runs": stats.continued_runs,
+                "continuation_rate": stats.continuation_rate,
                 "avg_rating": stats.avg_rating,
                 "last_used": stats.last_used.isoformat() if stats.last_used else None,
             },
@@ -294,6 +296,8 @@ async def workflow_stats(request, workflow_name):
             "total_runs": stats.total_runs,
             "successful_runs": stats.successful_runs,
             "success_rate": stats.success_rate,
+            "continued_runs": stats.continued_runs,
+            "continuation_rate": stats.continuation_rate,
             "avg_rating": stats.avg_rating,
             "last_used": stats.last_used,
         }

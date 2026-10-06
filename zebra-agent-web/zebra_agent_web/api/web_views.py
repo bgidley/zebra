@@ -157,6 +157,7 @@ async def dashboard(request):
     total_runs = sum(s.total_runs for s in all_stats)
     successful_runs = sum(s.successful_runs for s in all_stats)
     success_rate = successful_runs / total_runs if total_runs > 0 else 0
+    continuation_rates = _continuation_rates(all_stats)
 
     # Budget status
     budget_status = None
@@ -225,6 +226,7 @@ async def dashboard(request):
                 else w.description,
                 "use_count": w.use_count,
                 "success_rate": f"{w.success_rate:.0%}" if w.use_count > 0 else "N/A",
+                "continuation_rate": continuation_rates.get(w.name),
             }
             for w in workflows[:5]
         ],
@@ -238,12 +240,20 @@ async def dashboard(request):
 # =============================================================================
 
 
+def _continuation_rates(all_stats) -> dict[str, str]:
+    """Map workflow name → "N%" for workflows with at least one continued run (#137)."""
+    return {
+        s.workflow_name: f"{s.continuation_rate:.0%}" for s in all_stats if s.continued_runs > 0
+    }
+
+
 async def workflow_library(request):
     """List all workflows in the library."""
     await agent_engine.ensure_initialized()
     library = agent_engine.get_library()
 
     workflows = await library.list_workflows()
+    continuation_rates = _continuation_rates(await agent_engine.get_metrics().get_all_stats())
 
     workflows_data = [
         {
@@ -253,6 +263,7 @@ async def workflow_library(request):
             "version": w.version,
             "use_count": w.use_count,
             "success_rate": f"{w.success_rate:.0%}" if w.use_count > 0 else "N/A",
+            "continuation_rate": continuation_rates.get(w.name),
         }
         for w in workflows
     ]
@@ -287,6 +298,10 @@ async def workflow_detail(request, workflow_name):
             "total_runs": stats.total_runs,
             "successful_runs": stats.successful_runs,
             "success_rate": f"{stats.success_rate:.0%}" if stats.total_runs > 0 else "N/A",
+            "continued_runs": stats.continued_runs,
+            "continuation_rate": f"{stats.continuation_rate:.0%}"
+            if stats.total_runs > 0
+            else "N/A",
             "avg_rating": f"{stats.avg_rating:.1f}" if stats.avg_rating else "N/A",
             "last_used": stats.last_used.strftime("%Y-%m-%d %H:%M") if stats.last_used else "Never",
         },

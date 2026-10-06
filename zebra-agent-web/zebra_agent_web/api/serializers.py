@@ -72,6 +72,8 @@ class WorkflowStatsSerializer(serializers.Serializer):
     total_runs = serializers.IntegerField()
     successful_runs = serializers.IntegerField()
     success_rate = serializers.FloatField()
+    continued_runs = serializers.IntegerField()
+    continuation_rate = serializers.FloatField()
     avg_rating = serializers.FloatField(allow_null=True)
     last_used = serializers.DateTimeField(allow_null=True)
 

@@ -169,7 +169,7 @@
                     </div>
                     <div class="text-right">
                         <p class="text-sm text-white">{{ workflow.use_count }} runs</p>
-                        <p class="text-xs text-gray-400">{{ workflow.success_rate }} success</p>
+                        <p class="text-xs text-gray-400">{{ workflow.success_rate }} success{% if workflow.continuation_rate %} &middot; <span class="text-amber-400" title="Runs the user had to continue">{{ workflow.continuation_rate }} continued</span>{% endif %}</p>
                     </div>
                 </a>
                 {% empty %}
