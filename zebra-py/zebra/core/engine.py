@@ -4,8 +4,11 @@ This module contains the WorkflowEngine class that controls the execution
 of workflow processes. Ported from Java Engine class.
 """
 
+import asyncio
+import contextlib
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from zebra.core.exceptions import (
@@ -195,6 +198,74 @@ class WorkflowEngine:
             await self.transition_task(task.id)
 
         return await self._load_process(process_id)
+
+    async def start_process_with_timeout(
+        self,
+        process_id: str,
+        timeout: float,
+        cancel_check: Callable[[], Awaitable[str | None]] | None = None,
+        poll_interval: float = 1.0,
+    ) -> ProcessInstance:
+        """Start a process, bounding its inline auto-task chain (#142).
+
+        ``start_process()`` runs auto tasks inline until the process finishes or
+        parks on a manual task, so a slow or hung action would otherwise block the
+        caller indefinitely. This runs it as a background task and, if the chain is
+        still running after *timeout* seconds — or *cancel_check* returns a reason —
+        cancels it and fails the process. Time parked on a manual task is not
+        covered: the chain has returned by then.
+
+        If the caller is itself cancelled, the chain is cancelled and the process
+        failed before the cancellation propagates, so nested goal workflows do not
+        outlive their parent.
+
+        Args:
+            process_id: ID of a process in CREATED state.
+            timeout: Maximum seconds the inline chain may run.
+            cancel_check: Optional async callable polled every *poll_interval*
+                seconds; returning a non-empty string cancels with that reason.
+            poll_interval: Seconds between *cancel_check* polls.
+
+        Returns:
+            The process after the chain returned (COMPLETE, FAILED, or RUNNING and
+            waiting on a manual task), or the FAILED process if it was cancelled.
+        """
+        run = asyncio.create_task(self.start_process(process_id))
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        reason: str | None = None
+        try:
+            while not run.done():
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    reason = f"Timed out after {timeout}s"
+                    break
+                wait = min(poll_interval, remaining) if cancel_check else remaining
+                await asyncio.wait({run}, timeout=wait)
+                if not run.done() and cancel_check:
+                    reason = await cancel_check()
+                    if reason:
+                        break
+        except asyncio.CancelledError:
+            await self._cancel_process_run(run, process_id, "Cancelled by caller")
+            raise
+
+        if reason is None:
+            return run.result()
+        logger.warning("Cancelling process %s: %s", process_id, reason)
+        return await self._cancel_process_run(run, process_id, reason)
+
+    async def _cancel_process_run(
+        self, run: asyncio.Task, process_id: str, reason: str
+    ) -> ProcessInstance:
+        """Cancel an in-flight start_process task and fail the process if still active."""
+        run.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await run
+        process = await self._load_process(process_id)
+        if process.state in {ProcessState.COMPLETE, ProcessState.FAILED}:
+            return process
+        return await self.fail_process(process_id, reason)
 
     async def pause_process(self, process_id: str) -> ProcessInstance:
         """Pause a running process.

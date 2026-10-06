@@ -141,7 +141,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
         """Execute the goal workflow."""
         workflow_name = task.properties.get("workflow_name")
         goal = task.properties.get("goal")
-        timeout = task.properties.get("timeout", 120)
+        timeout = float(task.properties.get("timeout", 120))
         output_key = task.properties.get("output_key", "execution_result")
 
         # Resolve templates if needed
@@ -180,9 +180,9 @@ class ExecuteGoalWorkflowAction(TaskAction):
                     sub_process.state.value,
                 )
                 if sub_process.state == ProcessState.CREATED:
-                    await context.engine.start_process(sub_process.id)
+                    await context.engine.start_process_with_timeout(sub_process.id, timeout)
             else:
-                sub_process = await self._spawn_child(task, context, definition, goal)
+                sub_process = await self._spawn_child(task, context, definition, goal, timeout)
 
             # Emit progress event: workflow starting
             callback = context.extras.get("__progress_callback__")
@@ -280,8 +280,13 @@ class ExecuteGoalWorkflowAction(TaskAction):
         context: ExecutionContext,
         definition: Any,
         goal: str,
+        timeout: float,
     ) -> ProcessInstance:
-        """Create, link, record and start a new child process for this task."""
+        """Create, link, record and start a new child process for this task.
+
+        The child's inline auto-task chain is bounded by *timeout* (#142); on expiry
+        the child is failed and ``_wait_for_completion`` reports its error.
+        """
         # F116: a follow-up goal carries the previous run's context into the
         # executed workflow, which only sees the goal.
         sub_properties = {
@@ -310,7 +315,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
         task.properties[CHILD_PROCESS_ID_KEY] = sub_process.id
         await context.store.save_task(task)
 
-        await context.engine.start_process(sub_process.id)
+        await context.engine.start_process_with_timeout(sub_process.id, timeout)
         return sub_process
 
     async def _wait_for_completion(

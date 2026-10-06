@@ -241,6 +241,7 @@ Key settings in `settings.py`:
 | `ZEBRA_AGENT_SETTINGS.DAEMON_POLL_INTERVAL` | Seconds between daemon queue polls (default: 30) |
 | `ZEBRA_AGENT_SETTINGS.BUDGET_RESET_HOUR` | Hour (UTC) when daily budget resets (default: 0) |
 | `ZEBRA_AGENT_SETTINGS.GOAL_COST_WARNING_USD` | Per-goal soft warning threshold (default: 5.00) |
+| `ZEBRA_AGENT_SETTINGS.GOAL_TIMEOUT_SECONDS` | Max seconds a goal's auto tasks may run before the daemon / `AgentLoop` fails it; the kill switch also cancels mid-run (default: 900, #142) |
 | `ZEBRA_AGENT_SETTINGS.RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | Daemon-startup recovery fails a process once one of its tasks has been interrupted this many times, instead of flagging it for manual review again (default: 3, #130) |
 | `ZEBRA_AGENT_SETTINGS.VALUES_TAG_PROMOTION_THRESHOLD` | Usage count at which a candidate values tag is suggested for promotion (default: 3) |
 

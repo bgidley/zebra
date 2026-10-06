@@ -16,7 +16,11 @@ import asyncio
 import logging
 from pathlib import Path
 
+from zebra_agent.loop import DEFAULT_GOAL_TIMEOUT
+
 logger = logging.getLogger(__name__)
+
+KILL_SWITCH_REASON = "Kill switch activated"
 
 # Path to the built-in routine definitions relative to this file
 _ROUTINES_DIR = Path(__file__).parent.parent.parent / "fixtures" / "routines"
@@ -77,12 +81,15 @@ async def run_daemon_loop(
 
     goal_scheduler = GoalScheduler(wf_engine.store)
 
+    goal_timeout = agent_settings.get("GOAL_TIMEOUT_SECONDS", DEFAULT_GOAL_TIMEOUT)
+
     async def _goal_queue_tick_fn() -> None:
         await _tick(
             scheduler=goal_scheduler,
             budget_manager=budget_manager,
             engine=wf_engine,
             dry_run=False,
+            goal_timeout=goal_timeout,
         )
 
     scheduler_loop = SchedulerLoop(
@@ -150,8 +157,13 @@ async def _tick(
     budget_manager,
     engine,
     dry_run: bool,
+    goal_timeout: float = DEFAULT_GOAL_TIMEOUT,
 ) -> None:
-    """One goal-queue iteration: pick a goal, check budget, execute, log cost."""
+    """One goal-queue iteration: pick a goal, check budget, execute, log cost.
+
+    The goal's inline auto-task chain is bounded by *goal_timeout* seconds and
+    cancelled if the kill switch is set mid-run (#142).
+    """
     from zebra.core.models import ProcessState
 
     from zebra_agent_web.api.kill_switch import is_halted
@@ -199,18 +211,27 @@ async def _tick(
         logger.info("[daemon:dry-run] Would start %s", process.id[:12])
         return
 
-    # 3. Start the process
+    # 3. Start the process. start_process runs auto tasks inline, so bound it:
+    # the chain is failed at goal_timeout or when the kill switch is set (#142).
+    async def _kill_switch_reason() -> str | None:
+        return KILL_SWITCH_REASON if await is_halted() else None
+
+    poll_sec = 2.0
     logger.info("[daemon:start] Starting %s  run_id=%s...", process.id[:12], run_id)
     try:
-        await engine.start_process(process.id)
+        await engine.start_process_with_timeout(
+            process.id,
+            goal_timeout,
+            cancel_check=_kill_switch_reason,
+            poll_interval=poll_sec,
+        )
     except Exception:
         logger.exception("Failed to start process %s", process.id[:12])
         return
 
-    # 4. Poll until completion (with a generous timeout)
+    # 4. The chain has returned; poll while it waits on a human task
     max_wait = 600  # 10 minutes per goal
     waited = 0.0
-    poll_sec = 2.0
 
     while waited < max_wait:
         if await is_halted():
@@ -218,7 +239,7 @@ async def _tick(
                 "[daemon:halted] Kill switch set mid-flight — cancelling %s", process.id[:12]
             )
             try:
-                await engine.fail_process(process.id, "Kill switch activated")
+                await engine.fail_process(process.id, KILL_SWITCH_REASON)
             except Exception:
                 logger.exception("Failed to cancel in-flight process %s", process.id[:12])
             return

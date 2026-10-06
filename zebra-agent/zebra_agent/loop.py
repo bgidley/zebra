@@ -32,6 +32,13 @@ from zebra_agent.storage.interfaces import (
 
 logger = logging.getLogger(__name__)
 
+# Default bound (seconds) on one goal's full Agent Main Loop run (#142). The
+# goal workflow itself is bounded separately by execute_workflow's ``timeout``.
+DEFAULT_GOAL_TIMEOUT = 900.0
+
+# Dream cycles analyse and rewrite workflows, so they get their own bound.
+DREAM_CYCLE_TIMEOUT = 600.0
+
 # Type for progress callback: receives event name and data dict
 ProgressCallback = Callable[[str, dict[str, Any]], Awaitable[None]]
 
@@ -74,6 +81,7 @@ class AgentLoop:
         knowledge: PersonalKnowledgeStore | None = None,
         provider: str = "anthropic",
         model: str | None = None,
+        goal_timeout: float = DEFAULT_GOAL_TIMEOUT,
     ):
         """
         Initialize the agent loop.
@@ -86,6 +94,9 @@ class AgentLoop:
             profile: Values-profile store (optional, F18)
             provider: LLM provider name
             model: LLM model name (optional)
+            goal_timeout: Max seconds a goal's auto-task chain may run before the
+                process is failed (#142). Time waiting on a human task is not
+                counted against it.
         """
         self.library = library
         self.engine = engine
@@ -95,6 +106,7 @@ class AgentLoop:
         self.knowledge = knowledge
         self.provider_name = provider
         self.model = model
+        self.goal_timeout = goal_timeout
 
         # Inject stores into engine extras for task actions to use
         # These are non-serializable objects that can't go in process properties
@@ -224,10 +236,12 @@ class AgentLoop:
         """
         # Create and run the main loop workflow
         process = await self.engine.create_process(definition, properties=properties)
-        await self.engine.start_process(process.id)
+        # start_process runs auto tasks inline, so bound it here; a slow chain is
+        # failed at the deadline and surfaces through the FAILED branch below (#142).
+        await self.engine.start_process_with_timeout(process.id, self.goal_timeout)
 
-        # Wait for completion with progress tracking
-        max_wait = 300  # 5 minutes for the full loop
+        # The chain has returned: complete, failed, or parked on a human task.
+        max_wait = 300  # wait for a human task before reporting a timeout
         waited = 0.0
 
         while waited < max_wait:
@@ -485,10 +499,10 @@ class AgentLoop:
 
         try:
             process = await self.engine.create_process(definition, properties=properties)
-            await self.engine.start_process(process.id)
+            await self.engine.start_process_with_timeout(process.id, DREAM_CYCLE_TIMEOUT)
 
             # Dream cycles may take longer than regular goals
-            max_wait = 600  # 10 minutes
+            max_wait = DREAM_CYCLE_TIMEOUT
             waited = 0.0
 
             while waited < max_wait:
