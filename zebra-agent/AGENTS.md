@@ -126,6 +126,8 @@ consult_memory --> select_workflow
 5. **execute_workflow**: `ExecuteGoalWorkflowAction` runs the selected/created workflow
 6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
 7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
+8. **ethics_post_review → record_ethics_review**: advisory LLM review of the completed run, then `RecordEthicsReviewAction` audits it (`check_type="post_review"`). Runs after the memory update so a failed review cannot skip it (#143)
+9. **ethics_rejection** (terminal, any gate `reject`): `RecordEthicsRejectionAction` stores `ethics_rejection = {gate, reasoning, concerns}`; `AgentResult.ethics_rejection` / `error` surface it (#143)
 
 ### Task Actions for Agent Loop
 
@@ -142,6 +144,8 @@ These actions (in `zebra-tasks/zebra_tasks/agent/`) power the agent loop:
 | `execute_goal_workflow` | `execute_workflow.py` | Execute workflow by name |
 | `assess_and_record` | `assess_and_record.py` | LLM assessment + metrics + memory write |
 | `update_conceptual_memory` | `update_conceptual_memory.py` | Incrementally update conceptual memory index |
+| `record_ethics_review` | `record_ethics_review.py` | Normalise + audit the post-execution ethics review (#143) |
+| `record_ethics_rejection` | `record_ethics_rejection.py` | Record which ethics gate rejected the goal and why (#143) |
 
 These actions power the Dream Cycle self-improvement workflow:
 

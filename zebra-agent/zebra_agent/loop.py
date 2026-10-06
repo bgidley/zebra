@@ -48,6 +48,8 @@ class AgentResult:
     tokens_used: int = 0
     error: str | None = None
     created_new_workflow: bool = False
+    # Set when an ethics gate rejected the goal: {gate, reasoning, concerns} (#143)
+    ethics_rejection: dict[str, Any] | None = None
 
 
 class AgentLoop:
@@ -208,6 +210,7 @@ class AgentLoop:
             tokens_used=execution_result.get("tokens_used", 0),
             error=execution_result.get("error"),
             created_new_workflow=execution_result.get("created_new", False),
+            ethics_rejection=execution_result.get("ethics_rejection"),
         )
 
     async def _run_agent_workflow(
@@ -269,9 +272,17 @@ class AgentLoop:
             "tokens_used": execution_result.get("tokens_used", 0),
             "created_new": process.properties.get("created_new", False),
         }
+        # An ethics gate rejected the goal — report which gate and why (#143).
+        rejection = process.properties.get("ethics_rejection")
+        if isinstance(rejection, dict):
+            result["ethics_rejection"] = rejection
+            result["error"] = (
+                f"Rejected by ethics {rejection.get('gate', 'gate')}: "
+                f"{rejection.get('reasoning', '')}"
+            )
         # A task failure ends the process COMPLETE (no active tasks remain) without an
         # execution_result — surface the failed tasks' errors instead of a silent None.
-        if not execution_result:
+        elif not execution_result:
             result["error"] = await self._failed_task_errors(process.id)
         return result
 

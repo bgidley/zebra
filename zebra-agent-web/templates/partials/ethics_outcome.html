@@ -1,0 +1,57 @@
+{% comment %}
+Ethics outcome panel (#143).
+
+Parameters (via context):
+  - ethics_outcome: dict with either
+      `rejection` {gate, reasoning, concerns}  — a gate rejected the goal, or
+      `review` {ethical, overall_reasoning, concerns, recommendations} — post-execution review.
+    Renders nothing when falsy.
+{% endcomment %}
+{% if ethics_outcome %}
+{% if ethics_outcome.rejection %}
+<div class="bg-gray-800 rounded-lg border border-red-700/60" data-testid="ethics-rejection">
+    <div class="px-6 py-4 border-b border-red-700/60 flex items-center gap-2">
+        <h2 class="text-lg font-semibold text-white">Rejected on Ethical Grounds</h2>
+        <span class="ml-auto text-xs text-red-300/80">gate: {{ ethics_outcome.rejection.gate }}</span>
+    </div>
+    <div class="p-6 space-y-3">
+        <p class="text-sm text-gray-200">{{ ethics_outcome.rejection.reasoning }}</p>
+        {% if ethics_outcome.rejection.concerns %}
+        <ul class="list-disc list-inside space-y-1 text-sm text-red-200/90">
+            {% for concern in ethics_outcome.rejection.concerns %}<li>{{ concern }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+</div>
+{% elif ethics_outcome.review %}
+<div class="bg-gray-800 rounded-lg border {% if ethics_outcome.review.ethical %}border-gray-700{% else %}border-red-700/60{% endif %}" data-testid="ethics-review">
+    <div class="px-6 py-4 border-b border-gray-700 flex items-center gap-2">
+        <h2 class="text-lg font-semibold text-white">Post-Execution Ethics Review</h2>
+        {% if ethics_outcome.review.ethical %}
+        <span class="ml-auto px-2 py-0.5 text-xs rounded-full bg-green-900 text-green-300">Ethical</span>
+        {% else %}
+        <span class="ml-auto px-2 py-0.5 text-xs rounded-full bg-red-900 text-red-300">Concerns</span>
+        {% endif %}
+    </div>
+    <div class="p-6 space-y-3 text-sm">
+        <p class="text-gray-200">{{ ethics_outcome.review.overall_reasoning }}</p>
+        {% if ethics_outcome.review.concerns %}
+        <div>
+            <h3 class="text-xs uppercase text-gray-400 mb-1">Concerns</h3>
+            <ul class="list-disc list-inside space-y-1 text-amber-200/90">
+                {% for concern in ethics_outcome.review.concerns %}<li>{{ concern }}</li>{% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% if ethics_outcome.review.recommendations %}
+        <div>
+            <h3 class="text-xs uppercase text-gray-400 mb-1">Recommendations</h3>
+            <ul class="list-disc list-inside space-y-1 text-gray-300">
+                {% for rec in ethics_outcome.review.recommendations %}<li>{{ rec }}</li>{% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endif %}

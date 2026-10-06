@@ -153,15 +153,20 @@ The loop lives in `workflows/agent_main_loop.yaml`, not Python. `AgentLoop` is a
 
 ```
 consult_memory
+  → consult_knowledge
   → ethics_input_gate
+  → assess_continuation      (F135)
   → workflow_selector
   → [create_new | create_variant | use_existing]
   → flag_concerns            (advisory, non-blocking — F21)
   → ethics_plan_review       (escalate → resolve dilemma → record — F22)
   → execute_goal_workflow
-  → ethics_post_review
   → assess_and_record
   → update_conceptual_memory
+  → ethics_post_review       (llm_call)
+  → record_ethics_review     (audit check_type=post_review — #143)
+
+any gate "reject" → ethics_rejection (record_ethics_rejection — #143)
 ```
 
 ### Dream cycle (`dream_cycle.yaml`)
@@ -202,7 +207,15 @@ Minimal: `/list`, `/stats`, `/help`, `/quit`. Launch with `zebra-agent` / `pytho
 
 ### Ethics gates
 
-Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, post-execution review. Implementation is LLM-prompt-based Kantian reasoning (universalizability, rational beings as ends, autonomy). Human confirmation task waits for acknowledgement before completion.
+Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, post-execution review. Implementation is LLM-prompt-based Kantian reasoning (universalizability, rational beings as ends, autonomy). The post-execution review is advisory and automated (no human confirmation since F111).
+
+**Ethics outcome recording (#143, loop v9).** Every ethics verdict is now durable and visible:
+- `record_ethics_review` normalises `ethics_post_assessment` to `{ethical, overall_reasoning, concerns, recommendations}` and appends an `EthicsAuditEntry` with `check_type="post_review"`. An unparseable review fails closed (`ethical=false`).
+- The review runs *after* `update_conceptual_memory`, so a failed review no longer skips the memory update.
+- The terminal `ethics_rejection` task runs `record_ethics_rejection`. It stores `ethics_rejection = {gate, reasoning, concerns}`, where `gate` is `input_gate`, `plan_review` or `dilemma_resolution`. It writes no audit entry, because the gate already did.
+- `AgentResult.ethics_rejection` carries the record, and `error` reads `Rejected by ethics <gate>: <reasoning>`.
+- The run pages (`partials/ethics_outcome.html`) show the rejection or the post-review.
+- Rejected goals still write no metrics `WorkflowRun`, so per-workflow success rates are unaffected. See `openspec/changes/ethics-outcome-recording/`.
 
 `EthicsGateAction` accepts an optional `user_id` input. When provided and `__profile_store__` is available in `context.extras`, the gate loads the user's current `ValuesProfile` and incorporates it into a combined evaluation prompt. Kantian rejection always takes precedence (values can only restrict further). The stored assessment includes a `values_assessment` key (`null` for Kantian-only runs). Verdict log lines show both Kantian and values flags when a profile was consulted.
 
@@ -352,7 +365,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 
 ### Ethics gate change (F111)
 
-`ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`; `ethics_post_review` routes directly to `update_conceptual_memory`. This unblocked autonomous daemon processing.
+`ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`. This unblocked autonomous daemon processing. (Since v9 / #143 it runs after `update_conceptual_memory` and is followed by `record_ethics_review`.)
 
 ---
 
