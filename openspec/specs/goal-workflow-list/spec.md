@@ -1,7 +1,7 @@
 # goal-workflow-list Specification
 
 ## Purpose
-TBD - created by archiving change goal-workflow-list. Update Purpose after archive.
+How the workflow candidates offered to the Agent Main Loop's selector are built and refreshed: one builder for every goal entry point, `system`-tagged workflows excluded, and a live refresh at selection time (#144).
 
 ## Requirements
 
