@@ -69,6 +69,7 @@ assess_and_record = "zebra_tasks.agent.assess_and_record:AssessAndRecordAction"
 update_conceptual_memory = "zebra_tasks.agent.update_conceptual_memory:UpdateConceptualMemoryAction"
 compact_memory = "zebra_tasks.agent.compact_memory:CompactMemoryAction"
 record_metrics = "zebra_tasks.agent.record_metrics:RecordMetricsAction"
+propagate_failure = "zebra_tasks.agent.propagate_failure:PropagateFailureAction"
 queue_goal = "zebra_tasks.agent.queue_goal:QueueGoalAction"
 # Agent - Analysis and optimization
 metrics_analyzer = "zebra_tasks.agent.analyzer:MetricsAnalyzerAction"

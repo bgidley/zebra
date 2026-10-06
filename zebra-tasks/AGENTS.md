@@ -279,6 +279,7 @@ Execute a workflow by name and capture its output.
 | `goal` | string | - | Goal to pass to workflow |
 | `timeout` | float | 120 | Max execution time in seconds |
 | `output_key` | string | "execution_result" | Where to store result |
+| `continue_on_failure` | bool | false | On child failure/timeout/error, complete with `success: false` + `error` in the output instead of failing the task, so downstream tasks still run (#140) |
 
 **Output:**
 
@@ -295,6 +296,12 @@ Execute a workflow by name and capture its output.
 **Store Access:** Reads `__workflow_library__` from `context.extras` (engine-level dependency injection).
 
 **Resumable (#129):** records the child process id on its task (`__child_process_id__`) before starting it; a re-run (e.g. after crash recovery) re-attaches to that child while it is still linked via `parent_process_id`/`parent_task_id`, instead of spawning a duplicate. Declare the task `idempotent: true` so recovery re-runs it.
+
+### PropagateFailureAction (`propagate_failure`)
+
+Re-raise a recorded outcome at the end of a workflow (#140). Pairs with `execute_goal_workflow`'s `continue_on_failure`: the failure travels as data through the learning steps, then this task fails with it so the process still ends `FAILED`.
+
+**Properties:** `success` (bool or template, required), `error` (string or template; default message `"Workflow execution failed"`). **Result:** `TaskResult.fail(error)` when `success` is false, `TaskResult.ok()` otherwise. `reversibility_hint = "always_reversible"`.
 
 ### AssessAndRecordAction (formerly RecordMetricsAction)
 

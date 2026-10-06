@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 8
+version: 9
 first_task: consult_memory
 
 tasks:
@@ -172,6 +172,9 @@ tasks:
       workflow_name: "{{workflow_name}}"
       goal: "{{goal}}"
       timeout: 120
+      # #140: record a failed run as data so assess/learn still run;
+      # report_outcome re-raises the failure at the end.
+      continue_on_failure: true
       output_key: execution_result
 
   # Step 8: Assess effectiveness and record to metrics + memory
@@ -184,6 +187,7 @@ tasks:
       workflow_name: "{{workflow_name}}"
       goal: "{{goal}}"
       success: "{{execution_result.success}}"
+      error: "{{execution_result.error}}"
       output: "{{execution_result.output}}"
       tokens_used: "{{execution_result.tokens_used}}"
       input_tokens: "{{execution_result.input_tokens}}"
@@ -241,6 +245,15 @@ tasks:
       success: "{{execution_result.success}}"
       effectiveness_notes: "{{assess_result.effectiveness_notes}}"
       output_key: conceptual_memory_update
+
+  # Step 11: End FAILED with the goal workflow's error if it failed (#140)
+  report_outcome:
+    name: "Report Outcome"
+    action: propagate_failure
+    auto: true
+    properties:
+      success: "{{execution_result.success}}"
+      error: "{{execution_result.error}}"
 
   # Terminal: Ethics rejection (no outgoing routes = process completes)
   ethics_rejection:
@@ -354,3 +367,6 @@ routings:
 
   - from: ethics_post_review
     to: update_conceptual_memory
+
+  - from: update_conceptual_memory
+    to: report_outcome

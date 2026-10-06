@@ -110,9 +110,11 @@ consult_memory --> select_workflow
                        |
                 execute_workflow
                        |
-                assess_and_record
+                assess_and_record   (also runs for failed goal runs — #140)
                        |
              update_conceptual_memory
+                       |
+                report_outcome  (fails with the goal workflow's error, if any)
 ```
 
 **Steps:**
@@ -126,6 +128,7 @@ consult_memory --> select_workflow
 5. **execute_workflow**: `ExecuteGoalWorkflowAction` runs the selected/created workflow
 6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
 7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
+8. **report_outcome**: `PropagateFailureAction` fails with `execution_result.error` when the goal workflow failed, so the process ends FAILED only after the failure was recorded (`execute_workflow` sets `continue_on_failure: true`; #140)
 
 ### Task Actions for Agent Loop
 

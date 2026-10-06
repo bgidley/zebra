@@ -767,6 +767,29 @@ class TestProcessGoalSurfacesTaskErrors:
             "ethics_input_gate: Failed to get LLM provider for ethics gate: Kimi API key required."
         )
 
+    async def test_complete_process_with_unsuccessful_execution_reports_its_error(
+        self, library, mock_engine, metrics, agent_main_loop_yaml
+    ):
+        """#140: a recorded execution failure surfaces execution_result.error."""
+        (library.library_path / "agent_main_loop.yaml").write_text(agent_main_loop_yaml)
+
+        mock_process = MagicMock()
+        mock_process.id = "process-1"
+        mock_process.state = ProcessState.COMPLETE
+        mock_process.properties = {
+            "workflow_name": "Poem",
+            "execution_result": {"success": False, "output": None, "error": "boom"},
+        }
+        mock_engine.create_process = AsyncMock(return_value=mock_process)
+        mock_engine.start_process = AsyncMock()
+        mock_engine.store.load_process = AsyncMock(return_value=mock_process)
+
+        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics)
+        result = await loop.process_goal("Test goal")
+
+        assert result.success is False
+        assert result.error == "boom"
+
     async def test_failed_process_without_error_property_uses_task_errors(
         self, library, mock_engine, metrics, agent_main_loop_yaml
     ):
