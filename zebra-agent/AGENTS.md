@@ -94,7 +94,9 @@ not imperative Python code. The `AgentLoop` class is a thin wrapper that runs th
 The workflow handles the complete goal processing flow:
 
 ```
-consult_memory --> select_workflow
+consult_memory --> consult_knowledge --> assess_history_need
+                       (needs_history → get_workflow_history — F138)
+                --> ethics_input_gate --> assess_continuation --> select_workflow
                        |
              +---------+---------+
              |         |         |
@@ -134,6 +136,8 @@ These actions (in `zebra-tasks/zebra_tasks/agent/`) power the agent loop:
 | Action | File | Purpose |
 |--------|------|---------|
 | `consult_memory` | `consult_memory.py` | Read conceptual memory for workflow shortlist |
+| `assess_history_need` | `history.py` | Decide if the goal needs past runs; route `needs_history`/`no_history` (F138) |
+| `get_workflow_history` | `history.py` | Fetch past runs by time window + text via `MetricsStore.search_runs` (F138) |
 | `workflow_selector` | `selector.py` | LLM-powered workflow selection |
 | `workflow_creator` | `creator.py` | LLM-powered workflow creation |
 | `workflow_variant_creator` | `variant_creator.py` | LLM-powered workflow variant creation |

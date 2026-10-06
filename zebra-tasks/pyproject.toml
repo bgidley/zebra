@@ -60,6 +60,8 @@ python_exec = "zebra_tasks.compute.python_exec:PythonExecAction"
 # Agent - Core loop actions
 consult_memory = "zebra_tasks.agent.consult_memory:ConsultMemoryAction"
 consult_knowledge = "zebra_tasks.agent.consult_knowledge:ConsultKnowledgeAction"
+get_workflow_history = "zebra_tasks.agent.history:GetWorkflowHistoryAction"
+assess_history_need = "zebra_tasks.agent.history:AssessHistoryNeedAction"
 workflow_selector = "zebra_tasks.agent.selector:WorkflowSelectorAction"
 continuation_assessor = "zebra_tasks.agent.continuation_assessor:ContinuationAssessorAction"
 workflow_creator = "zebra_tasks.agent.creator:WorkflowCreatorAction"

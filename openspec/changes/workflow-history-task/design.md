@@ -40,9 +40,13 @@ new property (they keep consuming `goal`).
 5. **Bounded output.** Per-run `output` / `error` are truncated to about 300 characters, and
    `history_context` is capped at about 4,000 characters. The list is newest first and truncation
    is marked with an ellipsis note. Keeps process properties and prompts small.
-6. **Exclude the current run.** The current `run_id` process property is filtered out so a run
+6. **Explicit `user_id` on `search_runs`.** The daemon executes goals with no request user, so
+   relying on `get_current_user_id()` alone would expose every user's history. The action passes
+   the process's `__user_id__`; the Django store uses it, or falls back to the request user. The
+   single-user in-memory store ignores it.
+7. **Exclude the current run.** The current `run_id` process property is filtered out so a run
    doesn't see itself as history.
-7. **Wiring.** Main loop v9: `consult_knowledge → assess_history_need`; on `needs_history` it
+8. **Wiring.** Main loop v9: `consult_knowledge → assess_history_need`; on `needs_history` it
    goes to `get_workflow_history → ethics_input_gate`; on `no_history` it goes straight to
    `ethics_input_gate`. History outputs to the `workflow_history` key. The selector gets a new
    optional `history_context` input. `execute_goal_workflow` appends a delimited

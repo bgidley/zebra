@@ -16,7 +16,10 @@ The metrics store SHALL support searching past workflow runs. Every filter is op
 - a result limit
 
 Results SHALL be ordered newest first. The limit SHALL default to 20 and SHALL be capped at 200.
-When a current user is set, results SHALL include only that user's runs.
+Results SHALL be limited to an explicitly given user. When no user is given, results SHALL be
+limited to the request's current user, if there is one. The history task SHALL always pass the
+goal's owner, so goals run by the background daemon (which has no request user) never see other
+users' runs.
 
 #### Scenario: Date window filter
 - **WHEN** runs exist on 1 Oct, 3 Oct and 5 Oct and a search is made with start 2 Oct and end 5 Oct
@@ -37,6 +40,10 @@ When a current user is set, results SHALL include only that user's runs.
 #### Scenario: User scoping
 - **WHEN** user A searches with no other filters
 - **THEN** no runs belonging to user B are returned
+
+#### Scenario: Explicit user scoping without a request user
+- **WHEN** the daemon (no request user) searches with user A's id
+- **THEN** only user A's runs are returned
 
 ### Requirement: Workflow history task
 The system SHALL provide a `get_workflow_history` task action. It accepts start time, end time,

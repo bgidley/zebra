@@ -18,6 +18,7 @@ from zebra.storage.memory import InMemoryStore
 from zebra.tasks.base import TaskAction
 from zebra.tasks.registry import ActionRegistry
 from zebra_tasks.agent.continuation_assessor import ContinuationAssessorAction
+from zebra_tasks.agent.history import AssessHistoryNeedAction, GetWorkflowHistoryAction
 from zebra_tasks.agent.record_dilemma_resolution import RecordDilemmaResolutionAction
 
 # ---------------------------------------------------------------------------
@@ -181,6 +182,9 @@ def _make_registry(ethics_gate_class):
     registry.register_action("ethics_gate", ethics_gate_class)
     # F135: real assessor — passes non-continuation goals straight through (no LLM)
     registry.register_action("continuation_assessor", ContinuationAssessorAction)
+    # F138: real history actions — goals without history cues skip the LLM
+    registry.register_action("assess_history_need", AssessHistoryNeedAction)
+    registry.register_action("get_workflow_history", GetWorkflowHistoryAction)
     registry.register_action("flag_concerns", StubFlagConcerns)
     registry.register_action("record_dilemma_resolution", RecordDilemmaResolutionAction)
     registry.register_action("workflow_selector", StubWorkflowSelector)
@@ -489,3 +493,88 @@ class TestContinuationRouting:
         )
         assert props["continuation_decision"] == "existing_workflow"
         assert "__task_output_select_workflow" in props
+
+
+# ---------------------------------------------------------------------------
+# F138: workflow history routing through the real main loop
+# ---------------------------------------------------------------------------
+
+
+class EchoGoal(TaskAction):
+    """Child workflow task: records the goal it was given as its result."""
+
+    async def run(self, task, context):
+        context.set_process_property("answer", context.get_process_property("goal"))
+        return TaskResult.ok(output="done")
+
+
+class _ChildLibrary:
+    """Library returning a one-task child workflow for 'Test Workflow'."""
+
+    def get_workflow(self, name):
+        from zebra.core.models import ProcessDefinition, TaskDefinition
+
+        assert name == "Test Workflow"
+        return ProcessDefinition(
+            id="echo_wf",
+            name="Test Workflow",
+            first_task_id="echo",
+            properties={"result_key": "answer"},
+            tasks={"echo": TaskDefinition(id="echo", name="Echo", action="echo_goal")},
+        )
+
+
+class TestHistoryRouting:
+    """assess_history_need → [get_workflow_history] → ethics_input_gate (F138)."""
+
+    async def _run(self, definition, goal, provider=None):
+        from zebra_tasks.agent.execute_workflow import ExecuteGoalWorkflowAction
+
+        from zebra_agent.metrics import WorkflowRun
+        from zebra_agent.storage import InMemoryMetricsStore
+
+        metrics = InMemoryMetricsStore()
+        past = WorkflowRun.create("Research", "Compare pension providers")
+        past.success = True
+        past.output = "Vanguard has the lowest fees"
+        await metrics.record_run(past)
+
+        registry = _make_registry(StubEthicsGateApprove)
+        registry.register_action("execute_goal_workflow", ExecuteGoalWorkflowAction)
+        registry.register_action("echo_goal", EchoGoal)
+        store = InMemoryStore()
+        engine = WorkflowEngine(
+            store,
+            registry,
+            extras={"__workflow_library__": _ChildLibrary(), "__metrics_store__": metrics},
+        )
+        process = await engine.create_process(
+            definition, properties={"goal": goal, "available_workflows": []}
+        )
+        with patch(
+            "zebra_tasks.agent.history.get_provider",
+            return_value=provider or _llm_returning({}),
+        ) as get_provider:
+            await engine.start_process(process.id)
+        process = await store.load_process(process.id)
+        assert process.state == ProcessState.COMPLETE
+        return process.properties, get_provider
+
+    async def test_needs_history_reaches_child_goal(self, definition):
+        provider = _llm_returning({"needs_history": True, "since": "-7d", "text": "pension"})
+        props, _ = await self._run(
+            definition, "What did I ask you about pensions last week?", provider
+        )
+        assert props["history_need"]["needs_history"] is True
+        assert props["workflow_history"]["count"] == 1
+        child_goal = props["execution_result"]["output"]
+        assert child_goal.startswith("What did I ask you about pensions last week?")
+        assert "<workflow_history>" in child_goal
+        assert "Vanguard has the lowest fees" in child_goal
+
+    async def test_no_history_leaves_goal_untouched(self, definition):
+        props, get_provider = await self._run(definition, "Write a poem")
+        get_provider.assert_not_called()
+        assert "__task_output_get_workflow_history" not in props
+        assert "workflow_history" not in props
+        assert props["execution_result"]["output"] == "Write a poem"

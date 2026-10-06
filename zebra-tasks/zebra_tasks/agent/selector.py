@@ -159,6 +159,13 @@ class WorkflowSelectorAction(TaskAction):
             default="",
         ),
         ParameterDef(
+            name="history_context",
+            type="string",
+            description="Past workflow runs from get_workflow_history (F138)",
+            required=False,
+            default="",
+        ),
+        ParameterDef(
             name="provider",
             type="string",
             description="LLM provider name",
@@ -304,6 +311,11 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
         if isinstance(knowledge_context, str) and "{{" in knowledge_context:
             knowledge_context = context.resolve_template(knowledge_context)
 
+        # Past workflow runs from get_workflow_history (F138)
+        history_context = task.properties.get("history_context", "")
+        if isinstance(history_context, str) and "{{" in history_context:
+            history_context = context.resolve_template(history_context)
+
         # Get LLM provider
         provider_name = task.properties.get("provider", "anthropic")
         model = task.properties.get("model")
@@ -331,6 +343,9 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
         # Inject personal knowledge context if available
         if knowledge_context:
             prompt += f"## Personal Knowledge\n{knowledge_context}\n\n"
+
+        if history_context:
+            prompt += f"## Workflow History\n{history_context}\n\n"
 
         # Highlight shortlisted workflows
         if shortlist:
