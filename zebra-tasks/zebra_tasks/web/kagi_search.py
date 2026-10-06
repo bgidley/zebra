@@ -6,11 +6,11 @@ import httpx
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-KAGI_SEARCH_URL = "https://kagi.com/api/v0/search"
+KAGI_SEARCH_URL = "https://kagi.com/api/v1/search"
 
 
 class KagiSearchAction(TaskAction):
-    """Search the web using the Kagi Search API.
+    """Search the web using the Kagi Search API (v1).
 
     Returns ranked search results (title, URL, snippet) for a given query.
     Requires KAGI_API_KEY environment variable.
@@ -101,10 +101,10 @@ class KagiSearchAction(TaskAction):
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
+                response = await client.post(
                     KAGI_SEARCH_URL,
-                    params={"q": query, "limit": limit},
-                    headers={"Authorization": f"Bot {api_key}"},
+                    json={"query": query, "limit": limit},
+                    headers={"Authorization": f"Bearer {api_key}"},
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -113,17 +113,17 @@ class KagiSearchAction(TaskAction):
         except httpx.RequestError as e:
             return TaskResult.fail(f"Network error calling Kagi: {e}")
 
-        raw_items = data.get("data") or []
+        # v1 groups results by category; only web results ("search") are returned here.
+        raw_items = (data.get("data") or {}).get("search") or []
         results = [
             {
-                "rank": item.get("rank"),
+                "rank": rank,
                 "url": item.get("url", ""),
                 "title": item.get("title", ""),
                 "snippet": item.get("snippet", ""),
-                "published": item.get("published"),
+                "published": item.get("time"),
             }
-            for item in raw_items
-            if item.get("t") == 0  # t=0 are search results; t=1 are related searches
+            for rank, item in enumerate(raw_items[:limit], start=1)
         ]
 
         context.set_process_property(output_key, results)
