@@ -300,6 +300,29 @@ class TestEthicsWorkflowIntegration:
         assert process.state == ProcessState.COMPLETE
         assert process.properties.get("dilemma_resolution")["decision"] == "decline"
 
+    async def test_process_goal_reports_awaiting_input_on_dilemma(self, definition):
+        """process_goal returns awaiting_input (not a timeout) when parked on the dilemma (#141)."""
+        from zebra_agent.loop import AgentLoop
+
+        engine = WorkflowEngine(InMemoryStore(), _make_registry(StubEthicsGateEscalate))
+        library = MagicMock()
+        library.get_workflow.return_value = definition
+        library.list_workflows = AsyncMock(return_value=[])
+        events = []
+
+        async def progress(event, data):
+            events.append((event, data))
+
+        loop = AgentLoop(library=library, engine=engine, metrics=MagicMock())
+        result = await loop.process_goal("Give honest feedback", progress_callback=progress)
+
+        assert result.awaiting_input is True
+        assert result.success is False
+        assert "Awaiting human input: Resolve Ethics Dilemma" in result.error
+        pending = [d for e, d in events if e == "human_task_pending"]
+        assert len(pending) == 1
+        assert pending[0]["task_definition_id"] == "ethics_dilemma_resolution"
+
     async def test_input_gate_rejects_stops_at_rejection(self, definition):
         """When input gate rejects, process completes at ethics_rejection."""
         registry = _make_registry(StubEthicsGateReject)

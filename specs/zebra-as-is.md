@@ -274,7 +274,9 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 
 In production, the budget daemon runs as a **separate `zebra-daemon` Quadlet unit** (`deploy/podman/quadlet/zebra-daemon.container`) to guarantee exactly one daemon instance. It starts via `python manage.py run_daemon` (no middleware needed).
 
-In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via `asyncio.create_task()` on the first request (Daphne doesn't run ASGI lifespan events). Loop: `pick_next → budget_check → start_process → poll → record metrics → repeat`.
+In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via `asyncio.create_task()` on the first request (Daphne doesn't run ASGI lifespan events). Loop (each tick): `reconcile tracked goals → skip if one is still executing → pick_next → budget_check → start_process in a background task → wait until finished or parked on a human task → record metrics`.
+
+**Human-task hand-off (#141)**: `start_process` runs auto tasks inline, so `_tick` runs it as a background task via `GoalTracker` (`zebra-agent/zebra_agent/scheduler/goal_tracker.py`) and stops waiting as soon as `find_pending_human_task` (`zebra_agent/human_tasks.py`) sees a READY `auto: false` task in the goal or any RUNNING descendant (e.g. the ethics dilemma form, or a human task in the executed child workflow). The goal stays tracked; later ticks log its `[daemon:done]`/`[daemon:fail]` outcome and `goals_completed` metric exactly once when it terminates. Pickup stays serial: a tracked goal still executing and not waiting on a human blocks the next pickup. Daemon-started goals carry `__daemon_started__`, and a restarted daemon re-tracks RUNNING ones. `AgentLoop.process_goal()` likewise returns `AgentResult(awaiting_input=True, error="Awaiting human input: <task>")` and emits `human_task_pending` instead of timing out. Execution time is still unbounded (#142).
 
 **Startup recovery (F8, #129)**: on start the daemon runs `engine.resume_all_processes()` as a *background* asyncio task (`recover_interrupted`) so re-driving recovered goals never delays the scheduler loop. Recovery goes children-first. The Agent Main Loop's `execute_workflow` task is `idempotent: true` and `execute_goal_workflow` records `__child_process_id__` on its task, so a goal whose driver died (e.g. an `/api/goals/` web thread killed by a redeploy) is reset to READY and re-attaches to its existing child workflow instead of being flagged for manual review or spawning a duplicate. Each such interruption still counts toward `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` (#130, passed to `recover_interrupted`), so a goal interrupted 3 times auto-fails. See [f8-crash-recovery.md](f8-crash-recovery.md).
 
@@ -291,7 +293,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 
 ### Kill switch (F2)
 
-`POST /api/kill-switch/` sets a persisted `halted` flag in `SystemStateModel`. The daemon checks this flag before each goal pickup and during polling — in-flight processes are failed within 2 s of activation. `python manage.py kill_switch --halt|--resume|--status` is the CLI equivalent. See [f2-kill-switch.md](f2-kill-switch.md).
+`POST /api/kill-switch/` sets a persisted `halted` flag in `SystemStateModel`. The daemon checks this flag before each goal pickup and while waiting on a goal — the executing goal's background task is cancelled and its process failed ("Kill switch activated") within one poll second; goals parked on a human task are left alone. `python manage.py kill_switch --halt|--resume|--status` is the CLI equivalent. See [f2-kill-switch.md](f2-kill-switch.md).
 
 ### Observability (F3)
 

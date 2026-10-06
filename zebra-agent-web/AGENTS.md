@@ -463,7 +463,7 @@ code changes in `zebra-agent-web`.
 
 The daemon auto-starts as a background `asyncio.create_task()` inside the ASGI server on first HTTP/WebSocket request via `DaemonStarterMiddleware` in `asgi.py`. It can also run standalone via `python manage.py run_daemon`.
 
-**Loop:** `pick_next() → budget_check → start_process → poll until done → log cost → repeat`
+**Loop:** `reconcile tracked goals → pick_next() → budget_check → start_process (background) → wait until done or parked on a human task → log cost → repeat`. Goals waiting on a human are handed off and reconciled on later ticks (`GoalTracker`, #141).
 
 - `DaemonStarterMiddleware`: ASGI middleware that wraps the Daphne application; on first request, spawns the daemon task. Controlled by `DAEMON_AUTO_START` setting.
 - `run_daemon_loop()`: Shared reusable daemon loop in `api/daemon.py`, used by both the middleware and the management command.
