@@ -53,6 +53,7 @@ async def queue_goal(
     Raises:
         ValueError: If goal is empty or the Agent Main Loop workflow is missing.
     """
+    from zebra_agent.library import list_goal_workflows
     from zebra_tasks.llm.models import resolve_model_name
 
     from zebra_agent_web.api import agent_engine, engine
@@ -73,19 +74,7 @@ async def queue_goal(
 
     definition = library.get_workflow("Agent Main Loop")
 
-    workflows = await library.list_workflows()
-    available = [
-        {
-            "name": w.name,
-            "description": w.description,
-            "tags": w.tags,
-            "success_rate": f"{w.success_rate:.0%}" if w.use_count > 0 else "N/A",
-            "use_count": w.use_count,
-            "use_when": w.use_when,
-        }
-        for w in workflows
-        if "system" not in (w.tags or [])
-    ]
+    available = await list_goal_workflows(library)
 
     identity = identity or {"user_display_name": "", "user_identity_id": ""}
     run_id = str(uuid.uuid4())
@@ -94,7 +83,7 @@ async def queue_goal(
         "run_id": run_id,
         "priority": priority,
         "available_workflows": available,
-        "__llm_provider_name__": "anthropic",
+        "__llm_provider_name__": agent_engine.get_llm_provider_name(),
         "__llm_model__": resolved_model,
         "__started_at__": datetime.now(UTC).isoformat(),
         "__user_display_name__": identity.get("user_display_name", ""),

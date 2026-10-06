@@ -105,6 +105,29 @@ async def test_queue_goal_defaults(mock_machinery):
     assert "deadline" not in props
 
 
+async def test_queue_goal_uses_configured_provider(mock_machinery, settings):
+    """#144: the provider comes from LLM_PROVIDER, not a hard-coded "anthropic"."""
+    from zebra_agent_web.api.goals import queue_goal
+
+    settings.ZEBRA_AGENT_SETTINGS = {**settings.ZEBRA_AGENT_SETTINGS, "LLM_PROVIDER": "openai"}
+
+    await queue_goal("Do something")
+
+    props = mock_machinery["wf_engine"].create_process.call_args.kwargs["properties"]
+    assert props["__llm_provider_name__"] == "openai"
+
+
+async def test_queue_goal_success_rate_is_float(mock_machinery):
+    """#144: available_workflows uses the shared builder's float success_rate."""
+    from zebra_agent_web.api.goals import queue_goal
+
+    await queue_goal("Do something")
+
+    props = mock_machinery["wf_engine"].create_process.call_args.kwargs["properties"]
+    [entry] = props["available_workflows"]
+    assert entry["success_rate"] == 0.5
+
+
 async def test_queue_goal_clamps_priority(mock_machinery):
     """Priority is clamped to 1-5."""
     from zebra_agent_web.api.goals import queue_goal
