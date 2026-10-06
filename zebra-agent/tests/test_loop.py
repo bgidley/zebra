@@ -753,6 +753,7 @@ class TestProcessGoalSurfacesTaskErrors:
 
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
         mock_engine.store.load_tasks_for_process = AsyncMock(return_value=[])
 
