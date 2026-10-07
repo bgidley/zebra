@@ -408,6 +408,38 @@ class TestAssessAndRecordAction:
         assert recorded_run.workflow_name == "Test Workflow"
         assert recorded_run.success is True
 
+    async def test_records_long_output_untruncated(
+        self, mock_task, mock_context, mock_metrics_store
+    ):
+        """Long markdown output is recorded whole (it is the user-facing Final Output)."""
+        from unittest.mock import patch as mock_patch
+
+        from zebra_tasks.agent.assess_and_record import AssessAndRecordAction
+
+        long_output = "# Report\n\n" + ("Some findings with a [link](https://x.y/). " * 200)
+        assert len(long_output) > 2000
+        mock_context.extras["__metrics_store__"] = mock_metrics_store
+        mock_task.properties = {
+            "run_id": "run-1",
+            "workflow_name": "Test Workflow",
+            "goal": "Test goal",
+            "success": True,
+            "output": long_output,
+        }
+
+        mock_provider = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = '{"effectiveness_notes": "Good result"}'
+        mock_provider.complete = AsyncMock(return_value=mock_response)
+
+        with mock_patch(
+            "zebra_tasks.agent.assess_and_record.get_provider", return_value=mock_provider
+        ):
+            await AssessAndRecordAction().run(mock_task, mock_context)
+
+        recorded_run = mock_metrics_store.record_run.call_args[0][0]
+        assert recorded_run.output == long_output
+
     async def test_writes_to_memory_store(self, mock_task, mock_context, mock_memory_store):
         """Test that a WorkflowMemoryEntry is written when store is available."""
         from unittest.mock import patch as mock_patch
