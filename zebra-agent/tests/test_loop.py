@@ -403,6 +403,9 @@ class TestProcessGoalFailure:
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
+        # Running with no human task pending anywhere in the tree
+        mock_engine.store.load_definition = AsyncMock(return_value=None)
+        mock_engine.store.get_processes_by_state = AsyncMock(return_value=[])
 
         loop = AgentLoop(
             library=library,
@@ -417,6 +420,7 @@ class TestProcessGoalFailure:
             result = await loop.process_goal("Test goal")
 
         assert result.success is False
+        assert result.awaiting_input is False
         assert "timed out" in result.error
 
 
