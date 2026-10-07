@@ -19,6 +19,8 @@ from zebra.tasks.base import TaskAction
 from zebra.tasks.registry import ActionRegistry
 from zebra_tasks.agent.continuation_assessor import ContinuationAssessorAction
 from zebra_tasks.agent.record_dilemma_resolution import RecordDilemmaResolutionAction
+from zebra_tasks.agent.record_ethics_rejection import RecordEthicsRejectionAction
+from zebra_tasks.agent.record_ethics_review import RecordEthicsReviewAction
 
 # ---------------------------------------------------------------------------
 # Stub actions — replace real LLM calls with deterministic responses
@@ -190,6 +192,8 @@ def _make_registry(ethics_gate_class):
     registry.register_action("assess_and_record", StubAssessAndRecord)
     registry.register_action("llm_call", StubLLMCall)
     registry.register_action("update_conceptual_memory", StubUpdateConceptualMemory)
+    registry.register_action("record_ethics_review", RecordEthicsReviewAction)
+    registry.register_action("record_ethics_rejection", RecordEthicsRejectionAction)
     return registry
 
 
@@ -299,6 +303,9 @@ class TestEthicsWorkflowIntegration:
         process = await store.load_process(process.id)
         assert process.state == ProcessState.COMPLETE
         assert process.properties.get("dilemma_resolution")["decision"] == "decline"
+        rejection = process.properties["ethics_rejection"]
+        assert rejection["gate"] == "dilemma_resolution"
+        assert "not worth the cost" in rejection["reasoning"]
 
     async def test_process_goal_reports_awaiting_input_on_dilemma(self, definition):
         """process_goal returns awaiting_input (not a timeout) when parked on the dilemma (#141)."""
@@ -341,6 +348,11 @@ class TestEthicsWorkflowIntegration:
         # The ethics assessment should be recorded
         assert process.properties.get("ethics_input_assessment") is not None
         assert process.properties["ethics_input_assessment"]["approved"] is False
+        assert process.properties["ethics_rejection"] == {
+            "gate": "input_gate",
+            "reasoning": "Rejected on ethical grounds",
+            "concerns": ["Violates categorical imperative"],
+        }
 
     async def test_plan_review_rejects_after_selection(self, definition):
         """When plan review rejects (but input gate approves), stops at rejection."""
@@ -383,6 +395,8 @@ class TestEthicsWorkflowIntegration:
         # Input gate approved but plan review rejected
         assert process.properties.get("ethics_input_assessment", {}).get("approved") is True
         assert process.properties.get("ethics_plan_assessment", {}).get("approved") is False
+        assert process.properties["ethics_rejection"]["gate"] == "plan_review"
+        assert process.properties["ethics_rejection"]["reasoning"] == "Plan is unethical"
 
     async def test_ethics_assessment_recorded_in_properties(self, definition):
         """Ethics assessments are stored in process properties for traceability."""
@@ -403,6 +417,54 @@ class TestEthicsWorkflowIntegration:
         assert "ethics_plan_assessment" in process.properties
         assert process.properties["ethics_input_assessment"]["approved"] is True
         assert process.properties["ethics_plan_assessment"]["approved"] is True
+
+
+class TestEthicsOutcomeRecording:
+    """Post-execution review is audited; memory update doesn't depend on it (#143)."""
+
+    async def test_post_review_is_recorded_to_audit_trail(self, definition):
+        audit = MagicMock()
+        audit.append = AsyncMock()
+        registry = _make_registry(StubEthicsGateApprove)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry, extras={"__ethics_audit_store__": audit})
+
+        process = await engine.create_process(
+            definition, properties={"goal": "Write a poem", "available_workflows": []}
+        )
+        await engine.start_process(process.id)
+
+        process = await store.load_process(process.id)
+        assert process.state == ProcessState.COMPLETE
+        assert process.properties["ethics_post_assessment"] == {
+            "ethical": True,
+            "overall_reasoning": "Ethical conduct confirmed.",
+            "concerns": [],
+            "recommendations": [],
+        }
+        assert "ethics_rejection" not in process.properties
+        # Gates are stubbed here, so the post-review recorder is the only auditor.
+        check_types = [c.args[0].check_type for c in audit.append.await_args_list]
+        assert check_types == ["post_review"]
+
+    async def test_failed_post_review_does_not_skip_memory_update(self, definition):
+        class FailingLLMCall(TaskAction):
+            async def run(self, task, context):
+                return TaskResult.fail("LLM unavailable")
+
+        registry = _make_registry(StubEthicsGateApprove)
+        registry.register_action("llm_call", FailingLLMCall)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry)
+
+        process = await engine.create_process(
+            definition, properties={"goal": "Write a poem", "available_workflows": []}
+        )
+        await engine.start_process(process.id)
+
+        process = await store.load_process(process.id)
+        assert process.properties["conceptual_memory_update"] == {"updated": True}
+        assert "__task_output_record_ethics_review" not in process.properties
 
 
 # ---------------------------------------------------------------------------

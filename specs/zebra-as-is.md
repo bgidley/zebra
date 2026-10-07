@@ -121,7 +121,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 | Agent loop | `consult_memory`, `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (8000) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML before saving (#122) |
 | Dream cycle | `metrics_analyzer`, `workflow_evaluator`, `workflow_optimizer` |
 | Ethics | `ethics_gate` |
-| Web (F115) | `kagi_search`, `kagi_summarize` |
+| Web (F115, #145) | `kagi_search`, `kagi_extract` — Kagi v1 API (`POST /api/v1/search`, `/extract`, Bearer `KAGI_API_KEY`); `kagi_summarize` removed (v1 has no summarizer) |
 | Notifications (F65) | `notify_email` (SMTP, `ZEBRA_SMTP_*` env), `notify_webhook` (HTTP POST/PUT, `ZEBRA_NOTIFY_WEBHOOK_URL`) — both `always_irreversible` |
 
 ### LLM integration
@@ -153,15 +153,20 @@ The loop lives in `workflows/agent_main_loop.yaml`, not Python. `AgentLoop` is a
 
 ```
 consult_memory
+  → consult_knowledge
   → ethics_input_gate
+  → assess_continuation      (F135)
   → workflow_selector
   → [create_new | create_variant | use_existing]
   → flag_concerns            (advisory, non-blocking — F21)
   → ethics_plan_review       (escalate → resolve dilemma → record — F22)
   → execute_goal_workflow
-  → ethics_post_review
   → assess_and_record
   → update_conceptual_memory
+  → ethics_post_review       (llm_call)
+  → record_ethics_review     (audit check_type=post_review — #143)
+
+any gate "reject" → ethics_rejection (record_ethics_rejection — #143)
 ```
 
 ### Dream cycle (`dream_cycle.yaml`)
@@ -204,7 +209,15 @@ Minimal: `/list`, `/stats`, `/help`, `/quit`. Launch with `zebra-agent` / `pytho
 
 ### Ethics gates
 
-Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, post-execution review. Implementation is LLM-prompt-based Kantian reasoning (universalizability, rational beings as ends, autonomy). Human confirmation task waits for acknowledgement before completion.
+Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, post-execution review. Implementation is LLM-prompt-based Kantian reasoning (universalizability, rational beings as ends, autonomy). The post-execution review is advisory and automated (no human confirmation since F111).
+
+**Ethics outcome recording (#143, loop v10).** Every ethics verdict is now durable and visible:
+- `record_ethics_review` normalises `ethics_post_assessment` to `{ethical, overall_reasoning, concerns, recommendations}` and appends an `EthicsAuditEntry` with `check_type="post_review"`. An unparseable review fails closed (`ethical=false`).
+- The review runs *after* `update_conceptual_memory`, so a failed review no longer skips the memory update.
+- The terminal `ethics_rejection` task runs `record_ethics_rejection`. It stores `ethics_rejection = {gate, reasoning, concerns}`, where `gate` is `input_gate`, `plan_review` or `dilemma_resolution`. It writes no audit entry, because the gate already did.
+- `AgentResult.ethics_rejection` carries the record, and `error` reads `Rejected by ethics <gate>: <reasoning>`.
+- The run pages (`partials/ethics_outcome.html`) show the rejection or the post-review.
+- Rejected goals still write no metrics `WorkflowRun`, so per-workflow success rates are unaffected. See `openspec/specs/ethics-outcome-recording/spec.md`.
 
 `EthicsGateAction` accepts an optional `user_id` input. When provided and `__profile_store__` is available in `context.extras`, the gate loads the user's current `ValuesProfile` and incorporates it into a combined evaluation prompt. Kantian rejection always takes precedence (values can only restrict further). The stored assessment includes a `values_assessment` key (`null` for Kantian-only runs). Verdict log lines show both Kantian and values flags when a profile was consulted.
 
@@ -356,7 +369,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 
 ### Ethics gate change (F111)
 
-`ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`; `ethics_post_review` routes directly to `update_conceptual_memory`. This unblocked autonomous daemon processing.
+`ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`. This unblocked autonomous daemon processing. (Since v10 / #143 it runs after `update_conceptual_memory` and is followed by `record_ethics_review`.)
 
 ---
 
@@ -463,7 +476,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 | Integration provider framework | **Missing** | REQ-INT-001/002/004 |
 | Domain coverage beyond Code | **Missing** | REQ-DOM-SCHED/RESEARCH/FIN/HEALTH/HOME/CREATIVE/SOCIAL |
 | Web authentication | **Implemented** (F5 — passkey/WebAuthn) | REQ-NFR-007 |
-| Kagi web search action (`kagi_search`) | **Implemented** (F115) | — |
+| Kagi web search / page extraction (`kagi_search`, `kagi_extract`) | **Implemented** (F115; v1 API #145). See `openspec/specs/web-search/` | — |
 | Extend/follow-up on a previous goal | **Implemented** (F116) — attach one of your completed runs from the goal form or the Activity "Extend" link; `previous_run_context` process property is added to the goal by `zebra_tasks.agent.followup.with_previous_run()` for the ethics gate, selector, creators and the executed workflow (plain `goal` unchanged); `WorkflowRun.extends_run_id` records lineage; `DjangoMetricsStore.get_run` is user-scoped. See `openspec/specs/goal-follow-up/spec.md` | — |
 | Continue a goal run (phase 17) | **Implemented** (F134). The run page has a "Continue this run" form, and `POST /api/runs/<id>/continue/` queues a continuation. Both take a comment on where the run got to and work for successful and failed runs. The continuation keeps the goal text and carries a `continuation_comment` property. `followup.load_previous_run_context()` adds task-level progress and a capped summary of the chain. Lineage is stored via `extends_run_id` plus `WorkflowRun.continuation_comment/decision/rationale` (migration 0024). `MetricsStore.get_run_chain` / `get_continuations_since` query it, and `partials/run_chain.html` shows the whole chain from any run in it. See `openspec/specs/goal-continuation/` | — |
 | Continuation assessment | **Implemented** (F135) — `continuation_assessor` (`assess_continuation` in `agent_main_loop.yaml` v8, after the ethics input gate) asks the LLM for `same_workflow` / `existing_workflow` / `new_workflow` when the process has `previous_run_context`. It sees the previous goal, workflow, output, task progress and `continuation_comment`. Goals without `previous_run_context` pass through as `not_continuation`, with no LLM call. A missing previous workflow or an LLM/parse failure falls back to `existing_workflow`. `continuation_decision`/`continuation_rationale` are stored on `WorkflowRun` and shown on the run page (`partials/_continuation_decision.html`). See `openspec/specs/continuation-assessment/` | — |

@@ -41,6 +41,8 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
 | `zebra_tasks/agent/flag_concerns.py` | FlagConcernsAction - proactive, advisory concern flagging during planning (F21) |
 | `zebra_tasks/agent/record_dilemma_resolution.py` | RecordDilemmaResolutionAction - record a human ethics-dilemma resolution and route (F22) |
+| `zebra_tasks/agent/record_ethics_review.py` | RecordEthicsReviewAction - normalise + audit the post-execution ethics review (#143) |
+| `zebra_tasks/agent/record_ethics_rejection.py` | RecordEthicsRejectionAction - record which ethics gate rejected a goal and why (#143) |
 | `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13/F14) |
 | `zebra_tasks/agent/reversibility.py` | `assess_reversibility()` - contextual reversibility assessment (F14) |
 | `zebra_tasks/agent/propose_trust_promotion.py` | ProposeTrustPromotionAction - queue a trust promotion suggestion (F15) |
@@ -451,6 +453,22 @@ Record the human's resolution of an escalated ethics dilemma and route on their 
 **Routes:** `"proceed"` (decision `proceed`) or `"reject"` (otherwise). Defaults to `proceed`
 if the human output is missing (never leaves the workflow stuck). Degrades gracefully without
 an audit store — the routing decision is always honoured.
+
+### RecordEthicsReviewAction
+
+Persist the post-execution ethics review (#143). Runs after the `ethics_post_review` `llm_call`.
+
+**Properties:** `assessment_key` (default `ethics_post_assessment`) — process property holding the raw review.
+
+**Behaviour:** normalises the review to `{ethical, overall_reasoning, concerns, recommendations}`, writes it back to `assessment_key`, and appends an `EthicsAuditEntry` (`check_type="post_review"`, `approved=ethical`). A non-dict (unparseable) review fails closed: `ethical=false`. Missing audit store or audit errors are logged; always returns `TaskResult.ok`, no route.
+
+### RecordEthicsRejectionAction
+
+Record why a goal was rejected (#143). Runs on the terminal `ethics_rejection` task.
+
+**Properties:** `output_key` (default `ethics_rejection`).
+
+**Behaviour:** infers the rejecting gate from process properties — `dilemma_resolution` (human declined; checked first), `plan_review` (`ethics_plan_assessment.approved is False`), else `input_gate` — and stores `{gate, reasoning, concerns}`. No audit write (the gate already audited its verdict). Always `TaskResult.ok`.
 
 ### TrustGateAction
 

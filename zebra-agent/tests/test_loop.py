@@ -730,6 +730,34 @@ class TestProcessGoalSurfacesTaskErrors:
             "ethics_input_gate: Failed to get LLM provider for ethics gate: Kimi API key required."
         )
 
+    async def test_ethics_rejection_reports_gate_and_reason(
+        self, library, mock_engine, metrics, agent_main_loop_yaml
+    ):
+        """An ethics rejection surfaces the gate and reasoning, not 'Workflow failed' (#143)."""
+        (library.library_path / "agent_main_loop.yaml").write_text(agent_main_loop_yaml)
+
+        rejection = {
+            "gate": "input_gate",
+            "reasoning": "Rejected on ethical grounds",
+            "concerns": ["Deception"],
+        }
+        mock_process = MagicMock()
+        mock_process.id = "process-1"
+        mock_process.state = ProcessState.COMPLETE
+        mock_process.properties = {"ethics_rejection": rejection}
+
+        mock_engine.create_process = AsyncMock(return_value=mock_process)
+        mock_engine.start_process = AsyncMock()
+        mock_engine.store.load_process = AsyncMock(return_value=mock_process)
+        mock_engine.store.load_tasks_for_process = AsyncMock(return_value=[])
+
+        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics)
+        result = await loop.process_goal("Do something unethical")
+
+        assert result.success is False
+        assert result.ethics_rejection == rejection
+        assert result.error == "Rejected by ethics input_gate: Rejected on ethical grounds"
+
     async def test_failed_process_without_error_property_uses_task_errors(
         self, library, mock_engine, metrics, agent_main_loop_yaml
     ):
