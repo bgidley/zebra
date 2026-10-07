@@ -277,7 +277,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 | `/` | Dashboard: running activities (in-flight goals, current tasks, awaiting-input flag, cost — #126), budget, workflow count, success rate |
 | `/run/` | Goal submission (priority, deadline, queue, model) |
 | `/activity/` | Recent runs (handles orphaned processes) |
-| `/runs/<id>/` | Run detail with SVG workflow diagram |
+| `/runs/<id>/` | Run detail with SVG workflow diagram; Final Output markdown rendered server-side (`markdown` template filter, markdown-it-py, raw HTML escaped — #149) |
 | `/workflows/` | Library browser |
 | `/tasks/` & `/tasks/<id>/` | Pending human tasks + JSON-Schema form |
 | `/api/runs/<id>/diagram/` | SVG |
