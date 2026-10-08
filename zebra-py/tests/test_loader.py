@@ -37,6 +37,33 @@ routings:
         assert len(definition.routings) == 1
         assert definition.first_task_id == "start"
 
+    def test_top_level_result_key_goes_into_properties(self):
+        yaml_content = """
+name: "Result Key"
+result_key: summary
+tasks:
+  start:
+    name: Start
+"""
+        definition = load_definition_from_yaml(yaml_content)
+
+        assert definition.properties["result_key"] == "summary"
+
+    def test_explicit_properties_result_key_wins(self):
+        yaml_content = """
+name: "Result Key"
+result_key: top
+properties:
+  result_key: explicit
+  other: 1
+tasks:
+  start:
+    name: Start
+"""
+        definition = load_definition_from_yaml(yaml_content)
+
+        assert definition.properties == {"result_key": "explicit", "other": 1}
+
     def test_load_with_parallel_routing(self):
         yaml_content = """
 name: "Parallel Test"
