@@ -34,6 +34,9 @@ class ExecuteGoalWorkflowAction(TaskAction):
         goal: The user's goal to pass to the workflow
         timeout: Maximum execution time in seconds (default: 120)
         output_key: Where to store the execution result (default: "execution_result")
+        continue_on_failure: When true, a failed/timed-out child completes this task
+            with ``success: false`` in the output instead of failing it, so downstream
+            tasks (e.g. assess_and_record) still run (default: false)
 
     Output:
         - success: bool - Whether the workflow completed successfully
@@ -84,6 +87,13 @@ class ExecuteGoalWorkflowAction(TaskAction):
             description="Process property key to store the result",
             required=False,
             default="execution_result",
+        ),
+        ParameterDef(
+            name="continue_on_failure",
+            type="bool",
+            description="Complete with success=false in the output instead of failing the task",
+            required=False,
+            default=False,
         ),
     ]
 
@@ -144,6 +154,9 @@ class ExecuteGoalWorkflowAction(TaskAction):
         goal = task.properties.get("goal")
         timeout = task.properties.get("timeout", 120)
         output_key = task.properties.get("output_key", "execution_result")
+        continue_on_failure = task.properties.get("continue_on_failure", False)
+        if isinstance(continue_on_failure, str):
+            continue_on_failure = continue_on_failure.lower() in ("true", "1", "yes")
 
         # Resolve templates if needed
         if isinstance(workflow_name, str) and "{{" in workflow_name:
@@ -232,11 +245,10 @@ class ExecuteGoalWorkflowAction(TaskAction):
             # Store result
             context.set_process_property(output_key, result)
 
-            if result["success"]:
+            if result["success"] or continue_on_failure:
                 return TaskResult.ok(output=result)
-            else:
-                logger.warning(f"ExecuteGoalWorkflowAction returning fail: {result.get('error')}")
-                return TaskResult.fail(result.get("error", "Workflow execution failed"))
+            logger.warning(f"ExecuteGoalWorkflowAction returning fail: {result.get('error')}")
+            return TaskResult.fail(result.get("error", "Workflow execution failed"))
 
         except Exception as e:
             error_result = {
@@ -249,6 +261,8 @@ class ExecuteGoalWorkflowAction(TaskAction):
                 "error": str(e),
             }
             context.set_process_property(output_key, error_result)
+            if continue_on_failure:
+                return TaskResult.ok(output=error_result)
             return TaskResult.fail(f"Workflow execution failed: {e}")
 
     async def _find_existing_child(

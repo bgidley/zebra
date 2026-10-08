@@ -302,6 +302,8 @@ class AgentLoop:
         # execution_result — surface the failed tasks' errors instead of a silent None.
         elif not execution_result:
             result["error"] = await self._failed_task_errors(process.id)
+        elif not result["success"]:
+            result["error"] = execution_result.get("error")
         return result
 
     async def _failed_task_errors(self, process_id: str) -> str:

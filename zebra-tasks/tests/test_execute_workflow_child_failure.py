@@ -5,7 +5,7 @@ the engine rather than mocked: a child whose task returns ``TaskResult.fail``
 must end FAILED, and the parent action must surface the task's error.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import (
@@ -34,7 +34,8 @@ class _OkAction(TaskAction):
         return TaskResult.ok(output="report")
 
 
-async def test_child_task_failure_fails_parent_action():
+async def _run_parent_action(**extra_props):
+    """Run ExecuteGoalWorkflowAction on a child whose first task fails."""
     store = InMemoryStore()
     registry = ActionRegistry()
     registry.register_defaults()
@@ -74,7 +75,12 @@ async def test_child_task_failure_fails_parent_action():
     await engine.start_process(parent.id)
     (parent_task,) = await engine.get_pending_tasks(parent.id)
     parent_task.properties.update(
-        {"workflow_name": "FIRE Retirement Calculator", "goal": "Retire?", "timeout": 5}
+        {
+            "workflow_name": "FIRE Retirement Calculator",
+            "goal": "Retire?",
+            "timeout": 5,
+            **extra_props,
+        }
     )
     parent = await store.load_process(parent.id)
 
@@ -88,6 +94,11 @@ async def test_child_task_failure_fails_parent_action():
     )
 
     result = await ExecuteGoalWorkflowAction().run(parent_task, context)
+    return result, store, parent
+
+
+async def test_child_task_failure_fails_parent_action():
+    result, store, parent = await _run_parent_action()
 
     assert result.success is False
     assert "fire_number" in result.error
@@ -98,3 +109,26 @@ async def test_child_task_failure_fails_parent_action():
     assert await store.get_processes_by_state(ProcessState.COMPLETE) == []
     tasks = await store.load_tasks_for_process(child.id)
     assert {t.task_definition_id: t.state for t in tasks} == {"calculate_fire": TaskState.FAILED}
+
+
+async def test_continue_on_failure_records_child_failure_as_output():
+    """#140: with continue_on_failure the task completes and carries the failure as data."""
+    result, store, parent = await _run_parent_action(continue_on_failure=True)
+
+    assert result.success is True
+    assert result.output["success"] is False
+    assert "fire_number" in result.output["error"]
+    (child,) = await store.get_processes_by_state(ProcessState.FAILED)
+    assert child.parent_process_id == parent.id
+
+
+async def test_continue_on_failure_records_execution_exception_as_output():
+    """#140: an exception while running the child is also carried as data."""
+    with patch.object(
+        ExecuteGoalWorkflowAction, "_spawn_child", side_effect=RuntimeError("store down")
+    ):
+        result, _, parent = await _run_parent_action(continue_on_failure=True)
+
+    assert result.success is True
+    assert result.output["success"] is False
+    assert "store down" in result.output["error"]

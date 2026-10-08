@@ -114,9 +114,13 @@ consult_memory --> consult_knowledge --> assess_history_need
                        |
                 execute_workflow
                        |
-                assess_and_record
+                assess_and_record   (also runs for failed goal runs — #140)
                        |
              update_conceptual_memory
+                       |
+        ethics_post_review → record_ethics_review
+                       |
+                report_outcome  (fails with the goal workflow's error, if any)
 ```
 
 **Steps:**
@@ -131,7 +135,8 @@ consult_memory --> consult_knowledge --> assess_history_need
 6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
 7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
 8. **ethics_post_review → record_ethics_review**: advisory LLM review of the completed run, then `RecordEthicsReviewAction` audits it (`check_type="post_review"`). Runs after the memory update so a failed review cannot skip it (#143)
-9. **ethics_rejection** (terminal, any gate `reject`): `RecordEthicsRejectionAction` stores `ethics_rejection = {gate, reasoning, concerns}`; `AgentResult.ethics_rejection` / `error` surface it (#143)
+9. **report_outcome**: `PropagateFailureAction` fails with `execution_result.error` when the goal workflow failed, so the process ends FAILED only after the failure was recorded (`execute_workflow` sets `continue_on_failure: true`; #140)
+10. **ethics_rejection** (terminal, any gate `reject`): `RecordEthicsRejectionAction` stores `ethics_rejection = {gate, reasoning, concerns}`; `AgentResult.ethics_rejection` / `error` surface it (#143)
 
 ### Task Actions for Agent Loop
 

@@ -19,6 +19,7 @@ from zebra.tasks.base import TaskAction
 from zebra.tasks.registry import ActionRegistry
 from zebra_tasks.agent.continuation_assessor import ContinuationAssessorAction
 from zebra_tasks.agent.history import AssessHistoryNeedAction, GetWorkflowHistoryAction
+from zebra_tasks.agent.propagate_failure import PropagateFailureAction
 from zebra_tasks.agent.record_dilemma_resolution import RecordDilemmaResolutionAction
 from zebra_tasks.agent.record_ethics_rejection import RecordEthicsRejectionAction
 from zebra_tasks.agent.record_ethics_review import RecordEthicsReviewAction
@@ -137,8 +138,26 @@ class StubExecuteWorkflow(TaskAction):
         return TaskResult.ok(output=output)
 
 
+class StubExecuteWorkflowFails(TaskAction):
+    """Goal workflow failed; recorded as data (continue_on_failure), as the real action does."""
+
+    async def run(self, task, context):
+        assert task.properties.get("continue_on_failure") is True
+        output = {"success": False, "output": None, "tokens_used": 5, "error": "boom"}
+        key = task.properties.get("output_key", "execution_result")
+        context.set_process_property(key, output)
+        return TaskResult.ok(output=output)
+
+
 class StubAssessAndRecord(TaskAction):
     async def run(self, task, context):
+        context.set_process_property(
+            "assessed_with",
+            {
+                "success": context.resolve_template(task.properties["success"]),
+                "error": context.resolve_template(task.properties["error"]),
+            },
+        )
         output = {"recorded": True, "effectiveness_notes": "Effective execution."}
         key = task.properties.get("output_key", "assess_result")
         context.set_process_property(key, output)
@@ -175,7 +194,7 @@ def definition():
         return load_definition_from_yaml(f.read())
 
 
-def _make_registry(ethics_gate_class):
+def _make_registry(ethics_gate_class, execute_class=None):
     """Build a registry with stub actions and the given ethics gate class."""
     registry = ActionRegistry()
     registry.register_defaults()  # registers route_name condition
@@ -192,10 +211,11 @@ def _make_registry(ethics_gate_class):
     registry.register_action("workflow_selector", StubWorkflowSelector)
     registry.register_action("workflow_creator", StubWorkflowSelector)  # not reached
     registry.register_action("workflow_variant_creator", StubWorkflowSelector)  # not reached
-    registry.register_action("execute_goal_workflow", StubExecuteWorkflow)
+    registry.register_action("execute_goal_workflow", execute_class or StubExecuteWorkflow)
     registry.register_action("assess_and_record", StubAssessAndRecord)
     registry.register_action("llm_call", StubLLMCall)
     registry.register_action("update_conceptual_memory", StubUpdateConceptualMemory)
+    registry.register_action("propagate_failure", PropagateFailureAction)
     registry.register_action("record_ethics_review", RecordEthicsReviewAction)
     registry.register_action("record_ethics_rejection", RecordEthicsRejectionAction)
     return registry
@@ -228,6 +248,26 @@ class TestEthicsWorkflowIntegration:
         # No pending human tasks
         pending = await engine.get_pending_tasks(process.id)
         assert len(pending) == 0
+
+    async def test_failed_goal_workflow_is_recorded_then_fails_process(self, definition):
+        """#140: a failed goal run still runs assess/learn, then the loop ends FAILED."""
+        registry = _make_registry(StubEthicsGateApprove, StubExecuteWorkflowFails)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry)
+
+        process = await engine.create_process(
+            definition,
+            properties={"goal": "Write a poem", "available_workflows": []},
+        )
+        await engine.start_process(process.id)
+
+        process = await store.load_process(process.id)
+        assert process.properties["assessed_with"] == {"success": "False", "error": "boom"}
+        assert process.properties["ethics_post_assessment"] is not None
+        assert process.properties["conceptual_memory_update"] == {"updated": True}
+        assert process.state == ProcessState.FAILED
+        assert process.properties["__error__"] == "boom"
+        assert process.properties["__failed_task__"] == "report_outcome"
 
     async def test_concerns_flagged_during_planning(self, definition):
         """flag_concerns runs in the planning phase and records concerns on the process."""
