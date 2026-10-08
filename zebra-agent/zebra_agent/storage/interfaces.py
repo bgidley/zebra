@@ -226,6 +226,11 @@ class MemoryStore(ABC):
         ...
 
 
+# F138: bounds for MetricsStore.search_runs
+SEARCH_RUNS_DEFAULT_LIMIT = 20
+SEARCH_RUNS_MAX_LIMIT = 200
+
+
 class MetricsStore(ABC):
     """Abstract interface for workflow metrics storage.
 
@@ -292,6 +297,35 @@ class MetricsStore(ABC):
     @abstractmethod
     async def get_runs_for_workflow(self, workflow_name: str, limit: int = 10) -> list[WorkflowRun]:
         """Get recent runs for a specific workflow."""
+        ...
+
+    @abstractmethod
+    async def search_runs(
+        self,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        text: str | None = None,
+        workflow_name: str | None = None,
+        success: bool | None = None,
+        limit: int = SEARCH_RUNS_DEFAULT_LIMIT,
+        user_id: int | None = None,
+    ) -> list[WorkflowRun]:
+        """Search workflow runs with optional filters, newest first (F138).
+
+        Args:
+            since: Only include runs with started_at >= since.
+            until: Only include runs with started_at < until.
+            text: Case-insensitive substring match against the run's goal.
+            workflow_name: Exact workflow name match.
+            success: Only include runs with this success flag.
+            limit: Maximum runs to return; clamped to SEARCH_RUNS_MAX_LIMIT.
+            user_id: Only include this user's runs. Backends that track ownership
+                fall back to the request's current user when omitted; the
+                single-user in-memory backend ignores it.
+
+        Returns:
+            Matching WorkflowRun objects, ordered by started_at descending.
+        """
         ...
 
     async def get_run_chain(self, run_id: str, max_depth: int = 50) -> list[WorkflowRun]:

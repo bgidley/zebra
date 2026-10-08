@@ -94,6 +94,8 @@ These actions handle workflow selection, execution, metrics recording, and memor
 | `execute_goal_workflow` | `ExecuteGoalWorkflowAction` | Execute a workflow by name and capture output |
 | `record_metrics` | `RecordMetricsAction` | Record run metrics to metrics store |
 | `update_memory` | `UpdateMemoryAction` | Add entry to agent memory store |
+| `assess_history_need` | `AssessHistoryNeedAction` | Decide if a goal needs past workflow runs (keyword pre-check, then haiku); extract date/text filters; routes `needs_history` / `no_history` |
+| `get_workflow_history` | `GetWorkflowHistoryAction` | Fetch past runs filtered by `since`/`until` (ISO or `-7d`/`24h`), goal text, workflow, success; outputs bounded `history_context` |
 
 Agent actions access non-serializable stores (memory, metrics, workflow library) through
 `context.extras` rather than process properties. See [zebra-agent README](../zebra-agent/README.md#ioc-inversion-of-control) for details.

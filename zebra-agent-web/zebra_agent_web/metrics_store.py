@@ -14,7 +14,11 @@ from typing import TYPE_CHECKING
 from asgiref.sync import sync_to_async
 from django.db.models import Avg, Count, Max, Q, Sum
 from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
-from zebra_agent.storage.interfaces import MetricsStore
+from zebra_agent.storage.interfaces import (
+    SEARCH_RUNS_DEFAULT_LIMIT,
+    SEARCH_RUNS_MAX_LIMIT,
+    MetricsStore,
+)
 
 from zebra_agent_web.middleware import get_current_user_id
 
@@ -276,6 +280,43 @@ class DjangoMetricsStore(MetricsStore):
             if uid is not None:
                 qs = qs.filter(user_id=uid)
             return [self._model_to_run(m) for m in qs.order_by("-started_at")[:limit]]
+
+        return await _get()
+
+    async def search_runs(
+        self,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        text: str | None = None,
+        workflow_name: str | None = None,
+        success: bool | None = None,
+        limit: int = SEARCH_RUNS_DEFAULT_LIMIT,
+        user_id: int | None = None,
+    ) -> list[WorkflowRun]:
+        """Search runs with optional filters, newest first (F138).
+
+        Scoped to ``user_id`` when given, else to the request's current user —
+        the daemon has no request user, so callers there must pass ``user_id``.
+        """
+        capped = max(0, min(limit, SEARCH_RUNS_MAX_LIMIT))
+
+        @sync_to_async(thread_sensitive=False)
+        def _get():
+            qs = WorkflowRunModel.objects.all()
+            if since is not None:
+                qs = qs.filter(started_at__gte=since)
+            if until is not None:
+                qs = qs.filter(started_at__lt=until)
+            if text:
+                qs = qs.filter(goal__icontains=text)
+            if workflow_name is not None:
+                qs = qs.filter(workflow_name=workflow_name)
+            if success is not None:
+                qs = qs.filter(success=success)
+            uid = user_id if user_id is not None else get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            return [self._model_to_run(m) for m in qs.order_by("-started_at")[:capped]]
 
         return await _get()
 
