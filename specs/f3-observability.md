@@ -38,7 +38,7 @@ Private `CollectorRegistry` (no collision with default globals). Metrics refresh
 | Metric | Type | Labels | Purpose |
 |--------|------|--------|---------|
 | `zebra_goals_submitted_total` | Counter | — | Goals submitted via API |
-| `zebra_goals_completed_total` | Counter | `status` (success/failed/timeout) | Goals completed by daemon |
+| `zebra_goals_completed_total` | Counter | `status` (success/failed) | Goals completed by daemon, recorded when the goal terminates — including after a human-task hand-off (#141) |
 | `zebra_budget_spent_usd` | Gauge | — | Daily LLM spend |
 | `zebra_budget_remaining_usd` | Gauge | — | Paced remaining budget |
 | `zebra_queue_depth_total` | Gauge | — | CREATED processes awaiting daemon |

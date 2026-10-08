@@ -27,7 +27,7 @@ goals_submitted = Counter(
 goals_completed = Counter(
     "zebra_goals_completed_total",
     "Goals completed by the daemon",
-    ["status"],  # label: success | failed | timeout
+    ["status"],  # label: success | failed
     registry=REGISTRY,
 )
 

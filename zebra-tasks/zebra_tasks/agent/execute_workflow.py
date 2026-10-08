@@ -10,6 +10,7 @@ from zebra.core.models import ProcessInstance, ProcessState, TaskInstance, TaskR
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import with_previous_run
+from zebra_tasks.agent.history import with_workflow_history
 
 if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
@@ -299,7 +300,10 @@ class ExecuteGoalWorkflowAction(TaskAction):
         # F116: a follow-up goal carries the previous run's context into the
         # executed workflow, which only sees the goal.
         sub_properties = {
-            "goal": with_previous_run(goal, context.process.properties),
+            # F138: append any workflow history fetched earlier in the loop.
+            "goal": with_workflow_history(
+                with_previous_run(goal, context.process.properties), context.process.properties
+            ),
             "__parent_process_id__": context.process.id,
             "__parent_task_id__": task.id,
         }
