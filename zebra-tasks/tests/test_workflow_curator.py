@@ -242,6 +242,20 @@ async def test_without_metrics_unused_falls_back_to_file_age(library, context):
     assert _rules(result) == {"Old": "unused"}
 
 
+async def test_retired_workflow_never_reaches_load_definitions(library, metrics, context):
+    """Dream-cycle order: curator, then load_workflow_definitions feeds evaluator/optimizer."""
+    from zebra_tasks.agent.load_definitions import LoadWorkflowDefinitionsAction
+
+    library.add_workflow(_yaml("Bad"))
+    library.add_workflow(_yaml("Good"))
+    metrics.get_all_stats.return_value = [_stats("Bad", 10, 0), _stats("Good", 10, 10)]
+
+    await _run(context)
+    loaded = await LoadWorkflowDefinitionsAction().run(_task(), context)
+
+    assert set(loaded.output) == {"Good"}
+
+
 # --- duplicate detection --------------------------------------------------
 
 

@@ -873,6 +873,37 @@ class TestRetireRestore:
         assert copied == 0
         assert not (library.library_path / "flow.yaml").exists()
 
+    def test_newest_same_name_file_wins_lookup(self, library):
+        import os
+        import time
+
+        library.add_workflow(_named_yaml("Flow", description="old"))
+        library.add_workflow(_named_yaml("Flow", description="new"))
+        old = library.library_path / "flow.yaml"
+        new = library.library_path / "flow_1.yaml"
+        os.utime(old, (time.time() - 100, time.time() - 100))
+
+        assert 'description: "new"' in library.get_workflow_yaml("Flow")
+
+        # mtime decides, not the file name
+        os.utime(new, (time.time() - 200, time.time() - 200))
+        library._cache.clear()
+        assert 'description: "old"' in library.get_workflow_yaml("Flow")
+
+    async def test_retire_restore_retire_cycle(self, library):
+        original = _named_yaml("Flow")
+        library.add_workflow(original)
+
+        library.retire("Flow", "first")
+        library.restore("Flow")
+        library.retire("Flow", "second")
+
+        [info] = await library.list_retired_workflows()
+        assert info.retired["reason"] == "second"
+        assert library.get_workflow_yaml("Flow") == original
+        library.restore("Flow")
+        assert (library.library_path / "flow.yaml").read_text() == original
+
     def test_list_workflow_files_keeps_same_name_copies(self, library):
         library.add_workflow(_named_yaml("Flow", ["llm-defined"]))
         library.add_workflow(_named_yaml("Flow"))
