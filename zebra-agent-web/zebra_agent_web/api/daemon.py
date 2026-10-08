@@ -5,8 +5,9 @@ This module contains the core daemon logic shared by:
 - The ASGI auto-start middleware (in-process background task)
 
 ``run_daemon_loop`` starts a ``SchedulerLoop`` that:
-  1. Fires ``goal_queue_tick`` on every poll interval (picks the highest-priority
-     CREATED process, budget-checks it, starts it, waits for completion, logs cost).
+  1. Fires ``goal_queue_tick`` on every poll interval (reconciles in-flight goals,
+     picks the highest-priority CREATED process, budget-checks it, runs it until it
+     finishes or parks on a human task, logs cost).
   2. Fires any other routines discovered from ``fixtures/routines/*.yaml`` when due.
 """
 
@@ -15,12 +16,14 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from zebra_agent.loop import DEFAULT_GOAL_TIMEOUT
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from zebra_agent.scheduler.goal_tracker import GoalTracker
 
-KILL_SWITCH_REASON = "Kill switch activated"
+logger = logging.getLogger(__name__)
 
 # Path to the built-in routine definitions relative to this file
 _ROUTINES_DIR = Path(__file__).parent.parent.parent / "fixtures" / "routines"
@@ -78,10 +81,14 @@ async def run_daemon_loop(
     # The goal_queue_tick_fn wraps the full _tick logic (budget check, wait,
     # metrics) so the SchedulerLoop doesn't need to know about it.
     from zebra_agent.scheduler import GoalScheduler
+    from zebra_agent.scheduler.goal_tracker import GoalTracker
 
     goal_scheduler = GoalScheduler(wf_engine.store)
-
-    goal_timeout = agent_settings.get("GOAL_TIMEOUT_SECONDS", DEFAULT_GOAL_TIMEOUT)
+    # Each goal's auto-task chain is failed after GOAL_TIMEOUT_SECONDS (#142).
+    goal_tracker = GoalTracker(
+        wf_engine,
+        goal_timeout=agent_settings.get("GOAL_TIMEOUT_SECONDS", DEFAULT_GOAL_TIMEOUT),
+    )
 
     async def _goal_queue_tick_fn() -> None:
         await _tick(
@@ -89,7 +96,7 @@ async def run_daemon_loop(
             budget_manager=budget_manager,
             engine=wf_engine,
             dry_run=False,
-            goal_timeout=goal_timeout,
+            tracker=goal_tracker,
         )
 
     scheduler_loop = SchedulerLoop(
@@ -157,23 +164,42 @@ async def _tick(
     budget_manager,
     engine,
     dry_run: bool,
-    goal_timeout: float = DEFAULT_GOAL_TIMEOUT,
+    tracker: GoalTracker | None = None,
+    poll_interval: float = 1.0,
 ) -> None:
-    """One goal-queue iteration: pick a goal, check budget, execute, log cost.
+    """One goal-queue iteration: reconcile, pick a goal, check budget, execute.
 
-    The goal's inline auto-task chain is bounded by *goal_timeout* seconds and
-    cancelled if the kill switch is set mid-run (#142).
+    The picked goal runs in a background task; the tick waits until it finishes
+    or parks on a human task, then returns so a waiting goal never blocks the
+    queue (#141). *tracker* carries in-flight goals between ticks; when omitted
+    a fresh one is used (single-tick callers such as tests).
     """
-    from zebra.core.models import ProcessState
+    from zebra_agent.scheduler.goal_tracker import GoalTracker
 
     from zebra_agent_web.api.kill_switch import is_halted
 
-    # 0. Kill-switch guard — skip pickup while system is halted
+    if tracker is None:
+        tracker = GoalTracker(engine)
+    await tracker.seed()
+
+    # 0. Kill-switch guard — cancel executing goals and skip pickup while halted
     if await is_halted():
+        for process_id in await tracker.cancel_active("Kill switch activated"):
+            logger.warning("[daemon:halted] Kill switch active — cancelled %s", process_id[:12])
         logger.warning("[daemon:halted] Kill switch active — skipping pickup")
         return
 
-    # 1. Pick highest-priority CREATED process
+    # 1. Record goals that finished since the last tick (e.g. after a human answered)
+    for finished in await tracker.reconcile():
+        _log_outcome(finished)
+
+    # 2. Keep execution serial: don't start another goal while one is still running
+    active = await tracker.active_goals()
+    if active:
+        logger.info("[daemon:busy] %s still executing — skipping pickup", active[0].process_id[:12])
+        return
+
+    # 3. Pick highest-priority CREATED process
     process = await scheduler.pick_next()
     if process is None:
         return  # empty queue — nothing to do
@@ -193,7 +219,7 @@ async def _tick(
         goal,
     )
 
-    # 2. Budget check
+    # 4. Budget check
     status = await budget_manager.get_status()
     available = status["available"]
     logger.info(
@@ -211,68 +237,59 @@ async def _tick(
         logger.info("[daemon:dry-run] Would start %s", process.id[:12])
         return
 
-    # 3. Start the process. start_process runs auto tasks inline, so bound it:
-    # the chain is failed at goal_timeout or when the kill switch is set (#142).
-    async def _kill_switch_reason() -> str | None:
-        return KILL_SWITCH_REASON if await is_halted() else None
-
-    poll_sec = 2.0
+    # 5. Start the goal in the background and wait until it finishes or needs a human
     logger.info("[daemon:start] Starting %s  run_id=%s...", process.id[:12], run_id)
-    try:
-        await engine.start_process_with_timeout(
-            process.id,
-            goal_timeout,
-            cancel_check=_kill_switch_reason,
-            poll_interval=poll_sec,
+    tracked = await tracker.start(process)
+    outcome, task_name = await tracker.wait(
+        tracked, poll_interval=poll_interval, should_stop=is_halted
+    )
+
+    if outcome == "halted":
+        logger.warning(
+            "[daemon:halted] Kill switch set mid-flight — cancelling %s", process.id[:12]
         )
-    except Exception:
-        logger.exception("Failed to start process %s", process.id[:12])
-        return
+        await tracker.cancel_active("Kill switch activated")
+    elif outcome == "awaiting_human":
+        logger.info(
+            "[daemon:await] %s  run_id=%s  waiting on human task %r — moving on",
+            process.id[:12],
+            run_id,
+            task_name,
+        )
+    elif outcome == "stalled":
+        logger.warning(
+            "[daemon:stalled] %s  run_id=%s  not running and not awaiting a human — "
+            "tracking until it terminates",
+            process.id[:12],
+            run_id,
+        )
+    else:
+        for finished in await tracker.reconcile():
+            _log_outcome(finished)
 
-    # 4. The chain has returned; poll while it waits on a human task
-    max_wait = 600  # 10 minutes per goal
-    waited = 0.0
 
-    while waited < max_wait:
-        if await is_halted():
-            logger.warning(
-                "[daemon:halted] Kill switch set mid-flight — cancelling %s", process.id[:12]
-            )
-            try:
-                await engine.fail_process(process.id, KILL_SWITCH_REASON)
-            except Exception:
-                logger.exception("Failed to cancel in-flight process %s", process.id[:12])
-            return
-        process = await engine.store.load_process(process.id)
-        if process.state in (ProcessState.COMPLETE, ProcessState.FAILED):
-            break
-        await asyncio.sleep(poll_sec)
-        waited += poll_sec
+def _log_outcome(process) -> None:
+    """Log a finished goal's outcome and update the goals_completed metric."""
+    from zebra.core.models import ProcessState
 
-    # 5. Log outcome and update metrics
     from zebra_agent_web.api.metrics import goals_completed
 
+    props = process.properties or {}
+    run_id = props.get("run_id", "-")
     if process.state == ProcessState.COMPLETE:
-        cost = (process.properties or {}).get("__total_cost__", 0.0)
-        tokens = (process.properties or {}).get("__total_tokens__", 0)
         logger.info(
             "[daemon:done] %s  run_id=%s  completed  cost=$%.6f  tokens=%s",
             process.id[:12],
             run_id,
-            cost,
-            tokens,
+            props.get("__total_cost__", 0.0),
+            props.get("__total_tokens__", 0),
         )
         goals_completed.labels(status="success").inc()
-    elif process.state == ProcessState.FAILED:
-        error = (process.properties or {}).get("__error__", "unknown")
-        logger.error("[daemon:fail] %s  run_id=%s  failed: %s", process.id[:12], run_id, error)
-        goals_completed.labels(status="failed").inc()
     else:
-        logger.warning(
-            "[daemon:timeout] %s  run_id=%s  still %s after %ss — will check again next tick",
+        logger.error(
+            "[daemon:fail] %s  run_id=%s  failed: %s",
             process.id[:12],
             run_id,
-            process.state.value,
-            max_wait,
+            props.get("__error__", "unknown"),
         )
-        goals_completed.labels(status="timeout").inc()
+        goals_completed.labels(status="failed").inc()

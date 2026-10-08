@@ -12,6 +12,11 @@ from zebra_tasks.llm.providers import get_provider
 
 logger = logging.getLogger(__name__)
 
+# Upper bound on the run output stored in the metrics record. It is the
+# user-facing "Final Output", so keep it generous; consumers that feed it back
+# to an LLM apply their own, tighter caps.
+MAX_RECORDED_OUTPUT_CHARS = 100_000
+
 
 class AssessAndRecordAction(TaskAction):
     """
@@ -212,9 +217,9 @@ Respond with JSON only:
                     goal=goal,
                     success=success,
                     output=(
-                        output[:2000]
+                        output[:MAX_RECORDED_OUTPUT_CHARS]
                         if isinstance(output, str)
-                        else json.dumps(output, ensure_ascii=False)[:2000]
+                        else json.dumps(output, ensure_ascii=False)[:MAX_RECORDED_OUTPUT_CHARS]
                     )
                     if output is not None
                     else None,

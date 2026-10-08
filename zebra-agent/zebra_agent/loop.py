@@ -22,6 +22,7 @@ from typing import Any
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState, TaskState
 
+from zebra_agent.human_tasks import find_pending_human_task
 from zebra_agent.library import WorkflowLibrary, list_goal_workflows
 from zebra_agent.storage.interfaces import (
     MemoryStore,
@@ -55,6 +56,9 @@ class AgentResult:
     tokens_used: int = 0
     error: str | None = None
     created_new_workflow: bool = False
+    # True when the loop is parked on a human task (e.g. an ethics dilemma form);
+    # the goal continues once the task is completed (#141).
+    awaiting_input: bool = False
     # Set when an ethics gate rejected the goal: {gate, reasoning, concerns} (#143)
     ethics_rejection: dict[str, Any] | None = None
 
@@ -211,6 +215,7 @@ class AgentLoop:
             tokens_used=execution_result.get("tokens_used", 0),
             error=execution_result.get("error"),
             created_new_workflow=execution_result.get("created_new", False),
+            awaiting_input=execution_result.get("awaiting_input", False),
             ethics_rejection=execution_result.get("ethics_rejection"),
         )
 
@@ -252,6 +257,31 @@ class AgentLoop:
                     "tokens_used": 0,
                     "error": str(error),
                     "created_new": process.properties.get("created_new", False),
+                }
+
+            # start_process runs auto tasks inline, so a still-RUNNING process is
+            # usually parked on a human task — report that rather than a timeout.
+            pending = await find_pending_human_task(self.engine, process.id)
+            if pending is not None:
+                human_task, task_name = pending
+                callback = self.engine.extras.get("__progress_callback__")
+                if callback:
+                    await callback(
+                        "human_task_pending",
+                        {
+                            "task_id": human_task.id,
+                            "task_name": task_name,
+                            "task_definition_id": human_task.task_definition_id,
+                        },
+                    )
+                return {
+                    "workflow_name": process.properties.get("workflow_name", "unknown"),
+                    "output": None,
+                    "success": False,
+                    "tokens_used": 0,
+                    "error": f"Awaiting human input: {task_name}",
+                    "created_new": process.properties.get("created_new", False),
+                    "awaiting_input": True,
                 }
 
             await asyncio.sleep(0.5)

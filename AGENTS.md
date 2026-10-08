@@ -639,7 +639,7 @@ The system tracks LLM costs and manages a daily dollar-based budget for queued g
 
 The daemon auto-starts as a background `asyncio.create_task()` inside the ASGI server on first request (via `DaemonStarterMiddleware` in `asgi.py`). It can also run standalone via `python manage.py run_daemon`.
 
-Loop: `pick_next() → budget_check → start_process → poll until done → log cost → repeat`
+Loop: `reconcile tracked goals → pick_next() → budget_check → start_process (background) → wait until done or parked on a human task → log cost → repeat`. A goal waiting on a human task (e.g. an ethics dilemma) is handed off so it never blocks the queue; its outcome is recorded when it terminates (#141).
 
 See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking flow, key files, and orphaned process handling.
 

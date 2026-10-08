@@ -768,8 +768,11 @@ async def _execute_goal_background(
             continuation_comment=continuation_comment,
         )
 
-        # Send completion event
-        if result.success:
+        # Send completion event. A goal parked on a human task already emitted
+        # human_task_pending (with the form link) — it hasn't failed (#141).
+        if result.awaiting_input:
+            pass
+        elif result.success:
             await progress_callback(
                 "completed",
                 {
