@@ -138,3 +138,36 @@ class TestWorkflowSelectorKnowledge:
         assert result.success
         user_content = next((m.content for m in captured_messages if m.role == "user"), "")
         assert "## Personal Knowledge" not in user_content
+
+
+class TestWorkflowSelectorHistory:
+    """F138: history_context from get_workflow_history reaches the selector prompt."""
+
+    async def _user_prompt(self, mock_task, mock_context, mock_llm_response) -> str:
+        from zebra_tasks.agent.selector import WorkflowSelectorAction
+
+        captured_messages = []
+
+        async def mock_complete(messages, **kwargs):
+            captured_messages.extend(messages)
+            return mock_llm_response
+
+        mock_provider = MagicMock()
+        mock_provider.complete = AsyncMock(side_effect=mock_complete)
+
+        with patch("zebra_tasks.agent.selector.get_provider", return_value=mock_provider):
+            result = await WorkflowSelectorAction().run(mock_task, mock_context)
+
+        assert result.success
+        return next((m.content for m in captured_messages if m.role == "user"), "")
+
+    async def test_history_context_included(self, mock_task, mock_context, mock_llm_response):
+        mock_task.properties["history_context"] = "- [2026-10-01] Research: pensions"
+        prompt = await self._user_prompt(mock_task, mock_context, mock_llm_response)
+        assert "## Workflow History" in prompt
+        assert "Research: pensions" in prompt
+
+    async def test_history_context_absent(self, mock_task, mock_context, mock_llm_response):
+        mock_task.properties.pop("history_context", None)
+        prompt = await self._user_prompt(mock_task, mock_context, mock_llm_response)
+        assert "## Workflow History" not in prompt

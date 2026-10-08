@@ -199,6 +199,14 @@ class TestDiscovery:
         assert "file_read" in actions
         assert "file_write" in actions
 
+    def test_workflow_history_actions_discovered(self):
+        """F138 history actions are registered as entry points."""
+        from zebra_tasks.agent.history import AssessHistoryNeedAction, GetWorkflowHistoryAction
+
+        actions = discover_actions()
+        assert actions["get_workflow_history"] is GetWorkflowHistoryAction
+        assert actions["assess_history_need"] is AssessHistoryNeedAction
+
 
 # =========================================================================
 # IoCActionRegistry Tests

@@ -39,6 +39,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
+| `zebra_tasks/agent/history.py` | AssessHistoryNeedAction, GetWorkflowHistoryAction, `parse_time()`, `with_workflow_history()` - workflow history lookup (F138) |
 | `zebra_tasks/agent/flag_concerns.py` | FlagConcernsAction - proactive, advisory concern flagging during planning (F21) |
 | `zebra_tasks/agent/record_dilemma_resolution.py` | RecordDilemmaResolutionAction - record a human ethics-dilemma resolution and route (F22) |
 | `zebra_tasks/agent/record_ethics_review.py` | RecordEthicsReviewAction - normalise + audit the post-execution ethics review (#143) |
@@ -432,6 +433,29 @@ formal `ethics_plan_review` gate in `agent_main_loop.yaml`.
 **Fail-soft:** provider errors, unparseable responses, or a missing goal all yield an empty concerns list and still succeed (never blocks the workflow).
 
 **Surfacing:** the result lands on the Agent Main Loop root process as `planning_concerns` / `__task_output_flag_concerns`; the web run-detail view renders it via `partials/planning_concerns.html`. See `specs/f21-concern-flagging.md`.
+
+### AssessHistoryNeedAction / GetWorkflowHistoryAction (F138)
+
+Let a workflow decide it needs past workflow runs, fetch them, and use them downstream. Both
+live in `zebra_tasks/agent/history.py` and are `always_reversible` (read-only).
+
+**`assess_history_need`** — properties `goal`, `provider`, `model` (default `haiku`), `output_key`
+(default `history_need`). Goals without history cues (regex: "last week", "did I", "before",
+weekday/month names, …) route `no_history` with **no LLM call**; otherwise haiku returns
+`{needs_history, since, until, text, reasoning}`. Invalid extracted times are dropped. LLM errors or
+unparseable JSON degrade to `no_history`. **Routes:** `needs_history`, `no_history`.
+
+**`get_workflow_history`** — properties `since`/`until` (ISO-8601 or relative `-7d`, `24h`, `30m`,
+`2w`; unsigned = past), `text` (case-insensitive goal match), `workflow_name`, `success`, `limit`
+(default 20; store caps at 200), `output_key` (default `workflow_history`). Empty/unresolved templates
+mean "no filter". Calls `MetricsStore.search_runs()` from `__metrics_store__`, scoped to
+`__user_id__`, excluding the current `run_id`. **Output:** `{runs, count, filters, history_context}` —
+per-run output/error clipped to 300 chars, `history_context` capped at ~4000 chars. Missing store →
+empty history with a warning; invalid time → `TaskResult.fail`.
+
+**Downstream:** `workflow_selector` accepts `history_context`; `execute_goal_workflow` appends a
+`<workflow_history>` block to the child goal via `with_workflow_history()` when
+`workflow_history.history_context` is set.
 
 ### RecordDilemmaResolutionAction
 
