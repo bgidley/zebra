@@ -184,6 +184,11 @@ def load_definition_from_dict(data: dict[str, Any], source: str = "dict") -> Pro
     if errors:
         raise ValidationError(f"Invalid definition from {source}: {'; '.join(errors)}")
 
+    # Top-level result_key is the documented form; an explicit properties.result_key wins.
+    properties = dict(data.get("properties") or {})
+    if data.get("result_key") and "result_key" not in properties:
+        properties["result_key"] = data["result_key"]
+
     return ProcessDefinition(
         id=definition_id,
         name=name,
@@ -193,7 +198,7 @@ def load_definition_from_dict(data: dict[str, Any], source: str = "dict") -> Pro
         routings=routings,
         construct_action=data.get("construct_action"),
         destruct_action=data.get("destruct_action"),
-        properties=data.get("properties", {}),
+        properties=properties,
     )
 
 

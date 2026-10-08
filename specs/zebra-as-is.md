@@ -118,7 +118,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 | Subtasks | `subworkflow`, `wait_subworkflow`, `parallel_subworkflows` |
 | Filesystem | `file_read`, `file_write`, `file_copy`, `file_move`, `file_delete`, `file_search`, `file_exists`, `file_info` (9 actions) |
 | Compute | `python_exec` (sandboxed) |
-| Agent loop | `consult_memory`, `consult_knowledge`, `assess_history_need`, `get_workflow_history` (F138 — see [workflow-history spec](../openspec/specs/workflow-history/spec.md)), `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `propagate_failure`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (8000) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML before saving (#122) |
+| Agent loop | `consult_memory`, `consult_knowledge`, `assess_history_need`, `get_workflow_history` (F138 — see [workflow-history spec](../openspec/specs/workflow-history/spec.md)), `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `propagate_failure`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (8000) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML, or `route_name` routings from `llm_call` tasks, before saving (#122, #139); `workflow_creator` makes one repair call feeding the parse/validation error back (not for truncation), runs at temperature 0.3, and its prompt documents data flow, serial/parallel/`synchronized` routing and that `route_name` routes are human-task buttons (#139) |
 | Dream cycle | `metrics_analyzer`, `workflow_evaluator`, `workflow_optimizer` |
 | Ethics | `ethics_gate` |
 | Web (F115, #145) | `kagi_search`, `kagi_extract` — Kagi v1 API (`POST /api/v1/search`, `/extract`, Bearer `KAGI_API_KEY`); `kagi_summarize` removed (v1 has no summarizer) |
@@ -422,7 +422,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 | Engine core | `zebra-py/zebra/core/engine.py` |
 | State store interface & impls | `zebra-py/zebra/storage/` |
 | Form helpers | `zebra-py/zebra/forms.py` |
-| Definition loader | `zebra-py/zebra/definitions/loader.py` |
+| Definition loader | `zebra-py/zebra/definitions/loader.py` — a top-level `result_key` is copied into `definition.properties` (explicit `properties.result_key` wins; #139) |
 | Entry-point actions | `zebra-tasks/zebra_tasks/*` |
 | Ethics gate | `zebra-tasks/zebra_tasks/agent/ethics_gate.py` |
 | LLM providers & pricing | `zebra-tasks/zebra_tasks/llm/` |
