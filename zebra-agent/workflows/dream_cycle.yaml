@@ -2,7 +2,7 @@ name: "Dream Cycle"
 description: "Self-improvement cycle that analyzes performance, evaluates workflows, and optimizes the system"
 tags: ["system", "optimization", "self-improvement", "dream"]
 use_when: "Use this workflow periodically (e.g., daily) to review and improve the agent's capabilities"
-version: 4
+version: 5
 first_task: analyze_metrics
 
 tasks:
@@ -14,6 +14,15 @@ tasks:
       days_to_analyze: 7
       min_runs_for_analysis: 3
       output_key: metrics_analysis
+
+  # Runs before load_workflows so the evaluator and optimizer only see the
+  # active library. Thresholds come from ZEBRA_CURATOR_* env vars (#148).
+  curate_workflows:
+    name: "Retire Stale Workflows"
+    action: workflow_curator
+    auto: true
+    properties:
+      output_key: curation
 
   load_workflows:
     name: "Load Workflow Definitions"
@@ -72,6 +81,10 @@ tasks:
         Modified workflows: {{optimization_results.modified_workflows}}
         Failed changes (rejected, NOT saved): {{optimization_results.failed_changes}}
 
+        ### Library Curation (dry run: {{curation.dry_run}})
+        Retired workflows (rule, reason, superseded_by): {{curation.retired}}
+        Deferred to a later cycle (per-cycle cap): {{curation.deferred}}
+
         ### Continuations
         Continued goals in period: {{metrics_analysis.continuation_analysis.total_continuations}}
         Top continued workflows: {{metrics_analysis.continuation_analysis.top_continued}}
@@ -84,7 +97,9 @@ tasks:
         3. Any failed changes and why they were rejected
         4. Continuations: how many goals were continued, the top continued workflows,
            and which continuation-driven changes were made (status "made" only)
-        5. Recommendations for future focus
+        5. Library curation: which workflows were retired and why (only entries with
+           applied true were retired; in a dry run, say what would be retired)
+        6. Recommendations for future focus
 
         Never describe a failed change as applied or as having fixed anything.
       temperature: 0.5
@@ -93,6 +108,8 @@ tasks:
 
 routings:
   - from: analyze_metrics
+    to: curate_workflows
+  - from: curate_workflows
     to: load_workflows
   - from: load_workflows
     to: evaluate_workflows

@@ -119,6 +119,7 @@ async def test_workflow_detail_shows_continued_card(monkeypatch, rf_user):
         name = "Research"
         description = ""
         tags: list[str] = []
+        retired = None
 
     class _Library:
         def get_workflow_yaml(self, name):

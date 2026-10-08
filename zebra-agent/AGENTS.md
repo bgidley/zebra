@@ -154,6 +154,7 @@ These actions power the Dream Cycle self-improvement workflow:
 | Action | File | Purpose |
 |--------|------|---------|
 | `metrics_analyzer` | `analyzer.py` | Analyze metrics via MetricsStore interface |
+| `workflow_curator` | `curator.py` | Retire broken / superseded / failing / unused / duplicate workflows (`WorkflowLibrary.retire`; #148) |
 | `load_workflow_definitions` | `load_definitions.py` | Load workflow YAML via WorkflowLibrary |
 | `workflow_evaluator` | `evaluator.py` | LLM-based evaluation of workflow effectiveness |
 | `workflow_optimizer` | `optimizer.py` | Create/optimize workflows based on evaluation |
@@ -230,6 +231,8 @@ breaks portability across deployments.
 - Loads workflows from YAML files
 - Provides search/matching capabilities
 - Tracks usage metrics per workflow
+- `retire()` / `restore()` / `list_retired_workflows()`: soft retirement into `retired/`. Retired workflows are hidden from `list_workflows` but still load by name (#148)
+- `add_workflow(..., llm_defined=True)` tags LLM-written workflows `llm-defined`; only those can be retired for being unused
 
 **MetricsStore** (`storage/interfaces.py`):
 - Abstract interface for workflow metrics storage

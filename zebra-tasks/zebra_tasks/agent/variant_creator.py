@@ -203,7 +203,7 @@ class WorkflowVariantCreatorAction(TaskAction):
             # Save to library
             if library is not None:
                 try:
-                    library.add_workflow(yaml_content)
+                    library.add_workflow(yaml_content, llm_defined=True)
                 except Exception:
                     pass  # Don't fail — workflow is still valid
 

@@ -32,6 +32,16 @@ urlpatterns = [
     path("workflows/create/", web_views.workflow_create, name="workflow_create"),
     path("workflows/<str:workflow_name>/", web_views.workflow_detail, name="workflow_detail"),
     path(
+        "workflows/<str:workflow_name>/retire/",
+        web_views.workflow_retire,
+        name="workflow_retire",
+    ),
+    path(
+        "workflows/<str:workflow_name>/restore/",
+        web_views.workflow_restore,
+        name="workflow_restore",
+    ),
+    path(
         "workflows/<str:workflow_name>/delete/",
         web_views.workflow_delete,
         name="workflow_delete",

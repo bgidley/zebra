@@ -84,6 +84,8 @@ async def test_valid_workflow_is_accepted(task, context):
     assert result.success is True
     assert context.process.properties["workflow_name"] == "FIRE Calculator"
     library.add_workflow.assert_called_once()
+    # Tagged llm-defined, so the dream-cycle curator may retire it when unused (#148).
+    assert library.add_workflow.call_args.kwargs["llm_defined"] is True
     assert provider.complete.call_args.kwargs["max_tokens"] == GENERATED_WORKFLOW_MAX_TOKENS
 
 
