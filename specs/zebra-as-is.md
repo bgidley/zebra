@@ -119,7 +119,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 | Filesystem | `file_read`, `file_write`, `file_copy`, `file_move`, `file_delete`, `file_search`, `file_exists`, `file_info` (9 actions) |
 | Compute | `python_exec` (sandboxed) |
 | Agent loop | `consult_memory`, `consult_knowledge`, `assess_history_need`, `get_workflow_history` (F138 — see [workflow-history spec](../openspec/specs/workflow-history/spec.md)), `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `propagate_failure`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (8000) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML, or `route_name` routings from `llm_call` tasks, before saving (#122, #139); `workflow_creator` makes one repair call feeding the parse/validation error back (not for truncation), runs at temperature 0.3, and its prompt documents data flow, serial/parallel/`synchronized` routing and that `route_name` routes are human-task buttons (#139) |
-| Dream cycle | `metrics_analyzer`, `workflow_evaluator`, `workflow_optimizer` |
+| Dream cycle | `metrics_analyzer`, `workflow_curator`, `workflow_evaluator`, `workflow_optimizer` |
 | Ethics | `ethics_gate` |
 | Web (F115, #145) | `kagi_search`, `kagi_extract` — Kagi v1 API (`POST /api/v1/search`, `/extract`, Bearer `KAGI_API_KEY`); `kagi_summarize` removed (v1 has no summarizer) |
 | Notifications (F65) | `notify_email` (SMTP, `ZEBRA_SMTP_*` env), `notify_webhook` (HTTP POST/PUT, `ZEBRA_NOTIFY_WEBHOOK_URL`) — both `always_irreversible` |
@@ -175,7 +175,7 @@ any gate "reject" → ethics_rejection (record_ethics_rejection — #143)
 
 ### Dream cycle (`dream_cycle.yaml`)
 
-Self-improvement loop: `metrics_analyzer` → `workflow_evaluator` → `workflow_optimizer`. Runs over the last N days of metrics; can propose edits to stored workflows. `workflow_optimizer` parses and validates every created/modified workflow before saving it (library loader, `check_generated_workflow`, registered actions). It caps output at `GENERATED_WORKFLOW_MAX_TOKENS` and retries a truncated response once at 2x. Rejected changes are not saved and go to `failed_changes` instead of `changes_made`; the v3 summary prompt reports them as not applied (#128).
+Self-improvement loop: `metrics_analyzer` → `workflow_curator` → `load_workflow_definitions` → `workflow_evaluator` → `workflow_optimizer`. Runs over the last N days of metrics; can propose edits to stored workflows. `workflow_optimizer` parses and validates every created/modified workflow before saving it (library loader, `check_generated_workflow`, registered actions). It caps output at `GENERATED_WORKFLOW_MAX_TOKENS` and retries a truncated response once at 2x. Rejected changes are not saved and go to `failed_changes` instead of `changes_made`; the v3 summary prompt reports them as not applied (#128).
 
 - **F136 continuation analysis**: `metrics_analyzer` walks continuation chains in the window (`get_continuations_since` → `get_run_chain` → `get_task_executions`, logic in `zebra_tasks/agent/continuation_analysis.py`) and emits `continuation_analysis` (chains, frequently continued workflows, `new_workflow` capability gaps, added steps, `source: continuation` proposals) plus per-workflow `continuation_rate`. The evaluator merges those proposals into `improvement_priorities`; the optimizer applies them first, through the #128 validation, and reports `continuation_changes`. The v4 summary has a "Continuations" section. Lineage fields may be `None`; store errors degrade to an empty block. The same rate is also kept for all time in `WorkflowStats.continued_runs` / `continuation_rate` (both stores), shown as a "Continued" card on the workflow page, as "N% continued" in the dashboard and library lists, and in API workflow stats (#137).
 
@@ -196,6 +196,21 @@ Three-tier model (matches the design in REQ-DATA-004):
 ### Workflow library
 
 `WorkflowLibrary` loads YAMLs from `~/.zebra-agent/workflows/`, caches them, tracks success rate and use count. Workflows tagged `system` are internal and never offered for goals.
+
+**Curation (#148).** Workflows written by the LLM (`workflow_creator`, `workflow_variant_creator`, and the optimizer's creates) are tagged `llm-defined` (`add_workflow(llm_defined=True)` / `tag_llm_defined`). A workflow the optimizer modifies keeps the provenance of the original.
+
+`retire(name, reason, superseded_by)` moves a YAML to `retired/` and appends the metadata after a marker comment. It's soft and reversible with `restore(name)`. Retired workflows are not in `list_workflows`, so the selector, the LLM context and the dream cycle never see them. `get_workflow` / `get_workflow_yaml` still resolve them, so history and continuations keep working, and `copy_builtin_workflows` never brings back a retired built-in. When several active files share a name (the optimizer saves modified workflows as `foo_1.yaml`), the newest file wins.
+
+The dream cycle's `workflow_curator` runs before `load_workflows`. Rules, in priority order:
+- **broken:** the definition fails to load or validate.
+- **superseded_copy:** an older same-name file.
+- **failing:** `runs >= min_runs` and success below `min_success_rate`.
+- **unused:** `llm-defined` only; no run, or if never run no file change, within `unused_days`.
+- **duplicate:** an LLM finds the pair; the weaker one (lower success rate, then fewer runs) is retired if it is `llm-defined`.
+
+Workflows tagged `system`, and the core system names, are never touched. A per-cycle cap defers the rest, and dry run changes nothing. Settings come from task properties, then `ZEBRA_CURATOR_*` env vars (`MIN_RUNS` 5, `MIN_SUCCESS_RATE` 0.3, `UNUSED_DAYS` 30, `MAX_RETIRE_PER_CYCLE` 5, `DRY_RUN` false, `DETECT_DUPLICATES` true). The `curation` report feeds the v5 summary.
+
+The web library page lists retired workflows with a Restore button. The detail page has Retire / Restore buttons and a retired banner (`/workflows/<name>/retire/`, `/restore/`). Spec: [workflow-curation](../openspec/specs/workflow-curation/spec.md).
 
 `list_goal_workflows(library)` (`zebra_agent/library.py`) is the single builder of the selector's candidates: one dict per non-`system` workflow (`name`, `description`, `tags`, `success_rate` float, `use_count`, `use_when`). `AgentLoop.process_goal`, the web/daemon `api/goals.queue_goal` helper and the `queue_goal` action all use it for `available_workflows`. At selection time `workflow_selector` rebuilds the list from the live `__workflow_library__` (falling back to the queued property), so queued goals see workflows added since; the prompt shows "N/A" success for never-run workflows (#144).
 
@@ -344,7 +359,8 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 - **No per-user isolation in all paths** — `clear_conceptual_memories` wipes all users (latent bug). See [f6-user-id-namespacing.md](f6-user-id-namespacing.md).
 - **Channel layer defaults to in-memory** — production needs Redis.
 - **Orphaned processes are handled but fragile** — if `assess_and_record` never fires (now only failures before goal execution, #140), metrics are reconstructed from `__task_output_*` properties.
-- **Workflow library search is a list filter** — no full-text, no tagging.
+- **Workflow library search is a list filter** — no full-text search.
+- **Retired workflows are never hard-deleted** — `retired/` grows indefinitely (open question on #148).
 - **No multi-run comparison** UI.
 - **Django models manually track engine state** — they must stay in sync with `zebra-py` schema changes.
 

@@ -364,7 +364,7 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
             library = context.extras.get("__workflow_library__")
             if library is not None:
                 try:
-                    library.add_workflow(yaml_content)
+                    library.add_workflow(yaml_content, llm_defined=True)
                 except Exception:
                     # Log but don't fail - workflow is still valid
                     pass

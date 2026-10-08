@@ -21,6 +21,7 @@ from channels.layers import get_channel_layer
 from django.contrib.auth.decorators import login_not_required
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.html import escape
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
@@ -267,8 +268,19 @@ async def workflow_library(request):
         }
         for w in workflows
     ]
+    retired = [
+        {
+            "name": w.name,
+            "description": w.description,
+            "reason": w.retired.get("reason", ""),
+            "retired_at": str(w.retired.get("retired_at", ""))[:10],
+            "superseded_by": w.retired.get("superseded_by"),
+            "use_count": w.use_count,
+        }
+        for w in await library.list_retired_workflows()
+    ]
 
-    context = {"workflows": workflows_data}
+    context = {"workflows": workflows_data, "retired": retired}
 
     if request.headers.get("HX-Request"):
         return render(request, "partials/workflow_library_list.html", context)
@@ -286,11 +298,15 @@ async def workflow_detail(request, workflow_name):
         stats = await metrics.get_stats(workflow_name)
         workflows = await library.list_workflows()
         workflow_info = next((w for w in workflows if w.name == workflow_name), None)
+        if workflow_info is None:
+            retired = await library.list_retired_workflows()
+            workflow_info = next((w for w in retired if w.name == workflow_name), None)
     except ValueError:
         return HttpResponse("Workflow not found", status=404)
 
     context = {
         "workflow_name": workflow_name,
+        "retired": workflow_info.retired if workflow_info else None,
         "yaml_content": yaml_content,
         "description": workflow_info.description if workflow_info else "",
         "tags": workflow_info.tags if workflow_info else [],
@@ -331,6 +347,40 @@ async def workflow_create(request):
     except Exception as e:
         logger.exception("Failed to create workflow")
         return HttpResponse(f"Error: {e}", status=400)
+
+
+@require_http_methods(["POST"])
+async def workflow_retire(request, workflow_name):
+    """Retire a workflow: hide it from selection, keep it restorable (#148)."""
+    await agent_engine.ensure_initialized()
+    library = agent_engine.get_library()
+    reason = request.POST.get("reason", "").strip() or "Retired from the web UI"
+    try:
+        await sync_to_async(library.retire)(workflow_name, reason)
+    except ValueError as e:
+        return HttpResponse(str(e), status=404)
+    return _hx_redirect(request, "workflow_library")
+
+
+@require_http_methods(["POST"])
+async def workflow_restore(request, workflow_name):
+    """Restore a retired workflow to the active library (#148)."""
+    await agent_engine.ensure_initialized()
+    library = agent_engine.get_library()
+    try:
+        await sync_to_async(library.restore)(workflow_name)
+    except ValueError as e:
+        return HttpResponse(str(e), status=409)
+    return _hx_redirect(request, "workflow_detail", workflow_name=workflow_name)
+
+
+def _hx_redirect(request, view_name: str, **kwargs) -> HttpResponse:
+    """Redirect, using HX-Redirect for HTMX requests."""
+    if request.headers.get("HX-Request"):
+        response = HttpResponse(status=204)
+        response["HX-Redirect"] = reverse(view_name, kwargs=kwargs)
+        return response
+    return redirect(view_name, **kwargs)
 
 
 @require_http_methods(["DELETE"])

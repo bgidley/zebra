@@ -7,6 +7,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import yaml
 
 from zebra_tasks.llm.base import LLMResponse, TokenUsage
 
@@ -505,6 +506,34 @@ class TestWorkflowOptimizerAction:
         assert result.success is True
         yaml_files = list(tmp_path.glob("*.yaml"))
         assert len(yaml_files) == 1
+        # New workflows are tagged so the dream-cycle curator may retire them (#148).
+        assert "llm-defined" in yaml.safe_load(yaml_files[0].read_text())["tags"]
+
+    async def test_modified_hand_written_workflow_stays_untagged(
+        self, mock_task, mock_context, tmp_path
+    ):
+        """Modifying a hand-written workflow must not make it retirable as unused (#148)."""
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        provider = _mock_provider(_SIMPLE_YAML)
+        mock_context.process.properties["__llm_provider__"] = provider
+        mock_task.properties = {
+            "evaluation": {
+                "improvement_priorities": [
+                    {"priority": 1, "type": "fix", "target": "Mine", "action": "improve"}
+                ],
+                "new_workflow_suggestions": [],
+            },
+            "existing_workflows": {"Mine": 'name: Mine\ntags: ["web"]\n'},
+            "dry_run": False,
+            "workflow_library_path": str(tmp_path),
+        }
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert result.success is True
+        [saved] = list(tmp_path.glob("*.yaml"))
+        assert "llm-defined" not in (yaml.safe_load(saved.read_text()).get("tags") or [])
 
     async def test_max_changes_limit_enforced(self, mock_task, mock_context):
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction

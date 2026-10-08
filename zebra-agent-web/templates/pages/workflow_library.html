@@ -24,6 +24,33 @@
     <div id="workflow-list" class="bg-gray-800 rounded-lg border border-gray-700">
         {% include "partials/workflow_library_list.html" %}
     </div>
+
+    {% if retired %}
+    <!-- Retired Workflows (#148) -->
+    <div>
+        <h2 class="text-lg font-semibold text-white">Retired workflows</h2>
+        <p class="text-sm text-gray-400 mt-1">Hidden from workflow selection by the dream cycle or by hand. Restore one to make it selectable again.</p>
+        <div class="mt-3 bg-gray-800 rounded-lg border border-gray-700 divide-y divide-gray-700">
+            {% for workflow in retired %}
+            <div class="flex items-center justify-between px-6 py-4">
+                <div class="min-w-0 flex-1">
+                    <a href="/workflows/{{ workflow.name }}/" class="text-gray-300 font-medium hover:text-white">{{ workflow.name }}</a>
+                    <p class="text-sm text-gray-400 mt-1">{{ workflow.reason }}</p>
+                    <p class="text-xs text-gray-500 mt-1">
+                        Retired {{ workflow.retired_at }}
+                        {% if workflow.superseded_by %}&middot; replaced by <a href="/workflows/{{ workflow.superseded_by }}/" class="text-indigo-400 hover:text-indigo-300">{{ workflow.superseded_by }}</a>{% endif %}
+                        &middot; {{ workflow.use_count }} runs
+                    </p>
+                </div>
+                <button hx-post="/workflows/{{ workflow.name }}/restore/"
+                        class="ml-6 flex-shrink-0 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
+                    Restore
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Create Workflow Modal -->

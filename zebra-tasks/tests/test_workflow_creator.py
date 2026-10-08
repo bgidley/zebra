@@ -84,6 +84,8 @@ async def test_valid_workflow_is_accepted(task, context):
     assert result.success is True
     assert context.process.properties["workflow_name"] == "FIRE Calculator"
     library.add_workflow.assert_called_once()
+    # Tagged llm-defined, so the dream-cycle curator may retire it when unused (#148).
+    assert library.add_workflow.call_args.kwargs["llm_defined"] is True
     assert provider.complete.call_args.kwargs["max_tokens"] == GENERATED_WORKFLOW_MAX_TOKENS
 
 
@@ -125,7 +127,7 @@ async def test_invalid_workflow_is_repaired_once(task, context):
     repair_messages = provider.complete.call_args_list[1].kwargs["messages"]
     assert repair_messages[-2].content == _TRUNCATED_YAML.strip()
     assert "'calculate' has no incoming routes" in repair_messages[-1].content
-    library.add_workflow.assert_called_once_with(_VALID_YAML.strip())
+    library.add_workflow.assert_called_once_with(_VALID_YAML.strip(), llm_defined=True)
 
 
 async def test_failed_repair_makes_exactly_two_calls(task, context):

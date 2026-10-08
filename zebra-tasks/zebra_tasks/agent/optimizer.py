@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+import yaml
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
@@ -27,6 +28,28 @@ CONTINUATION = "continuation"
 
 # Matches a pure template reference like "{{some_key}}"
 _PURE_TEMPLATE_RE = re.compile(r"^\{\{(\w+)\}\}$")
+
+# Provenance tag for LLM-written workflows (mirrors zebra_agent.library, #148).
+LLM_DEFINED_TAG = "llm-defined"
+
+
+def _yaml_tags(yaml_content: str) -> list:
+    """Return the ``tags`` list of a workflow YAML, or [] if unreadable."""
+    try:
+        data = yaml.safe_load(yaml_content)
+    except yaml.YAMLError:
+        return []
+    tags = data.get("tags") if isinstance(data, dict) else None
+    return tags if isinstance(tags, list) else []
+
+
+def _tag_llm_defined(yaml_content: str) -> str:
+    """Add the ``llm-defined`` tag via the library helper, if zebra-agent is installed."""
+    try:
+        from zebra_agent.library import tag_llm_defined
+    except ImportError:
+        return yaml_content
+    return tag_llm_defined(yaml_content)
 
 
 class WorkflowOptimizerAction(TaskAction):
@@ -642,7 +665,13 @@ Maintain the same name and general purpose, but improve the implementation."""
                 }
             )
             if not dry_run and library_path:
-                self._save_workflow(library_path, target, modified_yaml)
+                # A modified workflow keeps its provenance: hand-written stays hand-written.
+                self._save_workflow(
+                    library_path,
+                    target,
+                    modified_yaml,
+                    llm_defined=LLM_DEFINED_TAG in _yaml_tags(existing_workflows[target]),
+                )
             self._record_change(results, priority, "modify", target)
             return True
 
@@ -686,8 +715,16 @@ Maintain the same name and general purpose, but improve the implementation."""
         logger.warning("workflow_optimizer rejected %s of %r: %s", change_type, name, reason)
         results["failed_changes"].append({"type": change_type, "workflow": name, "reason": reason})
 
-    def _save_workflow(self, library_path: str, name: str, yaml_content: str) -> None:
-        """Save a workflow to the library."""
+    def _save_workflow(
+        self, library_path: str, name: str, yaml_content: str, llm_defined: bool = True
+    ) -> None:
+        """Save a workflow to the library.
+
+        New workflows are tagged ``llm-defined`` so the dream-cycle curator may
+        retire them when unused (#148).
+        """
+        if llm_defined:
+            yaml_content = _tag_llm_defined(yaml_content)
         path = Path(library_path)
         path.mkdir(parents=True, exist_ok=True)
 

@@ -780,3 +780,163 @@ routings: []
         # Should raise ValueError since no valid workflow matches
         with pytest.raises(ValueError, match="Workflow not found"):
             library.get_workflow_yaml("NonExistent Workflow")
+
+
+def _named_yaml(name: str, tags: list[str] | None = None, description: str = "d") -> str:
+    tag_list = ", ".join(f'"{t}"' for t in (tags or []))
+    return f"""name: "{name}"
+description: "{description}"
+tags: [{tag_list}]
+version: 1
+first_task: t1
+
+tasks:
+  t1:
+    name: "Step"
+    action: llm_call
+    auto: true
+    properties:
+      prompt: |
+        Line one
+        Line two {{{{goal}}}}
+
+routings: []
+"""
+
+
+class TestRetireRestore:
+    """Soft retirement of workflows (#148)."""
+
+    async def test_retired_workflow_is_hidden_but_loadable(self, library):
+        original = _named_yaml("Old Flow")
+        library.add_workflow(original)
+
+        dest = library.retire("Old Flow", "unused for 30 days", superseded_by="New Flow")
+
+        assert dest.parent == library.retired_path
+        assert [w.name for w in await library.list_workflows()] == []
+        assert library.get_workflow("Old Flow").name == "Old Flow"
+        # The original YAML comes back byte-for-byte, without the retirement block.
+        assert library.get_workflow_yaml("Old Flow") == original
+
+    async def test_list_retired_workflows_has_metadata(self, library):
+        library.add_workflow(_named_yaml("Old Flow"))
+        library.retire("Old Flow", "failing", superseded_by="New Flow")
+
+        [info] = await library.list_retired_workflows()
+
+        assert info.name == "Old Flow"
+        assert info.retired["reason"] == "failing"
+        assert info.retired["superseded_by"] == "New Flow"
+        assert info.retired["retired_at"]
+
+    async def test_restore_brings_workflow_back(self, library):
+        original = _named_yaml("Old Flow")
+        library.add_workflow(original)
+        library.retire("Old Flow", "unused")
+
+        dest = library.restore("Old Flow")
+
+        assert dest.read_text() == original
+        assert [w.name for w in await library.list_workflows()] == ["Old Flow"]
+        assert await library.list_retired_workflows() == []
+
+    def test_restore_refuses_when_name_is_active(self, library):
+        library.add_workflow(_named_yaml("Flow"))
+        library.retire("Flow", "unused")
+        library.add_workflow(_named_yaml("Flow"))
+
+        with pytest.raises(ValueError, match="already exists"):
+            library.restore("Flow")
+
+    def test_retire_unknown_workflow_raises(self, library):
+        with pytest.raises(ValueError, match="Workflow not found"):
+            library.retire("Nope", "unused")
+
+    def test_retire_evicts_cache(self, library):
+        library.add_workflow(_named_yaml("Flow"))
+        library.get_workflow("Flow")
+
+        library.retire("Flow", "unused")
+
+        assert "Flow" not in library._cache
+
+    def test_copy_builtin_skips_retired(self, library, temp_dir):
+        builtin = temp_dir / "builtin"
+        builtin.mkdir()
+        (builtin / "flow.yaml").write_text(_named_yaml("Flow"))
+        library.copy_builtin_workflows(builtin)
+        library.retire("Flow", "failing")
+
+        copied, _ = library.copy_builtin_workflows(builtin)
+
+        assert copied == 0
+        assert not (library.library_path / "flow.yaml").exists()
+
+    def test_newest_same_name_file_wins_lookup(self, library):
+        import os
+        import time
+
+        library.add_workflow(_named_yaml("Flow", description="old"))
+        library.add_workflow(_named_yaml("Flow", description="new"))
+        old = library.library_path / "flow.yaml"
+        new = library.library_path / "flow_1.yaml"
+        os.utime(old, (time.time() - 100, time.time() - 100))
+
+        assert 'description: "new"' in library.get_workflow_yaml("Flow")
+
+        # mtime decides, not the file name
+        os.utime(new, (time.time() - 200, time.time() - 200))
+        library._cache.clear()
+        assert 'description: "old"' in library.get_workflow_yaml("Flow")
+
+    async def test_retire_restore_retire_cycle(self, library):
+        original = _named_yaml("Flow")
+        library.add_workflow(original)
+
+        library.retire("Flow", "first")
+        library.restore("Flow")
+        library.retire("Flow", "second")
+
+        [info] = await library.list_retired_workflows()
+        assert info.retired["reason"] == "second"
+        assert library.get_workflow_yaml("Flow") == original
+        library.restore("Flow")
+        assert (library.library_path / "flow.yaml").read_text() == original
+
+    def test_list_workflow_files_keeps_same_name_copies(self, library):
+        library.add_workflow(_named_yaml("Flow", ["llm-defined"]))
+        library.add_workflow(_named_yaml("Flow"))
+
+        files = library.list_workflow_files()
+
+        assert [f.name for f in files] == ["Flow", "Flow"]
+        assert {f.path.name for f in files} == {"flow.yaml", "flow_1.yaml"}
+        assert files[0].modified_at >= files[1].modified_at
+
+
+class TestLlmDefinedTag:
+    """Provenance tagging of LLM-written workflows (#148)."""
+
+    def test_add_workflow_llm_defined_adds_tag(self, library):
+        library.add_workflow(_named_yaml("Gen", ["web"]), llm_defined=True)
+
+        [wf] = library.list_workflow_files()
+
+        assert wf.tags == ["web", "llm-defined"]
+        # Multi-line prompts stay readable block scalars and still load.
+        assert "prompt: |" in wf.content
+        assert library.get_workflow("Gen").tasks["t1"].properties["prompt"].startswith("Line one")
+
+    def test_tag_is_not_duplicated(self):
+        from zebra_agent.library import tag_llm_defined
+
+        content = _named_yaml("Gen", ["llm-defined"])
+
+        assert tag_llm_defined(content) == content
+
+    def test_hand_written_workflow_is_untouched(self, library):
+        original = _named_yaml("Mine", ["web"])
+        library.add_workflow(original)
+
+        assert library.get_workflow_yaml("Mine") == original
