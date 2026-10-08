@@ -297,6 +297,8 @@ In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via
 
 **Human-task hand-off (#141)**: `start_process` runs auto tasks inline, so `_tick` runs it as a background task via `GoalTracker` (`zebra-agent/zebra_agent/scheduler/goal_tracker.py`) and stops waiting as soon as `find_pending_human_task` (`zebra_agent/human_tasks.py`) sees a READY `auto: false` task in the goal or any RUNNING descendant (e.g. the ethics dilemma form, or a human task in the executed child workflow). The goal stays tracked; later ticks log its `[daemon:done]`/`[daemon:fail]` outcome and `goals_completed` metric exactly once when it terminates. Pickup stays serial: a tracked goal still executing and not waiting on a human blocks the next pickup. Daemon-started goals carry `__daemon_started__`, and a restarted daemon re-tracks RUNNING ones. `AgentLoop.process_goal()` likewise returns `AgentResult(awaiting_input=True, error="Awaiting human input: <task>")` and emits `human_task_pending` instead of timing out. Execution time is still unbounded (#142).
 
+**Goal timeouts (#142)**: `start_process` runs auto tasks inline, so every goal-path start goes through `WorkflowEngine.start_process_with_timeout`, which cancels the inline chain and `fail_process`es it on timeout, on a `cancel_check` reason, or when the caller is cancelled. Bounds: daemon (`GoalTracker(goal_timeout=…)`) and web `AgentLoop` per goal = `GOAL_TIMEOUT_SECONDS` (default 900s; `AgentLoop(goal_timeout=…)`, `DEFAULT_GOAL_TIMEOUT`); child goal workflow = `execute_goal_workflow` `timeout` (600s in the Agent Main Loop YAML); Dream Cycle = 600s. Time parked on a human task is not counted. See `openspec/specs/goal-execution-timeouts/spec.md`.
+
 **Startup recovery (F8, #129)**: on start the daemon runs `engine.resume_all_processes()` as a *background* asyncio task (`recover_interrupted`) so re-driving recovered goals never delays the scheduler loop. Recovery goes children-first. The Agent Main Loop's `execute_workflow` task is `idempotent: true` and `execute_goal_workflow` records `__child_process_id__` on its task, so a goal whose driver died (e.g. an `/api/goals/` web thread killed by a redeploy) is reset to READY and re-attaches to its existing child workflow instead of being flagged for manual review or spawning a duplicate. Each such interruption still counts toward `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` (#130, passed to `recover_interrupted`), so a goal interrupted 3 times auto-fails. See [f8-crash-recovery.md](f8-crash-recovery.md).
 
 ### Storage backends (Django ORM)
@@ -312,7 +314,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 
 ### Kill switch (F2)
 
-`POST /api/kill-switch/` sets a persisted `halted` flag in `SystemStateModel`. The daemon checks this flag before each goal pickup and while waiting on a goal — the executing goal's background task is cancelled and its process failed ("Kill switch activated") within one poll second; goals parked on a human task are left alone. `python manage.py kill_switch --halt|--resume|--status` is the CLI equivalent. See [f2-kill-switch.md](f2-kill-switch.md).
+`POST /api/kill-switch/` sets a persisted `halted` flag in `SystemStateModel`. The daemon checks this flag before each goal pickup and while waiting on a goal — `GoalTracker.cancel_active` sets the executing goal's cancel reason, which `start_process_with_timeout` picks up as its `cancel_check` (#142), and its process is failed ("Kill switch activated") within a couple of seconds; goals parked on a human task are left alone. `python manage.py kill_switch --halt|--resume|--status` is the CLI equivalent. See [f2-kill-switch.md](f2-kill-switch.md).
 
 ### Observability (F3)
 
@@ -396,7 +398,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 5. ~~**No time scheduler or event bus**~~ — `SchedulerLoop` (F27) adds cron/interval routine scheduling. `GoalScheduler` ranks queued goals. No event-driven trigger bus (REQ-PRIN-009), no webhook intake, no trigger subscriptions.
 6. **CLI surface is thin** — four commands; no way to manage memory, workflows, trust, or budget from the terminal.
 7. **Standalone agent is ephemeral** — no persistent store outside the Django UI; CLI users lose memory on exit.
-8. **Error recovery is minimal** — timeouts, but no retry/backoff, no hung-call detection.
+8. **Error recovery is minimal** — goal runs are time-bounded and hung chains are cancelled (#142), but there is no retry/backoff.
 9. **Template expressiveness** — dotted keys only; any non-trivial branching logic must live inside task actions.
 10. **Security baseline is partial** — passkey auth (F5), kill switch (F2), and OS keychain credential store (F7) are implemented. No encryption at rest yet (Phase 2).
 

@@ -18,6 +18,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from zebra_agent.loop import DEFAULT_GOAL_TIMEOUT
+
 if TYPE_CHECKING:
     from zebra_agent.scheduler.goal_tracker import GoalTracker
 
@@ -82,7 +84,11 @@ async def run_daemon_loop(
     from zebra_agent.scheduler.goal_tracker import GoalTracker
 
     goal_scheduler = GoalScheduler(wf_engine.store)
-    goal_tracker = GoalTracker(wf_engine)
+    # Each goal's auto-task chain is failed after GOAL_TIMEOUT_SECONDS (#142).
+    goal_tracker = GoalTracker(
+        wf_engine,
+        goal_timeout=agent_settings.get("GOAL_TIMEOUT_SECONDS", DEFAULT_GOAL_TIMEOUT),
+    )
 
     async def _goal_queue_tick_fn() -> None:
         await _tick(
