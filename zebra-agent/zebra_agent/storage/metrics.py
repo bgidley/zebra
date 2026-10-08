@@ -11,7 +11,11 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from zebra_agent.storage.interfaces import MetricsStore
+from zebra_agent.storage.interfaces import (
+    SEARCH_RUNS_DEFAULT_LIMIT,
+    SEARCH_RUNS_MAX_LIMIT,
+    MetricsStore,
+)
 
 if TYPE_CHECKING:
     from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
@@ -139,6 +143,35 @@ class InMemoryMetricsStore(MetricsStore):
         runs = [r for r in self._runs.values() if r.workflow_name == workflow_name]
         runs.sort(key=lambda r: r.started_at, reverse=True)
         return runs[:limit]
+
+    async def search_runs(
+        self,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        text: str | None = None,
+        workflow_name: str | None = None,
+        success: bool | None = None,
+        limit: int = SEARCH_RUNS_DEFAULT_LIMIT,
+        user_id: int | None = None,
+    ) -> list[WorkflowRun]:
+        """Search runs with optional filters, newest first (F138).
+
+        ``user_id`` is ignored: in-memory runs carry no owner (single-user CLI).
+        """
+        await self._ensure_initialized()
+
+        needle = text.lower() if text else None
+        runs = [
+            r
+            for r in self._runs.values()
+            if (since is None or r.started_at >= since)
+            and (until is None or r.started_at < until)
+            and (needle is None or needle in (r.goal or "").lower())
+            and (workflow_name is None or r.workflow_name == workflow_name)
+            and (success is None or r.success == success)
+        ]
+        runs.sort(key=lambda r: r.started_at, reverse=True)
+        return runs[: max(0, min(limit, SEARCH_RUNS_MAX_LIMIT))]
 
     async def get_total_cost_since(self, since: datetime) -> float:
         """Return the total USD cost of all runs completed since *since*."""

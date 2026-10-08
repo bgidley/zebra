@@ -199,56 +199,6 @@ class TestAgentLoopInitialization:
         assert loop.model == "claude-3-opus"
 
 
-class TestIsSystemWorkflow:
-    """Tests for _is_system_workflow method."""
-
-    def test_agent_main_loop_is_system(self, library, mock_engine, metrics):
-        """Test that Agent Main Loop is identified as system workflow."""
-        loop = AgentLoop(
-            library=library,
-            engine=mock_engine,
-            metrics=metrics,
-            provider="anthropic",
-        )
-        assert loop._is_system_workflow("Agent Main Loop") is True
-
-    def test_memory_compact_not_system(self, library, mock_engine, metrics):
-        """Test that old memory compact workflows are no longer system workflows.
-
-        The compaction step was removed in the new loop design; compaction
-        is now replaced by the incremental conceptual memory update.
-        """
-        loop = AgentLoop(
-            library=library,
-            engine=mock_engine,
-            metrics=metrics,
-            provider="anthropic",
-        )
-        assert loop._is_system_workflow("Memory Compact Short") is False
-        assert loop._is_system_workflow("Memory Compact Long") is False
-
-    def test_regular_workflow_not_system(self, library, mock_engine, metrics):
-        """Test that regular workflows are not system workflows."""
-        loop = AgentLoop(
-            library=library,
-            engine=mock_engine,
-            metrics=metrics,
-            provider="anthropic",
-        )
-        assert loop._is_system_workflow("Test Workflow") is False
-        assert loop._is_system_workflow("Code Review") is False
-
-    def test_values_profile_wizard_is_system(self, library, mock_engine, metrics):
-        """The F18 values-profile wizard is internal — never a candidate for goals."""
-        loop = AgentLoop(
-            library=library,
-            engine=mock_engine,
-            metrics=metrics,
-            provider="anthropic",
-        )
-        assert loop._is_system_workflow("Values Profile Wizard") is True
-
-
 class TestRecordRating:
     """Tests for recording ratings."""
 
@@ -453,6 +403,9 @@ class TestProcessGoalFailure:
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
+        # Running with no human task pending anywhere in the tree
+        mock_engine.store.load_definition = AsyncMock(return_value=None)
+        mock_engine.store.get_processes_by_state = AsyncMock(return_value=[])
 
         loop = AgentLoop(
             library=library,
@@ -467,6 +420,7 @@ class TestProcessGoalFailure:
             result = await loop.process_goal("Test goal")
 
         assert result.success is False
+        assert result.awaiting_input is False
         assert "timed out" in result.error
 
 
@@ -631,6 +585,12 @@ routings: []
 """
         (library.library_path / "compact.yaml").write_text(compact_yaml)
 
+        # A system-tagged workflow that was missing from the old hard-coded name list (#144)
+        decay_yaml = compact_yaml.replace('"Memory Compact Short"', '"Knowledge Decay"').replace(
+            'tags: ["internal"]', 'tags: ["knowledge", "system"]'
+        )
+        (library.library_path / "decay.yaml").write_text(decay_yaml)
+
         captured_properties = {}
 
         async def capture_create_process(definition, properties=None):
@@ -673,6 +633,9 @@ routings: []
         # Memory Compact Short/Long are no longer system workflows in the new design
         # (the compaction step is replaced by incremental conceptual memory updates)
         assert "Memory Compact Short" in names
+        # Filtering is by the `system` tag, not a hard-coded name list (#144)
+        assert "Knowledge Decay" not in names
+        assert all(isinstance(w["success_rate"], float) for w in available)
 
 
 class TestProcessGoalContinuation:
@@ -766,6 +729,34 @@ class TestProcessGoalSurfacesTaskErrors:
         assert result.error == (
             "ethics_input_gate: Failed to get LLM provider for ethics gate: Kimi API key required."
         )
+
+    async def test_ethics_rejection_reports_gate_and_reason(
+        self, library, mock_engine, metrics, agent_main_loop_yaml
+    ):
+        """An ethics rejection surfaces the gate and reasoning, not 'Workflow failed' (#143)."""
+        (library.library_path / "agent_main_loop.yaml").write_text(agent_main_loop_yaml)
+
+        rejection = {
+            "gate": "input_gate",
+            "reasoning": "Rejected on ethical grounds",
+            "concerns": ["Deception"],
+        }
+        mock_process = MagicMock()
+        mock_process.id = "process-1"
+        mock_process.state = ProcessState.COMPLETE
+        mock_process.properties = {"ethics_rejection": rejection}
+
+        mock_engine.create_process = AsyncMock(return_value=mock_process)
+        mock_engine.start_process = AsyncMock()
+        mock_engine.store.load_process = AsyncMock(return_value=mock_process)
+        mock_engine.store.load_tasks_for_process = AsyncMock(return_value=[])
+
+        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics)
+        result = await loop.process_goal("Do something unethical")
+
+        assert result.success is False
+        assert result.ethics_rejection == rejection
+        assert result.error == "Rejected by ethics input_gate: Rejected on ethical grounds"
 
     async def test_failed_process_without_error_property_uses_task_errors(
         self, library, mock_engine, metrics, agent_main_loop_yaml

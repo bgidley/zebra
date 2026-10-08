@@ -159,6 +159,13 @@ class WorkflowSelectorAction(TaskAction):
             default="",
         ),
         ParameterDef(
+            name="history_context",
+            type="string",
+            description="Past workflow runs from get_workflow_history (F138)",
+            required=False,
+            default="",
+        ),
+        ParameterDef(
             name="provider",
             type="string",
             description="LLM provider name",
@@ -262,6 +269,21 @@ Respond with JSON only:
 
 Note: create_new and create_variant are mutually exclusive. If use_existing, both are false."""
 
+    async def _current_workflows(self, context: ExecutionContext, fallback: list) -> list:
+        """Return the live goal-workflow list, or *fallback* if the library is unavailable."""
+        library = context.extras.get("__workflow_library__")
+        if library is None:
+            return fallback
+        try:
+            from zebra_agent.library import list_goal_workflows
+
+            return await list_goal_workflows(library)
+        except Exception as e:
+            self._get_logger().warning(
+                "Could not refresh workflows from library, using queued list: %s", e
+            )
+            return fallback
+
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Execute workflow selection."""
         goal = task.properties.get("goal")
@@ -285,6 +307,10 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
                 except (ValueError, SyntaxError):
                     workflows = []
 
+        # Prefer the live library over the snapshot taken when the goal was queued,
+        # so workflows added since then are candidates too.
+        workflows = await self._current_workflows(context, workflows)
+
         # Memory context and shortlist from consult_memory step
         memory_context = task.properties.get("memory_context", "")
         if isinstance(memory_context, str) and "{{" in memory_context:
@@ -303,6 +329,11 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
         knowledge_context = task.properties.get("knowledge_context", "")
         if isinstance(knowledge_context, str) and "{{" in knowledge_context:
             knowledge_context = context.resolve_template(knowledge_context)
+
+        # Past workflow runs from get_workflow_history (F138)
+        history_context = task.properties.get("history_context", "")
+        if isinstance(history_context, str) and "{{" in history_context:
+            history_context = context.resolve_template(history_context)
 
         # Get LLM provider
         provider_name = task.properties.get("provider", "anthropic")
@@ -332,6 +363,9 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
         if knowledge_context:
             prompt += f"## Personal Knowledge\n{knowledge_context}\n\n"
 
+        if history_context:
+            prompt += f"## Workflow History\n{history_context}\n\n"
+
         # Highlight shortlisted workflows
         if shortlist:
             prompt += (
@@ -345,12 +379,14 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
                     name = w.get("name", "Unknown")
                     desc = w.get("description", "No description")
                     rate = w.get("success_rate", 0.0)
+                    use_count = w.get("use_count")
                     tags = w.get("tags", [])
                     use_when = w.get("use_when", "")
                 else:
                     name = w.name
                     desc = w.description
                     rate = w.success_rate
+                    use_count = getattr(w, "use_count", None)
                     tags = w.tags
                     use_when = getattr(w, "use_when", "")
 
@@ -360,7 +396,12 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
                 prompt += f"- {name}{marker}: {desc}\n"
                 if use_when:
                     prompt += f"  USE WHEN: {use_when}\n"
-                rate_str = f"{rate:.0%}" if isinstance(rate, (int, float)) else str(rate)
+                if use_count == 0:
+                    rate_str = "N/A"
+                elif isinstance(rate, (int, float)):
+                    rate_str = f"{rate:.0%}"
+                else:
+                    rate_str = str(rate)
                 prompt += f"  (success: {rate_str}, tags: {tags_str})\n"
         else:
             prompt += "No workflows available yet. You must create a new one.\n"

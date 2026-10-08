@@ -768,8 +768,11 @@ async def _execute_goal_background(
             continuation_comment=continuation_comment,
         )
 
-        # Send completion event
-        if result.success:
+        # Send completion event. A goal parked on a human task already emitted
+        # human_task_pending (with the form link) — it hasn't failed (#141).
+        if result.awaiting_input:
+            pass
+        elif result.success:
             await progress_callback(
                 "completed",
                 {
@@ -1023,6 +1026,7 @@ async def _build_parent_flow_context(
         "svg": parent_svg,
         "task_panels": task_panels,
         "planning_concerns": _extract_planning_concerns(parent_props),
+        "ethics_outcome": _extract_ethics_outcome(parent_props),
     }
 
 
@@ -1042,6 +1046,22 @@ def _extract_planning_concerns(parent_props: dict) -> dict | None:
     if not concerns:
         return None
     return {"concerns": concerns, "summary": result.get("summary", "")}
+
+
+def _extract_ethics_outcome(parent_props: dict) -> dict | None:
+    """Pull the ethics outcome (#143) from the parent process properties.
+
+    Returns ``{"rejection": {...}}`` when an ethics gate rejected the goal (set by
+    ``record_ethics_rejection``), ``{"review": {...}}`` with the post-execution review
+    once ``record_ethics_review`` has normalised it, or None when neither exists.
+    """
+    rejection = parent_props.get("ethics_rejection")
+    if isinstance(rejection, dict):
+        return {"rejection": rejection}
+    review = parent_props.get("ethics_post_assessment")
+    if isinstance(review, dict) and "ethical" in review:
+        return {"review": review}
+    return None
 
 
 async def _run_detail_pending_fallback(request, run_id: str):
@@ -1118,6 +1138,11 @@ async def _run_detail_pending_fallback(request, run_id: str):
     # If we're here, assess_and_record never ran — so the workflow didn't
     # complete its full lifecycle.  Mark as not-successful.
     error = props.get("__error__")
+    rejection = props.get("ethics_rejection")
+    if not error and isinstance(rejection, dict):
+        from zebra_tasks.agent.record_ethics_rejection import format_ethics_rejection
+
+        error = format_ethics_rejection(rejection)
     success = False
 
     # Build parent orchestration flow context
@@ -1150,6 +1175,7 @@ async def _run_detail_pending_fallback(request, run_id: str):
         "task_outputs": task_outputs,
         "parent_flow": parent_flow,
         "planning_concerns": parent_flow.get("planning_concerns") if parent_flow else None,
+        "ethics_outcome": parent_flow.get("ethics_outcome") if parent_flow else None,
         "review_tasks": await _review_tasks_for_run(wf_engine.store, run_id),
     }
     return render(request, "pages/run_pending.html", context)
@@ -1288,6 +1314,7 @@ async def run_detail(request, run_id):
         "task_executions": formatted_executions,
         "parent_flow": parent_flow,
         "planning_concerns": parent_flow.get("planning_concerns") if parent_flow else None,
+        "ethics_outcome": parent_flow.get("ethics_outcome") if parent_flow else None,
         "review_tasks": await _review_tasks_for_run(store, run_id),
     }
 

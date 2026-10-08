@@ -39,8 +39,11 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
+| `zebra_tasks/agent/history.py` | AssessHistoryNeedAction, GetWorkflowHistoryAction, `parse_time()`, `with_workflow_history()` - workflow history lookup (F138) |
 | `zebra_tasks/agent/flag_concerns.py` | FlagConcernsAction - proactive, advisory concern flagging during planning (F21) |
 | `zebra_tasks/agent/record_dilemma_resolution.py` | RecordDilemmaResolutionAction - record a human ethics-dilemma resolution and route (F22) |
+| `zebra_tasks/agent/record_ethics_review.py` | RecordEthicsReviewAction - normalise + audit the post-execution ethics review (#143) |
+| `zebra_tasks/agent/record_ethics_rejection.py` | RecordEthicsRejectionAction - record which ethics gate rejected a goal and why (#143) |
 | `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13/F14) |
 | `zebra_tasks/agent/reversibility.py` | `assess_reversibility()` - contextual reversibility assessment (F14) |
 | `zebra_tasks/agent/propose_trust_promotion.py` | ProposeTrustPromotionAction - queue a trust promotion suggestion (F15) |
@@ -232,7 +235,7 @@ LLM-powered workflow selection from available workflows.
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `goal` | string | - | User's goal to match |
-| `available_workflows` | list | - | List of workflow metadata dicts |
+| `available_workflows` | list | - | Workflow metadata dicts; fallback only — when `__workflow_library__` is in `context.extras` the selector rebuilds the list via `zebra_agent.library.list_goal_workflows` (#144) |
 | `output_key` | string | "selection" | Where to store selection result |
 
 **Output:**
@@ -431,6 +434,29 @@ formal `ethics_plan_review` gate in `agent_main_loop.yaml`.
 
 **Surfacing:** the result lands on the Agent Main Loop root process as `planning_concerns` / `__task_output_flag_concerns`; the web run-detail view renders it via `partials/planning_concerns.html`. See `specs/f21-concern-flagging.md`.
 
+### AssessHistoryNeedAction / GetWorkflowHistoryAction (F138)
+
+Let a workflow decide it needs past workflow runs, fetch them, and use them downstream. Both
+live in `zebra_tasks/agent/history.py` and are `always_reversible` (read-only).
+
+**`assess_history_need`** — properties `goal`, `provider`, `model` (default `haiku`), `output_key`
+(default `history_need`). Goals without history cues (regex: "last week", "did I", "before",
+weekday/month names, …) route `no_history` with **no LLM call**; otherwise haiku returns
+`{needs_history, since, until, text, reasoning}`. Invalid extracted times are dropped. LLM errors or
+unparseable JSON degrade to `no_history`. **Routes:** `needs_history`, `no_history`.
+
+**`get_workflow_history`** — properties `since`/`until` (ISO-8601 or relative `-7d`, `24h`, `30m`,
+`2w`; unsigned = past), `text` (case-insensitive goal match), `workflow_name`, `success`, `limit`
+(default 20; store caps at 200), `output_key` (default `workflow_history`). Empty/unresolved templates
+mean "no filter". Calls `MetricsStore.search_runs()` from `__metrics_store__`, scoped to
+`__user_id__`, excluding the current `run_id`. **Output:** `{runs, count, filters, history_context}` —
+per-run output/error clipped to 300 chars, `history_context` capped at ~4000 chars. Missing store →
+empty history with a warning; invalid time → `TaskResult.fail`.
+
+**Downstream:** `workflow_selector` accepts `history_context`; `execute_goal_workflow` appends a
+`<workflow_history>` block to the child goal via `with_workflow_history()` when
+`workflow_history.history_context` is set.
+
 ### RecordDilemmaResolutionAction
 
 Record the human's resolution of an escalated ethics dilemma and route on their decision
@@ -451,6 +477,22 @@ Record the human's resolution of an escalated ethics dilemma and route on their 
 **Routes:** `"proceed"` (decision `proceed`) or `"reject"` (otherwise). Defaults to `proceed`
 if the human output is missing (never leaves the workflow stuck). Degrades gracefully without
 an audit store — the routing decision is always honoured.
+
+### RecordEthicsReviewAction
+
+Persist the post-execution ethics review (#143). Runs after the `ethics_post_review` `llm_call`.
+
+**Properties:** `assessment_key` (default `ethics_post_assessment`) — process property holding the raw review.
+
+**Behaviour:** normalises the review to `{ethical, overall_reasoning, concerns, recommendations}`, writes it back to `assessment_key`, and appends an `EthicsAuditEntry` (`check_type="post_review"`, `approved=ethical`). A non-dict (unparseable) review fails closed: `ethical=false`. Missing audit store or audit errors are logged; always returns `TaskResult.ok`, no route.
+
+### RecordEthicsRejectionAction
+
+Record why a goal was rejected (#143). Runs on the terminal `ethics_rejection` task.
+
+**Properties:** `output_key` (default `ethics_rejection`).
+
+**Behaviour:** infers the rejecting gate from process properties — `dilemma_resolution` (human declined; checked first), `plan_review` (`ethics_plan_assessment.approved is False`), else `input_gate` — and stores `{gate, reasoning, concerns}`. No audit write (the gate already audited its verdict). Always `TaskResult.ok`.
 
 ### TrustGateAction
 
