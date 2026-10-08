@@ -23,6 +23,7 @@ dependencies = [
     "structlog>=24.0",
     "webauthn>=2.0",
     "whitenoise>=6.0",
+    "markdown-it-py>=3.0",
     "zebra-workflow",
     "zebra-agent",
 ]

@@ -2,12 +2,12 @@
 
 This module implements the agent loop as a Zebra workflow. The AgentLoop class
 is a thin wrapper that runs the "Agent Main Loop" workflow, which handles:
-1. Memory compaction check
-2. Workflow selection via LLM
-3. Workflow creation (if needed)
-4. Workflow execution
-5. Metrics recording
-6. Memory updates
+1. Memory and personal-knowledge consultation
+2. Ethics input gate
+3. Workflow selection via LLM (creating a workflow or variant if needed)
+4. Concern flagging and ethics plan review
+5. Workflow execution
+6. Assessment, metrics recording and memory updates
 """
 
 import asyncio
@@ -22,7 +22,8 @@ from typing import Any
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState, TaskState
 
-from zebra_agent.library import WorkflowLibrary
+from zebra_agent.human_tasks import find_pending_human_task
+from zebra_agent.library import WorkflowLibrary, list_goal_workflows
 from zebra_agent.storage.interfaces import (
     MemoryStore,
     MetricsStore,
@@ -48,6 +49,11 @@ class AgentResult:
     tokens_used: int = 0
     error: str | None = None
     created_new_workflow: bool = False
+    # True when the loop is parked on a human task (e.g. an ethics dilemma form);
+    # the goal continues once the task is completed (#141).
+    awaiting_input: bool = False
+    # Set when an ethics gate rejected the goal: {gate, reasoning, concerns} (#143)
+    ethics_rejection: dict[str, Any] | None = None
 
 
 class AgentLoop:
@@ -118,12 +124,13 @@ class AgentLoop:
         Process a user goal through the agent loop workflow.
 
         Runs the "Agent Main Loop" workflow which handles:
-        1. Check if memory needs compaction (runs compaction subworkflows if needed)
-        2. Select best workflow for the goal using LLM
-        3. Create new workflow if no good match exists
-        4. Execute the selected/created workflow
-        5. Record metrics for the run
-        6. Update agent memory with the interaction
+        1. Consult memory and the personal knowledge store
+        2. Ethics input gate
+        3. Select best workflow for the goal using LLM
+        4. Create new workflow (or variant) if no good match exists
+        5. Flag concerns and run the ethics plan review
+        6. Execute the selected/created workflow
+        7. Assess, record metrics and update memory
 
         Args:
             goal: The user's goal/request
@@ -154,20 +161,8 @@ class AgentLoop:
         # Load the main agent loop workflow
         definition = self.library.get_workflow("Agent Main Loop")
 
-        # Prepare available workflows for the selector (exclude system workflows)
-        workflows = await self.library.list_workflows()
-        available_workflows = [
-            {
-                "name": w.name,
-                "description": w.description,
-                "tags": w.tags,
-                "success_rate": w.success_rate,
-                "use_count": w.use_count,
-                "use_when": w.use_when,
-            }
-            for w in workflows
-            if not self._is_system_workflow(w.name)
-        ]
+        # Prepare available workflows for the selector (excludes system workflows)
+        available_workflows = await list_goal_workflows(self.library)
 
         # Prepare initial properties for the workflow
         # Note: Stores are passed via engine.extras (set in __init__) since they're
@@ -208,6 +203,8 @@ class AgentLoop:
             tokens_used=execution_result.get("tokens_used", 0),
             error=execution_result.get("error"),
             created_new_workflow=execution_result.get("created_new", False),
+            awaiting_input=execution_result.get("awaiting_input", False),
+            ethics_rejection=execution_result.get("ethics_rejection"),
         )
 
     async def _run_agent_workflow(
@@ -248,6 +245,31 @@ class AgentLoop:
                     "created_new": process.properties.get("created_new", False),
                 }
 
+            # start_process runs auto tasks inline, so a still-RUNNING process is
+            # usually parked on a human task — report that rather than a timeout.
+            pending = await find_pending_human_task(self.engine, process.id)
+            if pending is not None:
+                human_task, task_name = pending
+                callback = self.engine.extras.get("__progress_callback__")
+                if callback:
+                    await callback(
+                        "human_task_pending",
+                        {
+                            "task_id": human_task.id,
+                            "task_name": task_name,
+                            "task_definition_id": human_task.task_definition_id,
+                        },
+                    )
+                return {
+                    "workflow_name": process.properties.get("workflow_name", "unknown"),
+                    "output": None,
+                    "success": False,
+                    "tokens_used": 0,
+                    "error": f"Awaiting human input: {task_name}",
+                    "created_new": process.properties.get("created_new", False),
+                    "awaiting_input": True,
+                }
+
             await asyncio.sleep(0.5)
             waited += 0.5
 
@@ -269,9 +291,16 @@ class AgentLoop:
             "tokens_used": execution_result.get("tokens_used", 0),
             "created_new": process.properties.get("created_new", False),
         }
+        # An ethics gate rejected the goal — report which gate and why (#143).
+        rejection = process.properties.get("ethics_rejection")
+        if isinstance(rejection, dict):
+            from zebra_tasks.agent.record_ethics_rejection import format_ethics_rejection
+
+            result["ethics_rejection"] = rejection
+            result["error"] = format_ethics_rejection(rejection)
         # A task failure ends the process COMPLETE (no active tasks remain) without an
         # execution_result — surface the failed tasks' errors instead of a silent None.
-        if not execution_result:
+        elif not execution_result:
             result["error"] = await self._failed_task_errors(process.id)
         return result
 
@@ -526,14 +555,3 @@ class AgentLoop:
 
         finally:
             self.engine.extras.pop("__progress_callback__", None)
-
-    def _is_system_workflow(self, name: str) -> bool:
-        """Check if a workflow is a system/internal workflow."""
-        system_workflows = {
-            "Agent Main Loop",
-            "Dream Cycle",
-            "Create Goal",
-            "Values Profile Wizard",
-            "Compact Memory",
-        }
-        return name in system_workflows

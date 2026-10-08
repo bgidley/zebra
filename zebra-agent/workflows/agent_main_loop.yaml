@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 9
+version: 11
 first_task: consult_memory
 
 tasks:
@@ -111,7 +111,6 @@ tasks:
   flag_concerns:
     name: "Flag Planning Concerns"
     action: flag_concerns
-    synchronized: true
     auto: true
     properties:
       goal: "{{goal}}"
@@ -217,6 +216,7 @@ tasks:
       output_key: assess_result
 
   # Step 9: Ethics post-execution review - did we behave ethically?
+  # Runs after the memory update so a failed review cannot skip it (#143).
   ethics_post_review:
     name: "Ethics Post-Execution Review"
     action: llm_call
@@ -254,7 +254,15 @@ tasks:
       temperature: 0.3
       output_key: ethics_post_assessment
 
-  # Step 10: Incrementally update conceptual memory index
+  # Step 9a: Record the post-execution review to the ethics audit trail (#143)
+  record_ethics_review:
+    name: "Record Ethics Review"
+    action: record_ethics_review
+    auto: true
+    properties:
+      assessment_key: ethics_post_assessment
+
+  # Step 8a: Incrementally update conceptual memory index
   update_conceptual_memory:
     name: "Update Conceptual Memory"
     action: update_conceptual_memory
@@ -266,10 +274,14 @@ tasks:
       effectiveness_notes: "{{assess_result.effectiveness_notes}}"
       output_key: conceptual_memory_update
 
-  # Terminal: Ethics rejection (no outgoing routes = process completes)
+  # Terminal: Ethics rejection (no outgoing routes = process completes).
+  # Records which gate rejected and why as `ethics_rejection` (#143).
   ethics_rejection:
     name: "Ethics Rejection"
+    action: record_ethics_rejection
     auto: true
+    properties:
+      output_key: ethics_rejection
 
 routings:
   # Memory consultation leads to knowledge consultation
@@ -387,7 +399,10 @@ routings:
     to: assess_and_record
 
   - from: assess_and_record
+    to: update_conceptual_memory
+
+  - from: update_conceptual_memory
     to: ethics_post_review
 
   - from: ethics_post_review
-    to: update_conceptual_memory
+    to: record_ethics_review

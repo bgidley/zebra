@@ -28,6 +28,8 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/storage/metrics.py` | InMemoryMetricsStore implementation |
 | `zebra_agent/budget.py` | BudgetManager — daily budget with linear pacing |
 | `zebra_agent/scheduler.py` | GoalScheduler — priority + deadline + age scoring |
+| `zebra_agent/scheduler/goal_tracker.py` | GoalTracker — daemon's in-flight goals: background start, human-task hand-off, reconciliation (#141) |
+| `zebra_agent/human_tasks.py` | `find_pending_human_task` — READY `auto: false` task in a process tree |
 | `zebra_agent/ioc/` | IoC (Inversion of Control) module |
 | `zebra_agent/ioc/container.py` | `ZebraContainer` - dependency injection container |
 | `zebra_agent/ioc/registry.py` | `IoCActionRegistry` - action registry with constructor injection |
@@ -128,6 +130,8 @@ consult_memory --> consult_knowledge --> assess_history_need
 5. **execute_workflow**: `ExecuteGoalWorkflowAction` runs the selected/created workflow
 6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
 7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
+8. **ethics_post_review → record_ethics_review**: advisory LLM review of the completed run, then `RecordEthicsReviewAction` audits it (`check_type="post_review"`). Runs after the memory update so a failed review cannot skip it (#143)
+9. **ethics_rejection** (terminal, any gate `reject`): `RecordEthicsRejectionAction` stores `ethics_rejection = {gate, reasoning, concerns}`; `AgentResult.ethics_rejection` / `error` surface it (#143)
 
 ### Task Actions for Agent Loop
 
@@ -146,6 +150,8 @@ These actions (in `zebra-tasks/zebra_tasks/agent/`) power the agent loop:
 | `execute_goal_workflow` | `execute_workflow.py` | Execute workflow by name |
 | `assess_and_record` | `assess_and_record.py` | LLM assessment + metrics + memory write |
 | `update_conceptual_memory` | `update_conceptual_memory.py` | Incrementally update conceptual memory index |
+| `record_ethics_review` | `record_ethics_review.py` | Normalise + audit the post-execution ethics review (#143) |
+| `record_ethics_rejection` | `record_ethics_rejection.py` | Record which ethics gate rejected the goal and why (#143) |
 
 These actions power the Dream Cycle self-improvement workflow:
 
@@ -308,17 +314,11 @@ These workflows are internal to the agent and excluded from LLM selection:
 | `Dream Cycle` | `dream_cycle.yaml` | Self-improvement: analyze, evaluate, optimize workflows |
 | `Create Goal` | `create_goal.yaml` | Human input → queue goal as CREATED process |
 
-System workflows are identified by name in `loop.py`:
-
-```python
-def _is_system_workflow(self, name: str) -> bool:
-    system_workflows = {
-        "Agent Main Loop",
-        "Dream Cycle",
-        "Create Goal",
-    }
-    return name in system_workflows
-```
+System workflows are identified by the `system` tag in their YAML (`tags: [..., "system"]`) —
+tag any new internal workflow. `list_goal_workflows(library)` in `library.py` is the single
+builder of the selector's `available_workflows` and excludes them; every goal entry point
+(`AgentLoop.process_goal`, the web `queue_goal` helper, the `queue_goal` action) and the
+selector itself use it (#144).
 
 The Dream Cycle can be triggered explicitly via:
 - `AgentLoop.run_dream_cycle()` in Python

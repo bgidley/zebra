@@ -121,7 +121,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 | Agent loop | `consult_memory`, `consult_knowledge`, `assess_history_need`, `get_workflow_history` (F138 — see [workflow-history spec](../openspec/specs/workflow-history/spec.md)), `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (8000) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML before saving (#122) |
 | Dream cycle | `metrics_analyzer`, `workflow_evaluator`, `workflow_optimizer` |
 | Ethics | `ethics_gate` |
-| Web (F115) | `kagi_search`, `kagi_summarize` |
+| Web (F115, #145) | `kagi_search`, `kagi_extract` — Kagi v1 API (`POST /api/v1/search`, `/extract`, Bearer `KAGI_API_KEY`); `kagi_summarize` removed (v1 has no summarizer) |
 | Notifications (F65) | `notify_email` (SMTP, `ZEBRA_SMTP_*` env), `notify_webhook` (HTTP POST/PUT, `ZEBRA_NOTIFY_WEBHOOK_URL`) — both `always_irreversible` |
 
 ### LLM integration
@@ -162,9 +162,12 @@ consult_memory
   → flag_concerns            (advisory, non-blocking — F21)
   → ethics_plan_review       (escalate → resolve dilemma → record — F22)
   → execute_goal_workflow
-  → ethics_post_review
   → assess_and_record
   → update_conceptual_memory
+  → ethics_post_review       (llm_call)
+  → record_ethics_review     (audit check_type=post_review — #143)
+
+any gate "reject" → ethics_rejection (record_ethics_rejection — #143)
 ```
 
 ### Dream cycle (`dream_cycle.yaml`)
@@ -189,7 +192,9 @@ Three-tier model (matches the design in REQ-DATA-004):
 
 ### Workflow library
 
-`WorkflowLibrary` loads YAMLs from `~/.zebra-agent/workflows/`, caches them, flags system workflows (main loop, dream, create_goal), tracks success rate and use count.
+`WorkflowLibrary` loads YAMLs from `~/.zebra-agent/workflows/`, caches them, tracks success rate and use count. Workflows tagged `system` are internal and never offered for goals.
+
+`list_goal_workflows(library)` (`zebra_agent/library.py`) is the single builder of the selector's candidates: one dict per non-`system` workflow (`name`, `description`, `tags`, `success_rate` float, `use_count`, `use_when`). `AgentLoop.process_goal`, the web/daemon `api/goals.queue_goal` helper and the `queue_goal` action all use it for `available_workflows`. At selection time `workflow_selector` rebuilds the list from the live `__workflow_library__` (falling back to the queued property), so queued goals see workflows added since; the prompt shows "N/A" success for never-run workflows (#144).
 
 ### Budget
 
@@ -205,7 +210,15 @@ Minimal: `/list`, `/stats`, `/help`, `/quit`. Launch with `zebra-agent` / `pytho
 
 ### Ethics gates
 
-Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, post-execution review. Implementation is LLM-prompt-based Kantian reasoning (universalizability, rational beings as ends, autonomy). Human confirmation task waits for acknowledgement before completion.
+Three checkpoints wired into `agent_main_loop.yaml`: input gate, plan review, post-execution review. Implementation is LLM-prompt-based Kantian reasoning (universalizability, rational beings as ends, autonomy). The post-execution review is advisory and automated (no human confirmation since F111).
+
+**Ethics outcome recording (#143, loop v10).** Every ethics verdict is now durable and visible:
+- `record_ethics_review` normalises `ethics_post_assessment` to `{ethical, overall_reasoning, concerns, recommendations}` and appends an `EthicsAuditEntry` with `check_type="post_review"`. An unparseable review fails closed (`ethical=false`).
+- The review runs *after* `update_conceptual_memory`, so a failed review no longer skips the memory update.
+- The terminal `ethics_rejection` task runs `record_ethics_rejection`. It stores `ethics_rejection = {gate, reasoning, concerns}`, where `gate` is `input_gate`, `plan_review` or `dilemma_resolution`. It writes no audit entry, because the gate already did.
+- `AgentResult.ethics_rejection` carries the record, and `error` reads `Rejected by ethics <gate>: <reasoning>`.
+- The run pages (`partials/ethics_outcome.html`) show the rejection or the post-review.
+- Rejected goals still write no metrics `WorkflowRun`, so per-workflow success rates are unaffected. See `openspec/specs/ethics-outcome-recording/spec.md`.
 
 `EthicsGateAction` accepts an optional `user_id` input. When provided and `__profile_store__` is available in `context.extras`, the gate loads the user's current `ValuesProfile` and incorporates it into a combined evaluation prompt. Kantian rejection always takes precedence (values can only restrict further). The stored assessment includes a `values_assessment` key (`null` for Kantian-only runs). Verdict log lines show both Kantian and values flags when a profile was consulted.
 
@@ -265,7 +278,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 | `/` | Dashboard: running activities (in-flight goals, current tasks, awaiting-input flag, cost — #126), budget, workflow count, success rate |
 | `/run/` | Goal submission (priority, deadline, queue, model) |
 | `/activity/` | Recent runs (handles orphaned processes) |
-| `/runs/<id>/` | Run detail with SVG workflow diagram |
+| `/runs/<id>/` | Run detail with SVG workflow diagram; Final Output markdown rendered server-side (`markdown` template filter, markdown-it-py, raw HTML escaped — #149) |
 | `/workflows/` | Library browser |
 | `/tasks/` & `/tasks/<id>/` | Pending human tasks + JSON-Schema form |
 | `/api/runs/<id>/diagram/` | SVG |
@@ -277,7 +290,9 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 
 In production, the budget daemon runs as a **separate `zebra-daemon` Quadlet unit** (`deploy/podman/quadlet/zebra-daemon.container`) to guarantee exactly one daemon instance. It starts via `python manage.py run_daemon` (no middleware needed).
 
-In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via `asyncio.create_task()` on the first request (Daphne doesn't run ASGI lifespan events). Loop: `pick_next → budget_check → start_process → poll → record metrics → repeat`.
+In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via `asyncio.create_task()` on the first request (Daphne doesn't run ASGI lifespan events). Loop (each tick): `reconcile tracked goals → skip if one is still executing → pick_next → budget_check → start_process in a background task → wait until finished or parked on a human task → record metrics`.
+
+**Human-task hand-off (#141)**: `start_process` runs auto tasks inline, so `_tick` runs it as a background task via `GoalTracker` (`zebra-agent/zebra_agent/scheduler/goal_tracker.py`) and stops waiting as soon as `find_pending_human_task` (`zebra_agent/human_tasks.py`) sees a READY `auto: false` task in the goal or any RUNNING descendant (e.g. the ethics dilemma form, or a human task in the executed child workflow). The goal stays tracked; later ticks log its `[daemon:done]`/`[daemon:fail]` outcome and `goals_completed` metric exactly once when it terminates. Pickup stays serial: a tracked goal still executing and not waiting on a human blocks the next pickup. Daemon-started goals carry `__daemon_started__`, and a restarted daemon re-tracks RUNNING ones. `AgentLoop.process_goal()` likewise returns `AgentResult(awaiting_input=True, error="Awaiting human input: <task>")` and emits `human_task_pending` instead of timing out. Execution time is still unbounded (#142).
 
 **Startup recovery (F8, #129)**: on start the daemon runs `engine.resume_all_processes()` as a *background* asyncio task (`recover_interrupted`) so re-driving recovered goals never delays the scheduler loop. Recovery goes children-first. The Agent Main Loop's `execute_workflow` task is `idempotent: true` and `execute_goal_workflow` records `__child_process_id__` on its task, so a goal whose driver died (e.g. an `/api/goals/` web thread killed by a redeploy) is reset to READY and re-attaches to its existing child workflow instead of being flagged for manual review or spawning a duplicate. Each such interruption still counts toward `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` (#130, passed to `recover_interrupted`), so a goal interrupted 3 times auto-fails. See [f8-crash-recovery.md](f8-crash-recovery.md).
 
@@ -294,7 +309,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 
 ### Kill switch (F2)
 
-`POST /api/kill-switch/` sets a persisted `halted` flag in `SystemStateModel`. The daemon checks this flag before each goal pickup and during polling — in-flight processes are failed within 2 s of activation. `python manage.py kill_switch --halt|--resume|--status` is the CLI equivalent. See [f2-kill-switch.md](f2-kill-switch.md).
+`POST /api/kill-switch/` sets a persisted `halted` flag in `SystemStateModel`. The daemon checks this flag before each goal pickup and while waiting on a goal — the executing goal's background task is cancelled and its process failed ("Kill switch activated") within one poll second; goals parked on a human task are left alone. `python manage.py kill_switch --halt|--resume|--status` is the CLI equivalent. See [f2-kill-switch.md](f2-kill-switch.md).
 
 ### Observability (F3)
 
@@ -355,7 +370,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 
 ### Ethics gate change (F111)
 
-`ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`; `ethics_post_review` routes directly to `update_conceptual_memory`. This unblocked autonomous daemon processing.
+`ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`. This unblocked autonomous daemon processing. (Since v10 / #143 it runs after `update_conceptual_memory` and is followed by `record_ethics_review`.)
 
 ---
 
@@ -462,7 +477,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 | Integration provider framework | **Missing** | REQ-INT-001/002/004 |
 | Domain coverage beyond Code | **Missing** | REQ-DOM-SCHED/RESEARCH/FIN/HEALTH/HOME/CREATIVE/SOCIAL |
 | Web authentication | **Implemented** (F5 — passkey/WebAuthn) | REQ-NFR-007 |
-| Kagi web search action (`kagi_search`) | **Implemented** (F115) | — |
+| Kagi web search / page extraction (`kagi_search`, `kagi_extract`) | **Implemented** (F115; v1 API #145). See `openspec/specs/web-search/` | — |
 | Extend/follow-up on a previous goal | **Implemented** (F116) — attach one of your completed runs from the goal form or the Activity "Extend" link; `previous_run_context` process property is added to the goal by `zebra_tasks.agent.followup.with_previous_run()` for the ethics gate, selector, creators and the executed workflow (plain `goal` unchanged); `WorkflowRun.extends_run_id` records lineage; `DjangoMetricsStore.get_run` is user-scoped. See `openspec/specs/goal-follow-up/spec.md` | — |
 | Continue a goal run (phase 17) | **Implemented** (F134). The run page has a "Continue this run" form, and `POST /api/runs/<id>/continue/` queues a continuation. Both take a comment on where the run got to and work for successful and failed runs. The continuation keeps the goal text and carries a `continuation_comment` property. `followup.load_previous_run_context()` adds task-level progress and a capped summary of the chain. Lineage is stored via `extends_run_id` plus `WorkflowRun.continuation_comment/decision/rationale` (migration 0024). `MetricsStore.get_run_chain` / `get_continuations_since` query it, and `partials/run_chain.html` shows the whole chain from any run in it. See `openspec/specs/goal-continuation/` | — |
 | Continuation assessment | **Implemented** (F135) — `continuation_assessor` (`assess_continuation` in `agent_main_loop.yaml` v8, after the ethics input gate) asks the LLM for `same_workflow` / `existing_workflow` / `new_workflow` when the process has `previous_run_context`. It sees the previous goal, workflow, output, task progress and `continuation_comment`. Goals without `previous_run_context` pass through as `not_continuation`, with no LLM call. A missing previous workflow or an LLM/parse failure falls back to `existing_workflow`. `continuation_decision`/`continuation_rationale` are stored on `WorkflowRun` and shown on the run page (`partials/_continuation_decision.html`). See `openspec/specs/continuation-assessment/` | — |

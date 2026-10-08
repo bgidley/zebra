@@ -1,10 +1,10 @@
 {% extends "base.html" %}
+{% load markdown_tags %}
 
 {% block title %}Run Details - Zebra Agent{% endblock %}
 {% block page_title %}Run Details{% endblock %}
 
 {% block extra_head %}
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
 /* Markdown output styling (prose-invert replacement — Tailwind CDN lacks typography plugin) */
 #run-output-content { color: #e5e7eb; font-size: 0.875rem; line-height: 1.625; }
@@ -132,6 +132,7 @@
 
     <!-- Planning Concerns (F21 — proactive, advisory) -->
     {% include "partials/planning_concerns.html" %}
+    {% include "partials/ethics_outcome.html" %}
     {% include "partials/_continuation_decision.html" %}
 
     <!-- Parent Orchestration Flow -->
@@ -395,27 +396,9 @@
             <h2 class="text-lg font-semibold text-white">Final Output</h2>
         </div>
         <div class="p-6" id="run-output-content">
+            {{ run.output|markdown }}
         </div>
     </div>
-    {{ run.output|json_script:"run-output-data" }}
-    <script>
-    (function() {
-        var el = document.getElementById('run-output-content');
-        var dataEl = document.getElementById('run-output-data');
-        if (!el || !dataEl) return;
-        // json_script produces a <script type="application/json"> with proper
-        // JSON encoding.  JSON.parse gives us the real string with newlines etc.
-        var text = JSON.parse(dataEl.textContent) || '';
-        if (typeof marked !== 'undefined') {
-            el.innerHTML = marked.parse(text);
-        } else {
-            var pre = document.createElement('pre');
-            pre.className = 'text-gray-200 whitespace-pre-wrap text-sm overflow-x-auto';
-            pre.textContent = text;
-            el.appendChild(pre);
-        }
-    })();
-    </script>
     {% else %}
     <div class="bg-gray-800 rounded-lg border border-red-800">
         <div class="px-6 py-4 border-b border-red-800">
