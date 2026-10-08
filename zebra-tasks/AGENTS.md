@@ -39,6 +39,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
+| `zebra_tasks/agent/history.py` | AssessHistoryNeedAction, GetWorkflowHistoryAction, `parse_time()`, `with_workflow_history()` - workflow history lookup (F138) |
 | `zebra_tasks/agent/flag_concerns.py` | FlagConcernsAction - proactive, advisory concern flagging during planning (F21) |
 | `zebra_tasks/agent/record_dilemma_resolution.py` | RecordDilemmaResolutionAction - record a human ethics-dilemma resolution and route (F22) |
 | `zebra_tasks/agent/record_ethics_review.py` | RecordEthicsReviewAction - normalise + audit the post-execution ethics review (#143) |
@@ -281,6 +282,7 @@ Execute a workflow by name and capture its output.
 | `goal` | string | - | Goal to pass to workflow |
 | `timeout` | float | 120 | Max execution time in seconds — enforced on the child's inline run via `start_process_with_timeout` (#142); the Agent Main Loop sets 600 |
 | `output_key` | string | "execution_result" | Where to store result |
+| `continue_on_failure` | bool | false | On child failure/timeout/error, complete with `success: false` + `error` in the output instead of failing the task, so downstream tasks still run (#140) |
 
 **Output:**
 
@@ -297,6 +299,12 @@ Execute a workflow by name and capture its output.
 **Store Access:** Reads `__workflow_library__` from `context.extras` (engine-level dependency injection).
 
 **Resumable (#129):** records the child process id on its task (`__child_process_id__`) before starting it; a re-run (e.g. after crash recovery) re-attaches to that child while it is still linked via `parent_process_id`/`parent_task_id`, instead of spawning a duplicate. Declare the task `idempotent: true` so recovery re-runs it.
+
+### PropagateFailureAction (`propagate_failure`)
+
+Re-raise a recorded outcome at the end of a workflow (#140). Pairs with `execute_goal_workflow`'s `continue_on_failure`: the failure travels as data through the learning steps, then this task fails with it so the process still ends `FAILED`.
+
+**Properties:** `success` (bool or template, required), `error` (string or template; default message `"Workflow execution failed"`). **Result:** `TaskResult.fail(error)` when `success` is false, `TaskResult.ok()` otherwise. `reversibility_hint = "always_reversible"`.
 
 ### AssessAndRecordAction (formerly RecordMetricsAction)
 
@@ -432,6 +440,29 @@ formal `ethics_plan_review` gate in `agent_main_loop.yaml`.
 **Fail-soft:** provider errors, unparseable responses, or a missing goal all yield an empty concerns list and still succeed (never blocks the workflow).
 
 **Surfacing:** the result lands on the Agent Main Loop root process as `planning_concerns` / `__task_output_flag_concerns`; the web run-detail view renders it via `partials/planning_concerns.html`. See `specs/f21-concern-flagging.md`.
+
+### AssessHistoryNeedAction / GetWorkflowHistoryAction (F138)
+
+Let a workflow decide it needs past workflow runs, fetch them, and use them downstream. Both
+live in `zebra_tasks/agent/history.py` and are `always_reversible` (read-only).
+
+**`assess_history_need`** — properties `goal`, `provider`, `model` (default `haiku`), `output_key`
+(default `history_need`). Goals without history cues (regex: "last week", "did I", "before",
+weekday/month names, …) route `no_history` with **no LLM call**; otherwise haiku returns
+`{needs_history, since, until, text, reasoning}`. Invalid extracted times are dropped. LLM errors or
+unparseable JSON degrade to `no_history`. **Routes:** `needs_history`, `no_history`.
+
+**`get_workflow_history`** — properties `since`/`until` (ISO-8601 or relative `-7d`, `24h`, `30m`,
+`2w`; unsigned = past), `text` (case-insensitive goal match), `workflow_name`, `success`, `limit`
+(default 20; store caps at 200), `output_key` (default `workflow_history`). Empty/unresolved templates
+mean "no filter". Calls `MetricsStore.search_runs()` from `__metrics_store__`, scoped to
+`__user_id__`, excluding the current `run_id`. **Output:** `{runs, count, filters, history_context}` —
+per-run output/error clipped to 300 chars, `history_context` capped at ~4000 chars. Missing store →
+empty history with a warning; invalid time → `TaskResult.fail`.
+
+**Downstream:** `workflow_selector` accepts `history_context`; `execute_goal_workflow` appends a
+`<workflow_history>` block to the child goal via `with_workflow_history()` when
+`workflow_history.history_context` is set.
 
 ### RecordDilemmaResolutionAction
 

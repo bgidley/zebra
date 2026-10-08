@@ -118,7 +118,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 | Subtasks | `subworkflow`, `wait_subworkflow`, `parallel_subworkflows` |
 | Filesystem | `file_read`, `file_write`, `file_copy`, `file_move`, `file_delete`, `file_search`, `file_exists`, `file_info` (9 actions) |
 | Compute | `python_exec` (sandboxed) |
-| Agent loop | `consult_memory`, `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (8000) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML before saving (#122) |
+| Agent loop | `consult_memory`, `consult_knowledge`, `assess_history_need`, `get_workflow_history` (F138 — see [workflow-history spec](../openspec/specs/workflow-history/spec.md)), `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `propagate_failure`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (8000) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML before saving (#122) |
 | Dream cycle | `metrics_analyzer`, `workflow_evaluator`, `workflow_optimizer` |
 | Ethics | `ethics_gate` |
 | Web (F115, #145) | `kagi_search`, `kagi_extract` — Kagi v1 API (`POST /api/v1/search`, `/extract`, Bearer `KAGI_API_KEY`); `kagi_summarize` removed (v1 has no summarizer) |
@@ -154,20 +154,24 @@ The loop lives in `workflows/agent_main_loop.yaml`, not Python. `AgentLoop` is a
 ```
 consult_memory
   → consult_knowledge
+  → assess_history_need      (needs_history → get_workflow_history — F138)
   → ethics_input_gate
   → assess_continuation      (F135)
   → workflow_selector
   → [create_new | create_variant | use_existing]
   → flag_concerns            (advisory, non-blocking — F21)
   → ethics_plan_review       (escalate → resolve dilemma → record — F22)
-  → execute_goal_workflow
+  → execute_goal_workflow    (continue_on_failure — #140)
   → assess_and_record
   → update_conceptual_memory
   → ethics_post_review       (llm_call)
   → record_ethics_review     (audit check_type=post_review — #143)
+  → report_outcome           (propagate_failure — #140)
 
 any gate "reject" → ethics_rejection (record_ethics_rejection — #143)
 ```
+
+**Failed goal runs are learned from (#140)**: `execute_workflow` sets `continue_on_failure: true`, so a failed/timed-out child completes the task with `execution_result.success = false` and `error` instead of failing it. `assess_and_record` (given `error`), `update_conceptual_memory`, `ethics_post_review` and `record_ethics_review` therefore run for failures too, recording a `WorkflowRun` with `success=false` and a workflow-memory entry. The terminal `report_outcome` task (`propagate_failure`) then fails with the child's error, so the main-loop process still ends `FAILED` with `__error__` = child error (`__failed_task__` = `report_outcome`). Failures before execution (selection, creation, gate errors) are still not recorded.
 
 ### Dream cycle (`dream_cycle.yaml`)
 
@@ -187,7 +191,7 @@ Three-tier model (matches the design in REQ-DATA-004):
 
 ### Metrics
 
-`MetricsStore` records workflow runs, task executions, tokens, USD cost, and user ratings. Two implementations (in-memory, Django). `get_total_cost_since()` feeds the budget manager.
+`MetricsStore` records workflow runs, task executions, tokens, USD cost, and user ratings. Two implementations (in-memory, Django). `get_total_cost_since()` feeds the budget manager. `search_runs()` (F138) filters runs by `since`/`until`/goal text/workflow/success, newest first, limit ≤200; the Django store scopes to an explicit `user_id` or the request user.
 
 ### Workflow library
 
@@ -339,7 +343,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 - **No passkey management UI** — users cannot delete or rename registered passkeys.
 - **No per-user isolation in all paths** — `clear_conceptual_memories` wipes all users (latent bug). See [f6-user-id-namespacing.md](f6-user-id-namespacing.md).
 - **Channel layer defaults to in-memory** — production needs Redis.
-- **Orphaned processes are handled but fragile** — if `assess_and_record` never fires, metrics are reconstructed from `__task_output_*` properties.
+- **Orphaned processes are handled but fragile** — if `assess_and_record` never fires (now only failures before goal execution, #140), metrics are reconstructed from `__task_output_*` properties.
 - **Workflow library search is a list filter** — no full-text, no tagging.
 - **No multi-run comparison** UI.
 - **Django models manually track engine state** — they must stay in sync with `zebra-py` schema changes.

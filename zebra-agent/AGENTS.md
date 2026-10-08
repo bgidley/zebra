@@ -96,7 +96,9 @@ not imperative Python code. The `AgentLoop` class is a thin wrapper that runs th
 The workflow handles the complete goal processing flow:
 
 ```
-consult_memory --> select_workflow
+consult_memory --> consult_knowledge --> assess_history_need
+                       (needs_history → get_workflow_history — F138)
+                --> ethics_input_gate --> assess_continuation --> select_workflow
                        |
              +---------+---------+
              |         |         |
@@ -112,9 +114,13 @@ consult_memory --> select_workflow
                        |
                 execute_workflow
                        |
-                assess_and_record
+                assess_and_record   (also runs for failed goal runs — #140)
                        |
              update_conceptual_memory
+                       |
+        ethics_post_review → record_ethics_review
+                       |
+                report_outcome  (fails with the goal workflow's error, if any)
 ```
 
 **Steps:**
@@ -129,7 +135,8 @@ consult_memory --> select_workflow
 6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
 7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
 8. **ethics_post_review → record_ethics_review**: advisory LLM review of the completed run, then `RecordEthicsReviewAction` audits it (`check_type="post_review"`). Runs after the memory update so a failed review cannot skip it (#143)
-9. **ethics_rejection** (terminal, any gate `reject`): `RecordEthicsRejectionAction` stores `ethics_rejection = {gate, reasoning, concerns}`; `AgentResult.ethics_rejection` / `error` surface it (#143)
+9. **report_outcome**: `PropagateFailureAction` fails with `execution_result.error` when the goal workflow failed, so the process ends FAILED only after the failure was recorded (`execute_workflow` sets `continue_on_failure: true`; #140)
+10. **ethics_rejection** (terminal, any gate `reject`): `RecordEthicsRejectionAction` stores `ethics_rejection = {gate, reasoning, concerns}`; `AgentResult.ethics_rejection` / `error` surface it (#143)
 
 ### Task Actions for Agent Loop
 
@@ -138,6 +145,8 @@ These actions (in `zebra-tasks/zebra_tasks/agent/`) power the agent loop:
 | Action | File | Purpose |
 |--------|------|---------|
 | `consult_memory` | `consult_memory.py` | Read conceptual memory for workflow shortlist |
+| `assess_history_need` | `history.py` | Decide if the goal needs past runs; route `needs_history`/`no_history` (F138) |
+| `get_workflow_history` | `history.py` | Fetch past runs by time window + text via `MetricsStore.search_runs` (F138) |
 | `workflow_selector` | `selector.py` | LLM-powered workflow selection |
 | `workflow_creator` | `creator.py` | LLM-powered workflow creation |
 | `workflow_variant_creator` | `variant_creator.py` | LLM-powered workflow variant creation |

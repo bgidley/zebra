@@ -18,6 +18,8 @@ from zebra.storage.memory import InMemoryStore
 from zebra.tasks.base import TaskAction
 from zebra.tasks.registry import ActionRegistry
 from zebra_tasks.agent.continuation_assessor import ContinuationAssessorAction
+from zebra_tasks.agent.history import AssessHistoryNeedAction, GetWorkflowHistoryAction
+from zebra_tasks.agent.propagate_failure import PropagateFailureAction
 from zebra_tasks.agent.record_dilemma_resolution import RecordDilemmaResolutionAction
 from zebra_tasks.agent.record_ethics_rejection import RecordEthicsRejectionAction
 from zebra_tasks.agent.record_ethics_review import RecordEthicsReviewAction
@@ -136,8 +138,26 @@ class StubExecuteWorkflow(TaskAction):
         return TaskResult.ok(output=output)
 
 
+class StubExecuteWorkflowFails(TaskAction):
+    """Goal workflow failed; recorded as data (continue_on_failure), as the real action does."""
+
+    async def run(self, task, context):
+        assert task.properties.get("continue_on_failure") is True
+        output = {"success": False, "output": None, "tokens_used": 5, "error": "boom"}
+        key = task.properties.get("output_key", "execution_result")
+        context.set_process_property(key, output)
+        return TaskResult.ok(output=output)
+
+
 class StubAssessAndRecord(TaskAction):
     async def run(self, task, context):
+        context.set_process_property(
+            "assessed_with",
+            {
+                "success": context.resolve_template(task.properties["success"]),
+                "error": context.resolve_template(task.properties["error"]),
+            },
+        )
         output = {"recorded": True, "effectiveness_notes": "Effective execution."}
         key = task.properties.get("output_key", "assess_result")
         context.set_process_property(key, output)
@@ -174,7 +194,7 @@ def definition():
         return load_definition_from_yaml(f.read())
 
 
-def _make_registry(ethics_gate_class):
+def _make_registry(ethics_gate_class, execute_class=None):
     """Build a registry with stub actions and the given ethics gate class."""
     registry = ActionRegistry()
     registry.register_defaults()  # registers route_name condition
@@ -183,15 +203,19 @@ def _make_registry(ethics_gate_class):
     registry.register_action("ethics_gate", ethics_gate_class)
     # F135: real assessor — passes non-continuation goals straight through (no LLM)
     registry.register_action("continuation_assessor", ContinuationAssessorAction)
+    # F138: real history actions — goals without history cues skip the LLM
+    registry.register_action("assess_history_need", AssessHistoryNeedAction)
+    registry.register_action("get_workflow_history", GetWorkflowHistoryAction)
     registry.register_action("flag_concerns", StubFlagConcerns)
     registry.register_action("record_dilemma_resolution", RecordDilemmaResolutionAction)
     registry.register_action("workflow_selector", StubWorkflowSelector)
     registry.register_action("workflow_creator", StubWorkflowSelector)  # not reached
     registry.register_action("workflow_variant_creator", StubWorkflowSelector)  # not reached
-    registry.register_action("execute_goal_workflow", StubExecuteWorkflow)
+    registry.register_action("execute_goal_workflow", execute_class or StubExecuteWorkflow)
     registry.register_action("assess_and_record", StubAssessAndRecord)
     registry.register_action("llm_call", StubLLMCall)
     registry.register_action("update_conceptual_memory", StubUpdateConceptualMemory)
+    registry.register_action("propagate_failure", PropagateFailureAction)
     registry.register_action("record_ethics_review", RecordEthicsReviewAction)
     registry.register_action("record_ethics_rejection", RecordEthicsRejectionAction)
     return registry
@@ -224,6 +248,26 @@ class TestEthicsWorkflowIntegration:
         # No pending human tasks
         pending = await engine.get_pending_tasks(process.id)
         assert len(pending) == 0
+
+    async def test_failed_goal_workflow_is_recorded_then_fails_process(self, definition):
+        """#140: a failed goal run still runs assess/learn, then the loop ends FAILED."""
+        registry = _make_registry(StubEthicsGateApprove, StubExecuteWorkflowFails)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry)
+
+        process = await engine.create_process(
+            definition,
+            properties={"goal": "Write a poem", "available_workflows": []},
+        )
+        await engine.start_process(process.id)
+
+        process = await store.load_process(process.id)
+        assert process.properties["assessed_with"] == {"success": "False", "error": "boom"}
+        assert process.properties["ethics_post_assessment"] is not None
+        assert process.properties["conceptual_memory_update"] == {"updated": True}
+        assert process.state == ProcessState.FAILED
+        assert process.properties["__error__"] == "boom"
+        assert process.properties["__failed_task__"] == "report_outcome"
 
     async def test_concerns_flagged_during_planning(self, definition):
         """flag_concerns runs in the planning phase and records concerns on the process."""
@@ -574,3 +618,88 @@ class TestContinuationRouting:
         )
         assert props["continuation_decision"] == "existing_workflow"
         assert "__task_output_select_workflow" in props
+
+
+# ---------------------------------------------------------------------------
+# F138: workflow history routing through the real main loop
+# ---------------------------------------------------------------------------
+
+
+class EchoGoal(TaskAction):
+    """Child workflow task: records the goal it was given as its result."""
+
+    async def run(self, task, context):
+        context.set_process_property("answer", context.get_process_property("goal"))
+        return TaskResult.ok(output="done")
+
+
+class _ChildLibrary:
+    """Library returning a one-task child workflow for 'Test Workflow'."""
+
+    def get_workflow(self, name):
+        from zebra.core.models import ProcessDefinition, TaskDefinition
+
+        assert name == "Test Workflow"
+        return ProcessDefinition(
+            id="echo_wf",
+            name="Test Workflow",
+            first_task_id="echo",
+            properties={"result_key": "answer"},
+            tasks={"echo": TaskDefinition(id="echo", name="Echo", action="echo_goal")},
+        )
+
+
+class TestHistoryRouting:
+    """assess_history_need → [get_workflow_history] → ethics_input_gate (F138)."""
+
+    async def _run(self, definition, goal, provider=None):
+        from zebra_tasks.agent.execute_workflow import ExecuteGoalWorkflowAction
+
+        from zebra_agent.metrics import WorkflowRun
+        from zebra_agent.storage import InMemoryMetricsStore
+
+        metrics = InMemoryMetricsStore()
+        past = WorkflowRun.create("Research", "Compare pension providers")
+        past.success = True
+        past.output = "Vanguard has the lowest fees"
+        await metrics.record_run(past)
+
+        registry = _make_registry(StubEthicsGateApprove)
+        registry.register_action("execute_goal_workflow", ExecuteGoalWorkflowAction)
+        registry.register_action("echo_goal", EchoGoal)
+        store = InMemoryStore()
+        engine = WorkflowEngine(
+            store,
+            registry,
+            extras={"__workflow_library__": _ChildLibrary(), "__metrics_store__": metrics},
+        )
+        process = await engine.create_process(
+            definition, properties={"goal": goal, "available_workflows": []}
+        )
+        with patch(
+            "zebra_tasks.agent.history.get_provider",
+            return_value=provider or _llm_returning({}),
+        ) as get_provider:
+            await engine.start_process(process.id)
+        process = await store.load_process(process.id)
+        assert process.state == ProcessState.COMPLETE
+        return process.properties, get_provider
+
+    async def test_needs_history_reaches_child_goal(self, definition):
+        provider = _llm_returning({"needs_history": True, "since": "-7d", "text": "pension"})
+        props, _ = await self._run(
+            definition, "What did I ask you about pensions last week?", provider
+        )
+        assert props["history_need"]["needs_history"] is True
+        assert props["workflow_history"]["count"] == 1
+        child_goal = props["execution_result"]["output"]
+        assert child_goal.startswith("What did I ask you about pensions last week?")
+        assert "<workflow_history>" in child_goal
+        assert "Vanguard has the lowest fees" in child_goal
+
+    async def test_no_history_leaves_goal_untouched(self, definition):
+        props, get_provider = await self._run(definition, "Write a poem")
+        get_provider.assert_not_called()
+        assert "__task_output_get_workflow_history" not in props
+        assert "workflow_history" not in props
+        assert props["execution_result"]["output"] == "Write a poem"

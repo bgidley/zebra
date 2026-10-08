@@ -801,6 +801,63 @@ class TestContinuationChain:
         assert got.continuation_decision == "same_workflow"
 
 
+class TestSearchRuns:
+    """Tests for MetricsStore.search_runs (F138)."""
+
+    async def _seed(self, metrics):
+        specs = [
+            ("Research", "Compare Pension providers", datetime(2026, 10, 1, tzinfo=UTC), True),
+            ("Research", "pension tax relief", datetime(2026, 10, 3, tzinfo=UTC), False),
+            ("Haiku", "write a haiku about autumn", datetime(2026, 10, 5, tzinfo=UTC), True),
+        ]
+        runs = []
+        for workflow, goal, started, success in specs:
+            run = WorkflowRun.create(workflow, goal)
+            run.started_at = started
+            run.success = success
+            await metrics.record_run(run)
+            runs.append(run)
+        return runs
+
+    async def test_no_filters_returns_all_newest_first(self, metrics):
+        oct1, oct3, oct5 = await self._seed(metrics)
+        runs = await metrics.search_runs()
+        assert [r.id for r in runs] == [oct5.id, oct3.id, oct1.id]
+
+    async def test_date_window_since_inclusive_until_exclusive(self, metrics):
+        _, oct3, _ = await self._seed(metrics)
+        runs = await metrics.search_runs(
+            since=datetime(2026, 10, 2, tzinfo=UTC), until=datetime(2026, 10, 5, tzinfo=UTC)
+        )
+        assert [r.id for r in runs] == [oct3.id]
+
+    async def test_since_is_inclusive(self, metrics):
+        _, _, oct5 = await self._seed(metrics)
+        runs = await metrics.search_runs(since=datetime(2026, 10, 5, tzinfo=UTC))
+        assert [r.id for r in runs] == [oct5.id]
+
+    async def test_text_is_case_insensitive(self, metrics):
+        oct1, oct3, _ = await self._seed(metrics)
+        runs = await metrics.search_runs(text="PENSION")
+        assert [r.id for r in runs] == [oct3.id, oct1.id]
+
+    async def test_combined_filters(self, metrics):
+        oct1, _, _ = await self._seed(metrics)
+        runs = await metrics.search_runs(
+            text="pension",
+            since=datetime(2026, 9, 1, tzinfo=UTC),
+            workflow_name="Research",
+            success=True,
+        )
+        assert [r.id for r in runs] == [oct1.id]
+
+    async def test_limit_is_capped(self, metrics):
+        for i in range(205):
+            await metrics.record_run(WorkflowRun.create("W", f"goal {i}"))
+        assert len(await metrics.search_runs(limit=10000)) == 200
+        assert len(await metrics.search_runs()) == 20
+
+
 class TestContinuationRate:
     """Per-workflow continuation rate (#137)."""
 
