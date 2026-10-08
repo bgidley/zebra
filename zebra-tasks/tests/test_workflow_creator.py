@@ -158,8 +158,7 @@ async def test_system_prompt_describes_engine_semantics(task, context):
 
     system_prompt = provider.complete.call_args.kwargs["messages"][0].content
     for phrase in (
-        "{{output_key.field}}",
-        "__task_output_<task_id>",
+        "{{__task_output_<task_id>.<field>}}",
         "parallel: true",
         "synchronized: true",
         "shown to the user as a button",
@@ -168,3 +167,38 @@ async def test_system_prompt_describes_engine_semantics(task, context):
         assert phrase in system_prompt
     assert "use an enum field and conditional routings" not in system_prompt
     assert provider.complete.call_args.kwargs["temperature"] == 0.3
+
+
+async def test_route_name_after_llm_call_is_rejected(task, context):
+    bad_yaml = _VALID_YAML.replace(
+        "routings:\n  - from: gather\n    to: calculate\n",
+        "  done:\n    name: Done\n    action: llm_call\n    properties:\n      prompt: x\n"
+        "routings:\n  - from: gather\n    to: calculate\n"
+        "  - from: calculate\n    to: done\n    condition: route_name\n    name: ok\n",
+    )
+
+    result, _ = await _run(task, context, _response(bad_yaml))
+
+    assert result.success is False
+    assert "llm_call tasks never choose a route" in result.error
+
+
+def test_prompt_template_forms_resolve():
+    """The Data Flow forms the prompt teaches must resolve with the real resolver."""
+    from zebra.tasks.base import ExecutionContext
+
+    process = MagicMock()
+    process.properties = {
+        # As kagi_search stores them: main value under output_key, full output separately.
+        "search_results": [{"url": "https://a.example"}],
+        "__task_output_search": {"results": [{"url": "https://a.example"}], "total": 1},
+        "__task_output_get_input": {"description": "broken login"},
+    }
+    ctx = ExecutionContext(
+        engine=None, store=None, process=process, process_definition=None, task_definition=None
+    )
+
+    assert "https://a.example" in ctx.resolve_template("{{search_results}}")
+    assert ctx.resolve_template("{{__task_output_search.total}}") == "1"
+    assert ctx.resolve_template("{{__task_output_get_input.description}}") == "broken login"
+    assert "broken login" in ctx.resolve_template("{{get_input.output}}")

@@ -26,6 +26,14 @@ def check_generated_workflow(response: LLMResponse, definition: ProcessDefinitio
     if response.finish_reason in TRUNCATED_FINISH_REASONS:
         return "LLM output was truncated (hit max_tokens)"
     errors = validate_definition(definition)
+    # llm_call never sets next_route, so a route_name routing from it can never fire.
+    for routing in definition.routings:
+        source = definition.tasks.get(routing.source_task_id)
+        if routing.condition == "route_name" and source and source.action == "llm_call":
+            errors.append(
+                f"Routing from '{routing.source_task_id}' uses condition route_name, "
+                "but llm_call tasks never choose a route"
+            )
     if errors:
         return "; ".join(errors)
     return None
@@ -146,7 +154,7 @@ tasks:
         Goal: {{goal}}
 
         Search results:
-        {{search_results.results}}
+        {{search_results}}
 
         Write a one-page briefing that answers the goal, citing URLs.
       output_key: briefing
@@ -159,14 +167,15 @@ routings:
 ## Data Flow
 
 - `{{goal}}` is the user's goal text.
-- A task's `output_key` names the process property its result is stored under.
-  Later tasks read it with `{{output_key}}`.
-- `llm_call` stores its response text (a string) under `output_key`. With
-  `response_format: json` it stores the parsed JSON object instead.
-- Other actions store a dict whose fields are listed under "Outputs" below;
-  read one field with `{{output_key.field}}` (e.g. `{{search_results.results}}`).
-- Every task's raw result is also stored as `__task_output_<task_id>`. Human
-  tasks ignore `output_key`, so read their form fields with
+- A task's `output_key` names the process property holding the action's main
+  value. Later tasks read it with `{{output_key}}`. The main value is
+  `llm_call`'s response text (or the parsed object with `response_format: json`),
+  the result list for searches, file content for `file_read`, and so on.
+- Every task's full result — the fields listed under "Outputs" below — is stored
+  as `__task_output_<task_id>`. Read one field with
+  `{{__task_output_<task_id>.<field>}}` (e.g. `{{__task_output_search.total}}`).
+  If the main value is itself an object, `{{output_key.field}}` also works.
+- Human tasks ignore `output_key`: read their form fields with
   `{{__task_output_<task_id>.<field>}}`, or the whole form with `{{<task_id>.output}}`.
 
 ## Routing
