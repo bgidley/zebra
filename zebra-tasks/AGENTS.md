@@ -281,7 +281,7 @@ Execute a workflow by name and capture its output.
 |----------|------|---------|-------------|
 | `workflow_name` | string | - | Name of workflow to execute |
 | `goal` | string | - | Goal to pass to workflow |
-| `timeout` | float | 120 | Max execution time in seconds |
+| `timeout` | float | 120 | Max execution time in seconds — enforced on the child's inline run via `start_process_with_timeout` (#142); the Agent Main Loop sets 600 |
 | `output_key` | string | "execution_result" | Where to store result |
 | `continue_on_failure` | bool | false | On child failure/timeout/error, complete with `success: false` + `error` in the output instead of failing the task, so downstream tasks still run (#140) |
 

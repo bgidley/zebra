@@ -2,7 +2,8 @@
 
 ``WorkflowEngine.start_process`` runs every auto task inline, so the daemon
 runs it as a background task and only waits until the goal finishes or parks on
-a human task. Parked goals stay tracked; each tick reconciles tracked goals that
+a human task. The background run is bounded by ``goal_timeout`` (#142) via
+``start_process_with_timeout``. Parked goals stay tracked; each tick reconciles tracked goals that
 have since reached COMPLETE/FAILED so their outcome is recorded exactly once.
 """
 
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Literal
 from zebra.core.models import ProcessState
 
 from zebra_agent.human_tasks import find_pending_human_task
+from zebra_agent.loop import DEFAULT_GOAL_TIMEOUT
 
 if TYPE_CHECKING:
     from zebra.core.engine import WorkflowEngine
@@ -31,6 +33,10 @@ DAEMON_STARTED_KEY = "__daemon_started__"
 
 _TERMINAL = {ProcessState.COMPLETE, ProcessState.FAILED}
 
+# How long cancel_active waits for a goal to honour its cancel reason before
+# hard-cancelling the task; the bounded start polls the reason every second.
+_CANCEL_GRACE_SECONDS = 5.0
+
 WaitOutcome = Literal["finished", "awaiting_human", "stalled", "halted"]
 
 
@@ -41,6 +47,7 @@ class TrackedGoal:
     process_id: str
     run_id: str
     task: asyncio.Task | None = None
+    cancel_reason: str | None = None
 
     @property
     def executing(self) -> bool:
@@ -51,8 +58,9 @@ class TrackedGoal:
 class GoalTracker:
     """Track daemon-started goals across ticks."""
 
-    def __init__(self, engine: WorkflowEngine) -> None:
+    def __init__(self, engine: WorkflowEngine, goal_timeout: float = DEFAULT_GOAL_TIMEOUT) -> None:
         self._engine = engine
+        self._goal_timeout = goal_timeout
         self._goals: dict[str, TrackedGoal] = {}
         self._seeded = False
 
@@ -76,13 +84,24 @@ class GoalTracker:
                 logger.info("GoalTracker: resumed tracking goal %s", process.id[:12])
 
     async def start(self, process: ProcessInstance) -> TrackedGoal:
-        """Mark *process* as daemon-started and run it in a background task."""
+        """Mark *process* as daemon-started and run it in a background task.
+
+        The run is failed if its auto tasks exceed ``goal_timeout`` or once
+        ``cancel_active`` sets the goal's ``cancel_reason`` (#142).
+        """
         process.properties[DAEMON_STARTED_KEY] = True
         await self._engine.store.save_process(process)
-        task = asyncio.create_task(
-            self._engine.start_process(process.id), name=f"goal-{process.id[:12]}"
+        goal = TrackedGoal(process.id, process.properties.get("run_id", "-"))
+
+        async def cancel_check() -> str | None:
+            return goal.cancel_reason
+
+        goal.task = asyncio.create_task(
+            self._engine.start_process_with_timeout(
+                process.id, self._goal_timeout, cancel_check=cancel_check
+            ),
+            name=f"goal-{process.id[:12]}",
         )
-        goal = TrackedGoal(process.id, process.properties.get("run_id", "-"), task)
         self._goals[process.id] = goal
         return goal
 
@@ -167,12 +186,18 @@ class GoalTracker:
         """
         cancelled = []
         for goal in await self.active_goals():
-            goal.task.cancel()
+            # The bounded start fails the process with this reason on its next poll.
+            goal.cancel_reason = reason
+            await asyncio.wait({goal.task}, timeout=_CANCEL_GRACE_SECONDS)
+            if not goal.task.done():
+                goal.task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await goal.task
             goal.task = None
             try:
-                await self._engine.fail_process(goal.process_id, reason)
+                process = await self._engine.store.load_process(goal.process_id)
+                if process is not None and process.state not in _TERMINAL:
+                    await self._engine.fail_process(goal.process_id, reason)
             except Exception:
                 logger.exception("Failed to fail cancelled goal %s", goal.process_id[:12])
             del self._goals[goal.process_id]

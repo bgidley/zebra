@@ -26,6 +26,14 @@ def check_generated_workflow(response: LLMResponse, definition: ProcessDefinitio
     if response.finish_reason in TRUNCATED_FINISH_REASONS:
         return "LLM output was truncated (hit max_tokens)"
     errors = validate_definition(definition)
+    # llm_call never sets next_route, so a route_name routing from it can never fire.
+    for routing in definition.routings:
+        source = definition.tasks.get(routing.source_task_id)
+        if routing.condition == "route_name" and source and source.action == "llm_call":
+            errors.append(
+                f"Routing from '{routing.source_task_id}' uses condition route_name, "
+                "but llm_call tasks never choose a route"
+            )
     if errors:
         return "; ".join(errors)
     return None
@@ -119,27 +127,69 @@ Create workflow definitions in YAML format.
 ## Workflow Structure
 
 ```yaml
-name: "Workflow Name"
-description: "What this workflow does"
-tags: ["tag1", "tag2"]
+name: "Topic Briefing"
+description: "Research a topic on the web and write a short briefing"
+tags: ["research", "summary"]
 version: 1
-first_task: task_id
-result_key: final_output   # the output_key of the task whose value is the main result
+first_task: search
+result_key: briefing   # output_key of the task whose value is the main result
 
 tasks:
-  task_id:
-    name: "Task Display Name"
+  search:
+    name: "Search the Web"
+    action: kagi_search
+    auto: true
+    properties:
+      query: "{{goal}}"
+      limit: 5
+      output_key: search_results
+
+  write_briefing:
+    name: "Write Briefing"
     action: llm_call
     auto: true
     properties:
-      system_prompt: "Instructions for the LLM"
-      prompt: "{{goal}}"
-      output_key: final_output
+      system_prompt: "You write concise, well-sourced briefings in markdown."
+      prompt: |
+        Goal: {{goal}}
+
+        Search results:
+        {{search_results}}
+
+        Write a one-page briefing that answers the goal, citing URLs.
+      output_key: briefing
 
 routings:
-  - from: task1_id
-    to: task2_id
+  - from: search
+    to: write_briefing
 ```
+
+## Data Flow
+
+- `{{goal}}` is the user's goal text.
+- A task's `output_key` names the process property holding the action's main
+  value. Later tasks read it with `{{output_key}}`. The main value is
+  `llm_call`'s response text (or the parsed object with `response_format: json`),
+  the result list for searches, file content for `file_read`, and so on.
+- Every task's full result — the fields listed under "Outputs" below — is stored
+  as `__task_output_<task_id>`. Read one field with
+  `{{__task_output_<task_id>.<field>}}` (e.g. `{{__task_output_search.total}}`).
+  If the main value is itself an object, `{{output_key.field}}` also works.
+- Human tasks ignore `output_key`: read their form fields with
+  `{{__task_output_<task_id>.<field>}}`, or the whole form with `{{<task_id>.output}}`.
+
+## Routing
+
+- Routings run when the `from` task completes. Serial routings (the default)
+  stop at the first one that fires: two plain routings from one task go to the
+  first `to` only.
+- Use `parallel: true` on each routing to run branches at the same time, and
+  `synchronized: true` on the task where they meet so it waits for all of them.
+- `condition: route_name` routings fire only when the task picks that route
+  `name`. Only human tasks (auto: false) can pick a route: each route name is
+  shown to the user as a button. Never put `route_name` routings after an
+  automated task such as `llm_call`; they will never fire and the workflow fails.
+- A task with no outgoing routings ends the workflow.
 
 """
 
@@ -187,7 +237,9 @@ Example:
             default: medium
 ```
 
-For yes/no decisions, use an enum field and conditional routings:
+For yes/no (or any multi-way) decisions, give the human task `route_name`
+routings. Each routing `name` becomes a button on the form; the button the user
+clicks decides the route. Do not add a form field for the decision itself:
 ```yaml
 routings:
   - from: review
@@ -205,9 +257,10 @@ routings:
 1. Use descriptive task IDs (e.g., "analyze", "generate", "refine", "review")
 2. Always include description and tags for discoverability
 3. Use {{goal}} to reference the user's input
-4. Use {{previous_output_key}} to chain task outputs
+4. Chain tasks through `output_key` values as described in "Data Flow"
 5. Keep workflows focused - do one thing well
-6. For multi-step workflows, use routings to connect tasks
+6. For multi-step workflows, use routings to connect tasks; every task except
+   `first_task` must be the `to` of at least one routing
 7. Use human input tasks (auto: false) when the workflow needs information from
    the user, a review/approval step, or any decision that should not be automated
 8. Prefer human input tasks over llm_call when the user should provide or verify
@@ -216,6 +269,10 @@ routings:
    main human-readable result (the answer, recommendation, plan, etc.). This is
    what the UI displays as the workflow output — it should be a clear, readable
    string (markdown is fine), not a raw dict or intermediate value.
+10. Only use actions that change things outside the workflow (file_write,
+    file_move, file_copy, file_delete, python_exec, notifications) when the goal
+    explicitly asks for that effect. Put a human review task before any step
+    that deletes, overwrites or sends something.
 
 ## Output
 
@@ -286,27 +343,20 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
         try:
             actions_section = context.engine.actions.format_for_prompt(user_facing_only=True)
             system_prompt = self._PROMPT_HEADER + actions_section + self._PROMPT_FOOTER
-            response = await provider.complete(
-                messages=[
-                    Message.system(system_prompt),
-                    Message.user(prompt),
-                ],
-                temperature=0.7,  # Higher temperature for creativity
-                max_tokens=GENERATED_WORKFLOW_MAX_TOKENS,
-            )
-
-            yaml_content = response.content or ""
-
-            # Clean up response - remove markdown code blocks if present
-            yaml_content = self._extract_yaml(yaml_content)
-
-            # Validate by parsing
-            try:
-                definition = load_definition_from_yaml(yaml_content)
-            except Exception as e:
-                return TaskResult.fail(f"Generated invalid workflow YAML: {e}")
-
-            problem = check_generated_workflow(response, definition)
+            messages = [Message.system(system_prompt), Message.user(prompt)]
+            yaml_content, definition, problem, truncated = await self._generate(provider, messages)
+            if problem and not truncated:
+                # One repair round: show the LLM its YAML and the error.
+                messages = messages + [
+                    Message.assistant(yaml_content),
+                    Message.user(
+                        f"That workflow is invalid: {problem}\n"
+                        "Return the corrected workflow as YAML only."
+                    ),
+                ]
+                yaml_content, definition, problem, truncated = await self._generate(
+                    provider, messages
+                )
             if problem:
                 return TaskResult.fail(f"Generated invalid workflow: {problem}")
 
@@ -347,6 +397,28 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
 
         except Exception as e:
             return TaskResult.fail(f"Workflow creation failed: {e}")
+
+    async def _generate(
+        self, provider, messages: list[Message]
+    ) -> tuple[str, ProcessDefinition | None, str | None, bool]:
+        """Ask the LLM for a workflow and check it.
+
+        Returns:
+            (yaml, definition, problem, truncated) — ``problem`` is None when the
+            workflow is valid; ``truncated`` is True when the output hit max_tokens.
+        """
+        response = await provider.complete(
+            messages=messages,
+            temperature=0.3,  # Structured output; creativity lives in the workflow's own tasks
+            max_tokens=GENERATED_WORKFLOW_MAX_TOKENS,
+        )
+        yaml_content = self._extract_yaml(response.content or "")
+        truncated = response.finish_reason in TRUNCATED_FINISH_REASONS
+        try:
+            definition = load_definition_from_yaml(yaml_content)
+        except Exception as e:
+            return yaml_content, None, f"YAML did not load: {e}", truncated
+        return yaml_content, definition, check_generated_workflow(response, definition), truncated
 
     def _extract_yaml(self, content: str) -> str:
         """Extract YAML from content, removing markdown code blocks."""

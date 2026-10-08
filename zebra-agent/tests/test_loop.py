@@ -337,6 +337,7 @@ class TestProcessGoalSuccess:
 
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
 
         loop = AgentLoop(
@@ -376,6 +377,7 @@ class TestProcessGoalFailure:
 
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
 
         loop = AgentLoop(
@@ -402,6 +404,7 @@ class TestProcessGoalFailure:
 
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
         # Running with no human task pending anywhere in the tree
         mock_engine.store.load_definition = AsyncMock(return_value=None)
@@ -443,6 +446,7 @@ class TestProcessGoalWithProgressCallback:
 
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
 
         loop = AgentLoop(
@@ -484,6 +488,7 @@ class TestProcessGoalWithRunId:
 
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
 
         loop = AgentLoop(
@@ -522,6 +527,7 @@ class TestProcessGoalPassesStores:
 
         mock_engine.create_process = AsyncMock(side_effect=capture_create_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
 
         mock_process = MagicMock()
         mock_process.state = ProcessState.COMPLETE
@@ -606,6 +612,7 @@ routings: []
 
         mock_engine.create_process = AsyncMock(side_effect=capture_create_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
 
         mock_process = MagicMock()
         mock_process.state = ProcessState.COMPLETE
@@ -658,6 +665,7 @@ class TestProcessGoalContinuation:
 
         mock_engine.create_process = AsyncMock(side_effect=capture)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=done)
         loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics)
         await loop.process_goal("g", **kwargs)
@@ -711,6 +719,7 @@ class TestProcessGoalSurfacesTaskErrors:
         ok_task = MagicMock(task_definition_id="check_memory", state=TaskState.COMPLETE)
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
         mock_engine.store.load_tasks_for_process = AsyncMock(
             return_value=[
@@ -745,6 +754,7 @@ class TestProcessGoalSurfacesTaskErrors:
         }
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
 
         loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics)
@@ -771,6 +781,7 @@ class TestProcessGoalSurfacesTaskErrors:
 
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
         mock_engine.store.load_tasks_for_process = AsyncMock(return_value=[])
 
@@ -793,6 +804,7 @@ class TestProcessGoalSurfacesTaskErrors:
 
         mock_engine.create_process = AsyncMock(return_value=mock_process)
         mock_engine.start_process = AsyncMock()
+        mock_engine.start_process_with_timeout = AsyncMock()
         mock_engine.store.load_process = AsyncMock(return_value=mock_process)
         mock_engine.store.load_tasks_for_process = AsyncMock(
             return_value=[self._failed_task("select_workflow", None)]
@@ -803,3 +815,51 @@ class TestProcessGoalSurfacesTaskErrors:
 
         assert result.success is False
         assert result.error == "select_workflow: failed (no error recorded)"
+
+
+class TestProcessGoalTimeout:
+    """process_goal bounds the inline auto-task chain (#142)."""
+
+    async def test_slow_loop_is_failed_at_goal_timeout(self, library, library_path, metrics):
+        import asyncio
+
+        from zebra.core.engine import WorkflowEngine
+        from zebra.core.models import TaskResult
+        from zebra.storage.memory import InMemoryStore
+        from zebra.tasks.base import TaskAction
+        from zebra.tasks.registry import ActionRegistry
+
+        class SlowAction(TaskAction):
+            async def run(self, task, context):
+                await asyncio.sleep(30)
+                return TaskResult.ok(output="too late")
+
+        (library_path / "agent_main_loop.yaml").write_text(
+            """name: "Agent Main Loop"
+tags: ["system"]
+version: 1
+first_task: slow
+tasks:
+  slow:
+    name: "Slow Step"
+    action: slow
+    auto: true
+routings: []
+"""
+        )
+        registry = ActionRegistry()
+        registry.register_action("slow", SlowAction)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry)
+        agent = AgentLoop(library=library, engine=engine, metrics=metrics, goal_timeout=0.2)
+
+        loop = asyncio.get_running_loop()
+        began = loop.time()
+        result = await agent.process_goal("Do the thing")
+
+        assert loop.time() - began < 5
+        assert result.success is False
+        assert "Timed out after 0.2s" in result.error
+        (process,) = await store.get_processes_by_state(ProcessState.FAILED)
+        tasks = await store.load_tasks_for_process(process.id)
+        assert [t.state for t in tasks] == [TaskState.FAILED]

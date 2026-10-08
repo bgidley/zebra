@@ -226,6 +226,8 @@ ZEBRA_AGENT_SETTINGS = {
     "DAEMON_POLL_INTERVAL": int(os.environ.get("ZEBRA_DAEMON_POLL_INTERVAL", "30")),
     "BUDGET_RESET_HOUR": int(os.environ.get("ZEBRA_BUDGET_RESET_HOUR", "0")),
     "GOAL_COST_WARNING_USD": float(os.environ.get("ZEBRA_GOAL_COST_WARNING_USD", "5.00")),
+    # Max seconds a goal's auto-task chain may run before it is failed (#142)
+    "GOAL_TIMEOUT_SECONDS": float(os.environ.get("ZEBRA_GOAL_TIMEOUT_SECONDS", "900")),
     # Candidate values tags confirmed at least this many times are suggested for promotion (#106)
     "VALUES_TAG_PROMOTION_THRESHOLD": int(
         os.environ.get("ZEBRA_VALUES_TAG_PROMOTION_THRESHOLD", "3")

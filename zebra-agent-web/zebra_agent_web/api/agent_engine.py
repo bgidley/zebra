@@ -77,7 +77,7 @@ async def _async_init() -> None:
 
     # Import here to avoid issues at module load time
     from zebra_agent.library import WorkflowLibrary
-    from zebra_agent.loop import AgentLoop
+    from zebra_agent.loop import DEFAULT_GOAL_TIMEOUT, AgentLoop
 
     from zebra_agent_web.api.engine import ensure_initialized as ensure_workflow_engine
     from zebra_agent_web.api.engine import get_engine
@@ -188,6 +188,7 @@ async def _async_init() -> None:
         knowledge=_knowledge,
         provider=get_llm_provider_name(),
         model=agent_settings.get("LLM_MODEL"),
+        goal_timeout=agent_settings.get("GOAL_TIMEOUT_SECONDS", DEFAULT_GOAL_TIMEOUT),
     )
 
     logger.info("Zebra agent initialized successfully")

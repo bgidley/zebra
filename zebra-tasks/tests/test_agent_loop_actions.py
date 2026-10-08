@@ -527,6 +527,7 @@ class TestExecuteGoalWorkflowAction:
         engine = MagicMock()
         engine.create_process = AsyncMock()
         engine.start_process = AsyncMock()
+        engine.start_process_with_timeout = AsyncMock()
         return engine
 
     @pytest.fixture
