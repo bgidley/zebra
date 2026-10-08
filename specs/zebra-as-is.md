@@ -210,7 +210,7 @@ The dream cycle's `workflow_curator` runs before `load_workflows`. Rules, in pri
 
 Workflows tagged `system`, and the core system names, are never touched. A per-cycle cap defers the rest, and dry run changes nothing. Settings come from task properties, then `ZEBRA_CURATOR_*` env vars (`MIN_RUNS` 5, `MIN_SUCCESS_RATE` 0.3, `UNUSED_DAYS` 30, `MAX_RETIRE_PER_CYCLE` 5, `DRY_RUN` false, `DETECT_DUPLICATES` true). The `curation` report feeds the v5 summary.
 
-The web library page lists retired workflows with a Restore button. The detail page has Retire / Restore buttons and a retired banner (`/workflows/<name>/retire/`, `/restore/`). Spec: `openspec/changes/workflow-curation`.
+The web library page lists retired workflows with a Restore button. The detail page has Retire / Restore buttons and a retired banner (`/workflows/<name>/retire/`, `/restore/`). Spec: [workflow-curation](../openspec/specs/workflow-curation/spec.md).
 
 `list_goal_workflows(library)` (`zebra_agent/library.py`) is the single builder of the selector's candidates: one dict per non-`system` workflow (`name`, `description`, `tags`, `success_rate` float, `use_count`, `use_when`). `AgentLoop.process_goal`, the web/daemon `api/goals.queue_goal` helper and the `queue_goal` action all use it for `available_workflows`. At selection time `workflow_selector` rebuilds the list from the live `__workflow_library__` (falling back to the queued property), so queued goals see workflows added since; the prompt shows "N/A" success for never-run workflows (#144).
 
