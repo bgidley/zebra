@@ -8,7 +8,7 @@ Provides commands to run the development and production servers:
 
 And the ``zebra`` terminal client (F34 / REQ-UI-003), which shares the same
 Oracle-backed stores as the web app:
-- zebra goal "<text>" [--model ...] [--queue] [--priority N]
+- zebra goal "<text>" [--model ...] [--queue] [--priority N] [--user NAME]
 - zebra goals [--limit N]
 """
 
@@ -116,14 +116,43 @@ def _check_backend(allow_sqlite: bool) -> None:
     sys.exit(1)
 
 
-async def _goal_async(text: str, model: str, queue: bool, priority: int) -> int:
-    """Run or queue a goal. Returns the process exit code."""
+async def _owner_kwargs(username: str | None) -> dict | None:
+    """Resolve ``--user`` to the ``user_id`` / ``identity`` goal kwargs (#151).
+
+    Returns ``{}`` when no user was given (goal runs without a user, as
+    before), the kwargs dict when the user exists, or None if it doesn't.
+    """
+    if not username:
+        return {}
+    from django.contrib.auth import get_user_model
+
+    from zebra_agent_web.api.identity import goal_identity
+
+    user = await get_user_model().objects.filter(username=username).afirst()
+    if user is None:
+        return None
+    return {"user_id": user.id, "identity": await goal_identity()}
+
+
+async def _goal_async(
+    text: str, model: str, queue: bool, priority: int, user: str | None = None
+) -> int:
+    """Run or queue a goal. Returns the process exit code.
+
+    ``user`` is a username; when given, the goal runs as that user so
+    user-scoped steps (knowledge, values profile, run ownership) apply.
+    """
     from zebra_agent_web.api import agent_engine
+
+    owner = await _owner_kwargs(user)
+    if owner is None:
+        print(f"Error: no user named '{user}'.", file=sys.stderr)
+        return 2
 
     if queue:
         from zebra_agent_web.api.goals import queue_goal
 
-        process = await queue_goal(text, model=model, priority=priority)
+        process = await queue_goal(text, model=model, priority=priority, **owner)
         print(f"Goal queued as process {process.id}")
         print("The budget daemon will start it when budget allows.")
         return 0
@@ -147,7 +176,7 @@ async def _goal_async(text: str, model: str, queue: bool, priority: int) -> int:
 
     try:
         result = await agent_loop.process_goal(
-            goal=text, model=model, run_id=run_id, progress_callback=progress
+            goal=text, model=model, run_id=run_id, progress_callback=progress, **owner
         )
     finally:
         agent_loop.provider_name = original_provider
@@ -218,6 +247,11 @@ def main() -> None:
         help="Queue priority 1 (highest) to 5 (default: 3; queue mode only)",
     )
     goal_p.add_argument(
+        "--user",
+        default=None,
+        help="Username to run the goal as (enables knowledge / values profile for that user)",
+    )
+    goal_p.add_argument(
         "--allow-sqlite",
         action="store_true",
         help="Permit running against the SQLite fallback database",
@@ -237,7 +271,9 @@ def main() -> None:
     _check_backend(args.allow_sqlite)
 
     if args.command == "goal":
-        exit_code = asyncio.run(_goal_async(args.text, args.model, args.queue, args.priority))
+        exit_code = asyncio.run(
+            _goal_async(args.text, args.model, args.queue, args.priority, user=args.user)
+        )
     else:
         exit_code = asyncio.run(_goals_async(args.limit))
     sys.exit(exit_code)

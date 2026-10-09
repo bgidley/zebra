@@ -29,13 +29,18 @@ class Command(BaseCommand):
             choices=["haiku", "sonnet", "opus", "kimi"],
             help="LLM model to use (default: haiku)",
         )
+        parser.add_argument(
+            "--user",
+            default=None,
+            help="Username to run the goal as (enables knowledge / values profile; #151)",
+        )
 
     def handle(self, *args, **options):
         goal = options["goal"]
         model = options["model"]
 
         try:
-            result = asyncio.run(self._run(goal, model))
+            result = asyncio.run(self._run(goal, model, options.get("user")))
         except Exception as e:
             self.stderr.write(self.style.ERROR(f"Goal failed: {e}"))
             logger.exception("run_goal management command failed")
@@ -54,8 +59,13 @@ class Command(BaseCommand):
             )
         )
 
-    async def _run(self, goal: str, model: str):
+    async def _run(self, goal: str, model: str, user: str | None = None):
         from zebra_agent_web.api import agent_engine
+        from zebra_agent_web.cli import _owner_kwargs
+
+        owner = await _owner_kwargs(user)
+        if owner is None:
+            raise ValueError(f"No user named '{user}'")
 
         await agent_engine.ensure_initialized()
         agent_loop = agent_engine.get_agent_loop()
@@ -71,6 +81,6 @@ class Command(BaseCommand):
             agent_loop.provider_name = provider
 
         try:
-            return await agent_loop.process_goal(goal=goal, model=model, run_id=run_id)
+            return await agent_loop.process_goal(goal=goal, model=model, run_id=run_id, **owner)
         finally:
             agent_loop.provider_name = original_provider

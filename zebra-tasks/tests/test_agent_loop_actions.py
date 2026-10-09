@@ -764,6 +764,44 @@ class TestExecuteGoalWorkflowAction:
         assert props["__llm_provider_name__"] == "anthropic"
         assert props["__llm_model__"] == "claude-3-opus"
 
+    async def test_inherits_submitting_user(
+        self,
+        mock_task,
+        mock_context,
+        mock_workflow_library,
+        mock_definition,
+        mock_engine,
+        mock_store,
+    ):
+        """#151: the goal workflow runs as the user who submitted the goal."""
+        from zebra.core.models import ProcessState
+
+        from zebra_tasks.agent.execute_workflow import ExecuteGoalWorkflowAction
+
+        mock_workflow_library.get_workflow.return_value = mock_definition
+        mock_context.extras["__workflow_library__"] = mock_workflow_library
+        mock_context.process.properties["__user_id__"] = 7
+        mock_context.process.properties["__user_display_name__"] = "Ben"
+        mock_context.process.properties["__user_identity_id__"] = "id-1"
+        mock_context.engine = mock_engine
+        mock_context.store = mock_store
+
+        mock_sub_process = MagicMock()
+        mock_sub_process.id = "sub-process-1"
+        mock_sub_process.state = ProcessState.COMPLETE
+        mock_sub_process.properties = {"result": "done"}
+        mock_engine.create_process.return_value = mock_sub_process
+        mock_store.load_process.return_value = mock_sub_process
+
+        mock_task.properties = {"workflow_name": "Test Workflow", "goal": "Test goal", "timeout": 5}
+
+        await ExecuteGoalWorkflowAction().run(mock_task, mock_context)
+
+        props = mock_engine.create_process.call_args[1]["properties"]
+        assert props["__user_id__"] == 7
+        assert props["__user_display_name__"] == "Ben"
+        assert props["__user_identity_id__"] == "id-1"
+
     async def test_injected_workflow_library(
         self,
         mock_task,

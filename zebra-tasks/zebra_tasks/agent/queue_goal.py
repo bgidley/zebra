@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.user_context import copy_user_properties
+
 logger = logging.getLogger(__name__)
 
 
@@ -115,6 +117,10 @@ class QueueGoalAction(TaskAction):
             ]
         if "__llm_model__" in context.process.properties:
             properties["__llm_model__"] = context.process.properties["__llm_model__"]
+
+        # Carry the submitting user over so the queued goal's user-scoped steps
+        # (consult_knowledge, profile/ethics context, run ownership) see them (#151)
+        copy_user_properties(context.process.properties, properties)
 
         try:
             # Create the process in CREATED state — do NOT start it
