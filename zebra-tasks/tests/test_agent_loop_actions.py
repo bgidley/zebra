@@ -407,6 +407,31 @@ class TestAssessAndRecordAction:
         assert recorded_run.id == "run-1"
         assert recorded_run.workflow_name == "Test Workflow"
         assert recorded_run.success is True
+        assert recorded_run.user_id is None  # no __user_id__ on the process
+
+    async def test_records_run_owner(self, mock_task, mock_context, mock_metrics_store):
+        """The run carries __user_id__ so the dream cycle can review per user (F153)."""
+        from unittest.mock import patch as mock_patch
+
+        from zebra_tasks.agent.assess_and_record import AssessAndRecordAction
+
+        mock_context.extras["__metrics_store__"] = mock_metrics_store
+        mock_context.process.properties["__user_id__"] = 7
+        mock_task.properties = {
+            "run_id": "run-1",
+            "workflow_name": "Test Workflow",
+            "goal": "Test goal",
+            "success": True,
+        }
+        mock_provider = MagicMock()
+        mock_provider.complete = AsyncMock(return_value=MagicMock(content="{}"))
+
+        with mock_patch(
+            "zebra_tasks.agent.assess_and_record.get_provider", return_value=mock_provider
+        ):
+            await AssessAndRecordAction().run(mock_task, mock_context)
+
+        assert mock_metrics_store.record_run.call_args[0][0].user_id == 7
 
     async def test_records_long_output_untruncated(
         self, mock_task, mock_context, mock_metrics_store

@@ -2,7 +2,7 @@ name: "Dream Cycle"
 description: "Self-improvement cycle that analyzes performance, evaluates workflows, and optimizes the system"
 tags: ["system", "optimization", "self-improvement", "dream"]
 use_when: "Use this workflow periodically (e.g., daily) to review and improve the agent's capabilities"
-version: 5
+version: 6
 first_task: analyze_metrics
 
 tasks:
@@ -52,6 +52,20 @@ tasks:
       dry_run: false
       output_key: optimization_results
 
+  # Reviews each active user's personal knowledge against their runs since the
+  # last dream cycle (#153). Never fails the cycle; human entries only change
+  # through the contradiction / verification workflows it starts.
+  review_knowledge:
+    name: "Review Personal Knowledge"
+    action: review_knowledge
+    auto: true
+    properties:
+      lookback_days: 7
+      max_users: 20
+      max_runs_per_user: 20
+      max_changes_per_user: 10
+      output_key: knowledge_review
+
   generate_summary:
     name: "Generate Dream Cycle Summary"
     action: llm_call
@@ -91,6 +105,13 @@ tasks:
         Missing capabilities (needed a new workflow): {{metrics_analysis.continuation_analysis.capability_gaps}}
         Continuation-driven changes (status made/failed/skipped): {{optimization_results.continuation_changes}}
 
+        ### Knowledge
+        Users reviewed: {{knowledge_review.users_reviewed}} ({{knowledge_review.runs_reviewed}} runs)
+        Counts (added, updated, stale_flagged, merged, reinforced, contradictions_proposed,
+        verifications_proposed): {{knowledge_review.counts}}
+        Examples: {{knowledge_review.examples}}
+        Errors: {{knowledge_review.errors}}
+
         Provide a brief summary (3-5 sentences) of:
         1. Current system health
         2. Key improvements made — only those listed under "Changes made"
@@ -99,11 +120,14 @@ tasks:
            and which continuation-driven changes were made (status "made" only)
         5. Library curation: which workflows were retired and why (only entries with
            applied true were retired; in a dry run, say what would be retired)
-        6. Recommendations for future focus
+        6. Knowledge: entries added, updated, flagged stale, merged and reinforced (with
+           examples), and how many changes to user-entered facts were sent to the user
+           for confirmation instead of being applied
+        7. Recommendations for future focus
 
         Never describe a failed change as applied or as having fixed anything.
       temperature: 0.5
-      max_tokens: 700
+      max_tokens: 900
       output_key: dream_summary
 
 routings:
@@ -116,4 +140,6 @@ routings:
   - from: evaluate_workflows
     to: optimize_workflows
   - from: optimize_workflows
+    to: review_knowledge
+  - from: review_knowledge
     to: generate_summary

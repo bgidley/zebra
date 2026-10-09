@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 MAX_RECORDED_OUTPUT_CHARS = 100_000
 
 
+def _owner_id(properties: dict) -> int | None:
+    """Return the run owner's user id from ``__user_id__``, or None (F153)."""
+    try:
+        return int(properties["__user_id__"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 class AssessAndRecordAction(TaskAction):
     """
     Combine metrics recording + LLM effectiveness assessment + workflow memory write.
@@ -235,6 +243,7 @@ Respond with JSON only:
                     model=context.process.properties.get("__llm_model__"),
                     extends_run_id=previous_run_id(context.process.properties),
                     **continuation_fields(context.process.properties),
+                    user_id=_owner_id(context.process.properties),
                 )
                 await metrics_store.record_run(run)
 
