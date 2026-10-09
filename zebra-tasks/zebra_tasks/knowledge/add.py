@@ -1,11 +1,95 @@
 """AddKnowledgeAction — store a knowledge entry with contradiction detection."""
 
 import logging
+from datetime import UTC, datetime
+from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 logger = logging.getLogger(__name__)
+
+
+async def store_knowledge_entry(
+    knowledge_store: Any,
+    *,
+    user_id: int,
+    category: str,
+    key: str,
+    value: str,
+    source: str = "agent",
+    time_sensitive: bool = False,
+    confidence: float | None = None,
+) -> dict[str, Any]:
+    """Store one knowledge entry with contradiction detection (shared core of add_knowledge).
+
+    Never overwrites an existing entry with a different value: that is reported
+    as a contradiction for the caller to resolve.
+
+    - No live entry for ``(user_id, category, key)``: create it. ``confidence``
+      defaults to 1.0.
+    - Same value: refresh ``last_verified``. A ``human`` write, or one without an
+      explicit ``confidence``, confirms the entry (confidence 1.0); an ``agent``
+      write with a ``confidence`` keeps the higher of the old and new confidence,
+      so agent re-observations never reach 1.0 on their own.
+    - Different value: write nothing.
+
+    Returns:
+        ``{status, entry_id, existing_value, existing_source}`` where ``status`` is
+        ``created``, ``refreshed`` or ``contradiction``.
+    """
+    from zebra_agent.knowledge import KnowledgeEntry
+
+    existing = await knowledge_store.find_contradicting_entry(user_id, category, key)
+
+    if existing is None:
+        entry = KnowledgeEntry.create(
+            user_id=user_id,
+            category=category,
+            key=key,
+            value=value,
+            source=source,
+            confidence=1.0 if confidence is None else confidence,
+            time_sensitive=time_sensitive,
+        )
+        await knowledge_store.add_entry(entry)
+        logger.info("store_knowledge_entry: stored new entry %s (%s)", entry.id, source)
+        return {
+            "status": "created",
+            "entry_id": entry.id,
+            "existing_value": "",
+            "existing_source": "",
+        }
+
+    if existing.value == value:
+        now = datetime.now(UTC)
+        existing.last_verified = now
+        existing.updated_at = now
+        if source == "human" or confidence is None:
+            existing.confidence = 1.0
+        else:
+            existing.confidence = max(existing.confidence, confidence)
+        await knowledge_store.update_entry(existing)
+        logger.info("store_knowledge_entry: refreshed existing entry %s", existing.id)
+        return {
+            "status": "refreshed",
+            "entry_id": existing.id,
+            "existing_value": existing.value,
+            "existing_source": existing.source,
+        }
+
+    logger.info(
+        "store_knowledge_entry: contradiction for key %r (existing=%r proposed=%r)",
+        key,
+        existing.value,
+        value,
+    )
+    return {
+        "status": "contradiction",
+        "entry_id": existing.id,
+        "existing_value": existing.value,
+        "existing_source": existing.source,
+    }
 
 
 class AddKnowledgeAction(TaskAction):
@@ -26,6 +110,7 @@ class AddKnowledgeAction(TaskAction):
         value: The knowledge value
         time_sensitive: Whether to apply confidence decay (default false)
         source: Entry source, "human" or "agent" (default "agent")
+        confidence: Confidence for a new entry (default 1.0)
 
     Output:
         - entry_id: ID of the stored entry (empty on contradiction or degraded)
@@ -60,6 +145,12 @@ class AddKnowledgeAction(TaskAction):
             required=False,
             default="agent",
         ),
+        ParameterDef(
+            name="confidence",
+            type="float",
+            description="Confidence for a new entry (default 1.0)",
+            required=False,
+        ),
     ]
 
     outputs = [
@@ -85,10 +176,6 @@ class AddKnowledgeAction(TaskAction):
     ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        from datetime import UTC, datetime
-
-        from zebra_agent.knowledge import KnowledgeEntry
-
         knowledge_store = context.extras.get("__knowledge_store__")
         if knowledge_store is None:
             logger.info("AddKnowledgeAction: no knowledge store — skipping")
@@ -122,66 +209,29 @@ class AddKnowledgeAction(TaskAction):
         value = task.properties.get("value", "")
         time_sensitive = task.properties.get("time_sensitive", False)
         source = task.properties.get("source", "agent")
+        confidence = task.properties.get("confidence")
 
         try:
-            existing = await knowledge_store.find_contradicting_entry(user_id, category, key)
-
-            if existing is not None:
-                if existing.value == value:
-                    # Same value — just refresh last_verified and confidence
-                    existing.last_verified = datetime.now(UTC)
-                    existing.confidence = 1.0
-                    await knowledge_store.update_entry(existing)
-                    logger.info("AddKnowledgeAction: refreshed existing entry %s", existing.id)
-                    return TaskResult(
-                        success=True,
-                        output={
-                            "entry_id": existing.id,
-                            "contradiction": False,
-                            "existing_value": "",
-                            "proposed_value": "",
-                        },
-                        next_route="stored",
-                    )
-                else:
-                    # Different value — contradiction
-                    logger.info(
-                        "AddKnowledgeAction: contradiction for key %r (existing=%r proposed=%r)",
-                        key,
-                        existing.value,
-                        value,
-                    )
-                    return TaskResult(
-                        success=True,
-                        output={
-                            "entry_id": existing.id,
-                            "contradiction": True,
-                            "existing_value": existing.value,
-                            "proposed_value": value,
-                        },
-                        next_route="contradiction",
-                    )
-
-            # No existing entry — create new
-            entry = KnowledgeEntry.create(
+            outcome = await store_knowledge_entry(
+                knowledge_store,
                 user_id=user_id,
                 category=category,
                 key=key,
                 value=value,
                 source=source,
                 time_sensitive=time_sensitive,
+                confidence=float(confidence) if confidence not in (None, "") else None,
             )
-            await knowledge_store.add_entry(entry)
-            logger.info("AddKnowledgeAction: stored new entry %s", entry.id)
+            contradiction = outcome["status"] == "contradiction"
             return TaskResult(
                 success=True,
                 output={
-                    "entry_id": entry.id,
-                    "contradiction": False,
-                    "existing_value": "",
-                    "proposed_value": "",
+                    "entry_id": outcome["entry_id"],
+                    "contradiction": contradiction,
+                    "existing_value": outcome["existing_value"] if contradiction else "",
+                    "proposed_value": value if contradiction else "",
                 },
-                next_route="stored",
+                next_route="contradiction" if contradiction else "stored",
             )
 
         except Exception as e:
