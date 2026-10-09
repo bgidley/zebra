@@ -11,6 +11,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.agent.history import with_workflow_history
+from zebra_tasks.agent.user_context import copy_user_properties
 
 if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
@@ -320,6 +321,9 @@ class ExecuteGoalWorkflowAction(TaskAction):
             ]
         if "__llm_model__" in context.process.properties:
             sub_properties["__llm_model__"] = context.process.properties["__llm_model__"]
+
+        # The goal workflow runs as the submitting user (trust gate, knowledge; #151)
+        copy_user_properties(context.process.properties, sub_properties)
 
         sub_process = await context.engine.create_process(definition, properties=sub_properties)
 

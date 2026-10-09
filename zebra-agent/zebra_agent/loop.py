@@ -131,6 +131,7 @@ class AgentLoop:
         user_id: int | None = None,
         previous_run_context: dict | None = None,
         continuation_comment: str | None = None,
+        identity: dict | None = None,
     ) -> AgentResult:
         """
         Process a user goal through the agent loop workflow.
@@ -150,12 +151,18 @@ class AgentLoop:
                 Called with (event_name, data_dict) at key points.
             run_id: Optional run ID to use (for tracking from external callers)
             model: Optional LLM model override for this run
-            user_id: Optional ID of the user who submitted the goal
+            user_id: Optional ID of the user who submitted the goal; stored as
+                ``__user_id__`` so user-scoped steps (consult_knowledge,
+                profile/ethics context, run ownership) can find it (#151)
             previous_run_context: Optional summary of a previous run this goal
                 follows up on (F116), built by build_previous_run_context()
             continuation_comment: Optional user comment on where the previous
                 run got to and what to do next (F134); requires
                 previous_run_context.
+            identity: Optional dict with ``user_display_name`` /
+                ``user_identity_id``, stored as ``__user_display_name__`` /
+                ``__user_identity_id__`` (same keys the web ``queue_goal``
+                helper writes).
 
         Returns:
             AgentResult with output, success status, tokens used, etc.
@@ -188,6 +195,9 @@ class AgentLoop:
             "__started_at__": datetime.now(UTC).isoformat(),
             "__user_id__": user_id,
         }
+        if identity is not None:
+            properties["__user_display_name__"] = identity.get("user_display_name", "")
+            properties["__user_identity_id__"] = identity.get("user_identity_id", "")
         if previous_run_context:
             properties["previous_run_context"] = previous_run_context
             if continuation_comment:
