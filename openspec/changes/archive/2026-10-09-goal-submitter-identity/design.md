@@ -24,6 +24,7 @@ sync helper and stays for sync template contexts.
 | `/run/execute/`, `/runs/<id>/continue/` (now) | `request.user` (already) | `await goal_identity()` |
 | `/run/queue/`, `/runs/<id>/continue/` (queue) | `request.user` (already) | `await goal_identity()` |
 | `queue_goal` action | copied from the parent process | copied from the parent process |
+| `execute_goal_workflow` (child goal workflow) | copied from the Agent Main Loop | copied |
 | `zebra goal`, `manage.py run_goal` | `--user NAME` | `goal_identity()` when `--user` is given |
 
 The budget daemon starts processes that already carry these properties, so it needs no change.

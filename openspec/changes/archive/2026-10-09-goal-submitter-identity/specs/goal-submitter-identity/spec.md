@@ -19,6 +19,10 @@ SHALL also carry `__user_display_name__` and `__user_identity_id__`.
 - **WHEN** the `queue_goal` action runs in a process that has `__user_id__`
 - **THEN** the queued goal process has the same `__user_id__`, display name and identity id
 
+#### Scenario: Executed goal workflow
+- **WHEN** the Agent Main Loop runs the selected goal workflow as a child process
+- **THEN** the child process has the same `__user_id__`, display name and identity id
+
 #### Scenario: CLI goal as a named user
 - **WHEN** `zebra goal "<text>" --user alice` is run and the user `alice` exists
 - **THEN** the goal process has `__user_id__` equal to alice's id

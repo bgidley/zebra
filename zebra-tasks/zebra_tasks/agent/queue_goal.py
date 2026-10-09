@@ -16,10 +16,9 @@ from datetime import UTC, datetime
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-logger = logging.getLogger(__name__)
+from zebra_tasks.agent.user_context import copy_user_properties
 
-# Submitter identity copied from the queuing process onto the queued goal (#151)
-_USER_PROPERTY_KEYS = ("__user_id__", "__user_display_name__", "__user_identity_id__")
+logger = logging.getLogger(__name__)
 
 
 class QueueGoalAction(TaskAction):
@@ -121,9 +120,7 @@ class QueueGoalAction(TaskAction):
 
         # Carry the submitting user over so the queued goal's user-scoped steps
         # (consult_knowledge, profile/ethics context, run ownership) see them (#151)
-        for key in _USER_PROPERTY_KEYS:
-            if key in context.process.properties:
-                properties[key] = context.process.properties[key]
+        copy_user_properties(context.process.properties, properties)
 
         try:
             # Create the process in CREATED state — do NOT start it

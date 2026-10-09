@@ -28,6 +28,9 @@ An audit of the other goal entry points found three more gaps:
   web goal views use `goal_identity()`, and `_execute_goal_background` forwards identity.
 - `QueueGoalAction` copies `__user_id__`, `__user_display_name__` and `__user_identity_id__` from
   the queuing process.
+- `ExecuteGoalWorkflowAction` copies the same keys onto the executed goal workflow, so trust
+  gates and knowledge tasks inside it see the user (found via Zebra feedback). Both actions use
+  `zebra_tasks/agent/user_context.py::copy_user_properties`.
 - `zebra goal --user NAME` and `manage.py run_goal --user NAME` run the goal as that user.
 
 ## Capabilities

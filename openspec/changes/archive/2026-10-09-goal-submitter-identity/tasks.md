@@ -17,6 +17,7 @@ Branch: `f151/api-goals-user-id`. Commits reference #151.
 
 - [x] 3.1 `QueueGoalAction` copies the user keys from the parent; tests in `zebra-tasks/tests/test_queue_goal.py`
 - [x] 3.2 `zebra goal --user` and `manage.py run_goal --user`
+- [x] 3.3 `ExecuteGoalWorkflowAction` copies the user keys onto the child goal workflow (shared `user_context.copy_user_properties`); test in `zebra-tasks/tests/test_agent_loop_actions.py`
 
 ## 4. Delivery
 
