@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 13
+version: 14
 first_task: consult_memory
 
 tasks:
@@ -279,6 +279,35 @@ tasks:
       effectiveness_notes: "{{assess_result.effectiveness_notes}}"
       output_key: conceptual_memory_update
 
+  # Step 10: Learn personal knowledge from the run (F152). Skips with no
+  # __user_id__; nothing personal in the run → no candidates → nothing stored.
+  extract_knowledge:
+    name: "Extract Personal Knowledge"
+    action: extract_knowledge
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      user_inputs: "{{execution_result.user_inputs}}"
+      continuation_comment: "{{continuation_comment}}"
+      result: "{{execution_result.output}}"
+      max_entries: 5
+      min_confidence: 0.5
+      model: haiku
+      output_key: knowledge_candidates
+
+  # Step 10a: Store candidates as source=agent (confidence <= 0.5, below the
+  # weekly verification threshold). Conflicts with any existing entry start a
+  # "Resolve Knowledge Contradiction" process instead of overwriting.
+  store_learned_knowledge:
+    name: "Store Learned Knowledge"
+    action: store_learned_knowledge
+    auto: true
+    properties:
+      candidates: "{{knowledge_candidates.candidates}}"
+      max_confidence: 0.5
+      max_entries: 5
+      output_key: learned_knowledge
+
   # Step 11: End FAILED with the goal workflow's error if it failed (#140)
   report_outcome:
     name: "Report Outcome"
@@ -422,4 +451,17 @@ routings:
     to: record_ethics_review
 
   - from: record_ethics_review
+    to: extract_knowledge
+
+  - from: extract_knowledge
+    to: store_learned_knowledge
+    condition: route_name
+    name: "has_candidates"
+
+  - from: extract_knowledge
+    to: report_outcome
+    condition: route_name
+    name: "no_candidates"
+
+  - from: store_learned_knowledge
     to: report_outcome

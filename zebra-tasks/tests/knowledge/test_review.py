@@ -282,6 +282,7 @@ async def test_review_acceptance(engine, knowledge, metrics):
     assert process.properties["entry_id"] == "e-employer"
     assert process.properties["proposed_value"] == "Globex"
     assert process.properties["__user_id__"] == USER
+    assert process.properties["__knowledge_contradiction__"] == "e-employer:Globex"  # F152 dedupe
     pending = await engine.get_pending_tasks(process.id)
     assert [t.task_definition_id for t in pending] == ["present_contradiction"]
 

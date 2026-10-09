@@ -36,6 +36,7 @@ from typing import Any
 from zebra.core.models import ProcessState, TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.knowledge.store_learned import CONTRADICTION_MARKER
 from zebra_tasks.llm.base import Message
 
 logger = logging.getLogger(__name__)
@@ -726,6 +727,9 @@ class _Applier:
                     "proposed_value": value,
                     "review_reason": _clip(evidence, 200),
                     "__knowledge_review__": True,
+                    # Same dedupe marker as per-run learning (F152), so neither path
+                    # starts a second prompt for the same entry and value.
+                    CONTRADICTION_MARKER: f"{entry.id}:{value}",
                 },
             )
         except Exception as e:

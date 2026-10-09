@@ -439,6 +439,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
                     "input_tokens": input_tok,
                     "output_tokens": output_tok,
                     "error": None,
+                    "user_inputs": self._extract_user_inputs(process.properties, definition),
                 }, task_executions
 
             if process.state == ProcessState.FAILED:
@@ -462,6 +463,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
                     "input_tokens": input_tok,
                     "output_tokens": output_tok,
                     "error": str(error),
+                    "user_inputs": self._extract_user_inputs(process.properties, definition),
                 }, task_executions
 
             # Detect pending human tasks
@@ -492,6 +494,31 @@ class ExecuteGoalWorkflowAction(TaskAction):
 
             # Wait before checking again
             await asyncio.sleep(0.1)
+
+    @staticmethod
+    def _extract_user_inputs(properties: dict[str, Any], definition: Any) -> dict[str, Any]:
+        """Answers the user gave to the child's human (``auto: false``) tasks (F152).
+
+        Keyed by task name; read-only form fields (values the workflow showed the
+        user) are left out so only what the user typed remains.
+        """
+        inputs: dict[str, Any] = {}
+        tasks = getattr(definition, "tasks", None) or {}
+        for task_id, task_def in tasks.items():
+            if getattr(task_def, "auto", True):
+                continue
+            answer = properties.get(f"__task_output_{task_id}")
+            if answer in (None, "", {}):
+                continue
+            if isinstance(answer, dict):
+                schema_props = (task_def.properties.get("schema") or {}).get("properties") or {}
+                answer = {
+                    k: v
+                    for k, v in answer.items()
+                    if not (schema_props.get(k) or {}).get("readOnly")
+                }
+            inputs[task_def.name or task_id] = answer
+        return inputs
 
     def _extract_output(self, properties: dict[str, Any], definition: Any = None) -> Any:
         """Extract output from process properties.

@@ -74,6 +74,7 @@ class ApplyResolutionAction(TaskAction):
                 if entry is not None:
                     entry.value = proposed_value
                     entry.confidence = 1.0
+                    entry.source = "human"  # the user chose this value
                     entry.last_verified = datetime.now(UTC)
                     entry.updated_at = datetime.now(UTC)
                     await knowledge_store.update_entry(entry)
