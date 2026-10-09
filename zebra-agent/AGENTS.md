@@ -120,6 +120,8 @@ consult_memory --> consult_knowledge --> assess_history_need
                        |
         ethics_post_review → record_ethics_review
                        |
+        extract_knowledge → store_learned_knowledge   (F152; no_candidates skips the store)
+                       |
                 report_outcome  (fails with the goal workflow's error, if any)
 ```
 
@@ -135,6 +137,7 @@ consult_memory --> consult_knowledge --> assess_history_need
 6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
 7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
 8. **ethics_post_review → record_ethics_review**: advisory LLM review of the completed run, then `RecordEthicsReviewAction` audits it (`check_type="post_review"`). Runs after the memory update so a failed review cannot skip it (#143)
+8b. **extract_knowledge → store_learned_knowledge** (F152): haiku extracts personal-fact candidates from the goal, the child's human-task answers (`execution_result.user_inputs`), `continuation_comment` and the result; they are stored as `source="agent"` with confidence ≤ 0.5. A conflicting value starts a *Resolve Knowledge Contradiction* process instead of overwriting. Skipped when there is no `__user_id__`
 9. **report_outcome**: `PropagateFailureAction` fails with `execution_result.error` when the goal workflow failed, so the process ends FAILED only after the failure was recorded (`execute_workflow` sets `continue_on_failure: true`; #140)
 10. **ethics_rejection** (terminal, any gate `reject`): `RecordEthicsRejectionAction` stores `ethics_rejection = {gate, reasoning, concerns}`; `AgentResult.ethics_rejection` / `error` surface it (#143)
 
@@ -157,6 +160,8 @@ These actions (in `zebra-tasks/zebra_tasks/agent/`) power the agent loop:
 | `update_conceptual_memory` | `update_conceptual_memory.py` | Incrementally update conceptual memory index |
 | `record_ethics_review` | `record_ethics_review.py` | Normalise + audit the post-execution ethics review (#143) |
 | `record_ethics_rejection` | `record_ethics_rejection.py` | Record which ethics gate rejected the goal and why (#143) |
+| `extract_knowledge` | `../knowledge/extract.py` | LLM-extract personal knowledge candidates (no writes; reusable) (F152) |
+| `store_learned_knowledge` | `../knowledge/store_learned.py` | Store candidates as agent-sourced; conflicts → resolve-contradiction process (F152) |
 
 These actions power the Dream Cycle self-improvement workflow:
 
