@@ -9,7 +9,9 @@ window and search text, and use the result in later planning and execution steps
 ### Requirement: Filtered workflow run search
 The metrics store SHALL support searching past workflow runs. Every filter is optional:
 - start time (inclusive) and end time (exclusive), compared against the run's start time in UTC
-- search text, matched case-insensitively against the run's goal
+- search text, split into keywords (lowercased words of three or more characters, excluding
+  common stopwords). A run matches when its goal contains any keyword, case-insensitively. When
+  no keywords remain, the whole text SHALL be matched as one case-insensitive substring.
 - workflow name (exact match)
 - success flag
 - a result limit
@@ -27,6 +29,15 @@ users' runs.
 #### Scenario: Text filter is case-insensitive
 - **WHEN** a run has the goal "Compare Pension providers" and a search is made with text "pension"
 - **THEN** that run is returned
+
+#### Scenario: Multi-word text matches any keyword
+- **WHEN** a run has the goal "I need to plan a holiday to Scotland" and a search is made with text
+  "holiday plans"
+- **THEN** that run is returned
+
+#### Scenario: Stopword-only text falls back to the whole string
+- **WHEN** a search is made with text "to"
+- **THEN** only runs whose goal contains "to" are returned
 
 #### Scenario: Combined filters
 - **WHEN** a search is made with text, a date window and success=true
@@ -80,16 +91,29 @@ The action SHALL exclude the run it is executing within.
 - **THEN** each run's output is truncated and `history_context` does not exceed its size limit
 
 ### Requirement: History-need decision
-The system SHALL provide an `assess_history_need` task action. It decides from the goal whether past
-workflow history is needed, routes `needs_history` or `no_history`, and when history is needed
-outputs the extracted filters (start time, end time, search text). A goal with no history or time
-cues SHALL route `no_history` without calling an LLM. If the LLM call fails or returns an
-unparseable answer, the action SHALL route `no_history` instead of failing the process.
+The system SHALL provide an `assess_history_need` task action. It decides whether past workflow
+history is needed, routes `needs_history` or `no_history`, and when history is needed outputs the
+extracted filters (start time, end time, search text). The decision SHALL consider the goal, the
+continuation comment and the previous run's goal when those are present. A goal that is not a
+continuation and has no history or time cues SHALL route `no_history` without calling an LLM. A
+continuation goal (one with previous run context) SHALL always get an LLM decision. If the LLM call
+fails or returns an unparseable answer, the action SHALL route `no_history` instead of failing the
+process.
 
 #### Scenario: Goal referencing past work
 - **WHEN** the goal is "what did I ask you about pensions last week?"
 - **THEN** the task routes `needs_history`, with search text related to "pensions" and a start time
   about 7 days ago
+
+#### Scenario: Continuation with a history comment
+- **WHEN** the goal "Our holiday plans continue - what next" continues a previous run with the
+  comment "Check workflow history"
+- **THEN** the LLM is asked, its prompt includes the comment, and the task routes `needs_history`
+  when the LLM says so
+
+#### Scenario: Continuation phrasing is a cue
+- **WHEN** a non-continuation goal is "our holiday plans continue - what next"
+- **THEN** the cue check passes and the LLM is asked
 
 #### Scenario: Ordinary goal skips LLM
 - **WHEN** the goal is "write a haiku about autumn"
