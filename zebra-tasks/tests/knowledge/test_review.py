@@ -434,6 +434,18 @@ async def test_change_cap_per_user(engine, knowledge, metrics):
     assert out["counts"]["added"] == 2
 
 
+async def test_user_without_entries_can_learn(engine, knowledge, metrics):
+    await _seed_run(metrics, "r1", "Book my vegan dinner")
+    provider = _provider(
+        {"new": [{"category": "preferences", "key": "diet", "value": "vegan"}], "stale": []}
+    )
+    context = await _context(engine)
+    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+        out = (await ReviewKnowledgeAction().run(_task(), context)).output
+    assert out["counts"]["added"] == 1
+    assert (await knowledge.get_entries(USER))[0].value == "vegan"
+
+
 def test_normalize_key():
     assert normalize_key("  Commute Mode! ") == "commute_mode"
 

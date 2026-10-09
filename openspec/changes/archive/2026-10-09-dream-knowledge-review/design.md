@@ -30,3 +30,5 @@ Knowledge entries (`KnowledgeEntry`: category, key, value, source human|agent, c
 - Audit lives in process properties rather than a dedicated table; enough for audit/undo now, a store-level history could follow if needed.
 - If the dream cycle is triggered by an authenticated API user, the Django metrics store scopes `get_runs_since` to that user, so only their knowledge is reviewed (same as the metrics analysis).
 - Overlap with #152: both write agent-sourced entries through the same semantics; the review sees #152's entries as ordinary agent entries.
+- Two dream cycles running at the same time could both start a proposal for the same entry (the pending check is not a DB lock). Dream cycles are scheduled / manual and rare, so no guard is added.
+- `revert_knowledge_changes` is best effort, entry by entry, not atomic.

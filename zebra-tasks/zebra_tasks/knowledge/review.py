@@ -189,7 +189,8 @@ async def revert_knowledge_changes(knowledge_store: Any, changes: list[dict[str,
 
     Added entries are soft-deleted; updated, stale-flagged, reinforced and merged
     entries get their recorded ``before`` state back. Proposals (contradiction /
-    verification workflows) changed nothing and are skipped.
+    verification workflows) changed nothing and are skipped. Best effort, one entry
+    at a time in reverse order (not atomic); re-running it is harmless.
 
     Returns:
         Number of entries reverted.
