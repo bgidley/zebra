@@ -6,6 +6,7 @@ implemented by different backends (in-memory, Django ORM, PostgreSQL, etc.).
 
 from __future__ import annotations
 
+import re
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -230,6 +231,24 @@ class MemoryStore(ABC):
 SEARCH_RUNS_DEFAULT_LIMIT = 20
 SEARCH_RUNS_MAX_LIMIT = 200
 
+# F150: words too common to narrow a goal search.
+_SEARCH_STOPWORDS = frozenset(
+    "the and for with that this from what when where which who how our your you are was were "
+    "have has had did does not but can will would should could about into onto then than them "
+    "they their there these those its just any all some next".split()
+)
+
+
+def search_keywords(text: str) -> list[str]:
+    """Split search text into lowercase keywords for any-match goal search (F150).
+
+    Drops words shorter than three characters and common stopwords. Falls back
+    to the whole (lowercased, stripped) text when no keyword remains.
+    """
+    words = [w for w in re.findall(r"\w+", text.lower()) if len(w) >= 3]
+    keywords = list(dict.fromkeys(w for w in words if w not in _SEARCH_STOPWORDS))
+    return keywords or [text.strip().lower()]
+
 
 class MetricsStore(ABC):
     """Abstract interface for workflow metrics storage.
@@ -315,7 +334,8 @@ class MetricsStore(ABC):
         Args:
             since: Only include runs with started_at >= since.
             until: Only include runs with started_at < until.
-            text: Case-insensitive substring match against the run's goal.
+            text: Search text; split by :func:`search_keywords` and a run matches
+                when its goal contains any keyword (case-insensitive).
             workflow_name: Exact workflow name match.
             success: Only include runs with this success flag.
             limit: Maximum runs to return; clamped to SEARCH_RUNS_MAX_LIMIT.

@@ -125,3 +125,18 @@ async def test_text_wildcards_are_literal(user_a, user_b):
     assert [r.id for r in await store.search_runs(text="100%", user_id=user_a.id)] == ["pct"]
     assert await store.search_runs(text="%", user_id=user_b.id) == []
     assert await store.search_runs(text="_", user_id=user_a.id) == []
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_multi_word_text_matches_any_keyword(user_a, user_b):
+    """F150: keywords are matched individually, still scoped to the user."""
+    await _seed(user_a, user_b)
+    runs = await DjangoMetricsStore().search_runs(text="pension plans", user_id=user_a.id)
+    assert [r.id for r in runs] == ["r3", "r1"]
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_keywords_or_across_goals(user_a, user_b):
+    await _seed(user_a, user_b)
+    runs = await DjangoMetricsStore().search_runs(text="autumn pension", user_id=user_a.id)
+    assert [r.id for r in runs] == ["r5", "r3", "r1"]

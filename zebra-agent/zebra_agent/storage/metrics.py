@@ -15,6 +15,7 @@ from zebra_agent.storage.interfaces import (
     SEARCH_RUNS_DEFAULT_LIMIT,
     SEARCH_RUNS_MAX_LIMIT,
     MetricsStore,
+    search_keywords,
 )
 
 if TYPE_CHECKING:
@@ -160,13 +161,13 @@ class InMemoryMetricsStore(MetricsStore):
         """
         await self._ensure_initialized()
 
-        needle = text.lower() if text else None
+        keywords = search_keywords(text) if text else None
         runs = [
             r
             for r in self._runs.values()
             if (since is None or r.started_at >= since)
             and (until is None or r.started_at < until)
-            and (needle is None or needle in (r.goal or "").lower())
+            and (keywords is None or any(k in (r.goal or "").lower() for k in keywords))
             and (workflow_name is None or r.workflow_name == workflow_name)
             and (success is None or r.success == success)
         ]

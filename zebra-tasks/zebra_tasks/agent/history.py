@@ -15,6 +15,7 @@ from typing import Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.followup import CONTINUATION_COMMENT_KEY, PREVIOUS_RUN_CONTEXT_KEY
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
@@ -34,6 +35,8 @@ _HISTORY_CUES = re.compile(
     r"\b(last (week|month|year|time|night)|yesterday|earlier|before|previous(ly)?|"
     r"history|ago|since|recent(ly)?|past|did i|have we|have i|did we|did you|"
     r"we (tried|discussed|did)|i asked|you (said|told|found|did)|again|remind me|"
+    r"continu(e|es|ing)|carry on|pick up|where (were|was) we|what next|next steps?|"
+    r"follow[- ]?up|our .{0,40}\bplans?|"
     r"january|february|march|april|june|july|august|september|october|"
     r"november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
     re.IGNORECASE,
@@ -300,6 +303,11 @@ Today is {today} (UTC). When history is needed, extract filters:
 - since / until: ISO-8601 UTC timestamps or relative offsets like "-7d", "-24h";
   null when the goal gives no time bound.
 - text: 1-3 keywords most likely to appear in the earlier goal; null for "everything".
+  Keywords are matched individually against past goals, so use the topic nouns
+  (e.g. "holiday Scotland"), not the wording of the current request.
+A goal that continues a previous run, or a user comment such as "check workflow
+history", usually needs history: the earlier work on the same topic may predate
+the previous run.
 
 Respond with JSON only:
 {{"needs_history": true|false, "since": ..., "until": ..., "text": ..., "reasoning": "..."}}"""
@@ -358,8 +366,19 @@ class AssessHistoryNeedAction(TaskAction):
         """Classify the goal and route needs_history / no_history."""
         goal = _resolve(task, context, "goal") or ""
         output_key = task.properties.get("output_key", "history_need")
+        # F150: a continuation is about past work by definition; its comment and
+        # previous goal often carry the cue ("check workflow history") and topic.
+        previous = context.process.properties.get(PREVIOUS_RUN_CONTEXT_KEY)
+        is_continuation = isinstance(previous, dict)
+        comment = context.process.properties.get(CONTINUATION_COMMENT_KEY) or ""
+        query = f"Goal: {goal[:_MAX_GOAL_LEN]}"
+        if is_continuation:
+            previous_goal = str(previous.get("goal") or "")[:_MAX_GOAL_LEN]
+            query += f"\nContinues a previous run whose goal was: {previous_goal}"
+        if comment:
+            query += f"\nUser's comment: {str(comment)[:_MAX_GOAL_LEN]}"
 
-        if not _HISTORY_CUES.search(goal):
+        if not is_continuation and not _HISTORY_CUES.search(f"{goal}\n{comment}"):
             return self._finish(context, output_key, False, "No history cues in goal")
 
         provider_name = (
@@ -373,7 +392,7 @@ class AssessHistoryNeedAction(TaskAction):
             response = await provider.complete(
                 messages=[
                     Message.system(SYSTEM_PROMPT.format(today=datetime.now(UTC).date())),
-                    Message.user(f"Goal: {goal[:_MAX_GOAL_LEN]}"),
+                    Message.user(query),
                 ],
                 temperature=0.0,
                 max_tokens=300,

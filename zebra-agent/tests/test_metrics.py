@@ -841,6 +841,23 @@ class TestSearchRuns:
         runs = await metrics.search_runs(text="PENSION")
         assert [r.id for r in runs] == [oct3.id, oct1.id]
 
+    async def test_multi_word_text_matches_any_keyword(self, metrics):
+        """F150: 'holiday plans' finds 'plan a holiday to Scotland'."""
+        run = WorkflowRun.create("Web Research", "I need to plan a holiday to Scotland")
+        await metrics.record_run(run)
+        runs = await metrics.search_runs(text="holiday plans")
+        assert [r.id for r in runs] == [run.id]
+
+    async def test_text_keywords_or_across_goals(self, metrics):
+        oct1, oct3, oct5 = await self._seed(metrics)
+        runs = await metrics.search_runs(text="pension autumn")
+        assert [r.id for r in runs] == [oct5.id, oct3.id, oct1.id]
+
+    async def test_short_text_matches_whole_string(self, metrics):
+        _, _, oct5 = await self._seed(metrics)
+        runs = await metrics.search_runs(text="ab")  # no keyword left; "about" contains it
+        assert [r.id for r in runs] == [oct5.id]
+
     async def test_combined_filters(self, metrics):
         oct1, _, _ = await self._seed(metrics)
         runs = await metrics.search_runs(
@@ -882,3 +899,22 @@ class TestContinuationRate:
 
     def test_rate_zero_without_runs(self):
         assert WorkflowStats(workflow_name="W").continuation_rate == 0.0
+
+
+class TestSearchKeywords:
+    """Tests for search_keywords (F150)."""
+
+    def test_drops_short_words_and_stopwords(self):
+        from zebra_agent.storage.interfaces import search_keywords
+
+        assert search_keywords("Our holiday plans - what next?") == ["holiday", "plans"]
+
+    def test_dedupes_keeping_order(self):
+        from zebra_agent.storage.interfaces import search_keywords
+
+        assert search_keywords("Pension pension tax") == ["pension", "tax"]
+
+    def test_falls_back_to_whole_text(self):
+        from zebra_agent.storage.interfaces import search_keywords
+
+        assert search_keywords(" To ") == ["to"]
