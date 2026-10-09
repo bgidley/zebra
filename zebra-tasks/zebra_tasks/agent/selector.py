@@ -284,6 +284,22 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
             )
             return fallback
 
+    def _select_requested(
+        self, task: TaskInstance, context: ExecutionContext, workflow_name: str
+    ) -> TaskResult:
+        """Select a workflow the goal asked for by name, without an LLM call."""
+        self._get_logger().info("Using requested workflow: %s", workflow_name)
+        context.set_process_property("workflow_name", workflow_name)
+        output_data = {
+            "workflow_name": workflow_name,
+            "create_new": False,
+            "create_variant": False,
+            "reasoning": "Workflow requested by the goal (requested_workflow).",
+            "suggested_name": None,
+        }
+        context.set_process_property(task.properties.get("output_key", "selection"), output_data)
+        return TaskResult(success=True, output=output_data, next_route="use_existing")
+
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Execute workflow selection."""
         goal = task.properties.get("goal")
@@ -310,6 +326,16 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
         # Prefer the live library over the snapshot taken when the goal was queued,
         # so workflows added since then are candidates too.
         workflows = await self._current_workflows(context, workflows)
+
+        # A goal may name its workflow up front (e.g. a scheduled routine — F155).
+        requested = context.process.properties.get("requested_workflow")
+        if requested:
+            available_names = {w.get("name") if isinstance(w, dict) else w.name for w in workflows}
+            if requested in available_names:
+                return self._select_requested(task, context, requested)
+            self._get_logger().warning(
+                "Requested workflow %r not in library — selecting normally", requested
+            )
 
         # Memory context and shortlist from consult_memory step
         memory_context = task.properties.get("memory_context", "")
