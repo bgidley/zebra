@@ -52,6 +52,9 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/load_values_profile.py` | LoadValuesProfileAction - load current values-profile version |
 | `zebra_tasks/agent/save_values_profile.py` | SaveValuesProfileAction - persist a values-profile version |
 | `zebra_tasks/agent/extract_values_tags.py` | ExtractValuesTagsAction - LLM tag extraction for profile wizard |
+| `zebra_tasks/knowledge/add.py` | AddKnowledgeAction + `store_knowledge_entry()` — store with contradiction detection (shared core) |
+| `zebra_tasks/knowledge/extract.py` | ExtractKnowledgeAction - LLM personal-fact candidates from a run; `normalize_knowledge_key()`, `validate_candidates()` privacy/cap guardrails (F152) |
+| `zebra_tasks/knowledge/store_learned.py` | StoreLearnedKnowledgeAction - store candidates as `source=agent` (confidence ≤ `max_confidence`), start *Resolve Knowledge Contradiction* for conflicts (F152) |
 | `zebra_tasks/llm/pricing.py` | Anthropic pricing table, `calculate_cost()`, `estimate_goal_cost()` |
 | `zebra_tasks/llm/models.py` | ANTHROPIC_MODELS, `resolve_model_name()` model aliases |
 | `tests/` | Test suite |
@@ -292,6 +295,7 @@ Execute a workflow by name and capture its output.
 |-------|------|-------------|
 | `success` | bool | Whether workflow completed successfully |
 | `output` | any | Workflow's output |
+| `user_inputs` | dict | Child's human-task answers keyed by task name, read-only fields removed (F152) |
 | `tokens_used` | int | Total tokens used |
 | `cost` | float | Total LLM cost in USD (propagated from child process) |
 | `input_tokens` | int | Total input tokens used |

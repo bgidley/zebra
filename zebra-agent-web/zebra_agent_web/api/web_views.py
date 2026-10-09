@@ -2302,7 +2302,7 @@ async def knowledge_list(request):
     def _fetch(user_id, category_filter):
         from zebra_agent_web.api.models import KnowledgeEntryModel
 
-        qs = KnowledgeEntryModel.objects.filter(user_id=user_id)
+        qs = KnowledgeEntryModel.objects.filter(user_id=user_id, deleted_at__isnull=True)
         if category_filter:
             qs = qs.filter(category=category_filter)
         return list(qs.order_by("-last_verified"))
@@ -2473,6 +2473,26 @@ async def knowledge_edit(request, entry_id):
             "action": "Save",
         },
     )
+
+
+@require_POST
+async def knowledge_confirm(request, entry_id):
+    """Confirm an entry as correct: confidence 1.0, source human (F152)."""
+    from zebra_agent_web.knowledge_store import DjangoPersonalKnowledgeStore
+
+    store = DjangoPersonalKnowledgeStore()
+    entry = await store.get_entry(entry_id)
+    if entry is None or entry.user_id != request.user.id or entry.is_deleted:
+        from django.http import Http404
+
+        raise Http404
+    now = datetime.now(UTC)
+    entry.confidence = 1.0
+    entry.source = "human"
+    entry.last_verified = now
+    entry.updated_at = now
+    await store.update_entry(entry)
+    return redirect("knowledge_list")
 
 
 @require_POST

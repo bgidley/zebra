@@ -90,6 +90,9 @@ urlpatterns = [
     path("knowledge/", web_views.knowledge_list, name="knowledge_list"),
     path("knowledge/create/", web_views.knowledge_create, name="knowledge_create"),
     path("knowledge/<str:entry_id>/edit/", web_views.knowledge_edit, name="knowledge_edit"),
+    path(
+        "knowledge/<str:entry_id>/confirm/", web_views.knowledge_confirm, name="knowledge_confirm"
+    ),
     path("knowledge/<str:entry_id>/delete/", web_views.knowledge_delete, name="knowledge_delete"),
     # Run detail pages
     path("runs/<str:run_id>/", web_views.run_detail, name="run_detail"),

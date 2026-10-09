@@ -23,6 +23,13 @@ from zebra_tasks.agent.propagate_failure import PropagateFailureAction
 from zebra_tasks.agent.record_dilemma_resolution import RecordDilemmaResolutionAction
 from zebra_tasks.agent.record_ethics_rejection import RecordEthicsRejectionAction
 from zebra_tasks.agent.record_ethics_review import RecordEthicsReviewAction
+from zebra_tasks.knowledge.apply_resolution import ApplyResolutionAction
+from zebra_tasks.knowledge.extract import ExtractKnowledgeAction
+from zebra_tasks.knowledge.store_learned import StoreLearnedKnowledgeAction
+from zebra_tasks.llm.base import LLMResponse
+
+from zebra_agent.knowledge import KnowledgeEntry
+from zebra_agent.storage.memory import InMemoryPersonalKnowledgeStore
 
 # ---------------------------------------------------------------------------
 # Stub actions — replace real LLM calls with deterministic responses
@@ -218,6 +225,10 @@ def _make_registry(ethics_gate_class, execute_class=None):
     registry.register_action("propagate_failure", PropagateFailureAction)
     registry.register_action("record_ethics_review", RecordEthicsReviewAction)
     registry.register_action("record_ethics_rejection", RecordEthicsRejectionAction)
+    # F152: real knowledge learning — skips without __user_id__ (no LLM call)
+    registry.register_action("extract_knowledge", ExtractKnowledgeAction)
+    registry.register_action("store_learned_knowledge", StoreLearnedKnowledgeAction)
+    registry.register_action("apply_resolution", ApplyResolutionAction)
     return registry
 
 
@@ -703,3 +714,101 @@ class TestHistoryRouting:
         assert "__task_output_get_workflow_history" not in props
         assert "workflow_history" not in props
         assert props["execution_result"]["output"] == "Write a poem"
+
+
+# ---------------------------------------------------------------------------
+# F152: the main loop learns personal knowledge from goal runs
+# ---------------------------------------------------------------------------
+
+
+class _ResolveLibrary:
+    def get_workflow(self, name):
+        path = WORKFLOW_YAML_PATH.parent / "resolve_contradiction.yaml"
+        return load_definition_from_yaml(path.read_text())
+
+
+def _extraction_provider(*candidates):
+    provider = MagicMock()
+    provider.complete = AsyncMock(
+        return_value=LLMResponse(
+            content=json.dumps({"candidates": list(candidates)}),
+            model="haiku",
+            usage={},
+            tool_calls=[],
+            finish_reason="end_turn",
+        )
+    )
+    return provider
+
+
+class TestKnowledgeLearning:
+    """Goal runs feed the personal knowledge store (F152)."""
+
+    @staticmethod
+    async def _run_goal(definition, knowledge, goal, user_id=1, provider=None):
+        store = InMemoryStore()
+        engine = WorkflowEngine(
+            store,
+            _make_registry(StubEthicsGateApprove),
+            extras={"__knowledge_store__": knowledge, "__workflow_library__": _ResolveLibrary()},
+        )
+        props = {"goal": goal, "available_workflows": []}
+        if user_id is not None:
+            props["__user_id__"] = user_id
+        process = await engine.create_process(definition, properties=props)
+        with patch(
+            "zebra_tasks.knowledge.extract.get_provider",
+            return_value=provider or _extraction_provider(),
+        ) as gp:
+            await engine.start_process(process.id)
+        return engine, await store.load_process(process.id), gp
+
+    async def test_personal_fact_creates_agent_entry(self, definition):
+        knowledge = InMemoryPersonalKnowledgeStore()
+        provider = _extraction_provider(
+            {"category": "facts", "key": "Employer", "value": "Acme", "confidence": 0.9}
+        )
+        _, process, _ = await self._run_goal(
+            definition, knowledge, "I work at Acme, plan my commute", provider=provider
+        )
+
+        assert process.state == ProcessState.COMPLETE
+        [entry] = await knowledge.get_entries(1)
+        assert (entry.key, entry.value, entry.source) == ("employer", "Acme", "agent")
+        assert entry.confidence < 1.0
+        assert process.properties["learned_knowledge"]["stored"][0]["key"] == "employer"
+
+    async def test_conflicting_fact_starts_resolution_without_overwrite(self, definition):
+        knowledge = InMemoryPersonalKnowledgeStore()
+        await knowledge.add_entry(
+            KnowledgeEntry.create(user_id=1, category="facts", key="employer", value="Acme")
+        )
+        provider = _extraction_provider(
+            {"category": "facts", "key": "employer", "value": "Globex", "confidence": 0.9}
+        )
+        engine, process, _ = await self._run_goal(
+            definition, knowledge, "I now work at Globex", provider=provider
+        )
+
+        assert process.state == ProcessState.COMPLETE
+        [entry] = await knowledge.get_entries(1)
+        assert entry.value == "Acme" and entry.source == "human"
+        [conflict] = process.properties["learned_knowledge"]["contradictions"]
+        resolve = await engine.store.load_process(conflict["resolution_process_id"])
+        assert resolve.state == ProcessState.RUNNING
+        assert resolve.properties["proposed_value"] == "Globex"
+
+    async def test_no_user_writes_nothing_and_skips_llm(self, definition):
+        knowledge = InMemoryPersonalKnowledgeStore()
+        _, process, gp = await self._run_goal(definition, knowledge, "I work at Acme", user_id=None)
+        assert process.state == ProcessState.COMPLETE
+        gp.assert_not_called()
+        assert await knowledge.get_entries(1) == []
+
+    async def test_nothing_personal_writes_nothing(self, definition):
+        knowledge = InMemoryPersonalKnowledgeStore()
+        _, process, gp = await self._run_goal(definition, knowledge, "Summarise this text")
+        assert process.state == ProcessState.COMPLETE
+        gp.assert_called_once()
+        assert await knowledge.get_entries(1) == []
+        assert "learned_knowledge" not in process.properties

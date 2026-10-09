@@ -121,6 +121,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 | Agent loop | `consult_memory`, `consult_knowledge`, `assess_history_need`, `get_workflow_history` (F138 — see [workflow-history spec](../openspec/specs/workflow-history/spec.md)), `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `propagate_failure`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (8000) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML, or `route_name` routings from `llm_call` tasks, before saving (#122, #139); `workflow_creator` makes one repair call feeding the parse/validation error back (not for truncation), runs at temperature 0.3, and its prompt documents data flow, serial/parallel/`synchronized` routing and that `route_name` routes are human-task buttons (#139) |
 | Dream cycle | `metrics_analyzer`, `workflow_curator`, `workflow_evaluator`, `workflow_optimizer` |
 | Ethics | `ethics_gate` |
+| Knowledge (F32, F152) | `add_knowledge`, `decay_confidence`, `pick_entries_for_verification`, `apply_verification_result`, `apply_resolution`, `extract_knowledge` (haiku extraction of personal-fact candidates; no writes; reusable), `store_learned_knowledge` (stores candidates as `source=agent`, conflicts → *Resolve Knowledge Contradiction* process) — see [knowledge-learning spec](../openspec/specs/knowledge-learning/spec.md) |
 | Web (F115, #145) | `kagi_search`, `kagi_extract` — Kagi v1 API (`POST /api/v1/search`, `/extract`, Bearer `KAGI_API_KEY`); `kagi_summarize` removed (v1 has no summarizer) |
 | Notifications (F65) | `notify_email` (SMTP, `ZEBRA_SMTP_*` env), `notify_webhook` (HTTP POST/PUT, `ZEBRA_NOTIFY_WEBHOOK_URL`) — both `always_irreversible` |
 
@@ -166,12 +167,16 @@ consult_memory
   → update_conceptual_memory
   → ethics_post_review       (llm_call)
   → record_ethics_review     (audit check_type=post_review — #143)
+  → extract_knowledge        (F152 — skips with no __user_id__; no_candidates → report_outcome)
+  → store_learned_knowledge  (source=agent, confidence ≤ 0.5; conflicts → resolve-contradiction process)
   → report_outcome           (propagate_failure — #140)
 
 any gate "reject" → ethics_rejection (record_ethics_rejection — #143)
 ```
 
 **Failed goal runs are learned from (#140)**: `execute_workflow` sets `continue_on_failure: true`, so a failed/timed-out child completes the task with `execution_result.success = false` and `error` instead of failing it. `assess_and_record` (given `error`), `update_conceptual_memory`, `ethics_post_review` and `record_ethics_review` therefore run for failures too, recording a `WorkflowRun` with `success=false` and a workflow-memory entry. The terminal `report_outcome` task (`propagate_failure`) then fails with the child's error, so the main-loop process still ends `FAILED` with `__error__` = child error (`__failed_task__` = `report_outcome`). Failures before execution (selection, creation, gate errors) are still not recorded.
+
+**Personal knowledge is learned from goal runs (F152)**: after the post-execution review, `extract_knowledge` asks haiku for durable facts the user stated about themselves. Its inputs are the goal, `execution_result.user_inputs` (the child's human-task answers without read-only fields), `continuation_comment` and the result. It returns up to 5 `{category, key, value, time_sensitive, confidence}` candidates. Keys are normalised to snake_case and existing keys are offered for reuse. Credential- or card-like values are always dropped, and LLM-flagged special-category data is dropped unless `ZEBRA_KNOWLEDGE_ALLOW_SENSITIVE` / `allow_sensitive` is set. `store_learned_knowledge` writes each candidate through `store_knowledge_entry()` (the shared core of `add_knowledge`) as `source="agent"` with confidence capped at 0.5, below the 0.6 weekly-verification threshold. A re-observed value keeps `max(old, new)` confidence. A conflicting value (human or agent) is never written: it starts a top-level *Resolve Knowledge Contradiction* process, deduplicated by a `__knowledge_contradiction__` marker. `/knowledge/` shows source and confidence, hides soft-deleted entries, and has **Confirm** (`POST /knowledge/<id>/confirm/` → confidence 1.0, source human). Learning runs for failed goals too; goals without `__user_id__` make no LLM call.
 
 ### Dream cycle (`dream_cycle.yaml`)
 
@@ -486,6 +491,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 | Values-informed ethics gate | **Implemented** | REQ-ETH-003 |
 | Personal knowledge store (CRUD, agent loop integration) | **Implemented** (F31) | REQ-MEM-004 |
 | Knowledge lifecycle (decay, verification, contradiction, soft-delete) | **Implemented** (F32) | REQ-MEM-005 |
+| Knowledge learning from goal runs (agent-sourced entries, confirm UI) | **Implemented** (F152) | REQ-MEM-004 |
 | Cross-domain knowledge access | **Missing** | REQ-MEM-006 |
 | Proactive goal generation | **Missing** | REQ-PEER-001, REQ-PRIN-006 |
 | Polling scheduler (SchedulerLoop + RoutineRegistry) | **Implemented** (F27) | REQ-PRIN-008 |

@@ -580,6 +580,8 @@ POST /api/tasks/<task_id>/complete/
 | `/workflows/` | `workflow_library` | Workflow library (active + retired workflows with Restore) |
 | `/workflows/<name>/retire/` | `workflow_retire` | Retire a workflow, optional `reason` (POST, HTMX, #148) |
 | `/workflows/<name>/restore/` | `workflow_restore` | Restore a retired workflow; 409 if the name is active (POST, HTMX, #148) |
+| `/knowledge/` | `knowledge_list` | Personal knowledge (source badge, confidence; soft-deleted hidden) |
+| `/knowledge/<id>/confirm/` | `knowledge_confirm` | Confirm an entry: confidence 1.0, source human (POST, F152) |
 | `/tasks/` | `pending_tasks` | Pending human tasks list |
 | `/tasks/<id>/` | `human_task_form` | Human task form page |
 | `/tasks/<id>/submit/` | `human_task_submit` | Submit human task form (POST) |
