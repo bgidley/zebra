@@ -15,6 +15,10 @@ class PickEntriesForVerificationAction(TaskAction):
     or where ``last_verified`` is older than ``max_age_days``. Results are
     ordered by confidence ascending (lowest first), capped at ``max_entries``.
 
+    When the process property ``review_entry_ids`` is a non-empty list (set by the
+    dream-cycle knowledge review, F153), exactly those of the user's active entries
+    are selected instead.
+
     Requires ``__knowledge_store__`` in ``context.extras`` and ``__user_id__``
     in process properties. Degrades gracefully when either is absent.
 
@@ -97,12 +101,22 @@ class PickEntriesForVerificationAction(TaskAction):
         output_key = task.properties.get("output_key", "entries_to_verify")
 
         try:
-            entries = await knowledge_store.get_entries_for_verification(
-                user_id=user_id,
-                low_confidence_threshold=low_confidence_threshold,
-                max_age_days=max_age_days,
-                max_entries=max_entries,
-            )
+            review_ids = context.get_process_property("review_entry_ids")
+            if isinstance(review_ids, list) and review_ids:
+                # Proposed by the dream-cycle knowledge review (F153): verify exactly these.
+                entries = []
+                for entry_id in review_ids:
+                    entry = await knowledge_store.get_entry(str(entry_id))
+                    owned = entry is not None and str(entry.user_id) == str(user_id)
+                    if owned and not entry.is_deleted:
+                        entries.append(entry)
+            else:
+                entries = await knowledge_store.get_entries_for_verification(
+                    user_id=user_id,
+                    low_confidence_threshold=low_confidence_threshold,
+                    max_age_days=max_age_days,
+                    max_entries=max_entries,
+                )
 
             serialized = [
                 {

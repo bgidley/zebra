@@ -49,3 +49,23 @@ def test_summary_reports_curation():
 
     assert "{{curation.retired}}" in prompt
     assert "{{curation.deferred}}" in prompt
+
+
+def test_knowledge_review_runs_before_summary():
+    """The knowledge review (#153) runs after optimisation and feeds the summary."""
+    definition = load_definition(_DREAM_CYCLE)
+    routes = {(r.source_task_id, r.dest_task_id) for r in definition.routings}
+
+    assert definition.tasks["review_knowledge"].action == "review_knowledge"
+    assert ("optimize_workflows", "review_knowledge") in routes
+    assert ("review_knowledge", "generate_summary") in routes
+    assert ("optimize_workflows", "generate_summary") not in routes
+
+
+def test_summary_reports_knowledge():
+    data = yaml.safe_load(_DREAM_CYCLE.read_text())
+    prompt = data["tasks"]["generate_summary"]["properties"]["prompt"]
+
+    assert "### Knowledge" in prompt
+    assert "{{knowledge_review.counts}}" in prompt
+    assert "{{knowledge_review.examples}}" in prompt

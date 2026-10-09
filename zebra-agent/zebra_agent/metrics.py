@@ -40,6 +40,7 @@ class WorkflowRun:
     continuation_comment: str | None = None  # user's "where it got to / what next"
     continuation_decision: str | None = None  # same_workflow|existing_workflow|new_workflow
     continuation_rationale: str | None = None  # why the assessor chose that route
+    user_id: int | None = None  # F153: owner of the run (None = unowned / single-user)
 
     @classmethod
     def create(cls, workflow_name: str, goal: str) -> "WorkflowRun":

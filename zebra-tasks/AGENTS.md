@@ -38,6 +38,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/evaluator.py` | WorkflowEvaluatorAction - LLM workflow evaluation |
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization (tags created workflows `llm-defined`) |
 | `zebra_tasks/agent/curator.py` | WorkflowCuratorAction - dream-cycle retirement of broken/superseded/failing/unused/duplicate workflows; `ZEBRA_CURATOR_*` settings (#148) |
+| `zebra_tasks/knowledge/review.py` | ReviewKnowledgeAction - dream-cycle review of personal knowledge against recent runs; `revert_knowledge_changes()` (#153) |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/agent/user_context.py` | `copy_user_properties()` - carry `__user_id__` + identity keys onto processes the loop creates (#151) |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |

@@ -84,3 +84,22 @@ async def test_empty_store_returns_empty(action):
     context = _make_context(extras={"__knowledge_store__": store})
     result = await action.run(_make_task(), context)
     assert result.output == {"entries": [], "count": 0}
+
+
+async def test_review_entry_ids_select_exactly_those_entries(action):
+    """The dream-cycle knowledge review proposes specific entries (F153)."""
+    mine = KnowledgeEntry.create(user_id=1, category="facts", key="city", value="Leeds")
+    theirs = KnowledgeEntry.create(user_id=2, category="facts", key="city", value="York")
+    gone = KnowledgeEntry.create(user_id=1, category="facts", key="old", value="x")
+    gone.deleted_at = gone.created_at
+    by_id = {e.id: e for e in (mine, theirs, gone)}
+    store = _make_store([])
+    store.get_entry = AsyncMock(side_effect=lambda i: by_id.get(i))
+    context = _make_context(extras={"__knowledge_store__": store})
+    context.process.properties["review_entry_ids"] = [mine.id, theirs.id, gone.id, "missing"]
+
+    result = await action.run(_make_task(), context)
+
+    assert [e["id"] for e in result.output["entries"]] == [mine.id]
+    assert result.next_route == "has_entries"
+    store.get_entries_for_verification.assert_not_awaited()

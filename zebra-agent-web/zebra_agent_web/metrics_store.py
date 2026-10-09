@@ -78,9 +78,10 @@ class DjangoMetricsStore(MetricsStore):
                 else:
                     output_str = json.dumps(run.output, ensure_ascii=False, default=str)
 
-            # Resolve user_id: current request context first, then scan recent processes.
+            # Resolve user_id: the run's own owner (F153), the current request context,
+            # then scan recent processes.
             # Avoid properties__contains which triggers Oracle lazy cursor init in async.
-            user_id = get_current_user_id()
+            user_id = run.user_id if run.user_id is not None else get_current_user_id()
             if user_id is None:
                 target = f'"run_id": "{run.id}"'
                 for proc in (
@@ -366,6 +367,7 @@ class DjangoMetricsStore(MetricsStore):
             continuation_comment=model.continuation_comment,
             continuation_decision=model.continuation_decision,
             continuation_rationale=model.continuation_rationale,
+            user_id=model.user_id,
         )
 
     # =========================================================================

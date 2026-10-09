@@ -172,6 +172,7 @@ These actions power the Dream Cycle self-improvement workflow:
 | `load_workflow_definitions` | `load_definitions.py` | Load workflow YAML via WorkflowLibrary |
 | `workflow_evaluator` | `evaluator.py` | LLM-based evaluation of workflow effectiveness |
 | `workflow_optimizer` | `optimizer.py` | Create/optimize workflows based on evaluation |
+| `review_knowledge` | `knowledge/review.py` | Review each active user's personal knowledge against runs since the last dream cycle; human entries only via contradiction/verification workflows (#153) |
 
 ### IoC (Inversion of Control) for Stores
 

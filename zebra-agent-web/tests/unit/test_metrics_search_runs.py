@@ -140,3 +140,29 @@ async def test_keywords_or_across_goals(user_a, user_b):
     await _seed(user_a, user_b)
     runs = await DjangoMetricsStore().search_runs(text="autumn pension", user_id=user_a.id)
     assert [r.id for r in runs] == ["r5", "r3", "r1"]
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_runs_carry_owner_user_id(user_a, user_b):
+    """Runs expose their owner so the dream-cycle knowledge review can group them (F153)."""
+    await _seed(user_a, user_b)
+    runs = await DjangoMetricsStore().get_runs_since(datetime(2026, 10, 1, tzinfo=UTC))
+    owners = {r.id: r.user_id for r in runs}
+    assert owners["r1"] == user_a.id
+    assert owners["rb"] == user_b.id
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_record_run_keeps_explicit_owner(user_a):
+    """A run recorded outside a request (daemon) keeps the owner set on it (F153)."""
+    from zebra_agent.metrics import WorkflowRun
+
+    run = WorkflowRun.create("Research", "owned goal")
+    run.user_id = user_a.id
+    token = _current_user_id_var.set(None)
+    try:
+        await DjangoMetricsStore().record_run(run)
+    finally:
+        _current_user_id_var.reset(token)
+    stored = await sync_to_async(WorkflowRunModel.objects.get)(id=run.id)
+    assert stored.user_id == user_a.id

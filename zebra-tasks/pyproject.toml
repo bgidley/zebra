@@ -109,6 +109,8 @@ apply_verification_result = "zebra_tasks.knowledge.apply_verification_result:App
 # Knowledge learning (F152)
 extract_knowledge = "zebra_tasks.knowledge.extract:ExtractKnowledgeAction"
 store_learned_knowledge = "zebra_tasks.knowledge.store_learned:StoreLearnedKnowledgeAction"
+# Dream-cycle knowledge review (F153)
+review_knowledge = "zebra_tasks.knowledge.review:ReviewKnowledgeAction"
 
 [build-system]
 requires = ["hatchling"]
