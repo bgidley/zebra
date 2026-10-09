@@ -449,12 +449,16 @@ live in `zebra_tasks/agent/history.py` and are `always_reversible` (read-only).
 
 **`assess_history_need`** — properties `goal`, `provider`, `model` (default `haiku`), `output_key`
 (default `history_need`). Goals without history cues (regex: "last week", "did I", "before",
-weekday/month names, …) route `no_history` with **no LLM call**; otherwise haiku returns
+"continue", "what next", "pick up", weekday/month names, …; checked against the goal and the
+`continuation_comment`) route `no_history` with **no LLM call**. Continuations (a
+`previous_run_context` is present) always reach the LLM, with the comment and previous goal in the
+prompt (#150). Otherwise haiku returns
 `{needs_history, since, until, text, reasoning}`. Invalid extracted times are dropped. LLM errors or
 unparseable JSON degrade to `no_history`. **Routes:** `needs_history`, `no_history`.
 
 **`get_workflow_history`** — properties `since`/`until` (ISO-8601 or relative `-7d`, `24h`, `30m`,
-`2w`; unsigned = past), `text` (case-insensitive goal match), `workflow_name`, `success`, `limit`
+`2w`; unsigned = past), `text` (split into keywords; a run's goal must contain any of them,
+case-insensitive — #150), `workflow_name`, `success`, `limit`
 (default 20; store caps at 200), `output_key` (default `workflow_history`). Empty/unresolved templates
 mean "no filter". Calls `MetricsStore.search_runs()` from `__metrics_store__`, scoped to
 `__user_id__`, excluding the current `run_id`. **Output:** `{runs, count, filters, history_context}` —

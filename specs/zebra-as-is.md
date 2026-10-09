@@ -154,7 +154,7 @@ The loop lives in `workflows/agent_main_loop.yaml`, not Python. `AgentLoop` is a
 ```
 consult_memory
   → consult_knowledge
-  → assess_history_need      (needs_history → get_workflow_history — F138)
+  → assess_history_need      (needs_history → get_workflow_history — F138; continuations always ask the LLM — #150)
   → ethics_input_gate
   → assess_continuation      (F135)
   → workflow_selector
@@ -191,7 +191,7 @@ Three-tier model (matches the design in REQ-DATA-004):
 
 ### Metrics
 
-`MetricsStore` records workflow runs, task executions, tokens, USD cost, and user ratings. Two implementations (in-memory, Django). `get_total_cost_since()` feeds the budget manager. `search_runs()` (F138) filters runs by `since`/`until`/goal text/workflow/success, newest first, limit ≤200; the Django store scopes to an explicit `user_id` or the request user.
+`MetricsStore` records workflow runs, task executions, tokens, USD cost, and user ratings. Two implementations (in-memory, Django). `get_total_cost_since()` feeds the budget manager. `search_runs()` (F138) filters runs by `since`/`until`/goal text (any keyword from `search_keywords()`, #150)/workflow/success, newest first, limit ≤200; the Django store scopes to an explicit `user_id` or the request user.
 
 ### Workflow library
 

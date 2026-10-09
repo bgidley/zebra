@@ -226,6 +226,46 @@ class TestAssessHistoryNeed:
         assert result.next_route == "needs_history"
         assert result.output["since"] is None
 
+    async def test_continuation_always_asks_llm_with_comment(self, context):
+        """F150: the db777bc0 case — no goal cues, but a continuation with a comment."""
+        context.process.properties["previous_run_context"] = {
+            "goal": "Our holiday plans continue - what next",
+            "workflow_name": "Web Research",
+        }
+        context.process.properties["continuation_comment"] = "Check workflow history"
+        provider = _provider(json.dumps({"needs_history": True, "text": "holiday"}))
+        with patch("zebra_tasks.agent.history.get_provider", return_value=provider):
+            result = await AssessHistoryNeedAction().run(_task(goal="Holiday ideas"), context)
+        assert result.next_route == "needs_history"
+        assert result.output["text"] == "holiday"
+        prompt = provider.complete.call_args.kwargs["messages"][1].content
+        assert "Check workflow history" in prompt
+        assert "Our holiday plans continue - what next" in prompt
+
+    async def test_continuation_llm_failure_degrades(self, context):
+        context.process.properties["previous_run_context"] = {"goal": "x"}
+        provider = MagicMock()
+        provider.complete = AsyncMock(side_effect=RuntimeError("boom"))
+        with patch("zebra_tasks.agent.history.get_provider", return_value=provider):
+            result = await AssessHistoryNeedAction().run(_task(goal="write a haiku"), context)
+        assert result.success
+        assert result.next_route == "no_history"
+
+    @pytest.mark.parametrize(
+        "goal",
+        [
+            "Our holiday plans continue - what next",
+            "continue the pension research",
+            "where were we on the kitchen refit?",
+            "pick up the garden project",
+        ],
+    )
+    async def test_continuation_phrasing_is_a_cue(self, context, goal):
+        provider = _provider(json.dumps({"needs_history": False}))
+        with patch("zebra_tasks.agent.history.get_provider", return_value=provider) as gp:
+            await AssessHistoryNeedAction().run(_task(goal=goal), context)
+        gp.assert_called_once()
+
 
 class TestWithWorkflowHistory:
     def test_goal_unchanged_without_history(self):

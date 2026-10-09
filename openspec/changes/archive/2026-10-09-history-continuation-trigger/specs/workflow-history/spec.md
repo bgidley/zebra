@@ -1,10 +1,4 @@
-# workflow-history Specification
-
-## Purpose
-Lets a Zebra workflow decide whether it needs past workflow runs, fetch them filtered by time
-window and search text, and use the result in later planning and execution steps.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Filtered workflow run search
 The metrics store SHALL support searching past workflow runs. Every filter is optional:
@@ -55,41 +49,6 @@ users' runs.
 - **WHEN** the daemon (no request user) searches with user A's id
 - **THEN** only user A's runs are returned
 
-### Requirement: Workflow history task
-The system SHALL provide a `get_workflow_history` task action. It accepts start time, end time,
-search text, workflow name, success and limit as templatable properties. Times SHALL be accepted as
-ISO-8601 or as a relative offset from now (for example `-7d`, `24h`, `-30m`); an unsigned offset
-means that far in the past. The action SHALL output:
-- `runs`: a JSON-serialisable list of compact run records (id, workflow name, goal, started at,
-  success, rating, and output/error truncated to a fixed length)
-- `count`
-- `filters`: the resolved filters
-- `history_context`: a human/LLM-readable summary whose total size is bounded
-
-The action SHALL exclude the run it is executing within.
-
-#### Scenario: Relative window
-- **WHEN** the task runs with `since: "-7d"` and text "pension"
-- **THEN** it returns runs from the last 7 days whose goal mentions "pension", and `filters` shows
-  the resolved absolute start time
-
-#### Scenario: No matches
-- **WHEN** no runs match the filters
-- **THEN** the task succeeds with `count` 0, an empty `runs` list, and a `history_context` stating
-  that no matching history was found
-
-#### Scenario: Store unavailable
-- **WHEN** no metrics store is available to the task
-- **THEN** the task succeeds with empty history and logs a warning, rather than failing
-
-#### Scenario: Invalid time value
-- **WHEN** `since` is not a valid ISO-8601 timestamp or relative offset
-- **THEN** the task fails with a message naming the invalid value
-
-#### Scenario: Output is bounded
-- **WHEN** matching runs have very large outputs
-- **THEN** each run's output is truncated and `history_context` does not exceed its size limit
-
 ### Requirement: History-need decision
 The system SHALL provide an `assess_history_need` task action. It decides whether past workflow
 history is needed, routes `needs_history` or `no_history`, and when history is needed outputs the
@@ -122,17 +81,3 @@ process.
 #### Scenario: LLM failure degrades
 - **WHEN** the goal has history cues but the LLM call errors
 - **THEN** the task routes `no_history` and the process continues
-
-### Requirement: History flows into planning and execution
-When the agent main loop fetches history, the workflow selector SHALL receive the history context as
-planning input. The executed goal workflow SHALL receive the history context appended to its goal.
-When no history was fetched, the selector input and the goal SHALL be unchanged.
-
-#### Scenario: History reaches the executed workflow
-- **WHEN** a goal routes `needs_history` and matching runs are found
-- **THEN** the child workflow's goal contains the original goal followed by a delimited
-  workflow-history section
-
-#### Scenario: No history leaves goal untouched
-- **WHEN** a goal routes `no_history`
-- **THEN** the child workflow's goal is identical to what it would have been without this feature

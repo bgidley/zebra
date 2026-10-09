@@ -18,6 +18,7 @@ from zebra_agent.storage.interfaces import (
     SEARCH_RUNS_DEFAULT_LIMIT,
     SEARCH_RUNS_MAX_LIMIT,
     MetricsStore,
+    search_keywords,
 )
 
 from zebra_agent_web.middleware import get_current_user_id
@@ -308,7 +309,10 @@ class DjangoMetricsStore(MetricsStore):
             if until is not None:
                 qs = qs.filter(started_at__lt=until)
             if text:
-                qs = qs.filter(goal__icontains=text)
+                any_keyword = Q()
+                for keyword in search_keywords(text):
+                    any_keyword |= Q(goal__icontains=keyword)
+                qs = qs.filter(any_keyword)
             if workflow_name is not None:
                 qs = qs.filter(workflow_name=workflow_name)
             if success is not None:
