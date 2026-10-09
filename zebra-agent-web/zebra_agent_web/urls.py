@@ -97,6 +97,8 @@ urlpatterns = [
     path("runs/<str:run_id>/rate/", web_views.run_rate, name="run_rate"),
     path("runs/<str:run_id>/feedback/", web_views.run_feedback, name="run_feedback"),
     path("runs/<str:run_id>/continue/", web_views.run_continue, name="run_continue"),
+    # Dream Cycle history
+    path("dreams/", web_views.dream_cycles, name="dream_cycles"),
     # Ethics Audit Log (F20 / REQ-ETH-006)
     path("ethics-audit/", web_views.ethics_audit, name="ethics_audit"),
     # Legacy redirects (old URLs redirect to activity page)

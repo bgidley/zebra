@@ -178,6 +178,7 @@ any gate "reject" → ethics_rejection (record_ethics_rejection — #143)
 Self-improvement loop: `metrics_analyzer` → `workflow_curator` → `load_workflow_definitions` → `workflow_evaluator` → `workflow_optimizer`. Runs over the last N days of metrics; can propose edits to stored workflows. `workflow_optimizer` parses and validates every created/modified workflow before saving it (library loader, `check_generated_workflow`, registered actions). It caps output at `GENERATED_WORKFLOW_MAX_TOKENS` and retries a truncated response once at 2x. Rejected changes are not saved and go to `failed_changes` instead of `changes_made`; the v3 summary prompt reports them as not applied (#128).
 
 - **F136 continuation analysis**: `metrics_analyzer` walks continuation chains in the window (`get_continuations_since` → `get_run_chain` → `get_task_executions`, logic in `zebra_tasks/agent/continuation_analysis.py`) and emits `continuation_analysis` (chains, frequently continued workflows, `new_workflow` capability gaps, added steps, `source: continuation` proposals) plus per-workflow `continuation_rate`. The evaluator merges those proposals into `improvement_priorities`; the optimizer applies them first, through the #128 validation, and reports `continuation_changes`. The v4 summary has a "Continuations" section. Lineage fields may be `None`; store errors degrade to an empty block. The same rate is also kept for all time in `WorkflowStats.continued_runs` / `continuation_rate` (both stores), shown as a "Continued" card on the workflow page, as "N% continued" in the dashboard and library lists, and in API workflow stats (#137).
+- **History page**: `/dreams/` (`api/dream_history.py`) reads Dream Cycle process instances straight from the ORM (not user-scoped; scheduled cycles have no user) and flattens their step reports (`metrics_analysis`, `curation`, `evaluation`, `optimization_results`, `dream_summary`) for display, with the `dream_cycle` routine's next run.
 
 ### Memory
 
@@ -298,6 +299,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 | `/activity/` | Recent runs (handles orphaned processes) |
 | `/runs/<id>/` | Run detail with SVG workflow diagram; Final Output markdown rendered server-side (`markdown` template filter, markdown-it-py, raw HTML escaped — #149) |
 | `/workflows/` | Library browser |
+| `/dreams/` | Dream Cycle history: last 20 cycles with health score, changes applied/rejected, retirements, continuations and the LLM summary; health trend; next scheduled run |
 | `/tasks/` & `/tasks/<id>/` | Pending human tasks + JSON-Schema form |
 | `/api/runs/<id>/diagram/` | SVG |
 | `/api/tasks/<id>/complete/` | Submit human task |
