@@ -351,6 +351,7 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 - **Passkey (WebAuthn) authentication** on all web endpoints via `py_webauthn` and Django sessions.
 - **First-run setup flow** (`SetupRedirectMiddleware`) captures display name and generates a stable local identity UUID, stored in `SystemStateModel`.
 - Every process is stamped with `__user_display_name__` and `__user_identity_id__` at creation.
+- **Goal submitter (#151).** Every goal entry point stamps `__user_id__` plus the identity keys on the Agent Main Loop process: `POST /api/goals/` (`execute_goal` → `_run_goal_in_background` → `AgentLoop.process_goal(user_id=, identity=)`), API/web continue, `/run/execute/`, `/run/queue/`, the `queue_goal` action (copied from the queuing process) and `zebra goal --user NAME` / `manage.py run_goal --user NAME`. Identity is read with `goal_identity_sync()` in sync views and `await goal_identity()` in async views (`api/identity.py`); the sync ORM call fails inside the event loop.
 - See [f4-f5-identity-auth.md](f4-f5-identity-auth.md) for full detail.
 
 ### Weaknesses

@@ -339,12 +339,20 @@ def _run_dream_cycle_in_background(run_id: str) -> None:
     t.start()
 
 
-def _run_goal_in_background(run_id: str, goal: str, model: str | None = None) -> None:
+def _run_goal_in_background(
+    run_id: str,
+    goal: str,
+    model: str | None = None,
+    user_id: int | None = None,
+    identity: dict | None = None,
+) -> None:
     """Fire process_goal in a daemon thread with its own event loop.
 
     Returns immediately; the caller polls GET /api/runs/<run_id>/status/.
     Uses asyncio.run() in a fresh thread to avoid deadlocking the ASGI
-    event loop that is already running inside Daphne.
+    event loop that is already running inside Daphne. ``user_id`` and
+    ``identity`` are stamped onto the process so user-scoped steps (e.g.
+    consult_knowledge) see the submitting user (#151).
     """
 
     _active_api_runs.add(run_id)
@@ -352,7 +360,9 @@ def _run_goal_in_background(run_id: str, goal: str, model: str | None = None) ->
     async def _run():
         await agent_engine.ensure_initialized()
         agent_loop = agent_engine.get_agent_loop()
-        await agent_loop.process_goal(goal, run_id=run_id, model=model)
+        await agent_loop.process_goal(
+            goal, run_id=run_id, model=model, user_id=user_id, identity=identity
+        )
 
     def _thread():
         try:
@@ -395,8 +405,18 @@ def execute_goal(request):
 
     resolved_model = resolve_model_name(model_name) if model_name else None
 
+    from zebra_agent_web.api.identity import goal_identity_sync
+
+    user_id = request.user.id if request.user.is_authenticated else None
+
     try:
-        _run_goal_in_background(run_id, goal, model=resolved_model)
+        _run_goal_in_background(
+            run_id,
+            goal,
+            model=resolved_model,
+            user_id=user_id,
+            identity=goal_identity_sync(),
+        )
     except Exception as e:
         logger.exception("Failed to start goal execution")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -565,6 +585,10 @@ def run_continue(request, run_id):
     data = req_serializer.validated_data
     user_id = request.user.id if request.user.is_authenticated else None
 
+    from zebra_agent_web.api.identity import goal_identity_sync
+
+    identity = goal_identity_sync()
+
     async def _continue():
         from zebra_tasks.agent.followup import load_previous_run_context
 
@@ -581,6 +605,7 @@ def run_continue(request, run_id):
             model=data.get("model") or None,
             priority=data["priority"],
             user_id=user_id,
+            identity=identity,
             previous_run_context=context,
             continuation_comment=data["comment"],
         )

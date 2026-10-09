@@ -171,6 +171,29 @@ class TestQueueGoalAction:
         # Error is stored in result.error (TaskResult.fail sets error, not output)
         assert "DB error" in str(result.error)
 
+    async def test_copies_submitting_user_to_queued_goal(self, mock_task, mock_context):
+        """#151: the queued goal keeps the queuing process's user."""
+        mock_context.process.properties = {
+            "__user_id__": 7,
+            "__user_display_name__": "Ben",
+            "__user_identity_id__": "id-1",
+        }
+        mock_task.properties = {"goal": "Test goal"}
+        result = await QueueGoalAction().run(mock_task, mock_context)
+
+        assert result.success is True
+        props = mock_context.engine.create_process.call_args.kwargs["properties"]
+        assert props["__user_id__"] == 7
+        assert props["__user_display_name__"] == "Ben"
+        assert props["__user_identity_id__"] == "id-1"
+
+    async def test_no_user_keys_when_parent_has_none(self, mock_task, mock_context):
+        mock_task.properties = {"goal": "Test goal"}
+        await QueueGoalAction().run(mock_task, mock_context)
+
+        props = mock_context.engine.create_process.call_args.kwargs["properties"]
+        assert "__user_id__" not in props
+
 
 class TestQueueGoalActionMetadata:
     """Tests for QueueGoalAction metadata."""

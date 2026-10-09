@@ -37,17 +37,14 @@ _active_tasks: dict[str, asyncio.Task] = {}
 
 
 def _identity_context() -> dict:
-    """Return identity fields for template context (sync, safe to call from any view)."""
-    try:
-        from zebra_agent_web.api.identity import get_identity_sync
+    """Return identity fields for template context (sync views only).
 
-        identity = get_identity_sync()
-        return {
-            "user_display_name": identity["display_name"],
-            "user_identity_id": identity["identity_id"],
-        }
-    except Exception:
-        return {"user_display_name": "", "user_identity_id": ""}
+    From an async view use ``await goal_identity()`` instead — the ORM call
+    here fails inside a running event loop and the result is blank (#151).
+    """
+    from zebra_agent_web.api.identity import goal_identity_sync
+
+    return goal_identity_sync()
 
 
 # =============================================================================
@@ -579,6 +576,8 @@ async def run_goal_execute(request):
 
     previous_run_context = await _previous_run_context(request.POST.get("previous_run_id"))
 
+    from zebra_agent_web.api.identity import goal_identity
+
     # Start background task for goal execution
     task = asyncio.create_task(
         _execute_goal_background(
@@ -586,6 +585,7 @@ async def run_goal_execute(request):
             goal,
             model=resolved_model,
             user_id=user_id,
+            identity=await goal_identity(),
             previous_run_context=previous_run_context,
         )
     )
@@ -627,6 +627,10 @@ async def run_continue(request, run_id):
     model_name = request.POST.get("model", "").strip() or None
     user_id = request.user.id if request.user.is_authenticated else None
 
+    from zebra_agent_web.api.identity import goal_identity
+
+    identity = await goal_identity()
+
     if request.POST.get("mode", "now") == "queue":
         try:
             priority = max(1, min(5, int(request.POST.get("priority", "3"))))
@@ -641,7 +645,7 @@ async def run_continue(request, run_id):
                 model=model_name,
                 priority=priority,
                 user_id=user_id,
-                identity=_identity_context(),
+                identity=identity,
                 previous_run_context=previous_run_context,
                 continuation_comment=comment,
             )
@@ -659,6 +663,7 @@ async def run_continue(request, run_id):
             goal,
             model=resolve_model_name(model_name) if model_name else None,
             user_id=user_id,
+            identity=identity,
             previous_run_context=previous_run_context,
             continuation_comment=comment,
         )
@@ -757,6 +762,7 @@ async def run_goal_queue(request):
     previous_run_context = await _previous_run_context(request.POST.get("previous_run_id"))
 
     from zebra_agent_web.api.goals import queue_goal
+    from zebra_agent_web.api.identity import goal_identity
 
     try:
         process = await queue_goal(
@@ -765,7 +771,7 @@ async def run_goal_queue(request):
             priority=priority,
             deadline=deadline or None,
             user_id=request.user.id if request.user.is_authenticated else None,
-            identity=_identity_context(),
+            identity=await goal_identity(),
             previous_run_context=previous_run_context,
         )
     except ValueError as e:
@@ -782,6 +788,7 @@ async def _execute_goal_background(
     goal: str,
     model: str | None = None,
     user_id: int | None = None,
+    identity: dict | None = None,
     previous_run_context: dict | None = None,
     continuation_comment: str | None = None,
 ) -> None:
@@ -789,7 +796,9 @@ async def _execute_goal_background(
 
     This function runs as an asyncio task, independent of the HTTP request.
     Progress updates are sent to the channel group for the run_id, where
-    connected WebSocket clients receive them.
+    connected WebSocket clients receive them. ``user_id`` / ``identity`` are
+    stamped onto the process (``__user_id__`` etc.) so user-scoped steps such
+    as consult_knowledge see the submitter (#151).
     """
     channel_layer = get_channel_layer()
     group_name = f"goal_{run_id}"
@@ -814,6 +823,7 @@ async def _execute_goal_background(
             run_id=run_id,
             model=model,
             user_id=user_id,
+            identity=identity,
             previous_run_context=previous_run_context,
             continuation_comment=continuation_comment,
         )

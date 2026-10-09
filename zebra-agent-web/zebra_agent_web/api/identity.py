@@ -83,3 +83,42 @@ def is_setup_complete_sync() -> bool:
 
     obj, _ = SystemStateModel.objects.get_or_create(pk=1)
     return obj.setup_completed
+
+
+# ---------------------------------------------------------------------------
+# Goal-process identity (``__user_display_name__`` / ``__user_identity_id__``)
+# ---------------------------------------------------------------------------
+
+_EMPTY_GOAL_IDENTITY = {"user_display_name": "", "user_identity_id": ""}
+
+
+def _goal_identity(identity: dict) -> dict:
+    return {
+        "user_display_name": identity["display_name"],
+        "user_identity_id": identity["identity_id"],
+    }
+
+
+def goal_identity_sync() -> dict:
+    """Identity fields stamped onto goal processes, from a sync context.
+
+    Returns ``{"user_display_name", "user_identity_id"}``; empty strings if the
+    identity cannot be read (never raises).
+    """
+    try:
+        return _goal_identity(get_identity_sync())
+    except Exception:
+        return dict(_EMPTY_GOAL_IDENTITY)
+
+
+async def goal_identity() -> dict:
+    """Async variant of :func:`goal_identity_sync` for async views and the CLI.
+
+    The sync helper must not be called from a running event loop: Django
+    raises ``SynchronousOnlyOperation`` and the identity would silently come
+    back blank (#151).
+    """
+    try:
+        return _goal_identity(await get_identity())
+    except Exception:
+        return dict(_EMPTY_GOAL_IDENTITY)

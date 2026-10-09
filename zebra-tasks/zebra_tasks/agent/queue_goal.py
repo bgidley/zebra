@@ -18,6 +18,9 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 logger = logging.getLogger(__name__)
 
+# Submitter identity copied from the queuing process onto the queued goal (#151)
+_USER_PROPERTY_KEYS = ("__user_id__", "__user_display_name__", "__user_identity_id__")
+
 
 class QueueGoalAction(TaskAction):
     """Queue a goal for budget-managed execution.
@@ -115,6 +118,12 @@ class QueueGoalAction(TaskAction):
             ]
         if "__llm_model__" in context.process.properties:
             properties["__llm_model__"] = context.process.properties["__llm_model__"]
+
+        # Carry the submitting user over so the queued goal's user-scoped steps
+        # (consult_knowledge, profile/ethics context, run ownership) see them (#151)
+        for key in _USER_PROPERTY_KEYS:
+            if key in context.process.properties:
+                properties[key] = context.process.properties[key]
 
         try:
             # Create the process in CREATED state — do NOT start it

@@ -694,6 +694,29 @@ class TestProcessGoalContinuation:
         )
         assert "continuation_comment" not in props
 
+    async def test_user_id_and_identity_stored(
+        self, library, mock_engine, metrics, agent_main_loop_yaml
+    ):
+        """#151: the submitting user reaches the process as __user_id__ etc."""
+        props = await self._captured(
+            library,
+            mock_engine,
+            metrics,
+            agent_main_loop_yaml,
+            user_id=7,
+            identity={"user_display_name": "Ben", "user_identity_id": "id-1"},
+        )
+        assert props["__user_id__"] == 7
+        assert props["__user_display_name__"] == "Ben"
+        assert props["__user_identity_id__"] == "id-1"
+
+    async def test_no_identity_keys_without_identity(
+        self, library, mock_engine, metrics, agent_main_loop_yaml
+    ):
+        props = await self._captured(library, mock_engine, metrics, agent_main_loop_yaml)
+        assert props["__user_id__"] is None
+        assert "__user_display_name__" not in props
+
 
 class TestProcessGoalSurfacesTaskErrors:
     """A failed task must surface its error in AgentResult (#120)."""
