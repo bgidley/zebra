@@ -73,9 +73,10 @@ suite is red, stop and report the failing tests — do not commit.
 ### 4. Zebra feedback (advisory)
 Before the closing commit, run:
 `bash scripts/zebra-feedback.sh N "<title>" "<bullet list of changes>"`.
-Record the verdict. It is advisory — proceed regardless; if you disagree with a point, note
-it briefly in the commit body. If the script is unreachable it exits 0 with a notice; carry
-on and add "(Zebra feedback skipped — server unreachable)" to the commit.
+It runs the review in the prod `zebra-web` container (model `sonnet`; `ZEBRA_FEEDBACK_MODEL`
+overrides). Record the verdict. It is advisory — proceed regardless; if you disagree with a
+point, note it briefly in the commit body. The script always exits 0: if Zebra is unreachable
+or the goal fails it prints why — add "(Zebra feedback skipped — <reason>)" to the commit.
 
 ### 5. Commit
 Stage source files explicitly — **never** stage `.env`, secrets, `db.sqlite3`, or large
