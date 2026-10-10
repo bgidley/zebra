@@ -23,6 +23,15 @@ lint:
     - uv run ruff check .
     - uv run ruff format --check .
 
+# Build the stylesheet on every pipeline so a broken app.css never first fails
+# in the master-only Docker build.
+css:
+  stage: lint
+  script:
+    - uv run python scripts/build_css.py
+    - test -s zebra-agent-web/static/css/app.css
+    - grep -q -- "--color-voice" zebra-agent-web/static/css/app.css
+
 unit:
   stage: test
   script:

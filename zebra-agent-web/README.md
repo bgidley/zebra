@@ -79,6 +79,15 @@ See Django documentation for other database backends.
 
 ### Development Server
 
+Build the stylesheet first. The compiled `static/css/app.css` is not committed;
+without it pages render unstyled.
+
+```bash
+# From the repo root: one-off build, or rebuild on template changes
+uv run python scripts/build_css.py
+uv run python scripts/build_css.py --watch
+```
+
 ```bash
 # Using uv (recommended)
 uv run zebra-web-agent-dev

@@ -1,0 +1,109 @@
+/*
+ * Zebra web UI stylesheet source.
+ *
+ * Compiled to ../app.css by scripts/build_css.py (pinned Tailwind v4 binary).
+ * Do not edit ../app.css; it is generated and not committed.
+ */
+
+@import "tailwindcss" source(none);
+
+/* Everywhere utility classes can appear. */
+@source "../../../templates";
+@source "../../../zebra_agent_web/**/*.py";
+@source "../../js";
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/geist-latin-wght-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/geist-mono-latin-wght-normal.woff2") format("woff2");
+}
+
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Greys from the old Play CDN config, still used by current templates. */
+  --color-gray-750: #2d3748;
+  --color-gray-850: #1a202c;
+}
+
+/* Zebra tokens, always emitted as CSS variables so later phases can rely on them. */
+@theme static {
+  /* Frame: the neutral layer that holds the human's controls. */
+  --color-ground: #0c0d0f;
+  --color-surface: #131417;
+  --color-surface-2: #1b1c20;
+  --color-line: #26282e;
+  --color-ink: #ececef;
+  --color-muted: #9a9da6;
+  --color-faint: #6c6f78;
+
+  /* State: colour only ever means one of these. */
+  --color-ok: #5cbf86;
+  --color-fail: #ec6a61;
+  --color-needs: #f0b44a;
+
+  /* Reserved for text Zebra writes in its own words (#161). */
+  --color-voice: #8fb0f5;
+}
+
+/*
+ * Keep Tailwind v3 defaults the existing templates were written against.
+ * Temporary: remove in the sweep (#163) once every page uses the tokens above.
+ */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+[x-cloak] {
+  display: none !important;
+}
+
+/* HTMX loading indicator */
+.htmx-indicator {
+  display: none;
+}
+.htmx-request .htmx-indicator {
+  display: inline-flex;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-gray-800);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-gray-600);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gray-500);
+}

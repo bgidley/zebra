@@ -1,53 +1,18 @@
-<!DOCTYPE html>
+{% load static icon_tags %}<!DOCTYPE html>
 <html lang="en" class="h-full bg-gray-900">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}Zebra Agent{% endblock %}</title>
-    
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        gray: {
-                            750: '#2d3748',
-                            850: '#1a202c',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    
-    <!-- HTMX -->
-    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-    
-    <!-- Alpine.js -->
-    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    
-    <!-- Workflow Diagram JS -->
-    <script src="/static/js/workflow-diagram.js"></script>
-    
-    <!-- Custom styles -->
-    <style>
-        [x-cloak] { display: none !important; }
-        
-        /* HTMX loading indicator */
-        .htmx-request .htmx-indicator { display: inline-flex; }
-        .htmx-indicator { display: none; }
-        
-        /* Custom scrollbar */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #1f2937; }
-        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
-    </style>
-    
+
+    {% comment %}Compiled by scripts/build_css.py from static/css/src/app.css{% endcomment %}
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+
+    <script src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
+    <script defer src="{% static 'vendor/alpine-3.17.4.min.js' %}"></script>
+    <script src="{% static 'js/workflow-diagram.js' %}"></script>
+
     {% block extra_head %}{% endblock %}
 </head>
 <body class="h-full" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
@@ -76,16 +41,16 @@
             <!-- Navigation -->
             <nav class="mt-6 px-3">
                 <div class="space-y-1">
-                    {% include "partials/nav_item.html" with url="/" icon="dashboard" label="Dashboard" %}
-                    {% include "partials/nav_item.html" with url="/run/" icon="zap" label="Run Goal" %}
-                    {% include "partials/nav_item.html" with url="/activity/" icon="activity" label="Activity" %}
-                    {% include "partials/nav_item.html" with url="/workflows/" icon="library" label="Workflows" %}
-                    {% include "partials/nav_item.html" with url="/knowledge/" icon="book" label="Knowledge" %}
+                    {% include "partials/nav_item.html" with url="/" icon="squares-four" label="Dashboard" %}
+                    {% include "partials/nav_item.html" with url="/run/" icon="lightning" label="Run Goal" %}
+                    {% include "partials/nav_item.html" with url="/activity/" icon="pulse" label="Activity" %}
+                    {% include "partials/nav_item.html" with url="/workflows/" icon="tree-structure" label="Workflows" %}
+                    {% include "partials/nav_item.html" with url="/knowledge/" icon="book-open" label="Knowledge" %}
                     {% include "partials/nav_item.html" with url="/dreams/" icon="moon" label="Dream Cycles" %}
-                    {% include "partials/nav_item.html" with url="/trust/" icon="shield" label="Trust" %}
-                    {% include "partials/nav_item.html" with url="/profile/taxonomy/" icon="tasks" label="Values Tags" %}
+                    {% include "partials/nav_item.html" with url="/trust/" icon="shield-check" label="Trust" %}
+                    {% include "partials/nav_item.html" with url="/profile/taxonomy/" icon="tag" label="Values Tags" %}
                     {% if user.is_staff %}
-                    {% include "partials/nav_item.html" with url="/ethics-audit/" icon="shield" label="Ethics Audit" %}
+                    {% include "partials/nav_item.html" with url="/ethics-audit/" icon="scales" label="Ethics Audit" %}
                     {% endif %}
                 </div>
             </nav>
@@ -111,10 +76,8 @@
                         </span>
                     </div>
                     {% if user.is_authenticated %}
-                    <a href="/auth/logout/" class="text-gray-400 hover:text-white" title="Sign out">
-                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
+                    <a href="/auth/logout/" class="text-gray-400 hover:text-white" title="Sign out" aria-label="Sign out">
+                        {% icon "sign-out" class="h-5 w-5" %}
                     </a>
                     {% endif %}
                 </div>
@@ -127,10 +90,8 @@
             <!-- Top bar (mobile) -->
             <div class="sticky top-0 z-30 bg-gray-800 border-b border-gray-700 lg:hidden">
                 <div class="flex items-center h-16 px-4">
-                    <button @click="sidebarOpen = true" class="text-gray-400 hover:text-white">
-                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                        </svg>
+                    <button @click="sidebarOpen = true" class="text-gray-400 hover:text-white" aria-label="Open navigation">
+                        {% icon "list" class="h-6 w-6" %}
                     </button>
                     <span class="ml-4 text-lg font-semibold text-white">{% block page_title %}Zebra Agent{% endblock %}</span>
                 </div>

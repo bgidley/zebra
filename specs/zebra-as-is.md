@@ -299,7 +299,11 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 ### Stack
 
 - **Django 5 + Daphne + Channels**
-- **HTMX 2 + Alpine.js 3 + Tailwind (CDN)** — no frontend build step
+- **HTMX 2.0.4 + Alpine.js 3.17.4**, vendored in `static/vendor/` (no CDN scripts)
+- **Tailwind v4, compiled** by `scripts/build_css.py` (pinned standalone binary, sha256-checked, no Node) from `static/css/src/app.css` to `static/css/app.css` (generated, not committed). Built in the Dockerfile before `collectstatic` and by the `css` CI job (#159)
+- **Design tokens** in `app.css` `@theme`: frame neutrals (`ground`, `surface`, `surface-2`, `line`, `ink`, `muted`, `faint`), states (`ok`, `fail`, `needs`) and `voice`, reserved for Zebra's own words (#161). Templates still mostly use the stock grey/indigo classes until #160 to #163 land
+- **Fonts**: Geist + Geist Mono, self-hosted in `static/fonts/`
+- **Icons**: `{% icon "name" %}` (`api/templatetags/icon_tags.py`) inlines vendored Phosphor regular SVGs from `zebra_agent_web/icons/phosphor/`; an unknown name renders nothing and logs an error. Nav, stat cards and shell use it; other pages still have inline SVGs
 - **Django REST Framework** for JSON endpoints
 
 ### Routes
