@@ -55,6 +55,7 @@ class SchedulerLoop:
         routines_dir: str | None = None,
         goal_queue_tick_fn: Callable | None = None,
         queue_goal_fn: Callable[[Routine], Awaitable[object]] | None = None,
+        default_properties: dict | None = None,
     ) -> None:
         self._registry = registry
         self._store = store
@@ -66,6 +67,9 @@ class SchedulerLoop:
         self._routines_dir = routines_dir
         self._goal_queue_tick_fn = goal_queue_tick_fn
         self._queue_goal_fn = queue_goal_fn
+        # Seeded into every routine-dispatched process (e.g. __llm_provider_name__)
+        # so routine runs get the same context as manually started ones.
+        self._default_properties = dict(default_properties or {})
 
     async def run(self) -> None:
         """Run the scheduler loop until stop_event is set."""
@@ -164,7 +168,11 @@ class SchedulerLoop:
             )
             return
 
-        properties = {"__routine__": routine.name, **routine.extra_properties}
+        properties = {
+            **self._default_properties,
+            "__routine__": routine.name,
+            **routine.extra_properties,
+        }
         process = await self._engine.create_process(definition, properties=properties)
         logger.info(
             "[scheduler:dispatch] %s  workflow=%s  process=%s",

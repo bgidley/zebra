@@ -99,6 +99,16 @@ async def run_daemon_loop(
             tracker=goal_tracker,
         )
 
+    # Routine-dispatched workflows (e.g. the 03:00 Dream Cycle) need the same
+    # LLM/library context that AgentLoop.run_dream_cycle() sets; without it the
+    # evaluator/optimizer fail with "No LLM provider available".
+    agent_loop = agent_engine.get_agent_loop()
+    routine_properties = {
+        "__llm_provider_name__": agent_loop.provider_name,
+        "__llm_model__": agent_loop.model,
+        "__workflow_library_path__": str(agent_loop.library.library_path),
+    }
+
     scheduler_loop = SchedulerLoop(
         registry=registry,
         store=store,
@@ -109,6 +119,7 @@ async def run_daemon_loop(
         routines_dir=str(_ROUTINES_DIR),
         goal_queue_tick_fn=_goal_queue_tick_fn,
         queue_goal_fn=queue_routine_goal,
+        default_properties=routine_properties,
     )
 
     logger.info(
