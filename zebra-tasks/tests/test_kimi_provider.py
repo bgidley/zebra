@@ -34,6 +34,14 @@ def _provider(model=None):
         ("kimi-k3", "kimi-k3"),
         ("kimi-code", "kimi-k2.7-code-highspeed"),
         ("kimi-k2.7-code", "kimi-k2.7-code"),  # raw ids pass through
+        # Anthropic tier names used across workflows map to Kimi tiers
+        ("haiku", "kimi-k2.6"),
+        ("sonnet", "kimi-k2.6"),
+        ("opus", "kimi-k3"),
+        # other providers' ids fall back to the default
+        ("claude-haiku-4-5-20251001", "kimi-k2.6"),
+        ("gpt-4o", "kimi-k2.6"),
+        ("", "kimi-k2.6"),
     ],
 )
 def test_aliases_resolve_to_live_models(alias, model):

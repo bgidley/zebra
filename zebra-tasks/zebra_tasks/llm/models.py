@@ -19,6 +19,14 @@ KIMI_MODELS: dict[str, str] = {
     "kimi-auto": "kimi-k2.6",
 }
 
+# Anthropic tier names (used as "cheap / balanced / best" across workflows and actions)
+# mapped to Kimi models, so `model: haiku` still works when the provider is kimi (#164).
+KIMI_TIER_MODELS: dict[str, str] = {
+    "haiku": "kimi-k2.6",
+    "sonnet": "kimi-k2.6",
+    "opus": "kimi-k3",
+}
+
 # Ordered list of friendly names for UI dropdowns / API validation.
 MODEL_CHOICES: list[str] = ["haiku", "sonnet", "opus"]
 

@@ -58,7 +58,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/knowledge/store_learned.py` | StoreLearnedKnowledgeAction - store candidates as `source=agent` (confidence ≤ `max_confidence`), start *Resolve Knowledge Contradiction* for conflicts (F152); `update_agent_entries: true` updates a conflicting agent entry in place (F155) |
 | `zebra_tasks/web/kagi_news.py` | KagiNewsFetchAction (`kagi_news_fetch`: news.kagi.com `kite.json` feed, no key) and KagiNewsReadAction (`kagi_news_read`: batch Kagi Extract of picked stories, falls back to Kagi News summaries; never fails on extraction) (F155) |
 | `zebra_tasks/llm/pricing.py` | Anthropic pricing table, `calculate_cost()`, `estimate_goal_cost()` |
-| `zebra_tasks/llm/models.py` | ANTHROPIC_MODELS, KIMI_MODELS (`kimi` → `kimi-k2.6`, `kimi-k3`, `kimi-code`; #164), `resolve_model_name()` model aliases |
+| `zebra_tasks/llm/models.py` | ANTHROPIC_MODELS, KIMI_MODELS (`kimi` → `kimi-k2.6`, `kimi-k3`, `kimi-code`; #164), KIMI_TIER_MODELS (`haiku`/`sonnet` → `kimi-k2.6`, `opus` → `kimi-k3`, so tier names in workflows work under the kimi provider), `resolve_model_name()` model aliases |
 | `zebra_tasks/llm/providers/kimi.py` | KimiProvider (OpenAI-compatible): never sends `temperature` (Kimi models accept one fixed value) and sends `thinking: disabled` except for thinking-only `kimi-k2.7-code*` models, via the `OpenAIProvider._sampling_kwargs()` hook (#164) |
 | `tests/` | Test suite |
 
