@@ -1,6 +1,6 @@
-"""Hardcoded Anthropic pricing table and cost calculation helpers.
+"""Hardcoded LLM pricing tables (Anthropic, Kimi) and cost calculation helpers.
 
-Prices are in USD per 1 million tokens.  Update this file when Anthropic
+Prices are in USD per 1 million tokens.  Update this file when a provider
 publishes new pricing.
 """
 
@@ -20,6 +20,18 @@ ANTHROPIC_PRICING: dict[str, dict[str, float]] = {
     "claude-3-haiku-20240307": {"input": 0.25, "output": 1.25},
 }
 
+# Kimi (Moonshot AI) list prices from https://platform.kimi.ai/docs/pricing/chat
+# (checked 2026-10-10). Input is the cache-miss price: Zebra does not track cache hits,
+# so this is the upper bound. Keys are the ids Kimi echoes in ``response.model``.
+KIMI_PRICING: dict[str, dict[str, float]] = {
+    "kimi-k3": {"input": 3.00, "output": 15.00},
+    "kimi-k2.6": {"input": 0.95, "output": 4.00},
+    "kimi-k2.7-code": {"input": 0.95, "output": 4.00},
+    "kimi-k2.7-code-highspeed": {"input": 1.90, "output": 8.00},
+}
+
+PRICING: dict[str, dict[str, float]] = {**ANTHROPIC_PRICING, **KIMI_PRICING}
+
 # Fallback when the model ID is not in the table (sonnet-tier).
 DEFAULT_PRICING: dict[str, float] = {"input": 3.00, "output": 15.00}
 
@@ -28,7 +40,7 @@ def get_pricing(model: str | None) -> dict[str, float]:
     """Return the pricing entry for *model*, falling back to DEFAULT_PRICING."""
     if model is None:
         return DEFAULT_PRICING
-    return ANTHROPIC_PRICING.get(model, DEFAULT_PRICING)
+    return PRICING.get(model, DEFAULT_PRICING)
 
 
 def calculate_cost(
@@ -39,7 +51,8 @@ def calculate_cost(
     """Calculate the USD cost for an LLM call.
 
     Args:
-        model: Anthropic model ID (e.g. ``"claude-sonnet-4-20250514"``).
+        model: Model ID as returned by the provider (e.g. ``"claude-sonnet-4-6"``,
+            ``"kimi-k2.6"``).
         input_tokens: Number of input (prompt) tokens.
         output_tokens: Number of output (completion) tokens.
 

@@ -3,6 +3,7 @@
 from zebra_tasks.llm.pricing import (
     ANTHROPIC_PRICING,
     DEFAULT_PRICING,
+    KIMI_PRICING,
     calculate_cost,
     estimate_goal_cost,
     get_pricing,
@@ -107,3 +108,33 @@ class TestEstimateGoalCost:
         all_input = calculate_cost("claude-sonnet-4-6", 10000, 0)
         estimated = estimate_goal_cost("claude-sonnet-4-6", 10000)
         assert estimated > all_input
+
+
+class TestKimiPricing:
+    """Kimi list prices (platform.kimi.ai, cache-miss input) — #164 follow-up."""
+
+    def test_kimi_models_priced(self):
+        assert get_pricing("kimi-k2.6") == {"input": 0.95, "output": 4.00}
+        assert get_pricing("kimi-k3") == {"input": 3.00, "output": 15.00}
+        assert get_pricing("kimi-k2.7-code") == {"input": 0.95, "output": 4.00}
+        assert get_pricing("kimi-k2.7-code-highspeed") == {"input": 1.90, "output": 8.00}
+
+    def test_every_kimi_alias_target_is_priced(self):
+        """Any model a Kimi alias or tier name resolves to has a real price, not the fallback."""
+        from zebra_tasks.llm.models import KIMI_MODELS, KIMI_TIER_MODELS
+        from zebra_tasks.llm.providers.kimi import KimiProvider
+
+        for model in {*KIMI_MODELS.values(), *KIMI_TIER_MODELS.values()}:
+            assert model in KIMI_PRICING, model
+        assert set(KimiProvider.CONTEXT_WINDOWS) == set(KIMI_PRICING)
+
+    def test_unknown_kimi_model_uses_default(self):
+        """A Kimi id not in the table is costed at the conservative fallback."""
+        assert get_pricing("kimi-k9-preview") == DEFAULT_PRICING
+
+    def test_kimi_cost(self):
+        # 1M input + 1M output on kimi-k2.6 = $0.95 + $4.00
+        assert abs(calculate_cost("kimi-k2.6", 1_000_000, 1_000_000) - 4.95) < 1e-9
+
+    def test_anthropic_prices_unchanged(self):
+        assert get_pricing("claude-sonnet-4-6") == ANTHROPIC_PRICING["claude-sonnet-4-6"]
