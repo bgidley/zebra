@@ -54,6 +54,10 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `templates/pages/run_pending.html` | Queued/running/completed/failed process detail (no metrics record) |
 | `templates/components/` | Reusable components |
 | `static/` | Static assets (CSS, JS) |
+| `static/css/src/app.css` | Tailwind v4 source: `@source` paths, design tokens (`@theme`), fonts, v3-compat base layer. Compiled to `static/css/app.css` (not committed) by `uv run python scripts/build_css.py [--watch]` (#159) |
+| `static/vendor/` | Pinned HTMX and Alpine builds; versions and licences in its README |
+| `static/fonts/` | Self-hosted Geist / Geist Mono (OFL) |
+| `zebra_agent_web/icons/phosphor/` | Vendored Phosphor regular icons for `{% icon "name" class="..." %}` (`api/templatetags/icon_tags.py`) |
 | `static/js/workflow-diagram.js` | Shared workflow diagram JavaScript |
 | `manage.py` | Django management script |
 

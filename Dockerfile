@@ -25,6 +25,10 @@ COPY zebra-agent-web/ zebra-agent-web/
 # Install all packages without dev dependencies
 RUN uv sync --all-packages --no-dev --frozen
 
+# Compile the Tailwind stylesheet (pinned, checksum-verified standalone binary)
+COPY scripts/build_css.py scripts/build_css.py
+RUN python scripts/build_css.py
+
 # Collect static files (needs Django settings, use dummy secret)
 ENV DJANGO_SETTINGS_MODULE=zebra_agent_web.settings \
     DJANGO_SECRET_KEY=build-only-dummy-key \

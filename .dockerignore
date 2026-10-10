@@ -12,3 +12,4 @@ legacy/
 staticfiles/
 node_modules/
 .claude/
+zebra-agent-web/static/css/app.css

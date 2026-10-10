@@ -14,7 +14,7 @@ F135 renders the workflow-choice decision/rationale fields here as well.
     <ol class="p-6 space-y-3">
         {% for link in run_chain %}
         <li class="flex gap-3 {% if link.is_current %}text-white{% else %}text-gray-300{% endif %}">
-            <span class="mt-0.5 h-2.5 w-2.5 flex-shrink-0 rounded-full {% if link.success %}bg-green-500{% else %}bg-red-500{% endif %}"></span>
+            <span class="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full {% if link.success %}bg-green-500{% else %}bg-red-500{% endif %}"></span>
             <div class="min-w-0">
                 <div class="text-sm">
                     {% if link.position == 0 %}Original{% else %}Continuation {{ link.position }}{% endif %}

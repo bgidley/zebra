@@ -121,7 +121,7 @@ Context:
                         <span class="truncate text-white" title="{{ group.goal }}">{{ group.goal }}</span>
                         {% if group.tasks %}
                         <button @click="expanded=!expanded"
-                                class="flex-shrink-0 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                                class="shrink-0 text-xs text-gray-500 hover:text-gray-300 transition-colors"
                                 :class="{'text-gray-300': expanded}">
                             <span x-text="expanded ? '&#9660;' : '&#9654;'"></span>
                             {{ group.tasks|length }} task{{ group.tasks|length|pluralize }}
@@ -129,12 +129,12 @@ Context:
                         {% endif %}
                         {% if group.review_tasks %}
                         <span title="Interrupted by a restart; retry or fail it below"
-                              class="flex-shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50">review needed</span>
+                              class="shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50">review needed</span>
                         {% endif %}
                         {% if group.human_task_ids %}
                         <a href="{% url 'human_task_form' task_id=group.human_task_ids.0 %}"
                            title="Open the input form"
-                           class="flex-shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 hover:bg-amber-800/60 hover:text-amber-200 transition-colors">input needed{% if group.human_task_ids|length > 1 %} ({{ group.human_task_ids|length }}){% endif %}</a>
+                           class="shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 hover:bg-amber-800/60 hover:text-amber-200 transition-colors">input needed{% if group.human_task_ids|length > 1 %} ({{ group.human_task_ids|length }}){% endif %}</a>
                         {% endif %}
                     </div>
                 </td>
@@ -202,7 +202,7 @@ Context:
                                 <span class="text-xs text-white font-medium">{{ task.task_name }}</span>
                                 <span class="text-xs text-gray-500 ml-2">{{ task.process_name }}{% if task.schema_title %} &mdash; {{ task.schema_title }}{% endif %}</span>
                             </div>
-                            <span class="flex-shrink-0 px-2 py-0.5 text-xs font-medium rounded bg-amber-900 text-amber-200">Awaiting Input</span>
+                            <span class="shrink-0 px-2 py-0.5 text-xs font-medium rounded bg-amber-900 text-amber-200">Awaiting Input</span>
                         </a>
                         {% else %}
                         <div class="flex items-center justify-between py-1.5 px-3 rounded bg-gray-750 border border-gray-700/50">

@@ -16,3 +16,6 @@ tmp
 
 # Claude Code worktrees (other sessions work here — never commit or lint them)
 .claude/worktrees/
+
+# Compiled by scripts/build_css.py (built in the Docker image and CI, never committed)
+zebra-agent-web/static/css/app.css
