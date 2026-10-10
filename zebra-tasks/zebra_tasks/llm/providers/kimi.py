@@ -51,9 +51,7 @@ class KimiProvider(OpenAIProvider):
         except ImportError:
             raise ImportError("openai package not installed. Install with: pip install openai")
 
-        from zebra_tasks.llm.models import KIMI_MODELS
-
-        resolved_model = KIMI_MODELS.get(model or "", model) or self.DEFAULT_MODEL
+        resolved_model = self.resolve_model(model)
         resolved_key = api_key or os.environ.get("KIMI_API_KEY")
         resolved_base_url = os.environ.get("KIMI_BASE_URL", self.BASE_URL)
 
@@ -68,6 +66,25 @@ class KimiProvider(OpenAIProvider):
             api_key=self._api_key,
             base_url=resolved_base_url,
         )
+
+    @classmethod
+    def resolve_model(cls, model: str | None) -> str:
+        """Map a Kimi alias, an Anthropic tier name or a raw id to a Kimi model id.
+
+        Kimi aliases and raw ``kimi-*`` ids are used as given; ``haiku`` / ``sonnet`` /
+        ``opus`` map to Kimi tiers; anything else (e.g. a ``claude-*`` id from a
+        workflow written for Anthropic) falls back to ``DEFAULT_MODEL``.
+        """
+        from zebra_tasks.llm.models import KIMI_MODELS, KIMI_TIER_MODELS
+
+        model = (model or "").strip()
+        if model in KIMI_MODELS:
+            return KIMI_MODELS[model]
+        if model in KIMI_TIER_MODELS:
+            return KIMI_TIER_MODELS[model]
+        if model.startswith("kimi"):
+            return model
+        return cls.DEFAULT_MODEL
 
     @property
     def name(self) -> str:
