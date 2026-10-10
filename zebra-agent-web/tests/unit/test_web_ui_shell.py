@@ -102,6 +102,31 @@ def test_version_info_lives_in_sidebar_not_a_fixed_strip(staff_user):
         assert field in aside
 
 
+def test_sidebar_is_hidden_by_css_before_alpine_runs(staff_user):
+    """#166: on iPad the sidebar flashed over the page until deferred Alpine ran,
+    because only an Alpine-bound class hid it. It must be hidden by CSS alone."""
+    html = _render_page("base.html", staff_user)
+    aside_tag = re.search(r"<aside[^>]*>", html, flags=re.S).group(0)
+
+    assert "app-sidebar" in aside_tag
+    assert 'data-open="false"' in aside_tag
+    assert "translate-x" not in aside_tag
+
+    css = APP_CSS.read_text()
+    rule = re.search(r"@media \(max-width: 63\.999rem\) \{(.*?)\n  \}", css, flags=re.S).group(1)
+    assert re.search(r"\.app-sidebar \{\s*translate: -100% 0;", rule)
+    assert re.search(r'\.app-sidebar\[data-open="true"\] \{\s*translate: 0 0;', rule)
+
+
+def test_menu_button_controls_sidebar_and_locks_scroll(staff_user):
+    html = _render_page("base.html", staff_user)
+
+    assert 'aria-controls="app-sidebar"' in html
+    assert "classList.toggle('overflow-hidden', sidebarOpen)" in html
+    # Rotating to landscape (lg) with the menu open must release the scroll lock.
+    assert "@resize.window=\"if (window.matchMedia('(min-width: 64rem)').matches)" in html
+
+
 def _top_bar(page: str) -> str:
     return page.split('data-testid="mobile-top-bar"', 1)[1].split("<main", 1)[0]
 

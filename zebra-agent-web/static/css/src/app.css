@@ -209,6 +209,20 @@
     background: repeating-linear-gradient(-45deg, var(--stripe) 0 2px, transparent 2px 8px);
   }
 
+  /*
+   * App sidebar (#166). Hidden off-canvas below lg by default, in CSS, so it
+   * is correct before Alpine (deferred) runs; Alpine only toggles data-open.
+   */
+  @media (max-width: 63.999rem) {
+    .app-sidebar {
+      translate: -100% 0;
+      transition: translate 200ms ease-out;
+    }
+    .app-sidebar[data-open="true"] {
+      translate: 0 0;
+    }
+  }
+
   /* The brand mark: a stroked square of diagonal stripes. */
   .zebra-mark {
     display: inline-block;
