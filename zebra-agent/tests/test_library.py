@@ -2,8 +2,10 @@
 
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
 from zebra_agent.library import WorkflowInfo, WorkflowLibrary, list_goal_workflows
 from zebra_agent.metrics import WorkflowRun
@@ -940,3 +942,126 @@ class TestLlmDefinedTag:
         library.add_workflow(original)
 
         assert library.get_workflow_yaml("Mine") == original
+
+
+# A truncated LLM response, like prod's fire_retirement_calculator_1.yaml (#158).
+TRUNCATED_YAML = """name: "FIRE Retirement Calculator"
+description: "Evaluates FIRE readiness"
+version: 2
+first_task: ask
+tasks:
+  ask:
+    name: "Ask"
+    auto: false
+    properties:
+      schema:
+        type: object
+        properties:
+          risk_tolerance:
+            type: string
+            title: "Investment"""
+
+
+class TestUnparseableWorkflows:
+    """Unparseable library files are retired, not re-parsed forever (#158)."""
+
+    @pytest.fixture
+    def log(self, monkeypatch):
+        """The library's logger (Django test settings stop it reaching caplog)."""
+        mock = MagicMock()
+        monkeypatch.setattr("zebra_agent.library.logger", mock)
+        return mock
+
+    async def test_unparseable_file_is_retired_on_load(self, library, log):
+        broken = library.library_path / "fire_retirement_calculator_1.yaml"
+        broken.write_text(TRUNCATED_YAML)
+        library.add_workflow(_named_yaml("Good Flow"))
+
+        workflows = await library.list_workflows()
+
+        assert [w.name for w in workflows] == ["Good Flow"]
+        assert not broken.exists()
+        [stub] = library.retired_path.glob("*.yaml")
+        assert stub.name == "fire_retirement_calculator_1.unparseable.yaml"
+        log.warning.assert_called_once()
+        assert "Retired unparseable workflow file" in log.warning.call_args.args[0]
+        # The raw text is kept for a human to repair.
+        assert library.get_workflow("Good Flow").name == "Good Flow"
+        stub_data = yaml.safe_load(stub.read_text().split("\n# --- retired by zebra")[0])
+        assert stub_data["unparseable_content"] == TRUNCATED_YAML
+
+    async def test_retired_list_shows_unparseable_with_reason(self, library):
+        (library.library_path / "broken.yaml").write_text(TRUNCATED_YAML)
+        library.quarantine_unparseable()
+
+        [info] = await library.list_retired_workflows()
+
+        assert info.name == "FIRE Retirement Calculator [unparseable]"
+        assert info.tags == ["unparseable"]
+        assert info.retired["reason"].startswith("unparseable: Invalid workflow YAML")
+        assert info.retired["retired_at"]
+
+    async def test_not_reparsed_on_later_loads(self, library, log):
+        (library.library_path / "broken.yaml").write_text(TRUNCATED_YAML)
+        await library.list_workflows()
+        log.reset_mock()
+
+        await library.list_workflows()
+        library.list_workflow_files()
+
+        assert library.quarantine_unparseable() == []
+        log.warning.assert_not_called()
+        assert len(list(library.retired_path.glob("*.yaml"))) == 1
+
+    def test_non_mapping_file_is_retired(self, library):
+        (library.library_path / "list.yaml").write_text("- just\n- a list\n")
+
+        [stub] = library.quarantine_unparseable()
+
+        assert "expected a mapping" in stub.read_text()
+        assert not (library.library_path / "list.yaml").exists()
+
+    def test_concurrent_scan_that_already_moved_the_file_is_skipped(self, library, monkeypatch):
+        """Web and daemon share the library: if another scan claims the file first, skip it."""
+        broken = library.library_path / "broken.yaml"
+        broken.write_text(TRUNCATED_YAML)
+        real_read_text = Path.read_text
+
+        def read_then_lose_race(self, *args, **kwargs):
+            text = real_read_text(self, *args, **kwargs)
+            if self == broken:
+                self.unlink()  # the other process renamed it away
+            return text
+
+        monkeypatch.setattr(Path, "read_text", read_then_lose_race)
+
+        assert library.quarantine_unparseable() == []
+        assert not library.retired_path.exists() or not list(library.retired_path.iterdir())
+
+    def test_unparseable_stub_is_never_selected_or_restored(self, library):
+        (library.library_path / "broken.yaml").write_text(TRUNCATED_YAML)
+        library.quarantine_unparseable()
+
+        with pytest.raises(ValueError, match="Workflow not found"):
+            library.get_workflow("FIRE Retirement Calculator")
+        with pytest.raises(ValueError, match="cannot be restored"):
+            library.restore("FIRE Retirement Calculator [unparseable]")
+
+    def test_builtin_directory_is_not_scanned(self, library, temp_dir):
+        builtin = temp_dir / "builtin"
+        builtin.mkdir()
+        (builtin / "broken.yaml").write_text(TRUNCATED_YAML)
+
+        library.copy_builtin_workflows(builtin)  # copies it into the library
+
+        [stub] = library.quarantine_unparseable()
+        assert (builtin / "broken.yaml").exists()  # the shipped file is never touched
+        assert stub.parent == library.retired_path
+
+    @pytest.mark.parametrize(
+        "content", [TRUNCATED_YAML, "{ broken", "- a\n- list\n", ""], ids=str.__len__
+    )
+    def test_add_workflow_rejects_unparseable_yaml(self, library, content):
+        with pytest.raises(ValueError, match="Invalid workflow YAML"):
+            library.add_workflow(content)
+        assert list(library.library_path.glob("*.yaml")) == []
