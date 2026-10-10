@@ -1,5 +1,7 @@
 """Workflow library management."""
 
+import logging
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -11,6 +13,8 @@ from zebra.core.models import ProcessDefinition
 from zebra.definitions.loader import load_definition
 
 from zebra_agent.metrics import MetricsStore, WorkflowStats
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -64,6 +68,26 @@ RETIRED_DIR = "retired"
 # Retirement metadata is appended after this marker, so the original YAML text is
 # kept byte-for-byte and restore() can strip it again.
 _RETIRED_MARKER = "\n# --- retired by zebra (#148) ---\n"
+
+# Tag and suffix for workflow files that would not parse; they are moved to
+# ``retired/`` wrapped in a parseable stub that keeps the raw text (#158).
+UNPARSEABLE_TAG = "unparseable"
+_UNPARSEABLE_SUFFIX = ".unparseable.yaml"
+
+
+def parse_workflow_yaml(yaml_content: str) -> dict[str, Any]:
+    """Parse workflow YAML, requiring a mapping.
+
+    Raises:
+        ValueError: If the text is not valid YAML or not a mapping.
+    """
+    try:
+        data = yaml.safe_load(yaml_content)
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid workflow YAML: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError("Invalid workflow YAML: expected a mapping")
+    return data
 
 
 class _BlockDumper(yaml.SafeDumper):
@@ -124,6 +148,12 @@ async def list_goal_workflows(library: "WorkflowLibrary") -> list[dict[str, Any]
     ]
 
 
+def _recover_name(raw: str) -> str | None:
+    """Best-effort workflow name from YAML text that does not parse."""
+    match = re.search(r"^name:\s*[\"']?(.+?)[\"']?\s*$", raw, re.MULTILINE)
+    return match.group(1) if match else None
+
+
 def _free_path(directory: Path, filename: str) -> Path:
     """Return ``directory/filename``, adding ``_N`` to the stem if it is taken."""
     dest = directory / filename
@@ -171,6 +201,7 @@ class WorkflowLibrary:
             List of WorkflowInfo objects
         """
         self.ensure_initialized()
+        self.quarantine_unparseable()
 
         workflows = []
 
@@ -275,14 +306,17 @@ class WorkflowLibrary:
 
         Returns:
             Name of the added workflow
+
+        Raises:
+            ValueError: If the YAML does not parse or is not a mapping.
         """
         self.ensure_initialized()
 
         if llm_defined:
             yaml_content = tag_llm_defined(yaml_content)
 
-        # Parse to get the name
-        data = yaml.safe_load(yaml_content)
+        # Parse to get the name; never write a file the library cannot load (#158)
+        data = parse_workflow_yaml(yaml_content)
         name = data.get("name", "untitled")
 
         # Generate filename if not provided
@@ -356,6 +390,7 @@ class WorkflowLibrary:
         Several active files can share a name (the optimizer saves a modified
         workflow as ``foo_1.yaml``); the newest is the current version.
         """
+        self.quarantine_unparseable()
         dirs = [self.library_path, self.retired_path] if include_retired else [self.library_path]
         return [path for d in dirs for n, path in self._read_named(d) if n == name]
 
@@ -366,6 +401,7 @@ class WorkflowLibrary:
         so the curator can retire superseded copies (#148).
         """
         self.ensure_initialized()
+        self.quarantine_unparseable()
         files = []
         for name, path in self._read_named(self.library_path):
             content = path.read_text()
@@ -427,6 +463,61 @@ class WorkflowLibrary:
         self._cache.pop(name, None)
         return dest
 
+    def quarantine_unparseable(self) -> list[Path]:
+        """Move active workflow files that do not parse to ``retired/`` (#158).
+
+        Each one is replaced by a parseable stub (named ``<name> [unparseable]``,
+        tagged ``unparseable``, raw text in ``unparseable_content``) with the usual
+        retirement metadata, so it shows in the retired list but is never selected,
+        loaded or restored, and later scans no longer re-parse it. Only the library
+        directory is scanned; built-in workflows shipped in the repo are not.
+
+        Returns:
+            The retired stub files written by this call.
+        """
+        if not self.library_path.is_dir():
+            return []
+        moved = []
+        for path in sorted(self.library_path.glob("*.yaml")):
+            try:
+                raw = path.read_text(errors="replace")
+            except FileNotFoundError:
+                continue  # moved or deleted by a concurrent scan
+            try:
+                parse_workflow_yaml(raw)
+                continue
+            except ValueError as e:
+                error = " ".join(str(e).split())
+            name = _recover_name(raw) or path.stem
+            self.retired_path.mkdir(parents=True, exist_ok=True)
+            dest = _free_path(self.retired_path, path.stem + _UNPARSEABLE_SUFFIX)
+            # Claim the file with an atomic rename, so concurrent scans (web and
+            # daemon share the library) never write two stubs for it.
+            try:
+                path.rename(dest)
+            except FileNotFoundError:
+                continue
+            stub = {
+                "name": f"{name} [unparseable]",
+                "description": f"Unparseable workflow file {path.name}; raw text kept below.",
+                "tags": [UNPARSEABLE_TAG],
+                "unparseable_content": raw,
+            }
+            meta = {
+                "reason": f"unparseable: {error}"[:500],
+                "retired_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "superseded_by": None,
+            }
+            dest.write_text(
+                yaml.dump(stub, Dumper=_BlockDumper, sort_keys=False, allow_unicode=True)
+                + _RETIRED_MARKER
+                + yaml.safe_dump({"retired": meta})
+            )
+            self._cache.pop(name, None)
+            logger.warning("Retired unparseable workflow file %s → %s: %s", path, dest, error)
+            moved.append(dest)
+        return moved
+
     def restore(self, name: str) -> Path:
         """Restore a retired workflow to the active library.
 
@@ -443,6 +534,11 @@ class WorkflowLibrary:
         if not retired:
             raise ValueError(f"No retired workflow named {name!r}")
         source = retired[0]
+        if "unparseable_content" in (yaml.safe_load(source.read_text()) or {}):
+            raise ValueError(
+                f"{name!r} is an unparseable workflow file and cannot be restored; "
+                "fix its YAML (kept in the retired file) and add it again"
+            )
         dest = _free_path(self.library_path, source.name)
         dest.write_text(source.read_text().split(_RETIRED_MARKER, 1)[0])
         source.unlink()

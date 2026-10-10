@@ -248,6 +248,7 @@ breaks portability across deployments.
 - Provides search/matching capabilities
 - Tracks usage metrics per workflow
 - `retire()` / `restore()` / `list_retired_workflows()`: soft retirement into `retired/`. Retired workflows are hidden from `list_workflows` but still load by name (#148)
+- `quarantine_unparseable()`: runs before library scans and moves unparseable / non-mapping YAML to `retired/<stem>.unparseable.yaml` as a stub (`<name> [unparseable]`, raw text kept, reason `unparseable: …`); never selected or restorable. `add_workflow` raises `ValueError` for such YAML (`parse_workflow_yaml`) (#158)
 - `add_workflow(..., llm_defined=True)` tags LLM-written workflows `llm-defined`; only those can be retired for being unused
 
 **MetricsStore** (`storage/interfaces.py`):
