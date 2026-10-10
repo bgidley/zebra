@@ -1,0 +1,6 @@
+{% comment %}
+Nav badge: number of running goals waiting on a human task (#160).
+Swapped into the Tasks nav item by HTMX from /nav/needs-you/.
+{% endcomment %}<span id="nav-needs-you" data-testid="nav-needs-you"
+      class="ml-auto font-mono text-xs font-medium text-needs"
+      {% if count %}aria-label="{{ count }} waiting on you"{% endif %}>{% if count %}{{ count }}{% endif %}</span>

@@ -2027,6 +2027,22 @@ async def pending_tasks(request):
     return redirect("/activity/?human_only=true")
 
 
+async def nav_needs_you(request):
+    """HTMX badge for the Tasks nav item: running goals waiting on a human task (#160).
+
+    Loaded after the page renders, so a slow or failing store never delays or
+    breaks a page. On any error the badge is simply empty.
+    """
+    count = 0
+    try:
+        await engine.ensure_initialized()
+        activities = await _running_activities(engine.get_store(), limit=1000)
+        count = sum(1 for a in activities if a["awaiting_human"])
+    except Exception:
+        logger.warning("Could not count goals waiting on a human task", exc_info=True)
+    return render(request, "partials/nav_needs_you.html", {"count": count})
+
+
 # =============================================================================
 # Human Tasks
 # =============================================================================

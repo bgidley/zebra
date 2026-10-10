@@ -1,0 +1,29 @@
+{% comment %}
+Bare layout (#160) for pages a signed-out visitor sees: sign-in, passkey setup
+and first-run setup. Brand mark, centred content, version footer, no nav.
+Blocks: title, content, extra_js.
+{% endcomment %}<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+    {% include "partials/head_assets.html" %}
+    <title>{% block title %}Zebra{% endblock %}</title>
+</head>
+<body class="min-h-full flex flex-col text-ink" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    <header class="flex items-center gap-2.5 h-14 px-5 sm:px-8">
+        <span class="zebra-mark" aria-hidden="true"></span>
+        <span class="text-[15px] font-semibold tracking-tight">Zebra</span>
+    </header>
+
+    <main class="flex-1 flex items-center justify-center px-4 py-10">
+        <div class="w-full max-w-md">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <footer class="flex justify-center px-4 py-4">
+        {% include "partials/version_info.html" %}
+    </footer>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

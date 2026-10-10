@@ -32,9 +32,24 @@
   --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Greys from the old Play CDN config, still used by current templates. */
-  --color-gray-750: #2d3748;
-  --color-gray-850: #1a202c;
+  /*
+   * Tailwind's gray scale, remapped to the neutral frame (#160) so every page
+   * that still uses gray-* utilities sits on the same neutrals as the tokens
+   * below. 750 and 850 are the in-between steps the old CDN config added.
+   */
+  --color-gray-50: #f5f5f6;
+  --color-gray-100: #ececef;
+  --color-gray-200: #d8d9de;
+  --color-gray-300: #b9bbc3;
+  --color-gray-400: #9a9da6;
+  --color-gray-500: #6c6f78;
+  --color-gray-600: #4b4d55;
+  --color-gray-700: #303238;
+  --color-gray-750: #25272c;
+  --color-gray-800: #1b1c20;
+  --color-gray-850: #131417;
+  --color-gray-900: #101114;
+  --color-gray-950: #0c0d0f;
 }
 
 /* Zebra tokens, always emitted as CSS variables so later phases can rely on them. */
@@ -78,6 +93,142 @@
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+}
+
+/*
+ * Shared components (#160). One radius rule: panels 10px, controls 6px,
+ * dots and pills round. Primary action is the inverted ink button.
+ */
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+    border-radius: 6px;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    color: var(--color-ink);
+    padding: 0.4375rem 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    transition:
+      background-color 150ms,
+      opacity 150ms,
+      transform 100ms;
+  }
+  .btn:hover {
+    background: var(--color-surface-2);
+  }
+  .btn:active {
+    transform: translateY(1px);
+  }
+  .btn:focus-visible {
+    outline: 2px solid var(--color-needs);
+    outline-offset: 2px;
+  }
+  .btn-primary {
+    background: var(--color-ink);
+    border-color: var(--color-ink);
+    color: var(--color-ground);
+  }
+  .btn-primary:hover {
+    background: var(--color-ink);
+    opacity: 0.88;
+  }
+  .btn-quiet {
+    border-color: transparent;
+    background: transparent;
+    color: var(--color-muted);
+  }
+  .btn-quiet:hover {
+    color: var(--color-ink);
+  }
+  .btn-danger {
+    background: transparent;
+    border-color: color-mix(in srgb, var(--color-fail) 55%, transparent);
+    color: var(--color-fail);
+  }
+  .btn-danger:hover {
+    background: color-mix(in srgb, var(--color-fail) 12%, transparent);
+  }
+  .btn-sm {
+    padding: 0.25rem 0.625rem;
+    font-size: 0.8125rem;
+  }
+
+  .panel {
+    border-radius: 10px;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+  }
+
+  .state-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    flex: none;
+    border-radius: 9999px;
+    background: var(--color-faint);
+  }
+  .state-dot-running {
+    background: var(--color-ink);
+  }
+  .state-dot-ok {
+    background: var(--color-ok);
+  }
+  .state-dot-fail {
+    background: var(--color-fail);
+  }
+  .state-dot-needs {
+    background: var(--color-needs);
+  }
+
+  /* Certainty stripe: solid when sure, sparser hatching as confidence drops. */
+  .certainty {
+    display: inline-block;
+    width: 6px;
+    min-height: 1.75rem;
+    flex: none;
+    align-self: stretch;
+    border-radius: 3px;
+    --stripe: var(--color-voice);
+  }
+  .certainty-full {
+    background: var(--stripe);
+  }
+  .certainty-high {
+    background: repeating-linear-gradient(-45deg, var(--stripe) 0 4px, transparent 4px 6px);
+  }
+  .certainty-medium {
+    background: repeating-linear-gradient(-45deg, var(--stripe) 0 3px, transparent 3px 7px);
+  }
+  .certainty-low {
+    background: repeating-linear-gradient(-45deg, var(--stripe) 0 2px, transparent 2px 8px);
+  }
+
+  /* The brand mark: a stroked square of diagonal stripes. */
+  .zebra-mark {
+    display: inline-block;
+    flex: none;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 6px;
+    border: 1.5px solid var(--color-ink);
+    background: repeating-linear-gradient(-45deg, var(--color-ink) 0 3px, transparent 3px 6px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .state-dot-running {
+    animation: zebra-pulse 1.6s ease-in-out infinite;
+  }
+}
+@keyframes zebra-pulse {
+  50% {
+    opacity: 0.25;
   }
 }
 

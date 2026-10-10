@@ -1,0 +1,6 @@
+{% comment %}
+Certainty stripe (#160, used by the voice layer #161). Parameter: confidence, 0.0 to 1.0.
+Solid at 1.0, then high (>= 0.75), medium (>= 0.5) and low hatching.
+{% endcomment %}<span class="certainty {% if confidence >= 1 %}certainty-full{% elif confidence >= 0.75 %}certainty-high{% elif confidence >= 0.5 %}certainty-medium{% else %}certainty-low{% endif %}"
+      role="img" aria-label="confidence {{ confidence|floatformat:2 }}"
+      title="confidence {{ confidence|floatformat:2 }}"></span>
