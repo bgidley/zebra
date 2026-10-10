@@ -281,6 +281,9 @@ class TestAnthropicProvider:
     @pytest.mark.parametrize(
         "model,expect_temperature",
         [
+            ("claude-opus-5-5", False),  # the `opus` alias; Claude 5 family rejects sampling
+            ("claude-sonnet-5-5", False),
+            ("claude-haiku-5-5", False),
             ("claude-opus-4-8", False),
             ("claude-sonnet-4-6", False),
             ("claude-haiku-4-5-20251001", False),

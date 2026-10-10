@@ -8,10 +8,12 @@ from __future__ import annotations
 
 # Mapping of model ID -> {"input": $/1M input tokens, "output": $/1M output tokens}
 ANTHROPIC_PRICING: dict[str, dict[str, float]] = {
-    # Current generation
-    "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00},
+    # Current generation (Anthropic list prices, checked 2026-10-10)
+    "claude-opus-5-5": {"input": 4.00, "output": 20.00},
+    "claude-opus-4-8": {"input": 5.00, "output": 25.00},
+    "claude-opus-4-7": {"input": 5.00, "output": 25.00},
     "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
-    "claude-opus-4-7": {"input": 15.00, "output": 75.00},
+    "claude-haiku-4-5-20251001": {"input": 1.00, "output": 5.00},
     # Previous generation (still in CONTEXT_WINDOWS)
     "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00},
     "claude-3-5-haiku-20241022": {"input": 0.80, "output": 4.00},
