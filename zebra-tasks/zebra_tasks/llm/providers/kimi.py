@@ -21,21 +21,25 @@ class KimiProvider(OpenAIProvider):
     Uses the international endpoint by default (platform.kimi.ai keys).
     Set KIMI_BASE_URL=https://api.moonshot.cn/v1 for China domestic keys.
     Set KIMI_API_KEY environment variable or pass api_key.
+
+    Current Kimi models are reasoning models that only accept a fixed temperature
+    (1 with thinking on, 0.6 with it off), so the caller's temperature is never sent.
+    Thinking is turned off where the model allows it: fast replies, and reasoning
+    tokens don't use up ``max_tokens`` (#164).
     """
 
-    DEFAULT_MODEL = "moonshot-v1-32k"
+    DEFAULT_MODEL = "kimi-k2.6"
     BASE_URL = "https://api.moonshot.ai/v1"
 
     CONTEXT_WINDOWS = {
-        "moonshot-v1-8k": 8000,
-        "moonshot-v1-32k": 32000,
-        "moonshot-v1-128k": 128000,
-        "moonshot-v1-auto": 128000,
-        # Kimi k1.5 / k2 series (latest)
-        "kimi-k1.5-8k": 8000,
-        "kimi-k1.5-32k": 32000,
-        "kimi-k2": 128000,
+        "kimi-k2.6": 262144,
+        "kimi-k3": 1048576,
+        "kimi-k2.7-code": 262144,
+        "kimi-k2.7-code-highspeed": 262144,
     }
+
+    # Models that reject thinking={"type": "disabled"} (thinking is always on).
+    THINKING_ONLY_MODELS = {"kimi-k2.7-code", "kimi-k2.7-code-highspeed"}
 
     def __init__(
         self,
@@ -71,4 +75,10 @@ class KimiProvider(OpenAIProvider):
 
     @property
     def max_context_tokens(self) -> int:
-        return self.CONTEXT_WINDOWS.get(self._model, 32000)
+        return self.CONTEXT_WINDOWS.get(self._model, 262144)
+
+    def _sampling_kwargs(self, temperature: float) -> dict:
+        """No temperature (fixed per model); disable thinking where the model allows it."""
+        if self._model in self.THINKING_ONLY_MODELS:
+            return {}
+        return {"extra_body": {"thinking": {"type": "disabled"}}}

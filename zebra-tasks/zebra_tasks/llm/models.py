@@ -7,13 +7,16 @@ ANTHROPIC_MODELS: dict[str, str] = {
     "opus": "claude-opus-4-8",
 }
 
-# Kimi model aliases
+# Kimi model aliases. Moonshot retired the moonshot-v1-* models (#164); the old
+# aliases now map to kimi-k2.6 so existing settings keep working.
 KIMI_MODELS: dict[str, str] = {
-    "kimi-8k": "moonshot-v1-8k",
-    "kimi-32k": "moonshot-v1-32k",
-    "kimi-128k": "moonshot-v1-128k",
-    "kimi": "moonshot-v1-32k",
-    "kimi-auto": "moonshot-v1-auto",
+    "kimi": "kimi-k2.6",
+    "kimi-k3": "kimi-k3",
+    "kimi-code": "kimi-k2.7-code-highspeed",
+    "kimi-8k": "kimi-k2.6",
+    "kimi-32k": "kimi-k2.6",
+    "kimi-128k": "kimi-k2.6",
+    "kimi-auto": "kimi-k2.6",
 }
 
 # Ordered list of friendly names for UI dropdowns / API validation.
