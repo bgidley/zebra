@@ -146,7 +146,7 @@ async def _async_init() -> None:
 
             from zebra_agent_web.api.models import ProcessDefinitionModel
 
-            @sync_to_async
+            @sync_to_async(thread_sensitive=False)
             def _evict_stale(names: list[str]) -> int:
                 deleted, _ = ProcessDefinitionModel.objects.filter(name__in=names).delete()
                 return deleted
