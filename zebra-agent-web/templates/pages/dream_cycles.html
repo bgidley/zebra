@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% load markdown_tags %}
+
+{% block title %}Dream Cycles - Zebra Agent{% endblock %}
+{% block page_title %}Dream Cycles{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Dream Cycles</h1>
+            <p class="text-gray-400 mt-1">What the self-improvement cycle found and changed in its last {{ limit }} runs</p>
+        </div>
+        {% if schedule %}
+        <div class="text-sm text-gray-400 text-right">
+            <div>Next scheduled run: <span class="text-white font-mono">{{ schedule.next_run|date:"Y-m-d H:i" }} UTC</span></div>
+            {% if schedule.last_run %}
+            <div class="text-xs mt-1">Last dispatched {{ schedule.last_run|timesince }} ago ({{ schedule.last_status }})</div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if cycles %}
+    <!-- Summary stats -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-gray-800 rounded-lg p-5 border border-gray-700">
+            <p class="text-sm text-gray-400">Latest health score</p>
+            <p class="text-3xl font-bold mt-1 {% if latest.health_score is None %}text-gray-500{% elif latest.health_score >= 70 %}text-green-400{% elif latest.health_score >= 40 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                {% if latest.health_score is not None %}{{ latest.health_score }}<span class="text-base text-gray-500">/100</span>{% else %}—{% endif %}
+            </p>
+            <p class="text-xs text-gray-500 mt-1">{{ latest.started_at|timesince }} ago</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-5 border border-gray-700">
+            <p class="text-sm text-gray-400">Cycles</p>
+            <p class="text-3xl font-bold text-white mt-1">{{ completed_count }}</p>
+            <p class="text-xs mt-1 {% if failed_count %}text-red-400{% else %}text-gray-500{% endif %}">{{ failed_count }} failed</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-5 border border-gray-700">
+            <p class="text-sm text-gray-400">Workflow changes applied</p>
+            <p class="text-3xl font-bold text-white mt-1">{{ total_changes }}</p>
+            <p class="text-xs text-gray-500 mt-1">created or modified</p>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-5 border border-gray-700">
+            <p class="text-sm text-gray-400">Workflows retired</p>
+            <p class="text-3xl font-bold text-white mt-1">{{ total_retired }}</p>
+            <p class="text-xs text-gray-500 mt-1">by the curator</p>
+        </div>
+    </div>
+
+    {% if trend|length > 1 %}
+    <!-- Health trend -->
+    <div class="bg-gray-800 rounded-lg p-5 border border-gray-700">
+        <p class="text-sm text-gray-400 mb-3">Health score trend (oldest → newest)</p>
+        <div class="flex items-end gap-1 h-20">
+            {% for c in trend %}
+            <div class="flex-1 rounded-t {% if c.health_score >= 70 %}bg-green-600{% elif c.health_score >= 40 %}bg-yellow-600{% else %}bg-red-600{% endif %}"
+                 style="height: {{ c.health_score }}%"
+                 title="{{ c.started_at|date:'Y-m-d' }}: {{ c.health_score }}/100"></div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Cycles -->
+    <div class="space-y-4">
+        {% for c in cycles %}
+        <div class="bg-gray-800 rounded-xl border border-gray-700 p-5" id="cycle-{{ c.id }}">
+            <div class="flex items-center justify-between flex-wrap gap-3">
+                <div class="flex items-center gap-3">
+                    <span class="font-mono text-sm text-white">{{ c.started_at|date:"Y-m-d H:i" }}</span>
+                    {% if c.state == "complete" %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">Complete</span>
+                    {% elif c.state == "failed" %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-red-900/50 text-red-300 border border-red-700">Failed</span>
+                    {% else %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">{{ c.state|capfirst }}</span>
+                    {% endif %}
+                    {% if c.duration %}<span class="text-xs text-gray-500">{{ c.duration }}</span>{% endif %}
+                    {% if c.optimizer_dry_run or c.curation_dry_run %}
+                    <span class="px-2 py-0.5 rounded text-xs bg-gray-700 text-gray-300">dry run</span>
+                    {% endif %}
+                </div>
+                {% if c.health_score is not None %}
+                <span class="text-sm font-semibold {% if c.health_score >= 70 %}text-green-400{% elif c.health_score >= 40 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                    Health {{ c.health_score }}/100
+                </span>
+                {% endif %}
+            </div>
+
+            {% if c.error %}
+            <p class="mt-3 text-sm text-red-300">
+                {% if c.failed_task %}<span class="font-mono text-red-400">{{ c.failed_task }}</span>: {% endif %}{{ c.error|truncatechars:400 }}
+            </p>
+            {% endif %}
+
+            {% if c.state != "failed" or c.runs_analyzed is not None %}
+            <!-- Counts -->
+            <div class="mt-3 flex flex-wrap gap-2 text-xs">
+                {% if c.runs_analyzed is not None %}
+                <span class="px-2 py-1 rounded bg-gray-700 text-gray-300">{{ c.runs_analyzed }} runs over {{ c.period_days }}d</span>
+                {% endif %}
+                <span class="px-2 py-1 rounded bg-gray-700 {% if c.changes_made %}text-indigo-300{% else %}text-gray-400{% endif %}">{{ c.changes_made|length }} change{{ c.changes_made|length|pluralize }}</span>
+                {% if c.failed_changes %}
+                <span class="px-2 py-1 rounded bg-red-900/40 text-red-300">{{ c.failed_changes|length }} rejected</span>
+                {% endif %}
+                <span class="px-2 py-1 rounded bg-gray-700 {% if c.retired %}text-amber-300{% else %}text-gray-400{% endif %}">{{ c.retired_applied }} retired{% if c.deferred_count %} · {{ c.deferred_count }} deferred{% endif %}</span>
+                <span class="px-2 py-1 rounded bg-gray-700 text-gray-400">{{ c.continuations }} continuation{{ c.continuations|pluralize }}</span>
+            </div>
+            {% endif %}
+
+            {% if c.summary %}
+            <div class="mt-4 prose prose-invert prose-sm max-w-none text-gray-300">
+                {{ c.summary|markdown }}
+            </div>
+            {% elif c.health_summary %}
+            <p class="mt-4 text-sm text-gray-300">{{ c.health_summary }}</p>
+            {% endif %}
+
+            {% if c.changes_made or c.failed_changes or c.retired or c.key_issues or c.low_performers or c.top_continued %}
+            <details class="mt-4 group">
+                <summary class="cursor-pointer text-sm text-indigo-400 hover:text-indigo-300 select-none">Details</summary>
+                <div class="mt-3 grid md:grid-cols-2 gap-4 text-sm">
+                    {% if c.changes_made %}
+                    <div>
+                        <h3 class="text-xs uppercase tracking-wider text-gray-400 mb-1">Changes applied</h3>
+                        <ul class="space-y-1 text-gray-300">
+                            {% for ch in c.changes_made %}
+                            <li><span class="px-1.5 rounded bg-indigo-900/50 text-indigo-300 text-xs">{{ ch.type }}</span>
+                                <a href="/workflows/{{ ch.workflow|urlencode:'' }}/" class="hover:underline">{{ ch.workflow }}</a>
+                                {% if ch.action %}<span class="text-gray-500"> — {{ ch.action|truncatechars:160 }}</span>{% endif %}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    {% if c.failed_changes %}
+                    <div>
+                        <h3 class="text-xs uppercase tracking-wider text-gray-400 mb-1">Rejected changes (not saved)</h3>
+                        <ul class="space-y-1 text-gray-300">
+                            {% for ch in c.failed_changes %}
+                            <li><span class="font-medium">{{ ch.workflow }}</span>
+                                <span class="text-gray-500"> — {{ ch.reason|truncatechars:200 }}</span></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    {% if c.retired %}
+                    <div>
+                        <h3 class="text-xs uppercase tracking-wider text-gray-400 mb-1">Curation{% if c.curation_dry_run %} (would retire){% endif %}</h3>
+                        <ul class="space-y-1 text-gray-300">
+                            {% for r in c.retired %}
+                            <li><span class="px-1.5 rounded bg-amber-900/40 text-amber-300 text-xs">{{ r.rule }}</span>
+                                <span class="font-medium">{{ r.workflow }}</span>
+                                {% if r.superseded_by %}<span class="text-gray-500"> → {{ r.superseded_by }}</span>{% endif %}
+                                {% if r.error %}<span class="text-red-400"> (failed: {{ r.error|truncatechars:80 }})</span>{% endif %}
+                                <div class="text-gray-500 text-xs">{{ r.reason|truncatechars:200 }}</div></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    {% if c.key_issues %}
+                    <div>
+                        <h3 class="text-xs uppercase tracking-wider text-gray-400 mb-1">Key issues</h3>
+                        <ul class="list-disc list-inside space-y-1 text-gray-300">
+                            {% for issue in c.key_issues %}<li>{{ issue }}</li>{% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    {% if c.low_performers or c.high_performers %}
+                    <div>
+                        <h3 class="text-xs uppercase tracking-wider text-gray-400 mb-1">Performers</h3>
+                        {% if c.high_performers %}<p class="text-gray-300"><span class="text-green-400">High:</span> {{ c.high_performers|join:", " }}</p>{% endif %}
+                        {% if c.low_performers %}<p class="text-gray-300"><span class="text-red-400">Low:</span> {{ c.low_performers|join:", " }}</p>{% endif %}
+                    </div>
+                    {% endif %}
+                    {% if c.top_continued %}
+                    <div>
+                        <h3 class="text-xs uppercase tracking-wider text-gray-400 mb-1">Most continued</h3>
+                        <ul class="space-y-1 text-gray-300">
+                            {% for t in c.top_continued %}<li>{{ t.workflow_name }} <span class="text-gray-500">× {{ t.count }}</span></li>{% endfor %}
+                        </ul>
+                        {% if c.capability_gaps %}<p class="text-xs text-gray-500 mt-1">{{ c.capability_gaps }} capability gap{{ c.capability_gaps|pluralize }} found</p>{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </details>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-gray-800 rounded-xl border border-gray-700 px-4 py-12 text-center text-gray-500">
+        <p>No dream cycles have run yet.</p>
+        <p class="text-xs mt-2">They run daily at 03:00 UTC, or on demand via <span class="font-mono">POST /api/dream-cycle/</span>.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

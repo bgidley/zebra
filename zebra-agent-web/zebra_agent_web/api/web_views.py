@@ -2580,6 +2580,39 @@ async def ethics_audit(request):
 
 
 # =============================================================================
+# Dream Cycle history
+# =============================================================================
+
+_DREAM_CYCLE_LIMIT = 20
+
+
+async def dream_cycles(request):
+    """Summarise the most recent Dream Cycle runs."""
+    from zebra_agent_web.api import dream_history
+
+    cycles = await sync_to_async(dream_history.recent_dream_cycles)(_DREAM_CYCLE_LIMIT)
+    schedule = await sync_to_async(dream_history.next_scheduled_run)()
+    completed = [c for c in cycles if c["state"] == "complete"]
+    return render(
+        request,
+        "pages/dream_cycles.html",
+        {
+            "cycles": cycles,
+            "schedule": schedule,
+            "latest": cycles[0] if cycles else None,
+            # Oldest first, for the left-to-right health trend strip
+            "trend": [c for c in reversed(completed) if c["health_score"] is not None],
+            "completed_count": len(completed),
+            "failed_count": sum(1 for c in cycles if c["state"] == "failed"),
+            "total_changes": sum(len(c["changes_made"]) for c in completed),
+            "total_retired": sum(c["retired_applied"] for c in completed),
+            "limit": _DREAM_CYCLE_LIMIT,
+            **_identity_context(),
+        },
+    )
+
+
+# =============================================================================
 # Trust Management (F15 / REQ-TRUST-004)
 # =============================================================================
 

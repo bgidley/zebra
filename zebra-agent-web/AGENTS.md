@@ -40,6 +40,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/agent_engine.py` | Agent engine wrapper (creates BudgetManager + injection) |
 | `zebra_agent_web/api/daemon.py` | Shared daemon loop (`run_daemon_loop()`) |
 | `zebra_agent_web/api/identity.py` | Single-user identity; `goal_identity()` (async views) / `goal_identity_sync()` give the identity every goal entry point stamps with `__user_id__` (#151) |
+| `zebra_agent_web/api/dream_history.py` | Load + flatten recent Dream Cycle processes for the `/dreams/` page |
 | `zebra_agent_web/api/manual_review.py` | Find / retry / fail tasks flagged `__requires_manual_review__` by recovery (#130) |
 | `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
 | `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory) |
@@ -596,6 +597,7 @@ POST /api/tasks/<task_id>/complete/
 | `/api/budget/` | `budget_status` | Get budget status JSON (API) |
 | `/profile/taxonomy/` | `values_taxonomy_page` | Values-tag curation: review candidates, promote/reject/demote/merge (#106) |
 | `/profile/taxonomy/action/` | `values_taxonomy_action` | Apply one curation action (POST) |
+| `/dreams/` | `dream_cycles` | Recent Dream Cycle runs: health, changes, retirements, summary (`api/dream_history.py`) |
 | `/trust/` | `trust_page` | Trust management page (levels, suggestions, history) |
 | `/trust/<domain>/set/` | `trust_set_level_form` | Set domain trust level (POST, human-only) |
 | `/trust/suggestions/<id>/resolve/` | `trust_suggestion_resolve_form` | Approve/reject suggestion (POST) |
