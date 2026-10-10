@@ -1,10 +1,10 @@
-{% extends "base.html" %}
+{% extends "layouts/bare.html" %}
 
-{% block title %}Setup - Zebra Agent{% endblock %}
+{% block title %}Passkey Setup - Zebra{% endblock %}
 {% block page_title %}Setup{% endblock %}
 
 {% block content %}
-<div class="max-w-md mx-auto">
+<div>
     <div class="bg-gray-800 rounded-lg shadow-lg p-8 border border-gray-700">
         <div class="text-center mb-8">
             <svg class="mx-auto h-12 w-12 text-indigo-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -23,8 +23,8 @@
             </div>
 
             <button id="register-btn"
-                    class="w-full flex items-center justify-center px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors">
-                <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    class="btn btn-primary w-full justify-center py-2.5">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                 </svg>
                 Register Passkey

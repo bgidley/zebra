@@ -73,6 +73,9 @@ TEMPLATES = [
             "context_processors": [
                 "django.template.context_processors.debug",
                 "django.template.context_processors.request",
+                # Provides `user` to templates; base.html relies on it for the
+                # staff-only nav item and the signed-in user footer (#160).
+                "django.contrib.auth.context_processors.auth",
             ],
         },
     },

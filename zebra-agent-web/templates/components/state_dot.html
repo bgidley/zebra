@@ -1,0 +1,6 @@
+{% comment %}
+State dot (#160). Parameters: state = running | ok | fail | needs | anything else
+(neutral); label (optional) overrides the accessible name.
+{% endcomment %}<span class="state-dot{% if state == "running" %} state-dot-running{% elif state == "ok" %} state-dot-ok{% elif state == "fail" %} state-dot-fail{% elif state == "needs" %} state-dot-needs{% endif %}"
+      role="img"
+      aria-label="{% if label %}{{ label }}{% elif state == "running" %}running{% elif state == "ok" %}succeeded{% elif state == "fail" %}failed{% elif state == "needs" %}waiting on you{% else %}{{ state }}{% endif %}"></span>

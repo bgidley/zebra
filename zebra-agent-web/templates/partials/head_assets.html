@@ -1,0 +1,10 @@
+{% load static %}{% comment %}
+Shared <head> assets for base.html and layouts/bare.html.
+app.css is compiled by scripts/build_css.py from static/css/src/app.css.
+{% endcomment %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <script src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
+    <script defer src="{% static 'vendor/alpine-3.17.4.min.js' %}"></script>

@@ -1,10 +1,14 @@
 {% load icon_tags %}<a href="{{ url }}"
-   class="group flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md
-          {% if is_active %}bg-gray-900 text-white{% else %}text-gray-300 hover:bg-gray-700 hover:text-white{% endif %}">
+   class="group flex items-center gap-3 px-3 py-1.5 text-sm rounded-md
+          {% if is_active %}bg-surface-2 text-ink font-medium{% else %}text-muted hover:bg-surface-2 hover:text-ink{% endif %}"
+   {% if is_active %}aria-current="page"{% endif %}>
     {% if is_active %}
-    {% icon icon class="h-5 w-5 shrink-0 text-indigo-400" %}
+    {% icon icon class="h-[18px] w-[18px] shrink-0 text-ink" %}
     {% else %}
-    {% icon icon class="h-5 w-5 shrink-0 text-gray-400 group-hover:text-gray-300" %}
+    {% icon icon class="h-[18px] w-[18px] shrink-0 text-faint group-hover:text-muted" %}
     {% endif %}
     {{ label }}
+    {% if badge == "needs-you" %}
+    <span id="nav-needs-you" class="ml-auto" hx-get="/nav/needs-you/" hx-trigger="load" hx-swap="outerHTML"></span>
+    {% endif %}
 </a>
