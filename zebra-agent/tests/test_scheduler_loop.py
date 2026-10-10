@@ -110,6 +110,49 @@ class TestSchedulerLoopTick:
         call_kwargs = engine.create_process.call_args.kwargs
         assert call_kwargs["properties"]["__routine__"] == "test_r"
 
+    async def test_default_properties_seeded_into_dispatched_process(self, store, clock):
+        """default_properties reach the process; routine extra_properties win.
+
+        Regression: the 03:00 Dream Cycle routine ran without
+        __llm_provider_name__ and evaluate_workflows failed with
+        "No LLM provider available".
+        """
+        registry = RoutineRegistry()
+        routine = Routine(
+            name="test_r",
+            schedule={"every": "1m"},
+            workflow="my_wf",
+            extra_properties={"__llm_model__": "routine-model"},
+        )
+        registry.register(routine)
+
+        engine = _make_engine()
+        library = MagicMock()
+        library.get_workflow = MagicMock(return_value=MagicMock(name="my_wf"))
+        engine.extras["__workflow_library__"] = library
+
+        loop = SchedulerLoop(
+            registry=registry,
+            store=store,
+            engine=engine,
+            clock=clock,
+            default_properties={
+                "__llm_provider_name__": "anthropic",
+                "__llm_model__": "default-model",
+                "__routine__": "ignored",
+            },
+        )
+        await store.upsert_run(
+            RoutineRun("test_r", last_run=None, next_run=START - timedelta(seconds=1))
+        )
+
+        await loop._tick()
+
+        props = engine.create_process.call_args.kwargs["properties"]
+        assert props["__llm_provider_name__"] == "anthropic"
+        assert props["__llm_model__"] == "routine-model"
+        assert props["__routine__"] == "test_r"
+
     async def test_not_due_routine_skipped(self, store, clock):
         """A routine whose next_run is in the future is not dispatched."""
         registry = RoutineRegistry()
