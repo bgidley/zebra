@@ -289,6 +289,15 @@ async def my_web_view(request):
     return render(request, "pages/my_page.html", {"data": data})
 ```
 
+### ORM Calls in Stores and Task Code
+
+Wrap ORM calls reached from goal execution (stores, task actions) with
+`@sync_to_async(thread_sensitive=False)`, never bare `@sync_to_async`. Goals keep
+running after the request that started them returns; a thread-sensitive call is
+routed to that request's finished `CurrentThreadExecutor` and fails with
+"CurrentThreadExecutor already quit or is broken" (#123).
+`tests/unit/test_store_thread_sensitivity.py` guards the `*_store.py` modules.
+
 ## Querying the Database Directly
 
 You can query the Oracle database directly from a script for debugging and investigation. Use the environment variables from `.env` and Django's ORM via a standalone script:

@@ -42,8 +42,10 @@ def _to_dataclass(row) -> KnowledgeEntry:  # type: ignore[no-untyped-def]
 class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     """Django ORM-backed PersonalKnowledgeStore.
 
-    All ORM operations are wrapped with sync_to_async to avoid blocking
-    the async event loop, consistent with other Django stores in this package.
+    All ORM operations are wrapped with sync_to_async(thread_sensitive=False),
+    consistent with other Django stores in this package. Goals call the store
+    after the request that started them has returned, so a thread-sensitive
+    call would hit that request's finished CurrentThreadExecutor (#123).
     """
 
     def __init__(self) -> None:
@@ -63,7 +65,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def add_entry(self, entry: KnowledgeEntry) -> None:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _create() -> None:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -84,7 +86,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def update_entry(self, entry: KnowledgeEntry) -> None:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _update() -> None:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -104,7 +106,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def soft_delete_entry(self, entry_id: str) -> bool:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _soft_delete() -> bool:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -118,7 +120,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     async def get_entry(self, entry_id: str) -> KnowledgeEntry | None:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _fetch() -> KnowledgeEntry | None:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -138,7 +140,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     ) -> list[KnowledgeEntry]:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _fetch() -> list[KnowledgeEntry]:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
@@ -169,7 +171,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     ) -> list[KnowledgeEntry]:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _fetch() -> list[KnowledgeEntry]:
             from django.db.models import Q
 
@@ -193,7 +195,7 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
     ) -> KnowledgeEntry | None:
         await self._ensure_initialized()
 
-        @sync_to_async
+        @sync_to_async(thread_sensitive=False)
         def _fetch() -> KnowledgeEntry | None:
             from zebra_agent_web.api.models import KnowledgeEntryModel
 
