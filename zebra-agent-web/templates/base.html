@@ -7,15 +7,19 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body class="h-full text-ink" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-    <div class="min-h-full" x-data="{ sidebarOpen: false }" @keydown.escape.window="sidebarOpen = false">
+    <div class="min-h-full" x-data="{ sidebarOpen: false }"
+         x-effect="document.documentElement.classList.toggle('overflow-hidden', sidebarOpen)"
+         @keydown.escape.window="sidebarOpen = false"
+         @resize.window="if (window.matchMedia('(min-width: 64rem)').matches) sidebarOpen = false">
         {% comment %}Mobile sidebar backdrop{% endcomment %}
         <div x-show="sidebarOpen" x-cloak x-transition.opacity
              class="fixed inset-0 bg-black/60 z-40 lg:hidden"
              @click="sidebarOpen = false"></div>
 
-        <aside class="fixed inset-y-0 left-0 w-60 flex flex-col bg-surface border-r border-line z-50
-                      transform transition-transform duration-200 ease-out lg:translate-x-0"
-               :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
+        {% comment %}Hidden below lg by .app-sidebar in CSS until opened (#166).{% endcomment %}
+        <aside id="app-sidebar" data-open="false"
+               class="app-sidebar fixed inset-y-0 left-0 w-60 flex flex-col bg-surface border-r border-line z-50"
+               :data-open="sidebarOpen ? 'true' : 'false'">
 
             <a href="/" class="flex items-center gap-2.5 h-14 px-5 shrink-0 text-ink">
                 <span class="zebra-mark" aria-hidden="true"></span>
@@ -68,7 +72,8 @@
             {% comment %}Mobile top bar: menu, page title, one primary action{% endcomment %}
             <div class="sticky top-0 z-30 bg-surface/95 backdrop-blur border-b border-line lg:hidden" data-testid="mobile-top-bar">
                 <div class="flex items-center gap-3 h-14 px-4">
-                    <button type="button" @click="sidebarOpen = true" class="-ml-1 p-1 text-muted hover:text-ink" aria-label="Open navigation">
+                    <button type="button" @click="sidebarOpen = true" class="-ml-1 p-1 text-muted hover:text-ink"
+                            aria-label="Open navigation" aria-controls="app-sidebar" :aria-expanded="sidebarOpen">
                         {% icon "list" class="h-6 w-6" %}
                     </button>
                     <span class="flex-1 min-w-0 truncate text-[15px] font-semibold">{% block page_title %}Zebra Agent{% endblock %}</span>
