@@ -19,6 +19,7 @@ KNOWLEDGE_CATEGORIES: tuple[str, ...] = (
     "routines",
     "skills",
     "history",
+    "world",  # world knowledge the agent learned, e.g. from the daily news (F155)
 )
 
 # Exponential decay half-life in days per category.
@@ -31,6 +32,7 @@ CATEGORY_DECAY_HALF_LIFE_DAYS: dict[str, int | None] = {
     "routines": 60,
     "skills": 730,
     "history": None,
+    "world": 90,
 }
 
 # Minimum confidence floor — decay never reduces below this value.

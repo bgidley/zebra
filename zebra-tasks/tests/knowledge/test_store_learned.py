@@ -197,3 +197,87 @@ async def test_invalid_candidates_ignored(engine, knowledge):
     )
     assert result.output["skipped"] == "no_candidates"
     assert await knowledge.get_entries(1) == []
+
+
+# --- update_agent_entries (F155) -----------------------------------------------------
+
+
+def _world(value):
+    return _cand(key="iran_us_strike_policy", value=value, category="world", confidence=0.7)
+
+
+async def test_world_category_is_stored(engine, knowledge):
+    ctx = _context(engine, {"__user_id__": 1})
+    result = await StoreLearnedKnowledgeAction().run(_task([_world("No strikes before vote")]), ctx)
+
+    [entry] = await knowledge.get_entries(1)
+    assert entry.category == "world" and entry.source == "agent" and entry.time_sensitive
+    assert result.output["stored"][0]["key"] == "iran_us_strike_policy"
+
+
+async def test_update_agent_entries_updates_developing_story_in_place(engine, knowledge):
+    old = KnowledgeEntry.create(
+        user_id=1,
+        category="world",
+        key="iran_us_strike_policy",
+        value="Strikes possible",
+        source="agent",
+        confidence=0.5,
+    )
+    await knowledge.add_entry(old)
+    ctx = _context(engine, {"__user_id__": 1})
+
+    result = await StoreLearnedKnowledgeAction().run(
+        _task([_world("No strikes before vote")], update_agent_entries=True), ctx
+    )
+
+    [entry] = await knowledge.get_entries(1)
+    assert entry.id == old.id
+    assert entry.value == "No strikes before vote" and entry.source == "agent"
+    assert entry.confidence == 0.5  # capped by max_confidence
+    assert result.output["updated"] == [
+        {
+            "entry_id": old.id,
+            "category": "world",
+            "key": "iran_us_strike_policy",
+            "value": "No strikes before vote",
+            "previous_value": "Strikes possible",
+        }
+    ]
+    assert result.output["contradictions"] == []
+    assert await engine.store.get_processes_by_state(ProcessState.RUNNING) == []
+
+
+async def test_update_agent_entries_still_escalates_human_conflicts(engine, knowledge):
+    human = KnowledgeEntry.create(
+        user_id=1, category="world", key="iran_us_strike_policy", value="Mine", source="human"
+    )
+    await knowledge.add_entry(human)
+    ctx = _context(engine, {"__user_id__": 1})
+
+    result = await StoreLearnedKnowledgeAction().run(
+        _task([_world("Agent view")], update_agent_entries=True), ctx
+    )
+
+    [entry] = await knowledge.get_entries(1)
+    assert entry.value == "Mine"
+    assert result.output["updated"] == []
+    assert result.output["contradictions"][0]["resolution_process_id"]
+
+
+async def test_agent_conflict_without_flag_still_starts_resolution(engine, knowledge):
+    await knowledge.add_entry(
+        KnowledgeEntry.create(
+            user_id=1,
+            category="world",
+            key="iran_us_strike_policy",
+            value="Strikes possible",
+            source="agent",
+        )
+    )
+    ctx = _context(engine, {"__user_id__": 1})
+
+    result = await StoreLearnedKnowledgeAction().run(_task([_world("No strikes")]), ctx)
+
+    assert result.output["updated"] == []
+    assert len(result.output["contradictions"]) == 1

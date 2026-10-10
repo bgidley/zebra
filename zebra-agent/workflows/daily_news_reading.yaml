@@ -1,0 +1,133 @@
+name: "Daily News Reading"
+description: "Read today's news on news.kagi.com: pick the 5 stories most worth learning about, read them, write a digest and remember what was learned as world knowledge."
+tags: ["news", "kagi", "learning", "knowledge", "daily", "routine"]
+use_when: "The goal is to read, catch up on or learn from today's news / headlines (e.g. the daily news reading routine, 'what's in the news today'). Not for researching one specific topic — use Web Research for that."
+version: 1
+first_task: consult_knowledge
+result_key: digest
+
+tasks:
+  consult_knowledge:
+    name: "Recall what I already know"
+    action: consult_knowledge
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      output_key: knowledge_context
+
+  fetch_news:
+    name: "Fetch today's stories from Kagi News"
+    action: kagi_news_fetch
+    auto: true
+    properties:
+      categories: ["World", "Business", "Technology", "Science"]
+      max_per_category: 10
+      output_key: news
+
+  pick_articles:
+    name: "Pick 5 stories worth reading"
+    action: llm_call
+    auto: true
+    properties:
+      model: haiku
+      temperature: 0.3
+      response_format: json
+      system_prompt: |
+        You choose which news stories are most worth reading today to learn about the world.
+        Pick EXACTLY 5 stories. Prefer stories that are significant, explain how the world is
+        changing, or match the user's interests. Spread picks across categories. Avoid
+        near-duplicate stories, and skip stories that only repeat what is already known
+        unless there is a meaningful new development.
+        Reply with JSON only: {"picks": [{"id": "<story id>", "reason": "<one line>"}]}
+      prompt: |
+        Goal: {{goal}}
+
+        What I already know (user interests and earlier world knowledge):
+        {{knowledge_context.knowledge}}
+
+        Today's stories (id, category, title, summary):
+        {{news.stories}}
+      output_key: picked
+
+  read_articles:
+    name: "Read the picked stories"
+    action: kagi_news_read
+    auto: true
+    properties:
+      stories: "{{news}}"
+      picks: "{{picked}}"
+      max_articles: 5
+      max_chars: 6000
+      output_key: articles
+
+  write_digest:
+    name: "Write today's digest"
+    action: llm_call
+    auto: true
+    properties:
+      max_tokens: 3000
+      system_prompt: |
+        You are writing a short daily news digest for yourself and the user, from articles
+        you just read. For each of the 5 stories write a markdown section:
+        "### <title>" with a link to the source, then **What happened**, **Why it matters**
+        and **What I learned** (1–3 sentences each). Use only the article text given; do
+        not invent facts. Finish with one line on any thread connecting the stories.
+      prompt: |
+        Articles:
+        {{articles.articles}}
+      output_key: digest
+
+  extract_world_knowledge:
+    name: "Extract world knowledge"
+    action: llm_call
+    auto: true
+    properties:
+      model: haiku
+      temperature: 0.2
+      response_format: json
+      system_prompt: |
+        Turn today's news reading into durable world-knowledge entries.
+        Give 1–2 entries per story, at most 8 in total. Each entry is one standalone fact
+        that will still be useful in a few weeks.
+        - key: a short snake_case topic for the story or fact (e.g. "nobel_peace_prize_2026",
+          "us_russia_diesel_sanctions"). Reuse the same key for the same ongoing story so a
+          new development updates the old fact.
+        - value: the fact in one or two sentences, with the date (today is in the articles).
+        Reply with JSON only:
+        {"candidates": [{"category": "world", "key": "...", "value": "...",
+                         "time_sensitive": true, "confidence": 0.7}]}
+      prompt: |
+        Earlier world knowledge (reuse these keys for the same stories):
+        {{knowledge_context.knowledge}}
+
+        Articles:
+        {{articles.articles}}
+
+        Digest:
+        {{digest}}
+      output_key: world_knowledge
+
+  store_knowledge:
+    name: "Remember what I learned"
+    action: store_learned_knowledge
+    auto: true
+    properties:
+      candidates: "{{world_knowledge}}"
+      max_entries: 8
+      max_confidence: 0.7
+      update_agent_entries: true
+      output_key: learned_knowledge
+
+routings:
+  - from: consult_knowledge
+    to: fetch_news
+  - from: fetch_news
+    to: pick_articles
+  - from: pick_articles
+    to: read_articles
+  - from: read_articles
+    to: write_digest
+  - from: write_digest
+    to: extract_world_knowledge
+  - from: extract_world_knowledge
+    to: store_knowledge

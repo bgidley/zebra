@@ -1,0 +1,14 @@
+name: daily_news_reading
+description: >
+  Once a day, queue a goal to read the news on news.kagi.com: pick the 5 stories
+  most worth learning about, read them, write a digest and store what was learned
+  as world knowledge (F155). Runs at 07:00 UTC as the owner (first active superuser).
+schedule: "0 7 * * *"
+goal: >
+  Read today's news from news.kagi.com: pick the 5 articles most worth learning
+  about, read them, and record what you learned.
+workflow: Daily News Reading   # requested_workflow for the goal's selector
+goal_priority: 3
+budget_aware: true
+quiet_hours_ok: true
+on_missed: skip

@@ -107,6 +107,9 @@ class RoutineRegistry:
             on_missed=data.get("on_missed", "skip"),
             description=data.get("description", ""),
             extra_properties=data.get("extra_properties", {}),
+            goal=data.get("goal"),
+            goal_priority=int(data.get("goal_priority", 3)),
+            run_as=data.get("run_as"),
         )
         self.register(routine)
         logger.debug("Loaded routine from YAML: %s (%s)", routine.name, yaml_file.name)

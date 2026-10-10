@@ -118,6 +118,7 @@ async def run_daemon_loop(
         poll_interval=poll_interval,
         routines_dir=str(_ROUTINES_DIR),
         goal_queue_tick_fn=_goal_queue_tick_fn,
+        queue_goal_fn=queue_routine_goal,
         default_properties=routine_properties,
     )
 
@@ -149,6 +150,47 @@ async def run_daemon_loop(
             recovery.cancel()
 
     logger.info("Daemon stopped.")
+
+
+async def resolve_routine_user(username: str | None) -> int | None:
+    """User id a routine's goal runs as: *username*, else the first active superuser (F155).
+
+    Returns None when no such user exists — the goal still runs, but user-scoped
+    steps (knowledge, values profile) skip.
+    """
+    from django.contrib.auth import get_user_model
+
+    users = get_user_model().objects.filter(is_active=True)
+    if username:
+        user = await users.filter(username=username).afirst()
+    else:
+        user = await users.filter(is_superuser=True).order_by("id").afirst()
+    if user is None:
+        logger.warning("Routine goal: no user %r — running without a user", username or "(owner)")
+        return None
+    return user.id
+
+
+async def queue_routine_goal(routine):
+    """Queue a scheduled routine's goal through the normal goal queue (F155).
+
+    The goal is tagged ``__routine__`` (so the scheduler does not queue it twice)
+    and, when the routine names a workflow, asks the selector for it via
+    ``requested_workflow``.
+    """
+    from zebra_agent_web.api.goals import queue_goal
+    from zebra_agent_web.api.identity import goal_identity
+
+    extra = {"__routine__": routine.name, **routine.extra_properties}
+    if routine.workflow:
+        extra["requested_workflow"] = routine.workflow
+    return await queue_goal(
+        routine.goal,
+        priority=routine.goal_priority,
+        user_id=await resolve_routine_user(routine.run_as),
+        identity=await goal_identity(),
+        extra_properties=extra,
+    )
 
 
 async def recover_interrupted(engine, max_interrupted_attempts: int | None = None) -> None:

@@ -65,6 +65,9 @@ class Routine:
     on_missed: Literal["skip", "catchup"] = "skip"
     description: str = ""
     extra_properties: dict = field(default_factory=dict)
+    goal: str | None = None  # set = queue this goal (requests ``workflow`` if also set)
+    goal_priority: int = 3
+    run_as: str | None = None  # username the goal runs as; None = the queue_goal_fn default
 
 
 @dataclass

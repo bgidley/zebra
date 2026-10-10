@@ -28,6 +28,7 @@ async def queue_goal(
     identity: dict | None = None,
     previous_run_context: dict | None = None,
     continuation_comment: str | None = None,
+    extra_properties: dict | None = None,
 ) -> ProcessInstance:
     """Queue a goal for budget-managed daemon execution.
 
@@ -46,6 +47,9 @@ async def queue_goal(
             (F116), or None.
         continuation_comment: User comment on where the previous run got to
             and what to do next (F134); only stored with previous_run_context.
+        extra_properties: Additional process properties, e.g. ``__routine__`` and
+            ``requested_workflow`` for goals queued by a scheduled routine (F155).
+            They never override the core goal properties.
 
     Returns:
         The created ProcessInstance (state CREATED).
@@ -90,6 +94,8 @@ async def queue_goal(
         "__user_identity_id__": identity.get("user_identity_id", ""),
         "__user_id__": user_id,
     }
+    for key, value in (extra_properties or {}).items():
+        properties.setdefault(key, value)
     if deadline:
         properties["deadline"] = deadline
     if previous_run_context:

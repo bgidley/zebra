@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
-from datetime import UTC, datetime
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
+
+from zebra.core.models import ProcessState
 
 from zebra_agent.scheduler.registry import RoutineRegistry
 from zebra_agent.scheduler.routine import Routine, RoutineRun
 from zebra_agent.scheduler.store import RoutineRunStore
 
 logger = logging.getLogger(__name__)
+
+# A routine's previous goal only blocks a new one while it is younger than this, so a
+# goal parked forever (e.g. on an unanswered human task) cannot stop the routine (F155).
+PENDING_GOAL_MAX_AGE = timedelta(hours=20)
 
 
 class SchedulerLoop:
@@ -32,6 +38,9 @@ class SchedulerLoop:
         poll_interval: Seconds between ticks.
         clock: Callable returning current UTC datetime (injectable for tests).
         routines_dir: Optional path to YAML routines directory; loaded on start.
+        goal_queue_tick_fn: Optional full goal-queue tick used for ``workflow: null`` routines.
+        queue_goal_fn: Optional ``async fn(routine)`` that queues ``routine.goal`` as a goal
+            tagged ``__routine__`` (the web daemon wires ``api.goals.queue_goal``).
     """
 
     def __init__(
@@ -45,6 +54,7 @@ class SchedulerLoop:
         clock: Callable[[], datetime] | None = None,
         routines_dir: str | None = None,
         goal_queue_tick_fn: Callable | None = None,
+        queue_goal_fn: Callable[[Routine], Awaitable[object]] | None = None,
         default_properties: dict | None = None,
     ) -> None:
         self._registry = registry
@@ -56,6 +66,7 @@ class SchedulerLoop:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._routines_dir = routines_dir
         self._goal_queue_tick_fn = goal_queue_tick_fn
+        self._queue_goal_fn = queue_goal_fn
         # Seeded into every routine-dispatched process (e.g. __llm_provider_name__)
         # so routine runs get the same context as manually started ones.
         self._default_properties = dict(default_properties or {})
@@ -117,16 +128,22 @@ class SchedulerLoop:
                 return
 
         try:
-            await self._dispatch(routine, now)
-            updated = run.advance(routine, now, status="ok")
+            status = await self._dispatch(routine, now) or "ok"
+            updated = run.advance(routine, now, status=status)
         except Exception:
             logger.exception("[scheduler:error] Failed to dispatch %s", routine.name)
             updated = run.advance(routine, now, status="error")
 
         await self._store.upsert_run(updated)
 
-    async def _dispatch(self, routine: Routine, now: datetime) -> None:
-        """Dispatch a due routine — creates a workflow process or runs goal-queue logic."""
+    async def _dispatch(self, routine: Routine, now: datetime) -> str | None:
+        """Dispatch a due routine: queue a goal, start a workflow, or run the goal-queue tick.
+
+        Returns a run status other than ``ok`` when the routine was deliberately skipped.
+        """
+        if routine.goal:
+            return await self._queue_routine_goal(routine, now)
+
         if routine.workflow is None:
             # goal_queue_tick: use existing GoalScheduler logic
             await self._run_goal_queue_tick(routine)
@@ -164,6 +181,33 @@ class SchedulerLoop:
             process.id[:12],
         )
         await self._engine.start_process(process.id)
+
+    async def _queue_routine_goal(self, routine: Routine, now: datetime) -> str | None:
+        """Queue ``routine.goal`` unless a recent goal from this routine is still pending."""
+        if self._queue_goal_fn is None:
+            logger.warning("[scheduler:skip] %s — no queue_goal_fn configured", routine.name)
+            return "skipped"
+
+        for state in (ProcessState.CREATED, ProcessState.RUNNING):
+            for process in await self._engine.store.get_processes_by_state(state):
+                if (process.properties or {}).get("__routine__") != routine.name:
+                    continue
+                if now - process.created_at < PENDING_GOAL_MAX_AGE:
+                    logger.info(
+                        "[scheduler:skip] %s — goal %s still %s",
+                        routine.name,
+                        process.id[:12],
+                        state.value,
+                    )
+                    return "already_queued"
+
+        process = await self._queue_goal_fn(routine)
+        logger.info(
+            "[scheduler:dispatch] %s  goal queued  process=%s",
+            routine.name,
+            getattr(process, "id", "?")[:12],
+        )
+        return None
 
     async def _run_goal_queue_tick(self, routine: Routine) -> None:
         """Run the goal-queue daemon tick (reactive routine).
