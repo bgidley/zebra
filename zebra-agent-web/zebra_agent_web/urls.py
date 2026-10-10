@@ -104,6 +104,8 @@ urlpatterns = [
     path("dreams/", web_views.dream_cycles, name="dream_cycles"),
     # Ethics Audit Log (F20 / REQ-ETH-006)
     path("ethics-audit/", web_views.ethics_audit, name="ethics_audit"),
+    # Nav badge: goals waiting on a human task (HTMX, #160)
+    path("nav/needs-you/", web_views.nav_needs_you, name="nav_needs_you"),
     # Legacy redirects (old URLs redirect to activity page)
     path("tasks/", web_views.pending_tasks, name="pending_tasks"),
     path("runs/in-progress/", web_views.in_progress_runs, name="in_progress_runs"),

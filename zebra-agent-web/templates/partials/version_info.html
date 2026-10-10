@@ -1,0 +1,37 @@
+{% comment %}
+Deployed version (#107): short hash + date; click to show recent commits.
+Fetches /api/version/ once per page load. The panel opens upward because this
+sits at the bottom of the sidebar or the bare layout.
+{% endcomment %}
+<div class="relative" data-testid="version-info"
+     x-data="{
+        open: false,
+        version: {short_hash: '...', date: '', commits: []},
+        async init() {
+            try {
+                const r = await fetch('/api/version/');
+                this.version = await r.json();
+            } catch (e) {}
+        }
+     }"
+     @click.outside="open = false">
+    <button type="button" @click="open = !open" :aria-expanded="open"
+            class="flex items-center gap-2 font-mono text-xs text-faint hover:text-muted"
+            title="Recent changes">
+        <span x-text="version.short_hash"></span>
+        <span x-show="version.date" x-text="version.date"></span>
+    </button>
+    <div x-show="open" x-cloak x-transition.opacity
+         class="absolute bottom-full left-0 mb-2 w-96 max-w-[calc(100vw-2rem)] max-h-64 overflow-y-auto panel py-1 shadow-lg shadow-black/40 z-50">
+        <template x-if="version.commits.length === 0">
+            <p class="px-3 py-2 text-xs text-faint font-mono">No commit history available.</p>
+        </template>
+        <template x-for="c in version.commits" :key="c.hash">
+            <div class="flex gap-3 px-3 py-1 text-xs font-mono">
+                <span class="text-faint shrink-0" x-text="c.hash"></span>
+                <span class="text-faint shrink-0" x-text="c.date"></span>
+                <span class="text-muted truncate" x-text="c.subject"></span>
+            </div>
+        </template>
+    </div>
+</div>

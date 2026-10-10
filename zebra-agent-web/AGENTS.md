@@ -58,6 +58,11 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `static/vendor/` | Pinned HTMX and Alpine builds; versions and licences in its README |
 | `static/fonts/` | Self-hosted Geist / Geist Mono (OFL) |
 | `zebra_agent_web/icons/phosphor/` | Vendored Phosphor regular icons for `{% icon "name" class="..." %}` (`api/templatetags/icon_tags.py`) |
+| `templates/layouts/bare.html` | No-nav layout for signed-out pages (sign-in, passkey setup, first-run setup); blocks `title`, `content`, `extra_js` (#160) |
+| `templates/partials/head_assets.html` | `<head>` assets shared by `base.html` and the bare layout |
+| `templates/partials/version_info.html` | Version hash + recent-commits panel (sidebar footer / bare footer) |
+| `templates/components/state_dot.html`, `certainty.html` | State dot (`running`/`ok`/`fail`/`needs`) and certainty stripe (`confidence` 0 to 1) |
+| `zebra_agent_web/api/templatetags/format_tags.py` | `{{ amount\|usd }}`: `$1,234.50`, `<$0.01` below a cent |
 | `static/js/workflow-diagram.js` | Shared workflow diagram JavaScript |
 | `manage.py` | Django management script |
 
@@ -598,6 +603,7 @@ POST /api/tasks/<task_id>/complete/
 | `/knowledge/` | `knowledge_list` | Personal knowledge (source badge, confidence; soft-deleted hidden) |
 | `/knowledge/<id>/confirm/` | `knowledge_confirm` | Confirm an entry: confidence 1.0, source human (POST, F152) |
 | `/tasks/` | `pending_tasks` | Pending human tasks list |
+| `/nav/needs-you/` | `nav_needs_you` | HTMX nav badge: running goals waiting on a human task; empty on error (#160) |
 | `/tasks/<id>/` | `human_task_form` | Human task form page |
 | `/tasks/<id>/submit/` | `human_task_submit` | Submit human task form (POST) |
 | `/api/processes/<id>/pending-tasks/` | `process_pending_tasks` | Get pending human tasks with schema (API) |

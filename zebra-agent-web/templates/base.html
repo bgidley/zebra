@@ -1,52 +1,44 @@
 {% load static icon_tags %}<!DOCTYPE html>
 <html lang="en" class="h-full bg-gray-900">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token }}">
+    {% include "partials/head_assets.html" %}
     <title>{% block title %}Zebra Agent{% endblock %}</title>
-
-    {% comment %}Compiled by scripts/build_css.py from static/css/src/app.css{% endcomment %}
-    <link rel="stylesheet" href="{% static 'css/app.css' %}">
-
-    <script src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
-    <script defer src="{% static 'vendor/alpine-3.17.4.min.js' %}"></script>
     <script src="{% static 'js/workflow-diagram.js' %}"></script>
-
     {% block extra_head %}{% endblock %}
 </head>
-<body class="h-full" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-    <div class="min-h-full" x-data="{ sidebarOpen: false }">
-        <!-- Mobile sidebar backdrop -->
-        <div x-show="sidebarOpen" 
-             x-cloak
-             class="fixed inset-0 bg-gray-900/80 z-40 lg:hidden"
+<body class="h-full text-ink" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    <div class="min-h-full" x-data="{ sidebarOpen: false }" @keydown.escape.window="sidebarOpen = false">
+        {% comment %}Mobile sidebar backdrop{% endcomment %}
+        <div x-show="sidebarOpen" x-cloak x-transition.opacity
+             class="fixed inset-0 bg-black/60 z-40 lg:hidden"
              @click="sidebarOpen = false"></div>
-        
-        <!-- Sidebar -->
-        <aside class="fixed inset-y-0 left-0 w-64 bg-gray-800 border-r border-gray-700 z-50 
-                      transform transition-transform duration-200 ease-in-out
-                      lg:translate-x-0"
+
+        <aside class="fixed inset-y-0 left-0 w-60 flex flex-col bg-surface border-r border-line z-50
+                      transform transition-transform duration-200 ease-out lg:translate-x-0"
                :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
-            
-            <!-- Logo -->
-            <div class="flex items-center gap-2 h-16 px-6 border-b border-gray-700">
-                <svg class="h-8 w-8 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                          d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span class="text-xl font-bold text-white">Zebra Agent</span>
-            </div>
-            
-            <!-- Navigation -->
-            <nav class="mt-6 px-3">
-                <div class="space-y-1">
+
+            <a href="/" class="flex items-center gap-2.5 h-14 px-5 shrink-0 text-ink">
+                <span class="zebra-mark" aria-hidden="true"></span>
+                <span class="text-[15px] font-semibold tracking-tight">Zebra</span>
+            </a>
+
+            <nav class="flex-1 overflow-y-auto px-3 pb-4" aria-label="Main">
+                <div class="space-y-0.5">
                     {% include "partials/nav_item.html" with url="/" icon="squares-four" label="Dashboard" %}
+                    {% include "partials/nav_item.html" with url="/tasks/" icon="tray" label="Tasks" badge="needs-you" %}
                     {% include "partials/nav_item.html" with url="/run/" icon="lightning" label="Run Goal" %}
                     {% include "partials/nav_item.html" with url="/activity/" icon="pulse" label="Activity" %}
+                </div>
+
+                <p class="px-3 pt-5 pb-1.5 text-xs text-faint">Agent</p>
+                <div class="space-y-0.5">
                     {% include "partials/nav_item.html" with url="/workflows/" icon="tree-structure" label="Workflows" %}
                     {% include "partials/nav_item.html" with url="/knowledge/" icon="book-open" label="Knowledge" %}
                     {% include "partials/nav_item.html" with url="/dreams/" icon="moon" label="Dream Cycles" %}
+                </div>
+
+                <p class="px-3 pt-5 pb-1.5 text-xs text-faint">Governance</p>
+                <div class="space-y-0.5">
                     {% include "partials/nav_item.html" with url="/trust/" icon="shield-check" label="Trust" %}
                     {% include "partials/nav_item.html" with url="/profile/taxonomy/" icon="tag" label="Values Tags" %}
                     {% if user.is_staff %}
@@ -55,57 +47,45 @@
                 </div>
             </nav>
 
-            <!-- User -->
-            {% if user.is_authenticated or user_display_name %}
-            <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-medium">
-                            {% if user_display_name %}
-                                {{ user_display_name|slice:":1"|upper }}
-                            {% else %}
-                                {{ user.username|first|upper }}
-                            {% endif %}
-                        </div>
-                        <span class="text-sm text-gray-300 truncate">
-                            {% if user_display_name %}
-                                {{ user_display_name }}
-                            {% else %}
-                                {{ user.username }}
-                            {% endif %}
-                        </span>
-                    </div>
+            <div class="shrink-0 border-t border-line px-5 py-3 space-y-2">
+                {% if user.is_authenticated or user_display_name %}
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm text-ink truncate">
+                        {% if user_display_name %}{{ user_display_name }}{% else %}{{ user.username }}{% endif %}
+                    </span>
                     {% if user.is_authenticated %}
-                    <a href="/auth/logout/" class="text-gray-400 hover:text-white" title="Sign out" aria-label="Sign out">
-                        {% icon "sign-out" class="h-5 w-5" %}
+                    <a href="/auth/logout/" class="text-faint hover:text-ink" title="Sign out" aria-label="Sign out">
+                        {% icon "sign-out" class="h-[18px] w-[18px]" %}
                     </a>
                     {% endif %}
                 </div>
+                {% endif %}
+                {% include "partials/version_info.html" %}
             </div>
-            {% endif %}
         </aside>
-        
-        <!-- Main content -->
-        <div class="lg:pl-64">
-            <!-- Top bar (mobile) -->
-            <div class="sticky top-0 z-30 bg-gray-800 border-b border-gray-700 lg:hidden">
-                <div class="flex items-center h-16 px-4">
-                    <button @click="sidebarOpen = true" class="text-gray-400 hover:text-white" aria-label="Open navigation">
+
+        <div class="lg:pl-60">
+            {% comment %}Mobile top bar: menu, page title, one primary action{% endcomment %}
+            <div class="sticky top-0 z-30 bg-surface/95 backdrop-blur border-b border-line lg:hidden" data-testid="mobile-top-bar">
+                <div class="flex items-center gap-3 h-14 px-4">
+                    <button type="button" @click="sidebarOpen = true" class="-ml-1 p-1 text-muted hover:text-ink" aria-label="Open navigation">
                         {% icon "list" class="h-6 w-6" %}
                     </button>
-                    <span class="ml-4 text-lg font-semibold text-white">{% block page_title %}Zebra Agent{% endblock %}</span>
+                    <span class="flex-1 min-w-0 truncate text-[15px] font-semibold">{% block page_title %}Zebra Agent{% endblock %}</span>
+                    {% if request.path|slice:":5" != "/run/" %}
+                    <a href="/run/" class="btn btn-primary btn-sm">{% icon "lightning" class="h-4 w-4" %}Run goal</a>
+                    {% endif %}
                 </div>
             </div>
-            
-            <!-- Page content -->
-            <main class="p-6 lg:p-8">
+
+            <main class="p-4 sm:p-6 lg:p-8">
                 {% block content %}{% endblock %}
             </main>
         </div>
     </div>
-    
-    <!-- Toast notifications -->
-    <div id="toast-container" 
+
+    {% comment %}Toast notifications{% endcomment %}
+    <div id="toast-container"
          class="fixed bottom-4 right-4 z-50 space-y-2"
          x-data="{ toasts: [] }"
          @toast.window="toasts.push({message: $event.detail.message, type: $event.detail.type || 'info'}); setTimeout(() => toasts.shift(), 5000)">
@@ -120,39 +100,7 @@
                  x-transition></div>
         </template>
     </div>
-    
-    {% block extra_js %}{% endblock %}
 
-    <!-- Version footer -->
-    <div x-data="{
-            open: false,
-            version: {short_hash: '...', date: '', commits: []},
-            async init() {
-                try {
-                    const r = await fetch('/api/version/');
-                    this.version = await r.json();
-                } catch(e) {}
-            }
-         }"
-         class="fixed bottom-0 left-0 right-0 lg:left-64 z-40 bg-gray-900 border-t border-gray-800">
-        <button @click="open = !open"
-                class="w-full px-4 py-1 text-left text-xs text-gray-500 hover:text-gray-400 font-mono flex items-center gap-2">
-            <span x-text="version.short_hash"></span>
-            <span x-show="version.date" x-text="'· ' + version.date"></span>
-            <span class="ml-auto" x-text="open ? '▾' : '▸'"></span>
-        </button>
-        <div x-show="open" x-cloak class="border-t border-gray-800 max-h-48 overflow-y-auto">
-            <template x-if="version.commits.length === 0">
-                <p class="px-4 py-2 text-xs text-gray-600 font-mono">No commit history available.</p>
-            </template>
-            <template x-for="c in version.commits" :key="c.hash">
-                <div class="flex gap-3 px-4 py-1 text-xs font-mono text-gray-500 hover:bg-gray-800">
-                    <span class="text-gray-600 shrink-0" x-text="c.hash"></span>
-                    <span class="text-gray-600 shrink-0" x-text="c.date"></span>
-                    <span class="text-gray-400 truncate" x-text="c.subject"></span>
-                </div>
-            </template>
-        </div>
-    </div>
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

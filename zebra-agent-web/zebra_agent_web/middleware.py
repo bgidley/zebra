@@ -114,6 +114,10 @@ def CurrentUserMiddleware(get_response):
             # (accessing request.user directly triggers a sync session load which
             # raises SynchronousOnlyOperation in Django's async ASGI handler).
             user = await request.auser()
+            # Replace the lazy request.user with the resolved user so templates
+            # (via the auth context processor) never trigger that sync load
+            # inside the event loop.
+            request.user = user
             uid = user.id if user.is_authenticated else None
             token = _current_user_id_var.set(uid)
             try:
