@@ -4,8 +4,8 @@ Usage:
     python manage.py run_goal "Your goal text here"
     python manage.py run_goal "Your goal text" --model haiku
 
-Used by scripts/zebra-feedback.sh to consult the production Zebra instance
-from the local machine without requiring web authentication.
+Used by scripts/zebra-feedback.sh, which runs it inside the prod ``zebra-web``
+container (``podman exec``) to consult production Zebra without web authentication.
 """
 
 import asyncio

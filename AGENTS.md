@@ -109,7 +109,7 @@ uv run ruff format .        # fix formatting
 
 ### Consulting Zebra for Feedback (MUST before the closing commit)
 
-Before the `Closes #N` commit, submit the implementation to the **production Zebra instance** (`http://localhost:8000`) and incorporate its feedback. Zebra is always running via the deployed container. This embeds the XP **Feedback** principle directly in the iteration cycle — Zebra reviewing its own evolution.
+Before the `Closes #N` commit, submit the implementation to the **production Zebra instance** and incorporate its feedback. The script runs the review goal inside the prod `zebra-web` Podman container (`podman exec … manage.py run_goal`), so it works from any checkout or worktree. Model: `sonnet`, override with `ZEBRA_FEEDBACK_MODEL`. This embeds the XP **Feedback** principle directly in the iteration cycle — Zebra reviewing its own evolution.
 
 ```bash
 bash scripts/zebra-feedback.sh <issue_number> "<feature title>" \
@@ -121,7 +121,8 @@ bash scripts/zebra-feedback.sh <issue_number> "<feature title>" \
 **Acting on feedback:**
 - Feedback is **advisory** — incorporate it if it identifies a genuine gap.
 - If you disagree, note it briefly in the commit message.
-- If Zebra is unreachable, the script exits 0 with a notice; add `(Zebra feedback skipped — server unreachable)` to the commit.
+- If Zebra is unreachable (container not running), the script exits 0 with a notice; add `(Zebra feedback skipped — server unreachable)` to the commit.
+- If the goal fails, the script prints the error and exits 0; add `(Zebra feedback skipped — <error>)` to the commit. Don't work around a broken script by hand: fix it.
 
 ### Forks, worktrees & background agents (MUST merge their own work)
 
