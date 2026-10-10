@@ -40,6 +40,7 @@ def _provider(model=None):
         ("opus", "kimi-k3"),
         # other providers' ids fall back to the default
         ("claude-haiku-4-5-20251001", "kimi-k2.6"),
+        ("gpt-4o", "kimi-k2.6"),
         ("", "kimi-k2.6"),
     ],
 )
