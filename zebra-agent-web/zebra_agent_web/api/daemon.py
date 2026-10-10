@@ -153,7 +153,11 @@ async def run_daemon_loop(
 
 
 async def resolve_routine_user(username: str | None) -> int | None:
-    """User id a routine's goal runs as: *username*, else the first active superuser (F155).
+    """User id a routine's goal runs as (F155).
+
+    *username* if given; otherwise the owner: the first active superuser, else the
+    earliest-created active user (single-user installs may have no superuser, and
+    service accounts such as the CI smoke user are created after the owner).
 
     Returns None when no such user exists — the goal still runs, but user-scoped
     steps (knowledge, values profile) skip.
@@ -164,7 +168,10 @@ async def resolve_routine_user(username: str | None) -> int | None:
     if username:
         user = await users.filter(username=username).afirst()
     else:
-        user = await users.filter(is_superuser=True).order_by("id").afirst()
+        user = (
+            await users.filter(is_superuser=True).order_by("id").afirst()
+            or await users.order_by("id").afirst()
+        )
     if user is None:
         logger.warning("Routine goal: no user %r — running without a user", username or "(owner)")
         return None
