@@ -4,7 +4,7 @@
 ANTHROPIC_MODELS: dict[str, str] = {
     "haiku": "claude-haiku-4-5-20251001",
     "sonnet": "claude-sonnet-4-6",
-    "opus": "claude-opus-4-8",
+    "opus": "claude-opus-5-5",
 }
 
 # Kimi model aliases. Moonshot retired the moonshot-v1-* models (#164); the old

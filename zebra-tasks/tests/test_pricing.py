@@ -22,14 +22,23 @@ class TestGetPricing:
     def test_haiku_pricing(self):
         """Haiku has lower pricing."""
         pricing = get_pricing("claude-haiku-4-5-20251001")
-        assert pricing["input"] == 0.80
-        assert pricing["output"] == 4.00
+        assert pricing["input"] == 1.00
+        assert pricing["output"] == 5.00
 
     def test_opus_pricing(self):
         """Opus has higher pricing."""
         pricing = get_pricing("claude-opus-4-7")
-        assert pricing["input"] == 15.00
-        assert pricing["output"] == 75.00
+        assert pricing["input"] == 5.00
+        assert pricing["output"] == 25.00
+
+    def test_opus_alias_target_is_priced(self):
+        """The model the `opus` alias resolves to has a real price, not the fallback."""
+        from zebra_tasks.llm.models import ANTHROPIC_MODELS
+
+        assert ANTHROPIC_MODELS["opus"] == "claude-opus-5-5"
+        assert get_pricing("claude-opus-5-5") == {"input": 4.00, "output": 20.00}
+        for model in ANTHROPIC_MODELS.values():
+            assert model in ANTHROPIC_PRICING, model
 
     def test_unknown_model_returns_default(self):
         """Unknown model falls back to DEFAULT_PRICING (sonnet-tier)."""
@@ -67,13 +76,13 @@ class TestCalculateCost:
     def test_haiku_cost(self):
         """Haiku is cheapest."""
         cost = calculate_cost("claude-haiku-4-5-20251001", 10000, 5000)
-        expected = (10000 * 0.80 + 5000 * 4.00) / 1_000_000
+        expected = (10000 * 1.00 + 5000 * 5.00) / 1_000_000
         assert abs(cost - expected) < 1e-10
 
     def test_opus_cost(self):
         """Opus is most expensive."""
         cost = calculate_cost("claude-opus-4-7", 10000, 5000)
-        expected = (10000 * 15.00 + 5000 * 75.00) / 1_000_000
+        expected = (10000 * 5.00 + 5000 * 25.00) / 1_000_000
         assert abs(cost - expected) < 1e-10
 
     def test_none_model_uses_default(self):

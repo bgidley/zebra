@@ -1,6 +1,7 @@
 """Anthropic Claude LLM provider."""
 
 import os
+import re
 from collections.abc import AsyncIterator
 
 from zebra_tasks.llm.base import (
@@ -26,6 +27,7 @@ class AnthropicProvider(LLMProvider):
 
     # Model context windows (current Claude 4.x IDs)
     CONTEXT_WINDOWS = {
+        "claude-opus-5-5": 1000000,
         "claude-opus-4-8": 200000,
         "claude-sonnet-4-6": 200000,
         "claude-haiku-4-5-20251001": 200000,
@@ -40,12 +42,20 @@ class AnthropicProvider(LLMProvider):
 
     # Newer Claude 4+ models do not accept the `temperature` parameter — the API
     # returns a 400 invalid_request_error when it is included. Older Claude 3.x
-    # models still accept it. This set lists models that reject the parameter.
+    # models still accept it. This set lists models that reject the parameter;
+    # every Claude 5-family model (claude-<tier>-5*) rejects it too.
     _NO_TEMPERATURE_MODELS = {
         "claude-opus-4-8",
         "claude-sonnet-4-6",
         "claude-haiku-4-5-20251001",
     }
+
+    @classmethod
+    def accepts_temperature(cls, model: str) -> bool:
+        """Whether *model* accepts the ``temperature`` sampling parameter."""
+        if model in cls._NO_TEMPERATURE_MODELS:
+            return False
+        return re.match(r"claude-[a-z]+-5", model) is None
 
     def __init__(
         self,
@@ -105,7 +115,7 @@ class AnthropicProvider(LLMProvider):
         }
 
         # Newer Claude 4+ models reject the temperature parameter with a 400
-        if self._model not in self._NO_TEMPERATURE_MODELS:
+        if self.accepts_temperature(self._model):
             kwargs["temperature"] = temperature
 
         if system:
@@ -139,7 +149,7 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": max_tokens,
         }
 
-        if self._model not in self._NO_TEMPERATURE_MODELS:
+        if self.accepts_temperature(self._model):
             kwargs["temperature"] = temperature
 
         if system:
