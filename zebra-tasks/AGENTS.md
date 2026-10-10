@@ -55,7 +55,8 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/extract_values_tags.py` | ExtractValuesTagsAction - LLM tag extraction for profile wizard |
 | `zebra_tasks/knowledge/add.py` | AddKnowledgeAction + `store_knowledge_entry()` — store with contradiction detection (shared core) |
 | `zebra_tasks/knowledge/extract.py` | ExtractKnowledgeAction - LLM personal-fact candidates from a run; `normalize_knowledge_key()`, `validate_candidates()` privacy/cap guardrails (F152) |
-| `zebra_tasks/knowledge/store_learned.py` | StoreLearnedKnowledgeAction - store candidates as `source=agent` (confidence ≤ `max_confidence`), start *Resolve Knowledge Contradiction* for conflicts (F152) |
+| `zebra_tasks/knowledge/store_learned.py` | StoreLearnedKnowledgeAction - store candidates as `source=agent` (confidence ≤ `max_confidence`), start *Resolve Knowledge Contradiction* for conflicts (F152); `update_agent_entries: true` updates a conflicting agent entry in place (F155) |
+| `zebra_tasks/web/kagi_news.py` | KagiNewsFetchAction (`kagi_news_fetch`: news.kagi.com `kite.json` feed, no key) and KagiNewsReadAction (`kagi_news_read`: batch Kagi Extract of picked stories, falls back to Kagi News summaries; never fails on extraction) (F155) |
 | `zebra_tasks/llm/pricing.py` | Anthropic pricing table, `calculate_cost()`, `estimate_goal_cost()` |
 | `zebra_tasks/llm/models.py` | ANTHROPIC_MODELS, `resolve_model_name()` model aliases |
 | `tests/` | Test suite |
@@ -253,6 +254,8 @@ LLM-powered workflow selection from available workflows.
 | `confidence` | float | Selection confidence (0-1) |
 
 **Routes:** `"use_existing"` or `"create_new"`
+
+**Requested workflow (F155):** when the process has `requested_workflow` naming a workflow in the library, the selector routes `use_existing` to it without an LLM call (scheduled routine goals use this). Otherwise it selects normally.
 
 ### WorkflowCreatorAction
 

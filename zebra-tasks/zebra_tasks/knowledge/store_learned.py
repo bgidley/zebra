@@ -8,6 +8,7 @@ Contradiction* process so the user decides.
 """
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from zebra.core.models import ProcessState, TaskInstance, TaskResult
@@ -35,7 +36,10 @@ class StoreLearnedKnowledgeAction(TaskAction):
       raised to 1.0 by the agent);
     - different value already stored (human or agent): nothing is written; a
       *Resolve Knowledge Contradiction* process is started for the user, unless an
-      identical one is already waiting.
+      identical one is already waiting;
+    - with ``update_agent_entries`` (F155), a different value over an existing
+      ``source="agent"`` entry updates that entry in place instead (e.g. a developing
+      news story); conflicts with human entries still go to the user.
 
     Skips when there is no ``__user_id__`` or no ``__knowledge_store__``. Never
     fails the workflow.
@@ -65,6 +69,13 @@ class StoreLearnedKnowledgeAction(TaskAction):
             default=DEFAULT_MAX_ENTRIES,
         ),
         ParameterDef(
+            name="update_agent_entries",
+            type="bool",
+            description="Update a conflicting agent-sourced entry in place (F155)",
+            required=False,
+            default=False,
+        ),
+        ParameterDef(
             name="output_key",
             type="string",
             description="Process property for the result",
@@ -76,6 +87,7 @@ class StoreLearnedKnowledgeAction(TaskAction):
     outputs = [
         ParameterDef(name="stored", type="list", description="Newly created entries"),
         ParameterDef(name="refreshed", type="list", description="Re-observed entries"),
+        ParameterDef(name="updated", type="list", description="Agent entries updated in place"),
         ParameterDef(
             name="contradictions",
             type="list",
@@ -90,6 +102,7 @@ class StoreLearnedKnowledgeAction(TaskAction):
         result: dict[str, Any] = {
             "stored": [],
             "refreshed": [],
+            "updated": [],
             "contradictions": [],
             "errors": [],
             "skipped": "",
@@ -112,6 +125,7 @@ class StoreLearnedKnowledgeAction(TaskAction):
         raw = resolve_raw(context, props.get("candidates", []))
         max_entries = int(props.get("max_entries", DEFAULT_MAX_ENTRIES))
         max_confidence = float(props.get("max_confidence", DEFAULT_MAX_CONFIDENCE))
+        update_agent_entries = props.get("update_agent_entries", False) in (True, "true", "True")
         # Re-validate: candidates may come from any caller, not just extract_knowledge.
         candidates, _ = validate_candidates(
             raw if isinstance(raw, (list, dict)) else [],
@@ -150,6 +164,12 @@ class StoreLearnedKnowledgeAction(TaskAction):
                 result["stored"].append({**summary, "confidence": confidence})
             elif outcome["status"] == "refreshed":
                 result["refreshed"].append(summary)
+            elif (
+                update_agent_entries
+                and outcome["existing_source"] == "agent"
+                and await self._update_in_place(store, outcome["entry_id"], c, confidence)
+            ):
+                result["updated"].append({**summary, "previous_value": outcome["existing_value"]})
             else:
                 process_id = await self._start_resolution(
                     context, user_id, c, outcome["entry_id"], outcome["existing_value"]
@@ -164,12 +184,34 @@ class StoreLearnedKnowledgeAction(TaskAction):
                 )
 
         logger.info(
-            "StoreLearnedKnowledgeAction: stored=%d refreshed=%d contradictions=%d",
+            "StoreLearnedKnowledgeAction: stored=%d refreshed=%d updated=%d contradictions=%d",
             len(result["stored"]),
             len(result["refreshed"]),
+            len(result["updated"]),
             len(result["contradictions"]),
         )
         return _finish()
+
+    @staticmethod
+    async def _update_in_place(
+        store: Any, entry_id: str, candidate: dict[str, Any], confidence: float
+    ) -> bool:
+        """Overwrite an agent-sourced entry with a newer agent observation; True if done."""
+        try:
+            entry = await store.get_entry(entry_id)
+            if entry is None or entry.source != "agent":
+                return False
+            now = datetime.now(UTC)
+            entry.value = candidate["value"]
+            entry.confidence = confidence
+            entry.time_sensitive = candidate["time_sensitive"]
+            entry.last_verified = now
+            entry.updated_at = now
+            await store.update_entry(entry)
+            return True
+        except Exception as e:
+            logger.warning("StoreLearnedKnowledgeAction: in-place update failed: %s", e)
+            return False
 
     async def _start_resolution(
         self,

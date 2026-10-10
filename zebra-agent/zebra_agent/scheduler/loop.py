@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from zebra.core.models import ProcessState
 
@@ -14,6 +14,10 @@ from zebra_agent.scheduler.routine import Routine, RoutineRun
 from zebra_agent.scheduler.store import RoutineRunStore
 
 logger = logging.getLogger(__name__)
+
+# A routine's previous goal only blocks a new one while it is younger than this, so a
+# goal parked forever (e.g. on an unanswered human task) cannot stop the routine (F155).
+PENDING_GOAL_MAX_AGE = timedelta(hours=20)
 
 
 class SchedulerLoop:
@@ -134,7 +138,7 @@ class SchedulerLoop:
         Returns a run status other than ``ok`` when the routine was deliberately skipped.
         """
         if routine.goal:
-            return await self._queue_routine_goal(routine)
+            return await self._queue_routine_goal(routine, now)
 
         if routine.workflow is None:
             # goal_queue_tick: use existing GoalScheduler logic
@@ -170,15 +174,17 @@ class SchedulerLoop:
         )
         await self._engine.start_process(process.id)
 
-    async def _queue_routine_goal(self, routine: Routine) -> str | None:
-        """Queue ``routine.goal`` unless a goal from this routine is still pending."""
+    async def _queue_routine_goal(self, routine: Routine, now: datetime) -> str | None:
+        """Queue ``routine.goal`` unless a recent goal from this routine is still pending."""
         if self._queue_goal_fn is None:
             logger.warning("[scheduler:skip] %s — no queue_goal_fn configured", routine.name)
             return "skipped"
 
         for state in (ProcessState.CREATED, ProcessState.RUNNING):
             for process in await self._engine.store.get_processes_by_state(state):
-                if (process.properties or {}).get("__routine__") == routine.name:
+                if (process.properties or {}).get("__routine__") != routine.name:
+                    continue
+                if now - process.created_at < PENDING_GOAL_MAX_AGE:
                     logger.info(
                         "[scheduler:skip] %s — goal %s still %s",
                         routine.name,

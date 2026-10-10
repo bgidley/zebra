@@ -28,6 +28,7 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/storage/metrics.py` | InMemoryMetricsStore implementation |
 | `zebra_agent/budget.py` | BudgetManager — daily budget with linear pacing |
 | `zebra_agent/scheduler.py` | GoalScheduler — priority + deadline + age scoring |
+| `zebra_agent/scheduler/` | Polling scheduler: `Routine` (cron/interval; `workflow`, or `goal` + `goal_priority` + `run_as` to queue a goal — F155), `RoutineRegistry`, `SchedulerLoop` (`queue_goal_fn` dispatches goal routines; skips while one is `CREATED`/`RUNNING`) |
 | `zebra_agent/scheduler/goal_tracker.py` | GoalTracker — daemon's in-flight goals: background start, human-task hand-off, reconciliation (#141) |
 | `zebra_agent/human_tasks.py` | `find_pending_human_task` — READY `auto: false` task in a process tree |
 | `zebra_agent/ioc/` | IoC (Inversion of Control) module |

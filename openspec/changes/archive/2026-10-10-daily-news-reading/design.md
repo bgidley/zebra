@@ -19,8 +19,10 @@
    the web package, so the loop takes a `queue_goal_fn(routine)` callable. Without one, it logs
    `[scheduler:skip]`.
 2. **No pile-up.** Before queueing, the loop checks `CREATED` and `RUNNING` processes for
-   `__routine__ == routine.name`. If one is found, it skips with status `already_queued`. The cron
-   schedule gives at most one run a day.
+   `__routine__ == routine.name` created in the last 20 hours (`PENDING_GOAL_MAX_AGE`). If one is
+   found, it skips with status `already_queued`. The age limit stops a goal parked forever on an
+   unanswered human task from blocking the routine (from Zebra's review). The cron schedule gives at
+   most one run a day.
 3. **Run as the owner.** Knowledge is scoped to `user_id`. The daemon resolves `run_as` (a
    username) or the first active superuser, plus the installation identity. If there is no user,
    the goal still runs but `store_learned_knowledge` skips with `no_user`.

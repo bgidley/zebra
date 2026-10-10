@@ -38,7 +38,8 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/urls.py` | API URL routing |
 | `zebra_agent_web/api/engine.py` | Engine integration |
 | `zebra_agent_web/api/agent_engine.py` | Agent engine wrapper (creates BudgetManager + injection) |
-| `zebra_agent_web/api/daemon.py` | Shared daemon loop (`run_daemon_loop()`) |
+| `zebra_agent_web/api/daemon.py` | Shared daemon loop (`run_daemon_loop()`); `queue_routine_goal()` / `resolve_routine_user()` queue scheduled routine goals as `run_as` or the first active superuser (F155) |
+| `fixtures/routines/*.yaml` | Built-in routines: `goal_queue_tick`, `dream_cycle`, `compact_memory`, `daily_news_reading` (F155) |
 | `zebra_agent_web/api/identity.py` | Single-user identity; `goal_identity()` (async views) / `goal_identity_sync()` give the identity every goal entry point stamps with `__user_id__` (#151) |
 | `zebra_agent_web/api/dream_history.py` | Load + flatten recent Dream Cycle processes for the `/dreams/` page |
 | `zebra_agent_web/api/manual_review.py` | Find / retry / fail tasks flagged `__requires_manual_review__` by recovery (#130) |

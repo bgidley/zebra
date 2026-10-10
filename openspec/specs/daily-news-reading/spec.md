@@ -1,9 +1,15 @@
-## ADDED Requirements
+# daily-news-reading Specification
+
+## Purpose
+TBD - created by archiving change daily-news-reading. Update Purpose after archive.
+
+## Requirements
 
 ### Requirement: Routines can queue goals
 A routine with a `goal` SHALL be dispatched by queueing that goal through the injected
 `queue_goal_fn`, tagged with `__routine__`, instead of creating a workflow process. A routine SHALL
-NOT queue a goal while a previous goal from the same routine is still `CREATED` or `RUNNING`.
+NOT queue a goal while a previous goal from the same routine, created less than 20 hours earlier, is
+still `CREATED` or `RUNNING`.
 
 #### Scenario: Goal routine due
 - **WHEN** a routine with `goal` set becomes due
@@ -13,6 +19,10 @@ NOT queue a goal while a previous goal from the same routine is still `CREATED` 
 #### Scenario: Previous goal still pending
 - **WHEN** a goal routine becomes due and a process with the same `__routine__` is `CREATED` or `RUNNING`
 - **THEN** no new goal is queued and the run status is `already_queued`
+
+#### Scenario: Stale pending goal
+- **WHEN** a goal routine becomes due and its previous goal has been `RUNNING` for more than 20 hours
+- **THEN** a new goal is queued
 
 #### Scenario: No queue function
 - **WHEN** a goal routine becomes due and no `queue_goal_fn` is configured

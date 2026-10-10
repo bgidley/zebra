@@ -532,6 +532,7 @@ KNOWLEDGE_CATEGORY_CHOICES = [
     ("routines", "Routines"),
     ("skills", "Skills"),
     ("history", "History"),
+    ("world", "World"),
 ]
 
 
