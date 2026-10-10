@@ -35,6 +35,20 @@ async def test_default_user_is_first_active_superuser(users):
 
 
 @pytest.mark.django_db(transaction=True)
+async def test_without_superuser_default_user_is_earliest_active_user():
+    """Prod shape: the owner (created first) and a later smoke/service user, no superuser."""
+    owner = await sync_to_async(User.objects.create_user)(username="f155_ben", password="x")
+    await sync_to_async(User.objects.create_user)(username="f155_smoke", password="x")
+
+    assert await resolve_routine_user(None) == owner.id
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_no_users_runs_without_user():
+    assert await resolve_routine_user(None) is None
+
+
+@pytest.mark.django_db(transaction=True)
 async def test_run_as_names_the_user(users):
     assert await resolve_routine_user("f155_plain") == users["plain"].id
 
