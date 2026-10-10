@@ -35,7 +35,11 @@
     const diagramContainer = document.getElementById('workflow-diagram-container');
     
     let reconnectAttempts = 0;
-    const maxReconnectAttempts = 3;
+    // Backoff 2s, 4s, 8s, 16s, 30s, 30s (~90s) rides out a server restart/deploy
+    const maxReconnectAttempts = 6;
+    const reconnectDelay = n => Math.min(2000 * 2 ** (n - 1), 30000);
+    const maxPollFailures = 20;
+    let pollFailures = 0;
     let ws = null;
     let workflowDiagram = null;
     let currentWorkflowName = null;
@@ -247,7 +251,7 @@
                 if (reconnectAttempts < maxReconnectAttempts) {
                     reconnectAttempts++;
                     addLog(`Connection lost, reconnecting (${reconnectAttempts}/${maxReconnectAttempts})...`, 'text-yellow-400');
-                    setTimeout(connectWebSocket, 2000);
+                    setTimeout(connectWebSocket, reconnectDelay(reconnectAttempts));
                 } else {
                     addLog('Connection lost. Checking status via API...', 'text-yellow-400');
                     pollStatus();
@@ -258,8 +262,13 @@
     
     function pollStatus() {
         fetch(`/api/runs/${runId}/status/`)
-            .then(r => r.json())
+            .then(r => {
+                // A restarting server answers with a non-JSON error page; don't parse it
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
             .then(data => {
+                pollFailures = 0;
                 if (data.status === 'completed') {
                     addLog('Workflow completed!', 'text-green-400 font-bold');
                     showCompletion(true, data);
@@ -278,7 +287,15 @@
                 }
             })
             .catch(err => {
-                addLog(`Failed to check status: ${err}`, 'text-red-400');
+                pollFailures++;
+                if (pollFailures < maxPollFailures) {
+                    if (pollFailures === 1) {
+                        addLog(`Server unavailable (${err.message}), retrying...`, 'text-yellow-400');
+                    }
+                    setTimeout(pollStatus, 5000);
+                } else {
+                    addLog(`Failed to check status: ${err.message}. Refresh the page to retry.`, 'text-red-400');
+                }
             });
     }
     
