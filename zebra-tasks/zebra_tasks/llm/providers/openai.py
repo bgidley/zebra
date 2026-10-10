@@ -89,7 +89,7 @@ class OpenAIProvider(LLMProvider):
             "model": self._model,
             "messages": openai_messages,
             "max_tokens": max_tokens,
-            "temperature": temperature,
+            **self._sampling_kwargs(temperature),
         }
 
         if stop_sequences:
@@ -119,7 +119,7 @@ class OpenAIProvider(LLMProvider):
             "model": self._model,
             "messages": openai_messages,
             "max_tokens": max_tokens,
-            "temperature": temperature,
+            **self._sampling_kwargs(temperature),
             "stream": True,
         }
 
@@ -132,6 +132,10 @@ class OpenAIProvider(LLMProvider):
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+
+    def _sampling_kwargs(self, temperature: float) -> dict:
+        """Sampling arguments for a request; overridden for fixed-temperature models."""
+        return {"temperature": temperature}
 
     def _convert_messages(self, messages: list[Message]) -> list[dict]:
         """Convert messages to OpenAI format."""

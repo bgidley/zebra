@@ -84,7 +84,7 @@ source of truth; the host copy is regenerated on every deploy.
 |---|---|
 | `ORACLE_DSN` / `ORACLE_USERNAME` / `ORACLE_PASSWORD` | prod containers, `e2e-live` |
 | `ANTHROPIC_API_KEY`, `KAGI_API_KEY` | prod containers, e2e cassette recording |
-| `KIMI_API_KEY` (+ optional `KIMI_BASE_URL`) | prod containers — `--model kimi` (its `moonshot-v1-*` ids are no longer served by Moonshot, #157); `scripts/zebra-feedback.sh` defaults to `sonnet` |
+| `KIMI_API_KEY` (+ optional `KIMI_BASE_URL`) | prod containers — `--model kimi` → `kimi-k2.6` (also `kimi-k3`, `kimi-code` → `kimi-k2.7-code-highspeed`; old `moonshot-v1` aliases map to `kimi-k2.6`, #164); `scripts/zebra-feedback.sh` defaults to `sonnet` |
 | `ZEBRA_SMTP_USERNAME` / `ZEBRA_SMTP_PASSWORD` | prod containers — `notify_email` via OCI Email Delivery (an OCI user SMTP credential; host/sender live in `site.env`) |
 | `ZEBRA_NOTIFY_WEBHOOK_URL` (optional) | prod containers — default target for `notify_webhook` |
 | `SMOKE_PASSWORD` | deploy (creates `smoke` user), `smoke` |
