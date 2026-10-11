@@ -122,8 +122,8 @@ def ensure_vector_columns(cursor) -> list[str]:  # type: ignore[no-untyped-def]
     return added
 
 
-def drop_vector_columns(cursor) -> None:  # type: ignore[no-untyped-def]
-    """Reverse of ``ensure_vector_columns`` (drops triggers first)."""
+def drop_triggers(cursor) -> None:  # type: ignore[no-untyped-def]
+    """Drop the embedding triggers that exist."""
     for t in EMBEDDED_TABLES:
         cursor.execute(
             "SELECT COUNT(*) FROM user_triggers WHERE trigger_name = %(n)s",
@@ -131,6 +131,12 @@ def drop_vector_columns(cursor) -> None:  # type: ignore[no-untyped-def]
         )
         if cursor.fetchone()[0]:
             cursor.execute(f"DROP TRIGGER {t.trigger}")
+
+
+def drop_vector_columns(cursor) -> None:  # type: ignore[no-untyped-def]
+    """Reverse of ``ensure_vector_columns`` (drops triggers first)."""
+    drop_triggers(cursor)
+    for t in EMBEDDED_TABLES:
         if _has_column(cursor, t.table, "embedding"):
             cursor.execute(f"ALTER TABLE {t.table} DROP COLUMN embedding")
 
@@ -169,6 +175,11 @@ def install_triggers(cursor, name: str) -> None:  # type: ignore[no-untyped-def]
 
     A failure to embed never blocks the write: the row is stored with a NULL
     embedding and simply isn't found by vector search until re-embedded.
+
+    A trigger that compiles with errors is still created (INVALID), and an
+    invalid trigger makes every write to its table fail (ORA-04098). So the
+    triggers are checked after creation; if any is invalid they are all
+    dropped and ``RuntimeError`` is raised.
     """
     for t in EMBEDDED_TABLES:
         cursor.execute(
@@ -182,6 +193,18 @@ def install_triggers(cursor, name: str) -> None:  # type: ignore[no-untyped-def]
             "  WHEN OTHERS THEN :new.embedding := NULL;\n"
             "END;\n"
         )
+    invalid = []
+    for t in EMBEDDED_TABLES:
+        cursor.execute(
+            "SELECT status FROM user_objects WHERE object_type = 'TRIGGER' AND object_name = %(n)s",
+            {"n": t.trigger.upper()},
+        )
+        row = cursor.fetchone()
+        if row is None or row[0] != "VALID":
+            invalid.append(t.trigger)
+    if invalid:
+        drop_triggers(cursor)
+        raise RuntimeError(f"embedding triggers invalid, dropped: {', '.join(invalid)}")
 
 
 def backfill(cursor) -> dict[str, int]:  # type: ignore[no-untyped-def]

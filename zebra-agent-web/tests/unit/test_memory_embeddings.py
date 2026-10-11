@@ -21,26 +21,35 @@ T0 = datetime(2026, 10, 1, tzinfo=UTC)
 
 
 class RecordingCursor:
-    """Captures executed SQL; answers COUNT queries with a fixed value."""
+    """Captures executed SQL; answers COUNT queries with a fixed value and
+    trigger-status queries with ``status``."""
 
-    def __init__(self, count: int = 0) -> None:
+    def __init__(self, count: int = 0, status: str = "VALID") -> None:
         self.statements: list[tuple[str, object]] = []
         self._count = count
+        self._status = status
         self.rowcount = 3
 
     def execute(self, sql: str, params: object = None) -> None:
         self.statements.append((sql, params))
 
-    def fetchone(self) -> tuple[int]:
+    def fetchone(self) -> tuple:
+        if self.statements[-1][0].startswith("SELECT status"):
+            return (self._status,)
         return (self._count,)
+
+    def sql_starting(self, prefix: str) -> list[str]:
+        return [s for s, _ in self.statements if s.startswith(prefix)]
 
 
 def test_trigger_sql_keeps_plsql_terminator_and_skips_failed_embeddings():
     cursor = RecordingCursor()
     embeddings.install_triggers(cursor, "ZEBRA_EMBED_V1")
 
-    assert len(cursor.statements) == len(embeddings.EMBEDDED_TABLES)
-    sql = cursor.statements[0][0]
+    creates = cursor.sql_starting("CREATE OR REPLACE TRIGGER")
+    assert len(creates) == len(embeddings.EMBEDDED_TABLES)
+    assert not cursor.sql_starting("DROP TRIGGER")
+    sql = creates[0]
     assert sql.startswith("CREATE OR REPLACE TRIGGER zebra_wf_mem_embed_trg")
     # No UPDATE OF list: NCLOB columns are not allowed there (ORA-25006).
     assert "BEFORE INSERT OR UPDATE ON zebra_workflow_memories" in sql
@@ -49,8 +58,18 @@ def test_trigger_sql_keeps_plsql_terminator_and_skips_failed_embeddings():
     assert "WHEN OTHERS THEN :new.embedding := NULL;" in sql
     # Django's Oracle cursor strips one trailing ";" — the block must survive it.
     assert sql.endswith("END;\n")
-    knowledge = cursor.statements[2][0]
+    knowledge = creates[2]
     assert ':new."KEY"' in knowledge and ':new."VALUE"' in knowledge
+
+
+def test_invalid_triggers_are_dropped_so_writes_keep_working():
+    # An INVALID trigger would fail every write to its table (ORA-04098).
+    cursor = RecordingCursor(count=1, status="INVALID")
+    with pytest.raises(RuntimeError, match="embedding triggers invalid"):
+        embeddings.install_triggers(cursor, "ZEBRA_EMBED_V1")
+    assert cursor.sql_starting("DROP TRIGGER") == [
+        f"DROP TRIGGER {t.trigger}" for t in embeddings.EMBEDDED_TABLES
+    ]
 
 
 def test_backfill_touches_only_rows_without_embedding():
