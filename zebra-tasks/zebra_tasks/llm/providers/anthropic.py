@@ -63,6 +63,10 @@ class AnthropicProvider(LLMProvider):
     # prompts and reason aloud in the visible reply ("that's 5 words, need 3: ...").
     # At xhigh they think in a thinking block and return only the answer (#168).
     _XHIGH_EFFORT_PATTERN = re.compile(r"claude-(sonnet|haiku)-5")
+    # Thinking counts against max_tokens, and callers size max_tokens for the answer
+    # alone (often 150-600), so boosted-effort calls get this much on top. Unused
+    # tokens are not billed.
+    THINKING_HEADROOM_TOKENS = 4096
 
     @classmethod
     def effort_for(cls, model: str) -> str | None:
@@ -77,6 +81,7 @@ class AnthropicProvider(LLMProvider):
         if effort:
             # extra_body: the pinned anthropic SDK predates the output_config argument
             kwargs["extra_body"] = {"output_config": {"effort": effort}}
+            kwargs["max_tokens"] += self.THINKING_HEADROOM_TOKENS
 
     def __init__(
         self,

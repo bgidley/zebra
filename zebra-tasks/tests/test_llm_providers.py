@@ -359,12 +359,15 @@ class TestAnthropicProvider:
                 importlib.reload(anthropic_provider)
 
                 provider = anthropic_provider.AnthropicProvider(model=model)
-                await provider.complete([Message.user("hi")])
+                await provider.complete([Message.user("hi")], max_tokens=300)
                 call_kwargs = mock_client.messages.create.call_args.kwargs
                 if expect_effort:
                     assert call_kwargs["extra_body"] == {"output_config": {"effort": expect_effort}}
+                    # thinking gets headroom on top of the caller's answer budget
+                    assert call_kwargs["max_tokens"] == 300 + provider.THINKING_HEADROOM_TOKENS
                 else:
                     assert "extra_body" not in call_kwargs
+                    assert call_kwargs["max_tokens"] == 300
 
                 stream_kwargs = {}
 
