@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 14
+version: 15
 first_task: consult_memory
 
 tasks:
@@ -244,7 +244,9 @@ tasks:
           "autonomy": {"pass": true/false, "reasoning": "..."},
           "overall_reasoning": "brief summary",
           "concerns": ["any concerns, even for ethical actions"],
-          "recommendations": ["suggestions for future improvement"]
+          "recommendations": ["suggestions for future improvement"],
+          "voice": "one or two short sentences in the first person, addressed to the user, saying what you concluded about this run and why",
+          "confidence": a number from 0.0 to 1.0 for how sure you are
         }
       prompt: |
         Review the ethics of this completed AI action:

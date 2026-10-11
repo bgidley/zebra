@@ -1,0 +1,20 @@
+{% comment %}
+"On my mind" (#161): Zebra's latest notable thoughts across recent runs.
+Parameter: feed (list of api.thoughts.FeedThought).
+{% endcomment %}
+<section class="panel" data-testid="on-my-mind" aria-labelledby="on-my-mind-title">
+    <div class="px-6 py-4 border-b border-line">
+        <h2 id="on-my-mind-title" class="text-lg font-semibold text-voice">On my mind</h2>
+    </div>
+    <div class="px-6 py-1 divide-y divide-line">
+        {% for item in feed %}
+        {% if item.run_id %}
+        {% include "components/thought.html" with thought=item.thought context_text=item.goal href="/runs/"|add:item.run_id|add:"/" at=item.at %}
+        {% else %}
+        {% include "components/thought.html" with thought=item.thought context_text=item.goal href="" at=item.at %}
+        {% endif %}
+        {% empty %}
+        <p class="py-6 text-sm text-muted">Nothing yet. When I work on your goals, the reasoning I record along the way shows up here.</p>
+        {% endfor %}
+    </div>
+</section>

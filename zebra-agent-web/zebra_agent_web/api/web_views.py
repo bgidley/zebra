@@ -29,6 +29,7 @@ from zebra_agent.metrics import WorkflowRun
 from zebra_tasks.agent.followup import load_previous_run_context
 
 from zebra_agent_web.api import agent_engine, engine, manual_review
+from zebra_agent_web.api.thoughts import recent_thoughts, thoughts_for_process
 
 logger = logging.getLogger(__name__)
 
@@ -196,8 +197,16 @@ async def dashboard(request):
     except Exception:
         logger.warning("Could not load running activities for dashboard", exc_info=True)
 
+    # Zebra's voice layer (#161): recent recorded reasoning across runs
+    on_my_mind = []
+    try:
+        on_my_mind = await recent_thoughts()
+    except Exception:
+        logger.warning("Could not load recent thoughts for dashboard", exc_info=True)
+
     context = {
         **_identity_context(),
+        "on_my_mind": on_my_mind,
         "workflows_count": len(workflows),
         "total_runs": total_runs,
         "running_count": len(running_activities),
@@ -1087,6 +1096,8 @@ async def _build_parent_flow_context(
         "task_panels": task_panels,
         "planning_concerns": _extract_planning_concerns(parent_props),
         "ethics_outcome": _extract_ethics_outcome(parent_props),
+        # Zebra's recorded reasoning, in step order (#161)
+        "thoughts": thoughts_for_process(parent_props),
     }
 
 

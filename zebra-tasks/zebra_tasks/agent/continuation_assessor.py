@@ -20,6 +20,7 @@ from zebra_tasks.agent.followup import (
     CONTINUATION_RATIONALE_KEY,
     PREVIOUS_RUN_CONTEXT_KEY,
 )
+from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
@@ -33,7 +34,8 @@ DECISIONS = (SAME_WORKFLOW, EXISTING_WORKFLOW, NEW_WORKFLOW)
 
 _MAX_PROGRESS_ITEMS = 30
 
-SYSTEM_PROMPT = """You decide how an AI agent should continue a previous run.
+SYSTEM_PROMPT = (
+    """You decide how an AI agent should continue a previous run.
 
 The user has asked to continue a run. Choose ONE:
 - "same_workflow": re-run the previous workflow; it fits and the remaining work is
@@ -51,8 +53,12 @@ Respond with JSON only:
 {
   "decision": "same_workflow" | "existing_workflow" | "new_workflow",
   "rationale": "one or two sentences",
-  "suggested_name": "Title Case name for a new workflow (only for new_workflow)"
+  "suggested_name": "Title Case name for a new workflow (only for new_workflow)",
+"""
+    + VOICE_SCHEMA_FIELDS
+    + """
 }"""
+)
 
 
 def _format_progress(ctx: dict[str, Any]) -> str:
@@ -180,7 +186,9 @@ class ContinuationAssessorAction(TaskAction):
         comment = props.get(CONTINUATION_COMMENT_KEY) or ""
         previous_workflow = ctx.get("workflow_name") or ""
 
-        decision, rationale, suggested_name = await self._assess(task, context, goal, ctx, comment)
+        decision, rationale, suggested_name, voice = await self._assess(
+            task, context, goal, ctx, comment
+        )
 
         if decision == SAME_WORKFLOW and not self._workflow_exists(
             previous_workflow, task, context
@@ -227,6 +235,7 @@ class ContinuationAssessorAction(TaskAction):
             "decision": decision,
             "rationale": rationale,
             "workflow_name": previous_workflow if decision == SAME_WORKFLOW else None,
+            **voice,
         }
         context.set_process_property(
             task.properties.get("output_key", "continuation_assessment"), output
@@ -241,8 +250,12 @@ class ContinuationAssessorAction(TaskAction):
         goal: str,
         ctx: dict[str, Any],
         comment: str,
-    ) -> tuple[str, str, str | None]:
-        """Ask the LLM for a decision; fall back to existing_workflow on any failure."""
+    ) -> tuple[str, str, str | None, dict[str, Any]]:
+        """Ask the LLM for a decision; fall back to existing_workflow on any failure.
+
+        Returns ``(decision, rationale, suggested_name, voice)`` where ``voice`` holds
+        the normalised ``voice`` / ``confidence`` fields (#161).
+        """
         provider_name = (
             task.properties.get("provider")
             or context.process.properties.get("__llm_provider_name__")
@@ -276,13 +289,14 @@ class ContinuationAssessorAction(TaskAction):
                 raise ValueError(f"unknown decision {decision!r}")
             rationale = str(data.get("rationale") or "").strip()
             suggested = data.get("suggested_name") or None
-            return decision, rationale, suggested
+            return decision, rationale, suggested, voice_fields(data)
         except Exception as e:
             logger.warning("Continuation assessment failed (%s) — using existing_workflow", e)
             return (
                 EXISTING_WORKFLOW,
                 f"Assessment unavailable ({type(e).__name__}); defaulting to workflow selection.",
                 None,
+                {},
             )
 
     @staticmethod

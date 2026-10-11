@@ -131,6 +131,7 @@
     {% include "partials/run_chain.html" %}
 
     <!-- Planning Concerns (F21 — proactive, advisory) -->
+    {% include "partials/thought_trail.html" with thoughts=parent_flow.thoughts %}
     {% include "partials/planning_concerns.html" %}
     {% include "partials/ethics_outcome.html" %}
     {% include "partials/_continuation_decision.html" %}

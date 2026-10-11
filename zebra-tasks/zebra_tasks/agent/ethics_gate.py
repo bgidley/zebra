@@ -7,6 +7,7 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import with_previous_run
+from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
@@ -49,7 +50,8 @@ EVALUATION GUIDELINES:
 - When rejecting, explain clearly which test(s) failed and why.
 - Consider the action from the perspective of all affected rational beings."""
 
-_KANTIAN_JSON_SCHEMA = """\
+_KANTIAN_JSON_SCHEMA = (
+    """\
 Respond with JSON only:
 {
     "approved": true or false,
@@ -57,8 +59,12 @@ Respond with JSON only:
     "rational_beings_as_ends": {"pass": true/false, "reasoning": "..."},
     "autonomy": {"pass": true/false, "reasoning": "..."},
     "overall_reasoning": "brief summary of the ethical assessment",
-    "concerns": ["list of any concerns, even for approved actions"]
+    "concerns": ["list of any concerns, even for approved actions"],
+"""
+    + VOICE_SCHEMA_FIELDS
+    + """
 }"""
+)
 
 KANTIAN_SYSTEM_PROMPT = _KANTIAN_PREAMBLE + "\n\n" + _KANTIAN_JSON_SCHEMA
 
@@ -87,7 +93,8 @@ _VALUES_SECTION_TEMPLATE = """\
        rejections, not trade-offs to deliberate.
    Never manufacture dilemmas. When one exists, lay out BOTH sides fairly and recommend."""
 
-_COMBINED_JSON_SCHEMA = """\
+_COMBINED_JSON_SCHEMA = (
+    """\
 Respond with JSON only:
 {
     "approved": true or false,
@@ -111,8 +118,12 @@ Respond with JSON only:
         ],
         "recommendation": "proceed" or "decline",
         "recommendation_reasoning": "why you lean this way"
-    }
+    },
+"""
+    + VOICE_SCHEMA_FIELDS
+    + """
 }"""
+)
 
 INPUT_GATE_PROMPT = """\
 Evaluate whether the following goal is ethical for an AI agent to pursue.
@@ -412,6 +423,12 @@ class EthicsGateAction(TaskAction):
                 content = content[start:end].strip()
 
             assessment = json.loads(content)
+            # Zebra's first-person line + confidence for the voice layer (#161)
+            if isinstance(assessment, dict):
+                fields = voice_fields(assessment)
+                assessment.pop("voice", None)
+                assessment.pop("confidence", None)
+                assessment.update(fields)
 
             # Extract Kantian verdict (LLM-computed from the three tests)
             kantian_approved = assessment.get("approved", False)

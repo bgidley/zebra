@@ -13,6 +13,8 @@ from typing import Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.voice import voice_fields
+
 logger = logging.getLogger(__name__)
 
 _MAX_GOAL_LEN = 500
@@ -38,6 +40,7 @@ def normalise_post_review(raw: Any) -> dict[str, Any]:
         "overall_reasoning": str(raw.get("overall_reasoning", "")),
         "concerns": [str(c) for c in raw.get("concerns") or []],
         "recommendations": [str(r) for r in raw.get("recommendations") or []],
+        **voice_fields(raw),
     }
 
 

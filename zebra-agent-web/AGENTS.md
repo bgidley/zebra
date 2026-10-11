@@ -42,6 +42,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `fixtures/routines/*.yaml` | Built-in routines: `goal_queue_tick`, `dream_cycle`, `compact_memory`, `daily_news_reading` (F155) |
 | `zebra_agent_web/api/identity.py` | Single-user identity; `goal_identity()` (async views) / `goal_identity_sync()` give the identity every goal entry point stamps with `__user_id__` (#151) |
 | `zebra_agent_web/api/dream_history.py` | Load + flatten recent Dream Cycle processes for the `/dreams/` page |
+| `zebra_agent_web/api/thoughts.py` | Voice layer read model (#161): `thoughts_for_process(props)` (ordered recorded reasoning, voice line preferred) and `recent_thoughts()` (per-user feed for the dashboard). Rendered by `components/thought.html`, `partials/thought_trail.html`, `partials/on_my_mind.html` |
 | `zebra_agent_web/api/manual_review.py` | Find / retry / fail tasks flagged `__requires_manual_review__` by recovery (#130) |
 | `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
 | `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory) |

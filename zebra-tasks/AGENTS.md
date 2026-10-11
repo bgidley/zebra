@@ -44,6 +44,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
 | `zebra_tasks/agent/history.py` | AssessHistoryNeedAction, GetWorkflowHistoryAction, `parse_time()`, `with_workflow_history()` - workflow history lookup (F138) |
 | `zebra_tasks/agent/flag_concerns.py` | FlagConcernsAction - proactive, advisory concern flagging during planning (F21) |
+| `zebra_tasks/agent/voice.py` | `VOICE_SCHEMA_FIELDS`, `extract_voice()`, `voice_fields()` - Zebra's first-person `voice` + `confidence` recorded alongside reasoning outputs (ethics gate, selector, flag concerns, continuation, post-review); stored only when supplied (#161) |
 | `zebra_tasks/agent/record_dilemma_resolution.py` | RecordDilemmaResolutionAction - record a human ethics-dilemma resolution and route (F22) |
 | `zebra_tasks/agent/record_ethics_review.py` | RecordEthicsReviewAction - normalise + audit the post-execution ethics review (#143) |
 | `zebra_tasks/agent/record_ethics_rejection.py` | RecordEthicsRejectionAction - record which ethics gate rejected a goal and why (#143) |

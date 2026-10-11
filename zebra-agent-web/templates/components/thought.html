@@ -1,0 +1,24 @@
+{% comment %}
+One thought from Zebra's voice layer (#161).
+Parameters: thought (api.thoughts.Thought); context_text (optional, e.g. the goal);
+href (optional link for the source line); at (optional datetime).
+
+Voice lines are Zebra's own first-person words, set in ink. Recorded reasoning
+without a voice line is quoted in muted text. The certainty stripe appears only
+when Zebra recorded a confidence; otherwise a plain voice-coloured rule.
+{% endcomment %}<div class="flex gap-3 py-3{% if thought.quiet %} opacity-70{% endif %}" data-thought="{{ thought.kind }}">
+    {% if thought.confidence is not None %}
+    {% include "components/certainty.html" with confidence=thought.confidence %}
+    {% else %}
+    <span class="w-1.5 shrink-0 self-stretch rounded-sm bg-voice/35" aria-hidden="true"></span>
+    {% endif %}
+    <div class="min-w-0">
+        <p class="{% if thought.is_voice %}text-[15px] leading-relaxed text-ink{% else %}text-sm leading-relaxed text-muted{% endif %}">{{ thought.text }}</p>
+        <p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-faint">
+            {% if href %}<a href="{{ href }}" class="font-medium text-voice hover:underline">{{ thought.label }}</a>{% else %}<span class="font-medium text-voice">{{ thought.label }}</span>{% endif %}
+            {% if context_text %}<span class="truncate max-w-[32ch]">{{ context_text }}</span>{% endif %}
+            {% if not thought.is_voice %}<span>recorded reasoning</span>{% endif %}
+            {% if at %}<span class="font-mono">{{ at|timesince }} ago</span>{% endif %}
+        </p>
+    </div>
+</div>
