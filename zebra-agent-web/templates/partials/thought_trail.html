@@ -1,0 +1,17 @@
+{% comment %}
+Thought trail (#161): Zebra's recorded reasoning for one run, in step order.
+Parameter: thoughts (list of api.thoughts.Thought). Renders nothing when empty.
+{% endcomment %}
+{% if thoughts %}
+<section class="panel" data-testid="thought-trail" aria-labelledby="thought-trail-title">
+    <div class="px-6 py-4 border-b border-line">
+        <h2 id="thought-trail-title" class="text-lg font-semibold text-ink">Thought trail</h2>
+        <p class="mt-0.5 text-sm text-muted">What Zebra concluded at each step, as recorded during the run.</p>
+    </div>
+    <div class="px-6 py-1 divide-y divide-line">
+        {% for thought in thoughts %}
+        {% include "components/thought.html" with thought=thought context_text="" href="" at=None %}
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

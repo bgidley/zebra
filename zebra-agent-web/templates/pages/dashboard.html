@@ -80,6 +80,9 @@
         </div>
     </div>
 
+    {% comment %}Zebra's voice layer (#161){% endcomment %}
+    {% include "partials/on_my_mind.html" with feed=on_my_mind %}
+
     {% if budget %}
     <!-- Budget Status -->
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">

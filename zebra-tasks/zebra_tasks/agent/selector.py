@@ -8,6 +8,7 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import with_previous_run
+from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, extract_voice, voice_fields
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
@@ -41,6 +42,8 @@ class WorkflowSelection:
     create_variant: bool
     reasoning: str
     suggested_name: str | None = None
+    voice: str | None = None
+    confidence: float | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "WorkflowSelection":
@@ -50,6 +53,7 @@ class WorkflowSelection:
             create_variant=data.get("create_variant", False),
             reasoning=data.get("reasoning", ""),
             suggested_name=data.get("suggested_name"),
+            **extract_voice(data),
         )
 
 
@@ -220,7 +224,8 @@ class WorkflowSelectorAction(TaskAction):
         ),
     ]
 
-    SYSTEM_PROMPT = """You are a workflow selector. Given a user goal and available workflows,
+    SYSTEM_PROMPT = (
+        """You are a workflow selector. Given a user goal and available workflows,
 select the best action: use an existing workflow, create a variant of one, or create a new one.
 
 WORKFLOW CAPABILITIES:
@@ -264,10 +269,14 @@ Respond with JSON only:
     "create_new": true ONLY if no existing workflow is even close,
     "create_variant": true ONLY if an existing workflow is close but needs modification,
     "reasoning": "brief explanation of your choice",
-    "suggested_name": "name for new/variant workflow" (only if create_new or create_variant)
+    "suggested_name": "name for new/variant workflow" (only if create_new or create_variant),
+"""
+        + VOICE_SCHEMA_FIELDS
+        + """
 }
 
 Note: create_new and create_variant are mutually exclusive. If use_existing, both are false."""
+    )
 
     async def _current_workflows(self, context: ExecutionContext, fallback: list) -> list:
         """Return the live goal-workflow list, or *fallback* if the library is unavailable."""
@@ -524,6 +533,7 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
                 "create_variant": selection.create_variant,
                 "reasoning": selection.reasoning,
                 "suggested_name": selection.suggested_name,
+                **voice_fields({"voice": selection.voice, "confidence": selection.confidence}),
             }
             context.set_process_property(output_key, output_data)
 

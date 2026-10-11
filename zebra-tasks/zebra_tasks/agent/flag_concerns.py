@@ -15,6 +15,7 @@ import logging
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
 
@@ -23,7 +24,8 @@ logger = logging.getLogger(__name__)
 _MAX_GOAL_LEN = 500
 _MAX_PLAN_LEN = 500
 
-SYSTEM_PROMPT = """\
+SYSTEM_PROMPT = (
+    """\
 You are a careful planning reviewer for an AI agent. Before the agent executes a
 chosen plan, you proactively surface POTENTIAL CONCERNS the human should be aware of.
 
@@ -46,8 +48,12 @@ Respond with JSON only:
     "concerns": [
         {"description": "...", "severity": "low|medium|high", "step": "the aspect this relates to"}
     ],
-    "summary": "one-line summary of the overall concern level"
+    "summary": "one-line summary of the overall concern level",
+"""
+    + VOICE_SCHEMA_FIELDS
+    + """
 }"""
+)
 
 USER_PROMPT = """\
 Review the following planned approach and flag any potential concerns.
@@ -203,7 +209,7 @@ class FlagConcernsAction(TaskAction):
             concerns = parsed.get("concerns", []) or []
             summary = parsed.get("summary", "")
 
-            result = {"concerns": concerns, "summary": summary}
+            result = {"concerns": concerns, "summary": summary, **voice_fields(parsed)}
             context.set_process_property(output_key, result)
 
             logger.info(
