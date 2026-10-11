@@ -21,7 +21,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/llm/base.py` | LLMProvider base class, Message model |
 | `zebra_tasks/llm/action.py` | LLMCallAction task action |
 | `zebra_tasks/llm/providers/` | Provider implementations |
-| `zebra_tasks/llm/providers/anthropic.py` | Anthropic (Claude) provider |
+| `zebra_tasks/llm/providers/anthropic.py` | Anthropic (Claude) provider: no `temperature` for Claude 4.6+/5 models; `output_config.effort: xhigh` for Sonnet/Haiku 5.5, which otherwise reason aloud in the reply on short prompts (#168) |
 | `zebra_tasks/llm/providers/openai.py` | OpenAI provider |
 | `zebra_tasks/subtasks/` | Sub-workflow actions |
 | `zebra_tasks/subtasks/subworkflow.py` | SubworkflowAction, ParallelSubworkflowsAction |

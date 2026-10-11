@@ -59,6 +59,25 @@ class AnthropicProvider(LLMProvider):
             return False
         return re.match(r"claude-[a-z]+-5", model) is None
 
+    # At their default effort Sonnet 5.5 and Haiku 5.5 often skip thinking on short
+    # prompts and reason aloud in the visible reply ("that's 5 words, need 3: ...").
+    # At xhigh they think in a thinking block and return only the answer (#168).
+    _XHIGH_EFFORT_PATTERN = re.compile(r"claude-(sonnet|haiku)-5")
+
+    @classmethod
+    def effort_for(cls, model: str) -> str | None:
+        """The ``output_config.effort`` to send for *model*, or None for the API default."""
+        return "xhigh" if cls._XHIGH_EFFORT_PATTERN.match(model) else None
+
+    def _apply_sampling(self, kwargs: dict, temperature: float) -> None:
+        # Newer Claude 4+ models reject the temperature parameter with a 400
+        if self.accepts_temperature(self._model):
+            kwargs["temperature"] = temperature
+        effort = self.effort_for(self._model)
+        if effort:
+            # extra_body: the pinned anthropic SDK predates the output_config argument
+            kwargs["extra_body"] = {"output_config": {"effort": effort}}
+
     def __init__(
         self,
         model: str | None = None,
@@ -116,9 +135,7 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": max_tokens,
         }
 
-        # Newer Claude 4+ models reject the temperature parameter with a 400
-        if self.accepts_temperature(self._model):
-            kwargs["temperature"] = temperature
+        self._apply_sampling(kwargs, temperature)
 
         if system:
             kwargs["system"] = system
@@ -151,8 +168,7 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": max_tokens,
         }
 
-        if self.accepts_temperature(self._model):
-            kwargs["temperature"] = temperature
+        self._apply_sampling(kwargs, temperature)
 
         if system:
             kwargs["system"] = system
