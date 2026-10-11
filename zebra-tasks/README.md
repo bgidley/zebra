@@ -155,7 +155,7 @@ registry.register_action("llm_call", LLMCallAction)
 from zebra_tasks.llm import get_provider
 
 # Get provider (requires API key in environment)
-provider = get_provider("anthropic", model="claude-sonnet-4-20250514")
+provider = get_provider("anthropic", model="claude-sonnet-5-5")
 
 # Use in workflow via process properties
 process_properties = {

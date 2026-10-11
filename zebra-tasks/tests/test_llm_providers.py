@@ -277,6 +277,15 @@ class TestAnthropicProvider:
                 with pytest.raises(ValueError, match="API key required"):
                     anthropic_provider.AnthropicProvider()
 
+    def test_current_models_context_windows_and_default(self):
+        """Default is Sonnet 5.5; every alias target has its real context window."""
+        from zebra_tasks.llm.models import ANTHROPIC_MODELS
+        from zebra_tasks.llm.providers.anthropic import AnthropicProvider
+
+        assert AnthropicProvider.DEFAULT_MODEL == ANTHROPIC_MODELS["sonnet"]
+        for model in ANTHROPIC_MODELS.values():
+            assert AnthropicProvider.CONTEXT_WINDOWS[model] == 1_000_000, model
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "model,expect_temperature",
@@ -322,6 +331,66 @@ class TestAnthropicProvider:
                     assert "temperature" not in call_kwargs, (
                         f"{model} must not send temperature (API returns HTTP 400)"
                     )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "model,expect_effort",
+        [
+            ("claude-sonnet-5-5", "xhigh"),  # reasons aloud in the reply at default effort
+            ("claude-haiku-5-5", "xhigh"),
+            ("claude-opus-5-5", None),  # thinks properly at its default
+            ("claude-sonnet-4-6", None),
+            ("claude-3-5-sonnet-20241022", None),
+        ],
+    )
+    async def test_effort_sent_for_sonnet_and_haiku_5(
+        self, mock_anthropic_module, model, expect_effort
+    ):
+        """Sonnet/Haiku 5.5 get effort xhigh on complete() and stream(); others send none."""
+        mock_module, mock_client = mock_anthropic_module
+        mock_client.messages.create.return_value.model = model
+
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.dict("sys.modules", {"anthropic": mock_module}):
+                import importlib
+
+                import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
+                importlib.reload(anthropic_provider)
+
+                provider = anthropic_provider.AnthropicProvider(model=model)
+                await provider.complete([Message.user("hi")], max_tokens=300)
+                call_kwargs = mock_client.messages.create.call_args.kwargs
+                if expect_effort:
+                    assert call_kwargs["extra_body"] == {"output_config": {"effort": expect_effort}}
+                    # thinking gets headroom on top of the caller's answer budget
+                    assert call_kwargs["max_tokens"] == 300 + provider.THINKING_HEADROOM_TOKENS
+                else:
+                    assert "extra_body" not in call_kwargs
+                    assert call_kwargs["max_tokens"] == 300
+
+                stream_kwargs = {}
+
+                class _Stream:
+                    async def __aenter__(self):
+                        async def _text():
+                            yield "ok"
+
+                        self.text_stream = _text()
+                        return self
+
+                    async def __aexit__(self, *exc):
+                        return False
+
+                def _stream(**kwargs):
+                    stream_kwargs.update(kwargs)
+                    return _Stream()
+
+                mock_client.messages.stream = _stream
+                assert [c async for c in provider.stream([Message.user("hi")])] == ["ok"]
+                assert stream_kwargs.get("extra_body") == (
+                    {"output_config": {"effort": expect_effort}} if expect_effort else None
+                )
 
 
 class TestOpenAIProvider:

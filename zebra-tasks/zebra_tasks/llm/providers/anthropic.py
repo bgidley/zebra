@@ -23,11 +23,13 @@ class AnthropicProvider(LLMProvider):
     Set ANTHROPIC_API_KEY environment variable or pass api_key.
     """
 
-    DEFAULT_MODEL = "claude-sonnet-4-6"
+    DEFAULT_MODEL = "claude-sonnet-5-5"
 
     # Model context windows (current Claude 4.x IDs)
     CONTEXT_WINDOWS = {
         "claude-opus-5-5": 1000000,
+        "claude-sonnet-5-5": 1000000,
+        "claude-haiku-5-5": 1000000,
         "claude-opus-4-8": 200000,
         "claude-sonnet-4-6": 200000,
         "claude-haiku-4-5-20251001": 200000,
@@ -56,6 +58,30 @@ class AnthropicProvider(LLMProvider):
         if model in cls._NO_TEMPERATURE_MODELS:
             return False
         return re.match(r"claude-[a-z]+-5", model) is None
+
+    # At their default effort Sonnet 5.5 and Haiku 5.5 often skip thinking on short
+    # prompts and reason aloud in the visible reply ("that's 5 words, need 3: ...").
+    # At xhigh they think in a thinking block and return only the answer (#168).
+    _XHIGH_EFFORT_PATTERN = re.compile(r"claude-(sonnet|haiku)-5")
+    # Thinking counts against max_tokens, and callers size max_tokens for the answer
+    # alone (often 150-600), so boosted-effort calls get this much on top. Unused
+    # tokens are not billed.
+    THINKING_HEADROOM_TOKENS = 4096
+
+    @classmethod
+    def effort_for(cls, model: str) -> str | None:
+        """The ``output_config.effort`` to send for *model*, or None for the API default."""
+        return "xhigh" if cls._XHIGH_EFFORT_PATTERN.match(model) else None
+
+    def _apply_sampling(self, kwargs: dict, temperature: float) -> None:
+        # Newer Claude 4+ models reject the temperature parameter with a 400
+        if self.accepts_temperature(self._model):
+            kwargs["temperature"] = temperature
+        effort = self.effort_for(self._model)
+        if effort:
+            # extra_body: the pinned anthropic SDK predates the output_config argument
+            kwargs["extra_body"] = {"output_config": {"effort": effort}}
+            kwargs["max_tokens"] += self.THINKING_HEADROOM_TOKENS
 
     def __init__(
         self,
@@ -114,9 +140,7 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": max_tokens,
         }
 
-        # Newer Claude 4+ models reject the temperature parameter with a 400
-        if self.accepts_temperature(self._model):
-            kwargs["temperature"] = temperature
+        self._apply_sampling(kwargs, temperature)
 
         if system:
             kwargs["system"] = system
@@ -149,8 +173,7 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": max_tokens,
         }
 
-        if self.accepts_temperature(self._model):
-            kwargs["temperature"] = temperature
+        self._apply_sampling(kwargs, temperature)
 
         if system:
             kwargs["system"] = system

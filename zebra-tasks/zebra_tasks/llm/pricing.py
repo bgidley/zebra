@@ -8,11 +8,13 @@ from __future__ import annotations
 
 # Mapping of model ID -> {"input": $/1M input tokens, "output": $/1M output tokens}
 ANTHROPIC_PRICING: dict[str, dict[str, float]] = {
-    # Current generation (Anthropic list prices, checked 2026-10-10)
+    # Current generation (Anthropic list prices, checked 2026-10-11)
     "claude-opus-5-5": {"input": 4.00, "output": 20.00},
     "claude-opus-4-8": {"input": 5.00, "output": 25.00},
     "claude-opus-4-7": {"input": 5.00, "output": 25.00},
+    "claude-sonnet-5-5": {"input": 2.00, "output": 10.00},
     "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
+    "claude-haiku-5-5": {"input": 0.10, "output": 0.50},
     "claude-haiku-4-5-20251001": {"input": 1.00, "output": 5.00},
     # Previous generation (still in CONTEXT_WINDOWS)
     "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00},
@@ -34,6 +36,12 @@ KIMI_PRICING: dict[str, dict[str, float]] = {
 
 PRICING: dict[str, dict[str, float]] = {**ANTHROPIC_PRICING, **KIMI_PRICING}
 
+# Models billed at a higher rate for the whole call once its prompt exceeds a size:
+# model ID -> (prompt-token threshold, pricing above it).
+LONG_PROMPT_PRICING: dict[str, tuple[int, dict[str, float]]] = {
+    "claude-haiku-5-5": (100_000, {"input": 0.50, "output": 2.50}),
+}
+
 # Fallback when the model ID is not in the table (sonnet-tier).
 DEFAULT_PRICING: dict[str, float] = {"input": 3.00, "output": 15.00}
 
@@ -50,10 +58,13 @@ def calculate_cost(
     input_tokens: int,
     output_tokens: int,
 ) -> float:
-    """Calculate the USD cost for an LLM call.
+    """Calculate the USD cost for a single LLM call.
+
+    Applies LONG_PROMPT_PRICING when the call's prompt exceeds the model's threshold,
+    so pass one call's usage, not totals summed across calls.
 
     Args:
-        model: Model ID as returned by the provider (e.g. ``"claude-sonnet-4-6"``,
+        model: Model ID as returned by the provider (e.g. ``"claude-sonnet-5-5"``,
             ``"kimi-k2.6"``).
         input_tokens: Number of input (prompt) tokens.
         output_tokens: Number of output (completion) tokens.
@@ -62,6 +73,13 @@ def calculate_cost(
         Cost in USD (float).
     """
     pricing = get_pricing(model)
+    threshold, long_pricing = LONG_PROMPT_PRICING.get(model or "", (None, None))
+    if threshold is not None and input_tokens > threshold:
+        pricing = long_pricing
+    return _cost(pricing, input_tokens, output_tokens)
+
+
+def _cost(pricing: dict[str, float], input_tokens: int, output_tokens: int) -> float:
     return (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
 
 
@@ -72,8 +90,9 @@ def estimate_goal_cost(
     """Rough cost estimate assuming a 40/60 input/output token split.
 
     Useful when you only know the total token count (e.g. from historical data)
-    but not the input/output breakdown.
+    but not the input/output breakdown. Uses base rates: the total spans many calls,
+    so long-prompt pricing is not applied.
     """
     input_tokens = int(estimated_total_tokens * 0.4)
     output_tokens = estimated_total_tokens - input_tokens
-    return calculate_cost(model, input_tokens, output_tokens)
+    return _cost(get_pricing(model), input_tokens, output_tokens)

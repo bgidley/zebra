@@ -2,8 +2,8 @@
 
 # Mapping of friendly names to Anthropic API model IDs.
 ANTHROPIC_MODELS: dict[str, str] = {
-    "haiku": "claude-haiku-4-5-20251001",
-    "sonnet": "claude-sonnet-4-6",
+    "haiku": "claude-haiku-5-5",
+    "sonnet": "claude-sonnet-5-5",
     "opus": "claude-opus-5-5",
 }
 
