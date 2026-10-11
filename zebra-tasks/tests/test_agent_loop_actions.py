@@ -51,6 +51,8 @@ def mock_memory_store():
     store.get_recent_workflow_memories = AsyncMock(return_value=[])
     store.get_conceptual_memories = AsyncMock(return_value=[])
     store.get_conceptual_context_for_llm = AsyncMock(return_value="")
+    store.search_conceptual_memories = AsyncMock(return_value=[])
+    store.search_workflow_memories = AsyncMock(return_value=[])
     store.save_conceptual_memory = AsyncMock()
     return store
 
@@ -100,17 +102,19 @@ class TestConsultMemoryAction:
         assert result.output["has_memory"] is False
 
     async def test_with_conceptual_memory(self, mock_task, mock_context, mock_memory_store):
-        """Test that conceptual memory produces a shortlist."""
+        """Goal-relevant concepts produce the shortlist and the memory context (#169)."""
+        from zebra_agent.memory import ConceptualMemoryEntry
+
         from zebra_tasks.agent.consult_memory import ConsultMemoryAction
 
-        # Setup mock conceptual entries
-        mock_entry = MagicMock()
-        mock_entry.recommended_workflows = [
-            {"name": "analyze_code", "fit_notes": "great", "avg_rating": 4.5, "use_count": 3},
-            {"name": "brainstorm", "fit_notes": "ok", "avg_rating": None, "use_count": 1},
-        ]
-        mock_memory_store.get_conceptual_memories.return_value = [mock_entry]
-        mock_memory_store.get_conceptual_context_for_llm.return_value = "## Memory context"
+        entry = ConceptualMemoryEntry.create(
+            concept="Code analysis and review",
+            recommended_workflows=[
+                {"name": "analyze_code", "fit_notes": "great", "avg_rating": 4.5, "use_count": 3},
+                {"name": "brainstorm", "fit_notes": "ok", "avg_rating": None, "use_count": 1},
+            ],
+        )
+        mock_memory_store.search_conceptual_memories.return_value = [entry]
 
         mock_context.extras["__memory_store__"] = mock_memory_store
         mock_task.properties = {"goal": "analyze my code"}
@@ -119,10 +123,52 @@ class TestConsultMemoryAction:
         result = await action.run(mock_task, mock_context)
 
         assert result.success is True
-        assert "analyze_code" in result.output["shortlist"]
-        assert "brainstorm" in result.output["shortlist"]
+        mock_memory_store.search_conceptual_memories.assert_awaited_once_with(
+            "analyze my code", limit=10
+        )
+        assert result.output["shortlist"] == ["analyze_code", "brainstorm"]
         assert result.output["has_memory"] is True
-        assert "Memory context" in result.output["memory_context"]
+        assert "Code analysis and review" in result.output["memory_context"]
+        assert "analyze_code (avg rating: 4.5/5): great" in result.output["memory_context"]
+
+    async def test_similar_past_runs_added(self, mock_task, mock_context, mock_memory_store):
+        """Similar past goals are shown, and their successful workflows shortlisted (#169)."""
+        from zebra_agent.memory import WorkflowMemoryEntry
+
+        from zebra_tasks.agent.consult_memory import ConsultMemoryAction
+
+        def run(workflow: str, success: bool) -> WorkflowMemoryEntry:
+            return WorkflowMemoryEntry(
+                id=workflow,
+                timestamp=datetime(2026, 10, 1, tzinfo=UTC),
+                workflow_name=workflow,
+                goal=f"plan a trip ({workflow})",
+                success=success,
+                input_summary="",
+                output_summary="",
+                effectiveness_notes="worked well",
+                tokens_used=0,
+                rating=5 if success else None,
+            )
+
+        mock_memory_store.search_workflow_memories.return_value = [
+            run("Trip Planner", True),
+            run("Broken Planner", False),
+        ]
+        mock_context.extras["__memory_store__"] = mock_memory_store
+        mock_task.properties = {"goal": "plan a weekend in Rome"}
+
+        result = await ConsultMemoryAction().run(mock_task, mock_context)
+
+        mock_memory_store.search_workflow_memories.assert_awaited_once_with(
+            "plan a weekend in Rome", limit=5
+        )
+        assert result.output["shortlist"] == ["Trip Planner"]
+        context = result.output["memory_context"]
+        assert "## Similar Past Goals" in context
+        assert "Trip Planner: SUCCESS | rating: 5/5" in context
+        assert "Broken Planner: FAILED" in context
+        assert result.output["has_memory"] is True
 
     async def test_custom_output_key(self, mock_task, mock_context, mock_memory_store):
         """Test using a custom output key."""
@@ -143,7 +189,7 @@ class TestConsultMemoryAction:
         """Test graceful degradation when memory store raises an error."""
         from zebra_tasks.agent.consult_memory import ConsultMemoryAction
 
-        mock_memory_store.get_conceptual_context_for_llm.side_effect = Exception("Store error")
+        mock_memory_store.search_conceptual_memories.side_effect = Exception("Store error")
         mock_context.extras["__memory_store__"] = mock_memory_store
         mock_task.properties = {"goal": "Test goal"}
 

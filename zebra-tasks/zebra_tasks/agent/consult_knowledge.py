@@ -7,19 +7,24 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 logger = logging.getLogger(__name__)
 
+# How many goal-relevant knowledge entries to include (#169).
+KNOWLEDGE_LIMIT = 20
+
 
 class ConsultKnowledgeAction(TaskAction):
     """
     Consult the personal knowledge store to produce context for the planning LLM.
 
-    Reads knowledge entries for the current user from ``__knowledge_store__`` in
-    ``context.extras``, formats them as a concise string, and stores the result
-    in the process property named by ``output_key``.
+    Reads the knowledge entries most relevant to the goal for the current user
+    from ``__knowledge_store__`` in ``context.extras`` (vector similarity on
+    Oracle, keyword overlap elsewhere — #169), formats them as a concise string,
+    and stores the result in the process property named by ``output_key``.
+    Without a goal it falls back to the most recently verified entries.
 
     Degrades gracefully when the store is unavailable or ``user_id`` is ``None``.
 
     Properties:
-        goal: The user's goal/request (used for logging only in this version)
+        goal: The user's goal/request, used to pick relevant entries
         output_key: Where to store the result (default: "knowledge_context")
 
     Output:
@@ -90,8 +95,18 @@ class ConsultKnowledgeAction(TaskAction):
             context.set_process_property(output_key, result)
             return TaskResult.ok(output=result)
 
+        goal = task.properties.get("goal", "")
+        if isinstance(goal, str) and "{{" in goal:
+            goal = context.resolve_template(goal)
+
         try:
-            knowledge = await knowledge_store.get_context_for_llm(user_id)
+            if goal and goal.strip():
+                # Goal-relevant entries (#169): vector similarity on Oracle,
+                # keyword overlap elsewhere.
+                entries = await knowledge_store.search_entries(user_id, goal, limit=KNOWLEDGE_LIMIT)
+                knowledge = "\n".join(f"[{e.category}] {e.key}: {e.value}" for e in entries)
+            else:
+                knowledge = await knowledge_store.get_context_for_llm(user_id)
             has_knowledge = bool(knowledge)
 
             if has_knowledge:

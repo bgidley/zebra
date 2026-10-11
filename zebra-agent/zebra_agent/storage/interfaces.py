@@ -226,6 +226,109 @@ class MemoryStore(ABC):
         """
         ...
 
+    # =========================================================================
+    # Goal-relevant retrieval (#169)
+    # =========================================================================
+
+    async def search_conceptual_memories(
+        self, goal: str, limit: int = 10
+    ) -> list[ConceptualMemoryEntry]:
+        """Return the conceptual memory entries most relevant to a goal, best first.
+
+        The default ranks the 50 most recently updated entries by keyword
+        overlap with the goal. Backends with semantic search (Oracle vector
+        embeddings) override this.
+        """
+        entries = await self.get_conceptual_memories(limit=SEARCH_WINDOW)
+        return keyword_rank(entries, _conceptual_text, goal, limit)
+
+    async def search_workflow_memories(
+        self, goal: str, limit: int = 5
+    ) -> list[WorkflowMemoryEntry]:
+        """Return past workflow runs whose goals are most similar to ``goal``, best first.
+
+        The default ranks the most recent runs by keyword overlap with the goal.
+        """
+        entries = await self.get_recent_workflow_memories(limit=SEARCH_WINDOW)
+        return keyword_rank(entries, lambda e: e.goal, goal, limit)
+
+
+# #169: how many recent entries the keyword-overlap fallback ranks.
+SEARCH_WINDOW = 50
+
+
+def _conceptual_text(entry: ConceptualMemoryEntry) -> str:
+    notes = " ".join(
+        f"{wf.get('name', '')} {wf.get('fit_notes', '')}" for wf in entry.recommended_workflows
+    )
+    return f"{entry.concept} {notes}"
+
+
+def keyword_rank(items: list, text_of: Any, query: str, limit: int) -> list:
+    """Rank items by keyword overlap with ``query``, keeping input order on ties.
+
+    Used by backends without semantic search so retrieval still prefers
+    entries that share words with the goal. Items with no overlap stay in
+    the result (after the matches) so a store with data never returns nothing.
+
+    Args:
+        items: Entries in their natural (e.g. most-recent-first) order.
+        text_of: Callable returning the searchable text of an item.
+        query: The goal or query text.
+        limit: Maximum number of items to return.
+    """
+    keywords = set(search_keywords(query)) if query and query.strip() else set()
+    if not keywords:
+        return items[:limit]
+
+    def score(item: Any) -> int:
+        words = set(re.findall(r"\w+", text_of(item).lower()))
+        return len(keywords & words)
+
+    scored = [(score(item), i, item) for i, item in enumerate(items)]
+    scored.sort(key=lambda s: (-s[0], s[1]))
+    return [item for _, _, item in scored[:limit]]
+
+
+def format_conceptual_context(entries: list[ConceptualMemoryEntry]) -> str:
+    """Format conceptual memory entries as a context string for the LLM."""
+    if not entries:
+        return ""
+    lines = ["## Conceptual Memory (Goal Patterns → Recommended Workflows)"]
+    for entry in entries:
+        lines.append(f"\n### {entry.concept}")
+        if entry.recommended_workflows:
+            lines.append("Recommended workflows:")
+            for wf in entry.recommended_workflows:
+                name = wf.get("name", "?")
+                notes = wf.get("fit_notes", "")
+                rating = wf.get("avg_rating")
+                rating_str = f" (avg rating: {rating:.1f}/5)" if rating else ""
+                lines.append(f"  - {name}{rating_str}: {notes}")
+        if entry.anti_patterns:
+            lines.append(f"Anti-patterns: {entry.anti_patterns}")
+    return "\n".join(lines)
+
+
+def format_similar_runs_context(entries: list[WorkflowMemoryEntry]) -> str:
+    """Format past runs with similar goals as a context string for the LLM (#169)."""
+    if not entries:
+        return ""
+    lines = ["## Similar Past Goals"]
+    for entry in entries:
+        status = "SUCCESS" if entry.success else "FAILED"
+        rating_str = f" | rating: {entry.rating}/5" if entry.rating else ""
+        lines.append(
+            f"\n[{entry.timestamp.strftime('%Y-%m-%d')}] {entry.workflow_name}: "
+            f"{status}{rating_str}"
+        )
+        lines.append(f"Goal: {entry.goal[:300]}")
+        if entry.effectiveness_notes:
+            lines.append(f"Notes: {entry.effectiveness_notes[:200]}")
+        if entry.user_feedback:
+            lines.append(f"User feedback: {entry.user_feedback[:300]}")
+    return "\n".join(lines)
+
 
 # F138: bounds for MetricsStore.search_runs
 SEARCH_RUNS_DEFAULT_LIMIT = 20
@@ -555,6 +658,18 @@ class PersonalKnowledgeStore(ABC):
         entries exist for the user. Excludes soft-deleted entries.
         """
         ...
+
+    async def search_entries(
+        self, user_id: int, query: str, limit: int = 20
+    ) -> list[KnowledgeEntry]:
+        """Return the user's entries most relevant to ``query``, best first (#169).
+
+        The default ranks by keyword overlap with ``query``, then by
+        ``last_verified``. Backends with semantic search override this.
+        Excludes soft-deleted entries.
+        """
+        entries = await self.get_entries(user_id)
+        return keyword_rank(entries, lambda e: f"{e.category} {e.key} {e.value}", query, limit)
 
     @abstractmethod
     async def get_entries_for_verification(

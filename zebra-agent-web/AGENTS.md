@@ -45,7 +45,8 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/thoughts.py` | Voice layer read model (#161): `thoughts_for_process(props)` (ordered recorded reasoning, voice line preferred) and `recent_thoughts()` (per-user feed for the dashboard). Rendered by `components/thought.html`, `partials/thought_trail.html`, `partials/on_my_mind.html` |
 | `zebra_agent_web/api/manual_review.py` | Find / retry / fail tasks flagged `__requires_manual_review__` by recovery (#130) |
 | `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
-| `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory) |
+| `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory); `search_*` use Oracle vector search (#169) |
+| `zebra_agent_web/embeddings.py` | In-database embeddings (#169): `embedding VECTOR` columns, ONNX model load from Object Storage (resource principal), triggers, backfill, `vector_search_ready()`, `nearest_ids()`. Run `manage.py load_embedding_model [--strict]` (entrypoint runs it after `migrate`). See `specs/memory-vector-embeddings-design.md` |
 | `zebra_agent_web/metrics_store.py` | DjangoMetricsStore (MetricsStore for metrics) |
 | `zebra_agent_web/api/models.py` | Django models for workflow data |
 | `zebra_agent_web/diagram.py` | Workflow SVG diagram generator |
@@ -256,6 +257,8 @@ Key settings in `settings.py`:
 | `ZEBRA_AGENT_SETTINGS.GOAL_COST_WARNING_USD` | Per-goal soft warning threshold (default: 5.00) |
 | `ZEBRA_AGENT_SETTINGS.GOAL_TIMEOUT_SECONDS` | Max seconds a goal's auto tasks may run before the daemon / `AgentLoop` fails it; the kill switch also cancels mid-run (default: 900, #142) |
 | `ZEBRA_AGENT_SETTINGS.RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | Daemon-startup recovery fails a process once one of its tasks has been interrupted this many times, instead of flagging it for manual review again (default: 3, #130) |
+| `ZEBRA_AGENT_SETTINGS.MEMORY_VECTOR_SEARCH` / `MEMORY_VECTOR_MAX_DISTANCE` | Oracle vector memory search on/off (default on) and cosine cut-off (default 0.8) (#169) |
+| `ZEBRA_AGENT_SETTINGS.EMBEDDING_MODEL_NAME` / `_URI` / `_CREDENTIAL` | In-database model name (`ZEBRA_EMBED_V1`), its `zebra-models` Object Storage URI, and the DBMS_CLOUD credential (`OCI$RESOURCE_PRINCIPAL`) (#169) |
 | `ZEBRA_AGENT_SETTINGS.VALUES_TAG_PROMOTION_THRESHOLD` | Usage count at which a candidate values tag is suggested for promotion (default: 3) |
 
 ## Async Views and DRF

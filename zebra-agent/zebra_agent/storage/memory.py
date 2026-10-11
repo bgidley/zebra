@@ -11,7 +11,12 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from zebra_agent.storage.interfaces import CompactionBatch, MemoryStore, PersonalKnowledgeStore
+from zebra_agent.storage.interfaces import (
+    CompactionBatch,
+    MemoryStore,
+    PersonalKnowledgeStore,
+    format_conceptual_context,
+)
 
 if TYPE_CHECKING:
     from zebra_agent.knowledge import KnowledgeEntry
@@ -118,24 +123,7 @@ class InMemoryMemoryStore(MemoryStore):
     async def get_conceptual_context_for_llm(self) -> str:
         """Format conceptual memory as a context string for the LLM."""
         await self._ensure_initialized()
-        entries = await self.get_conceptual_memories()
-        if not entries:
-            return ""
-
-        lines = ["## Conceptual Memory (Goal Patterns → Recommended Workflows)"]
-        for entry in entries:
-            lines.append(f"\n### {entry.concept}")
-            if entry.recommended_workflows:
-                lines.append("Recommended workflows:")
-                for wf in entry.recommended_workflows:
-                    name = wf.get("name", "?")
-                    notes = wf.get("fit_notes", "")
-                    rating = wf.get("avg_rating")
-                    rating_str = f" (avg rating: {rating:.1f}/5)" if rating else ""
-                    lines.append(f"  - {name}{rating_str}: {notes}")
-            if entry.anti_patterns:
-                lines.append(f"Anti-patterns: {entry.anti_patterns}")
-        return "\n".join(lines)
+        return format_conceptual_context(await self.get_conceptual_memories())
 
     async def get_workflow_context_for_llm(self, workflow_name: str) -> str:
         """Format recent workflow memory for a specific workflow as LLM context."""

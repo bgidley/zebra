@@ -197,8 +197,10 @@ Three-tier model (matches the design in REQ-DATA-004):
 | Tier | Interface | Implementations | Typical size |
 |---|---|---|---|
 | Working (process properties) | `ExecutionContext` | in-engine | unbounded per run |
-| Episodic (`WorkflowMemoryEntry`) | `MemoryStore` | `InMemoryMemoryStore`, `DjangoMemoryStore` | last 5 / workflow |
-| Conceptual (`ConceptualMemoryEntry`) | `MemoryStore` | same | ≤50 entries into LLM |
+| Episodic (`WorkflowMemoryEntry`) | `MemoryStore` | `InMemoryMemoryStore`, `DjangoMemoryStore` | last 5 / workflow; 5 most similar goals at selection |
+| Conceptual (`ConceptualMemoryEntry`) | `MemoryStore` | same | 10 most goal-relevant entries into LLM |
+
+**Goal-relevant retrieval (#169)**: `consult_memory` asks `MemoryStore.search_conceptual_memories(goal)` and `search_workflow_memories(goal)` (adding a "Similar Past Goals" section and the workflows of similar successful runs to the shortlist); `consult_knowledge` asks `PersonalKnowledgeStore.search_entries(user_id, goal)`. On Oracle these rank by **in-database embeddings**: an ONNX model (Oracle's prebuilt all-MiniLM-L12-v2, 384 dims, loaded from the `zebra-models` OCI bucket via the database resource principal by `manage.py load_embedding_model`) and per-table triggers keep an `embedding VECTOR` column filled; search orders by `VECTOR_DISTANCE` (cosine, cut-off `MEMORY_VECTOR_MAX_DISTANCE`). Elsewhere, and whenever the model isn't loaded, the interface defaults rank recent entries by keyword overlap. Design: [memory-vector-embeddings-design.md](memory-vector-embeddings-design.md).
 
 ### Metrics
 
@@ -277,7 +279,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 
 - Declarative agent behaviour — YAML is editable, inspectable, version-controllable.
 - Pluggable storage cleanly decouples task actions from database choice.
-- Memory consolidation keeps LLM context bounded without RAG infrastructure.
+- Memory consolidation keeps LLM context bounded; goal-relevant retrieval uses Oracle's in-database embeddings, with no separate vector DB or embedding service (#169).
 - Cost tracking is fine-grained and surfaced.
 
 ### Weaknesses
@@ -290,7 +292,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 - ~~**Only a goal scheduler, not a time/event scheduler**~~ — `GoalScheduler` (`zebra-agent/zebra_agent/scheduler/goal_queue.py`) picks the next CREATED process for the budget daemon. A cron/interval `SchedulerLoop` now fires built-in and user-defined routines (F27 / REQ-PRIN-008). There is **no event-driven trigger bus** (REQ-PRIN-009).
 - ~~**Single-user implicit** — no `user_id` namespacing anywhere in stores or schemas.~~ Resolved by F6 (REQ-USR-002).
 - **Agent main loop YAML is 258 lines** — hard to unit-test sub-branches.
-- **Conceptual memory scan is O(n)** — no indexing; fine for hundreds of entries, degrades thereafter.
+- **Memory vector search is an exact scan** — no vector index (#169); fine for thousands of rows. Non-Oracle backends rank by keyword overlap over the 50 most recent entries.
 
 ---
 
@@ -425,7 +427,7 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 
 1. **Coherent architectural story**: *everything is a workflow*; entry points + IoC make extension painless.
 2. **Declarative agent**: the main loop, ethics gates, and dream cycle are YAML — legible and editable without redeploying code.
-3. **Memory consolidation**: the three-tier model bounds LLM context without embeddings or vector DBs.
+3. **Memory consolidation**: the three-tier model bounds LLM context, and goal-relevant retrieval runs on the database's own embeddings (#169).
 4. **Cost observability**: every token is priced, every run is costed, budget daemon enforces a soft ceiling.
 5. **Pluggable storage**: one task-action codebase runs against in-memory, SQLite, Postgres, Oracle, Django ORM.
 

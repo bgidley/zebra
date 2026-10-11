@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
-from zebra_agent.storage.interfaces import CompactionBatch, MemoryStore
+from zebra_agent.storage.interfaces import CompactionBatch, MemoryStore, format_conceptual_context
 
 from zebra_agent_web.middleware import get_current_user_id
 
@@ -23,6 +23,56 @@ if TYPE_CHECKING:
     from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
 
 logger = logging.getLogger(__name__)
+
+
+def _nearest_ids(table: str, goal: str, limit: int) -> list[str] | None:
+    """Ids nearest to ``goal`` for the current user, or None to use the fallback (#169)."""
+    from zebra_agent_web import embeddings
+
+    if not goal or not goal.strip() or not embeddings.vector_search_ready():
+        return None
+    uid = get_current_user_id()
+    where, params = ("t.user_id = %(uid)s", {"uid": uid}) if uid is not None else ("", None)
+    try:
+        return embeddings.nearest_ids(table, goal, limit, where=where, params=params)
+    except Exception as e:  # noqa: BLE001 - retrieval must degrade, not fail the goal
+        logger.warning("Vector search on %s failed, using keyword ranking: %s", table, e)
+        return None
+
+
+def _to_workflow_entry(m) -> WorkflowMemoryEntry:  # type: ignore[no-untyped-def]
+    from zebra_agent.memory import WorkflowMemoryEntry as Entry
+
+    return Entry(
+        id=m.id,
+        timestamp=m.timestamp,
+        workflow_name=m.workflow_name,
+        goal=m.goal,
+        success=m.success,
+        input_summary=m.input_summary,
+        output_summary=m.output_summary,
+        effectiveness_notes=m.effectiveness_notes,
+        tokens_used=m.tokens_used,
+        rating=m.rating,
+        user_feedback=m.user_feedback,
+        run_id=m.run_id,
+        model=m.model,
+        tier=m.tier,
+    )
+
+
+def _to_conceptual_entry(m) -> ConceptualMemoryEntry:  # type: ignore[no-untyped-def]
+    from zebra_agent.memory import ConceptualMemoryEntry as Entry
+
+    return Entry(
+        id=m.id,
+        concept=m.concept,
+        recommended_workflows=m.recommended_workflows or [],
+        anti_patterns=m.anti_patterns or "",
+        last_updated=m.last_updated,
+        tokens=m.tokens,
+        tier=m.tier,
+    )
 
 
 class DjangoMemoryStore(MemoryStore):
@@ -94,8 +144,6 @@ class DjangoMemoryStore(MemoryStore):
         self, workflow_name: str, limit: int = 10
     ) -> list[WorkflowMemoryEntry]:
         """Get recent memory entries for a specific workflow, newest first."""
-        from zebra_agent.memory import WorkflowMemoryEntry as Entry
-
         await self._ensure_initialized()
 
         @sync_to_async(thread_sensitive=False)
@@ -107,32 +155,12 @@ class DjangoMemoryStore(MemoryStore):
             if uid is not None:
                 qs = qs.filter(user_id=uid)
             qs = qs.order_by("-timestamp")[:limit]
-            return [
-                Entry(
-                    id=m.id,
-                    timestamp=m.timestamp,
-                    workflow_name=m.workflow_name,
-                    goal=m.goal,
-                    success=m.success,
-                    input_summary=m.input_summary,
-                    output_summary=m.output_summary,
-                    effectiveness_notes=m.effectiveness_notes,
-                    tokens_used=m.tokens_used,
-                    rating=m.rating,
-                    user_feedback=m.user_feedback,
-                    run_id=m.run_id,
-                    model=m.model,
-                    tier=m.tier,
-                )
-                for m in qs
-            ]
+            return [_to_workflow_entry(m) for m in qs]
 
         return await _get()
 
     async def get_recent_workflow_memories(self, limit: int = 20) -> list[WorkflowMemoryEntry]:
         """Get the most recent workflow memory entries across all workflows."""
-        from zebra_agent.memory import WorkflowMemoryEntry as Entry
-
         await self._ensure_initialized()
 
         @sync_to_async(thread_sensitive=False)
@@ -144,25 +172,7 @@ class DjangoMemoryStore(MemoryStore):
             if uid is not None:
                 qs = qs.filter(user_id=uid)
             qs = qs.order_by("-timestamp")[:limit]
-            return [
-                Entry(
-                    id=m.id,
-                    timestamp=m.timestamp,
-                    workflow_name=m.workflow_name,
-                    goal=m.goal,
-                    success=m.success,
-                    input_summary=m.input_summary,
-                    output_summary=m.output_summary,
-                    effectiveness_notes=m.effectiveness_notes,
-                    tokens_used=m.tokens_used,
-                    rating=m.rating,
-                    user_feedback=m.user_feedback,
-                    run_id=m.run_id,
-                    model=m.model,
-                    tier=m.tier,
-                )
-                for m in qs
-            ]
+            return [_to_workflow_entry(m) for m in qs]
 
         return await _get()
 
@@ -183,8 +193,6 @@ class DjangoMemoryStore(MemoryStore):
 
     async def get_workflow_memory_by_run_id(self, run_id: str) -> WorkflowMemoryEntry | None:
         """Return the workflow memory entry for a specific run, or None if not found."""
-        from zebra_agent.memory import WorkflowMemoryEntry as Entry
-
         await self._ensure_initialized()
 
         @sync_to_async(thread_sensitive=False)
@@ -194,22 +202,7 @@ class DjangoMemoryStore(MemoryStore):
             m = WorkflowMemoryModel.objects.filter(run_id=run_id).first()
             if m is None:
                 return None
-            return Entry(
-                id=m.id,
-                timestamp=m.timestamp,
-                workflow_name=m.workflow_name,
-                goal=m.goal,
-                success=m.success,
-                input_summary=m.input_summary,
-                output_summary=m.output_summary,
-                effectiveness_notes=m.effectiveness_notes,
-                tokens_used=m.tokens_used,
-                rating=m.rating,
-                user_feedback=m.user_feedback,
-                run_id=m.run_id,
-                model=m.model,
-                tier=m.tier,
-            )
+            return _to_workflow_entry(m)
 
         return await _get()
 
@@ -219,8 +212,6 @@ class DjangoMemoryStore(MemoryStore):
 
     async def get_conceptual_memories(self, limit: int = 50) -> list[ConceptualMemoryEntry]:
         """Get all conceptual memory entries, most recently updated first."""
-        from zebra_agent.memory import ConceptualMemoryEntry as Entry
-
         await self._ensure_initialized()
 
         @sync_to_async(thread_sensitive=False)
@@ -232,18 +223,7 @@ class DjangoMemoryStore(MemoryStore):
             if uid is not None:
                 qs = qs.filter(user_id=uid)
             qs = qs.order_by("-last_updated")[:limit]
-            return [
-                Entry(
-                    id=m.id,
-                    concept=m.concept,
-                    recommended_workflows=m.recommended_workflows or [],
-                    anti_patterns=m.anti_patterns or "",
-                    last_updated=m.last_updated,
-                    tokens=m.tokens,
-                    tier=m.tier,
-                )
-                for m in qs
-            ]
+            return [_to_conceptual_entry(m) for m in qs]
 
         return await _get()
 
@@ -283,30 +263,65 @@ class DjangoMemoryStore(MemoryStore):
         await _clear()
 
     # =========================================================================
+    # Goal-relevant retrieval (#169)
+    # =========================================================================
+
+    async def search_conceptual_memories(
+        self, goal: str, limit: int = 10
+    ) -> list[ConceptualMemoryEntry]:
+        """Conceptual memories nearest to the goal by in-database embedding (Oracle).
+
+        Falls back to keyword ranking when vector search is unavailable or fails.
+        """
+        await self._ensure_initialized()
+
+        @sync_to_async(thread_sensitive=False)
+        def _search():
+            from zebra_agent_web.api.models import ConceptualMemoryModel
+
+            ids = _nearest_ids("zebra_conceptual_memories", goal, limit)
+            if ids is None:
+                return None
+            rows = {m.id: m for m in ConceptualMemoryModel.objects.filter(id__in=ids)}
+            return [_to_conceptual_entry(rows[i]) for i in ids if i in rows]
+
+        found = await _search()
+        if found is None:
+            return await super().search_conceptual_memories(goal, limit)
+        return found
+
+    async def search_workflow_memories(
+        self, goal: str, limit: int = 5
+    ) -> list[WorkflowMemoryEntry]:
+        """Past runs whose goals are nearest to this goal by embedding (Oracle).
+
+        Falls back to keyword ranking when vector search is unavailable or fails.
+        """
+        await self._ensure_initialized()
+
+        @sync_to_async(thread_sensitive=False)
+        def _search():
+            from zebra_agent_web.api.models import WorkflowMemoryModel
+
+            ids = _nearest_ids("zebra_workflow_memories", goal, limit)
+            if ids is None:
+                return None
+            rows = {m.id: m for m in WorkflowMemoryModel.objects.filter(id__in=ids)}
+            return [_to_workflow_entry(rows[i]) for i in ids if i in rows]
+
+        found = await _search()
+        if found is None:
+            return await super().search_workflow_memories(goal, limit)
+        return found
+
+    # =========================================================================
     # Context Generation
     # =========================================================================
 
     async def get_conceptual_context_for_llm(self) -> str:
         """Format conceptual memory as a context string for the LLM."""
         await self._ensure_initialized()
-        entries = await self.get_conceptual_memories()
-        if not entries:
-            return ""
-
-        lines = ["## Conceptual Memory (Goal Patterns → Recommended Workflows)"]
-        for entry in entries:
-            lines.append(f"\n### {entry.concept}")
-            if entry.recommended_workflows:
-                lines.append("Recommended workflows:")
-                for wf in entry.recommended_workflows:
-                    name = wf.get("name", "?")
-                    notes = wf.get("fit_notes", "")
-                    rating = wf.get("avg_rating")
-                    rating_str = f" (avg rating: {rating:.1f}/5)" if rating else ""
-                    lines.append(f"  - {name}{rating_str}: {notes}")
-            if entry.anti_patterns:
-                lines.append(f"Anti-patterns: {entry.anti_patterns}")
-        return "\n".join(lines)
+        return format_conceptual_context(await self.get_conceptual_memories())
 
     async def get_workflow_context_for_llm(self, workflow_name: str) -> str:
         """Format recent workflow memory for a specific workflow as LLM context."""
@@ -354,9 +369,6 @@ class DjangoMemoryStore(MemoryStore):
         """Return entries that have crossed a tier boundary since last compaction."""
         from datetime import timedelta
 
-        from zebra_agent.memory import ConceptualMemoryEntry as CEntry
-        from zebra_agent.memory import WorkflowMemoryEntry as WEntry
-
         await self._ensure_initialized()
         warm_cutoff = now - timedelta(weeks=2)
         cold_cutoff = now - timedelta(days=60)
@@ -378,40 +390,11 @@ class DjangoMemoryStore(MemoryStore):
                 tier="cold"
             )
 
-            def _to_wentry(m):
-                return WEntry(
-                    id=m.id,
-                    timestamp=m.timestamp,
-                    workflow_name=m.workflow_name,
-                    goal=m.goal,
-                    success=m.success,
-                    input_summary=m.input_summary,
-                    output_summary=m.output_summary,
-                    effectiveness_notes=m.effectiveness_notes,
-                    tokens_used=m.tokens_used,
-                    rating=m.rating,
-                    user_feedback=m.user_feedback,
-                    run_id=m.run_id,
-                    model=m.model,
-                    tier=m.tier,
-                )
-
-            def _to_centry(m):
-                return CEntry(
-                    id=m.id,
-                    concept=m.concept,
-                    recommended_workflows=m.recommended_workflows or [],
-                    anti_patterns=m.anti_patterns or "",
-                    last_updated=m.last_updated,
-                    tokens=m.tokens,
-                    tier=m.tier,
-                )
-
             return CompactionBatch(
-                warm_workflow=[_to_wentry(m) for m in warm_wf],
-                cold_workflow=[_to_wentry(m) for m in cold_wf],
-                warm_conceptual=[_to_centry(m) for m in warm_cm],
-                cold_conceptual=[_to_centry(m) for m in cold_cm],
+                warm_workflow=[_to_workflow_entry(m) for m in warm_wf],
+                cold_workflow=[_to_workflow_entry(m) for m in cold_wf],
+                warm_conceptual=[_to_conceptual_entry(m) for m in warm_cm],
+                cold_conceptual=[_to_conceptual_entry(m) for m in cold_cm],
             )
 
         return await _query()

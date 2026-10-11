@@ -4,17 +4,24 @@ import logging
 
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
+from zebra_agent.storage.interfaces import format_conceptual_context, format_similar_runs_context
 
 logger = logging.getLogger(__name__)
+
+# How many goal-relevant concepts / similar past runs to give the selector (#169).
+CONCEPT_LIMIT = 10
+SIMILAR_RUNS_LIMIT = 5
 
 
 class ConsultMemoryAction(TaskAction):
     """
     Consult conceptual memory to get a shortlist of recommended workflows for a goal.
 
-    This is the first step of the new agent loop. It reads the conceptual memory
-    index (goal-pattern → workflow mapping) and returns a shortlist of candidates
-    plus raw memory context for the downstream selector.
+    This is the first step of the new agent loop. It retrieves the conceptual
+    memory entries (goal-pattern → workflow mapping) and past runs most relevant
+    to the goal — by in-database vector similarity on Oracle, keyword overlap
+    elsewhere (#169) — and returns a shortlist of candidates plus memory context
+    for the downstream selector.
 
     If no memory store is available or memory is empty, it gracefully returns an
     empty shortlist so the selector falls back to the full workflow list.
@@ -100,25 +107,37 @@ class ConsultMemoryAction(TaskAction):
             return TaskResult.ok(output=result)
 
         try:
-            # Get conceptual memory context (compact summary for LLM)
-            memory_context = await memory_store.get_conceptual_context_for_llm()
+            # Goal-relevant retrieval (#169): the concepts and past runs nearest
+            # to this goal (vector search on Oracle, keyword ranking otherwise).
+            conceptual_entries = await memory_store.search_conceptual_memories(
+                goal, limit=CONCEPT_LIMIT
+            )
+            similar_runs = await memory_store.search_workflow_memories(
+                goal, limit=SIMILAR_RUNS_LIMIT
+            )
 
-            # Extract shortlist: all workflows mentioned in conceptual memory
-            # that appear relevant to the goal. We pass the full list to the
-            # selector; the selector uses the context string for ranking.
-            conceptual_entries = await memory_store.get_conceptual_memories(limit=50)
+            # Shortlist: workflows recommended by the relevant concepts, then
+            # workflows that succeeded on similar past goals.
             shortlist: list[str] = []
             for entry in conceptual_entries:
                 for wf in entry.recommended_workflows:
                     name = wf.get("name")
                     if name and name not in shortlist:
                         shortlist.append(name)
+            for run in similar_runs:
+                if run.success and run.workflow_name not in shortlist:
+                    shortlist.append(run.workflow_name)
 
+            sections = [
+                format_conceptual_context(conceptual_entries),
+                format_similar_runs_context(similar_runs),
+            ]
+            memory_context = "\n\n".join(s for s in sections if s)
             has_memory = bool(memory_context)
 
             logger.info(
                 f"ConsultMemoryAction: {len(conceptual_entries)} concepts, "
-                f"{len(shortlist)} shortlisted workflows"
+                f"{len(similar_runs)} similar runs, {len(shortlist)} shortlisted workflows"
             )
 
             result = {

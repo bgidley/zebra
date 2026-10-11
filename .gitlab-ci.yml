@@ -61,6 +61,8 @@ e2e:
         export ORACLE_USERNAME="$E2E_SCHEMA"
         export ORACLE_PASSWORD="$E2E_SCHEMA_PASSWORD"
         uv run python zebra-agent-web/manage.py migrate --noinput
+        # In-database embedding model for vector memory search (#169).
+        uv run python zebra-agent-web/manage.py load_embedding_model --strict
         uv run pytest zebra-agent-web/tests/e2e/ -m e2e
       else
         # Fallback (no provisioner creds): SQLite.

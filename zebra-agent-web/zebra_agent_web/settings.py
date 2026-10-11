@@ -240,6 +240,22 @@ ZEBRA_AGENT_SETTINGS = {
     "RECOVERY_MAX_INTERRUPTED_ATTEMPTS": int(
         os.environ.get("ZEBRA_RECOVERY_MAX_INTERRUPTED_ATTEMPTS", "3")
     ),
+    # In-database vector embeddings for memory/knowledge retrieval (#169, Oracle only).
+    # Search falls back to keyword ranking when disabled or the model is not loaded.
+    "MEMORY_VECTOR_SEARCH": os.environ.get("ZEBRA_MEMORY_VECTOR_SEARCH", "1") != "0",
+    # Cosine distance above which a row is not considered relevant.
+    "MEMORY_VECTOR_MAX_DISTANCE": float(os.environ.get("ZEBRA_MEMORY_VECTOR_MAX_DISTANCE", "0.8")),
+    "EMBEDDING_MODEL_NAME": os.environ.get("ZEBRA_EMBEDDING_MODEL_NAME", "ZEBRA_EMBED_V1"),
+    # Oracle's prebuilt augmented all-MiniLM-L12-v2 in the private zebra-models bucket,
+    # read by the database's resource principal (not a secret).
+    "EMBEDDING_MODEL_URI": os.environ.get(
+        "ZEBRA_EMBEDDING_MODEL_URI",
+        "https://objectstorage.uk-london-1.oraclecloud.com/n/lrwrttlllusl/b/zebra-models"
+        "/o/embeddings/all_MiniLM_L12_v2_v1.onnx",
+    ),
+    "EMBEDDING_MODEL_CREDENTIAL": os.environ.get(
+        "ZEBRA_EMBEDDING_MODEL_CREDENTIAL", "OCI$RESOURCE_PRINCIPAL"
+    ),
     # Auto-start the budget daemon inside the ASGI server process.
     # Set to False (or ZEBRA_DAEMON_AUTO_START=0) to disable and use
     # the standalone ``python manage.py run_daemon`` command instead.

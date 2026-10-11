@@ -162,6 +162,41 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
         lines = [f"[{e.category}] {e.key}: {e.value}" for e in entries]
         return "\n".join(lines)
 
+    async def search_entries(
+        self, user_id: int, query: str, limit: int = 20
+    ) -> list[KnowledgeEntry]:
+        """The user's entries nearest to ``query`` by in-database embedding (Oracle, #169).
+
+        Falls back to keyword ranking when vector search is unavailable or fails.
+        """
+        await self._ensure_initialized()
+
+        @sync_to_async(thread_sensitive=False)
+        def _search() -> list[KnowledgeEntry] | None:
+            from zebra_agent_web import embeddings
+            from zebra_agent_web.api.models import KnowledgeEntryModel
+
+            if not query or not query.strip() or not embeddings.vector_search_ready():
+                return None
+            try:
+                ids = embeddings.nearest_ids(
+                    "zebra_knowledge_entries",
+                    query,
+                    limit,
+                    where="t.user_id = %(uid)s AND t.deleted_at IS NULL",
+                    params={"uid": user_id},
+                )
+            except Exception as e:  # noqa: BLE001 - retrieval must degrade, not fail the goal
+                logger.warning("Vector knowledge search failed, using keyword ranking: %s", e)
+                return None
+            rows = {r.id: r for r in KnowledgeEntryModel.objects.filter(id__in=ids)}
+            return [_to_dataclass(rows[i]) for i in ids if i in rows]
+
+        found = await _search()
+        if found is None:
+            return await super().search_entries(user_id, query, limit)
+        return found
+
     async def get_entries_for_verification(
         self,
         user_id: int,
