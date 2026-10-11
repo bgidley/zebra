@@ -35,7 +35,25 @@ read: consult_* → store.search_* → vector_search_ready? → nearest_ids (one
 
 **Access**: the database reads the bucket as its own OCI identity (resource principal). One IAM policy:
 `Allow any-user to read objects in compartment zebra where ALL {request.principal.type = 'autonomousdatabase', request.principal.id = '<Zebra ADB OCID>', target.bucket.name = 'zebra-models'}`.
-ADMIN enabled the resource principal for ADMIN, the prod schema and `E2E_PROVISIONER` (with `grant_option`); `scripts/e2e_oracle_schema.py` enables it, and grants `CREATE MINING MODEL` and `EXECUTE ON DBMS_CLOUD`, for each test schema.
+ADMIN enabled the resource principal for ADMIN and the prod schema. Per-pipeline e2e schemas need it too, but `ENABLE_RESOURCE_PRINCIPAL(..., grant_option => TRUE)` does **not** let the provisioner call `DBMS_CLOUD_ADMIN` (PLS-00201), and that package is too powerful to grant. Instead ADMIN owns a narrow definer-rights procedure that only accepts `E2E_*` schemas, and `scripts/e2e_oracle_schema.py` calls it:
+
+```sql
+CREATE OR REPLACE PROCEDURE ADMIN.ZEBRA_E2E_GRANT_EMBEDDING(p_schema IN VARCHAR2)
+  AUTHID DEFINER
+AS
+  v_schema VARCHAR2(128) := UPPER(p_schema);
+BEGIN
+  IF NOT REGEXP_LIKE(v_schema, '^E2E_[A-Z0-9_]{1,26}$') THEN
+    RAISE_APPLICATION_ERROR(-20001, 'ZEBRA_E2E_GRANT_EMBEDDING: only E2E_* schemas');
+  END IF;
+  v_schema := DBMS_ASSERT.SCHEMA_NAME(v_schema);  -- must exist
+  EXECUTE IMMEDIATE 'GRANT CREATE MINING MODEL TO ' || v_schema;
+  EXECUTE IMMEDIATE 'GRANT EXECUTE ON DBMS_CLOUD TO ' || v_schema;
+  DBMS_CLOUD_ADMIN.ENABLE_RESOURCE_PRINCIPAL(username => v_schema);
+END;
+/
+GRANT EXECUTE ON ADMIN.ZEBRA_E2E_GRANT_EMBEDDING TO E2E_PROVISIONER;
+```
 
 ## 5. Configuration (`ZEBRA_AGENT_SETTINGS`)
 
