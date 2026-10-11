@@ -23,11 +23,13 @@ class AnthropicProvider(LLMProvider):
     Set ANTHROPIC_API_KEY environment variable or pass api_key.
     """
 
-    DEFAULT_MODEL = "claude-sonnet-4-6"
+    DEFAULT_MODEL = "claude-sonnet-5-5"
 
     # Model context windows (current Claude 4.x IDs)
     CONTEXT_WINDOWS = {
         "claude-opus-5-5": 1000000,
+        "claude-sonnet-5-5": 1000000,
+        "claude-haiku-5-5": 1000000,
         "claude-opus-4-8": 200000,
         "claude-sonnet-4-6": 200000,
         "claude-haiku-4-5-20251001": 200000,

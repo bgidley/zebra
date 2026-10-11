@@ -277,6 +277,15 @@ class TestAnthropicProvider:
                 with pytest.raises(ValueError, match="API key required"):
                     anthropic_provider.AnthropicProvider()
 
+    def test_current_models_context_windows_and_default(self):
+        """Default is Sonnet 5.5; every alias target has its real context window."""
+        from zebra_tasks.llm.models import ANTHROPIC_MODELS
+        from zebra_tasks.llm.providers.anthropic import AnthropicProvider
+
+        assert AnthropicProvider.DEFAULT_MODEL == ANTHROPIC_MODELS["sonnet"]
+        for model in ANTHROPIC_MODELS.values():
+            assert AnthropicProvider.CONTEXT_WINDOWS[model] == 1_000_000, model
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "model,expect_temperature",

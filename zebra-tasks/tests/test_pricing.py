@@ -31,12 +31,16 @@ class TestGetPricing:
         assert pricing["input"] == 5.00
         assert pricing["output"] == 25.00
 
-    def test_opus_alias_target_is_priced(self):
-        """The model the `opus` alias resolves to has a real price, not the fallback."""
+    def test_alias_targets_are_priced(self):
+        """The models the aliases resolve to have real prices, not the fallback."""
         from zebra_tasks.llm.models import ANTHROPIC_MODELS
 
         assert ANTHROPIC_MODELS["opus"] == "claude-opus-5-5"
+        assert ANTHROPIC_MODELS["sonnet"] == "claude-sonnet-5-5"
+        assert ANTHROPIC_MODELS["haiku"] == "claude-haiku-5-5"
         assert get_pricing("claude-opus-5-5") == {"input": 4.00, "output": 20.00}
+        assert get_pricing("claude-sonnet-5-5") == {"input": 2.00, "output": 10.00}
+        assert get_pricing("claude-haiku-5-5") == {"input": 0.10, "output": 0.50}
         for model in ANTHROPIC_MODELS.values():
             assert model in ANTHROPIC_PRICING, model
 
@@ -84,6 +88,18 @@ class TestCalculateCost:
         cost = calculate_cost("claude-opus-4-7", 10000, 5000)
         expected = (10000 * 5.00 + 5000 * 25.00) / 1_000_000
         assert abs(cost - expected) < 1e-10
+
+    def test_haiku_5_5_long_prompt_rate(self):
+        """Haiku 5.5 bills the whole call at $0.50/$2.50 once the prompt exceeds 100K tokens."""
+        at_limit = calculate_cost("claude-haiku-5-5", 100_000, 1_000)
+        assert abs(at_limit - (100_000 * 0.10 + 1_000 * 0.50) / 1_000_000) < 1e-10
+        over = calculate_cost("claude-haiku-5-5", 100_001, 1_000)
+        assert abs(over - (100_001 * 0.50 + 1_000 * 2.50) / 1_000_000) < 1e-10
+
+    def test_long_prompt_rate_not_used_for_goal_estimates(self):
+        """estimate_goal_cost sums many calls, so it stays on base rates."""
+        expected = (400_000 * 0.10 + 600_000 * 0.50) / 1_000_000
+        assert abs(estimate_goal_cost("claude-haiku-5-5", 1_000_000) - expected) < 1e-10
 
     def test_none_model_uses_default(self):
         """None model uses default pricing."""
