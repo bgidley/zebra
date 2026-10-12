@@ -8,11 +8,11 @@
     <!-- Header -->
     <div class="flex items-center justify-between">
         <div>
-            <h1 class="text-2xl font-bold text-white">Workflow Library</h1>
+            <h1 class="text-2xl font-bold text-ink">Workflow Library</h1>
             <p class="text-gray-400 mt-1">Manage your workflow definitions</p>
         </div>
         <button @click="$refs.createModal.showModal()"
-                class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors">
+                class="inline-flex items-center gap-2 px-4 py-2 bg-ink hover:opacity-90 text-ground rounded-lg transition-colors">
             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
@@ -28,22 +28,22 @@
     {% if retired %}
     <!-- Retired Workflows (#148) -->
     <div>
-        <h2 class="text-lg font-semibold text-white">Retired workflows</h2>
+        <h2 class="text-lg font-semibold text-ink">Retired workflows</h2>
         <p class="text-sm text-gray-400 mt-1">Hidden from workflow selection by the dream cycle or by hand. Restore one to make it selectable again.</p>
         <div class="mt-3 bg-gray-800 rounded-lg border border-gray-700 divide-y divide-gray-700">
             {% for workflow in retired %}
             <div class="flex items-center justify-between px-6 py-4">
                 <div class="min-w-0 flex-1">
-                    <a href="/workflows/{{ workflow.name }}/" class="text-gray-300 font-medium hover:text-white">{{ workflow.name }}</a>
+                    <a href="/workflows/{{ workflow.name }}/" class="text-gray-300 font-medium hover:text-ink">{{ workflow.name }}</a>
                     <p class="text-sm text-gray-400 mt-1">{{ workflow.reason }}</p>
                     <p class="text-xs text-gray-500 mt-1">
                         Retired {{ workflow.retired_at }}
-                        {% if workflow.superseded_by %}&middot; replaced by <a href="/workflows/{{ workflow.superseded_by }}/" class="text-indigo-400 hover:text-indigo-300">{{ workflow.superseded_by }}</a>{% endif %}
+                        {% if workflow.superseded_by %}&middot; replaced by <a href="/workflows/{{ workflow.superseded_by }}/" class="text-ink hover:underline">{{ workflow.superseded_by }}</a>{% endif %}
                         &middot; {{ workflow.use_count }} runs
                     </p>
                 </div>
                 <button hx-post="/workflows/{{ workflow.name }}/restore/"
-                        class="ml-6 shrink-0 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
+                        class="ml-6 shrink-0 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-ink rounded-lg transition-colors">
                     Restore
                 </button>
             </div>
@@ -57,8 +57,8 @@
 <dialog x-ref="createModal" class="bg-gray-800 rounded-lg border border-gray-700 p-0 w-full max-w-2xl backdrop:bg-gray-900/80">
     <div class="p-6">
         <div class="flex items-center justify-between mb-6">
-            <h2 class="text-xl font-semibold text-white">Create Workflow</h2>
-            <button @click="$refs.createModal.close()" class="text-gray-400 hover:text-white">
+            <h2 class="text-xl font-semibold text-ink">Create Workflow</h2>
+            <button @click="$refs.createModal.close()" class="text-gray-400 hover:text-ink">
                 <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -71,8 +71,8 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-300 mb-2">Workflow YAML</label>
                     <textarea name="yaml_content" rows="15" required
-                              class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white font-mono text-sm 
-                                     focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-ink font-mono text-sm 
+                                     focus:outline-none focus:ring-2 focus:ring-needs"
                               placeholder="name: My Workflow
 description: What this workflow does
 tags: [tag1, tag2]
@@ -92,11 +92,11 @@ tasks:
             
             <div class="flex justify-end gap-3 mt-6">
                 <button type="button" @click="$refs.createModal.close()"
-                        class="px-4 py-2 text-gray-300 hover:text-white transition-colors">
+                        class="px-4 py-2 text-gray-300 hover:text-ink transition-colors">
                     Cancel
                 </button>
                 <button type="submit"
-                        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors">
+                        class="px-4 py-2 bg-ink hover:opacity-90 text-ground rounded-lg transition-colors">
                     Create Workflow
                 </button>
             </div>

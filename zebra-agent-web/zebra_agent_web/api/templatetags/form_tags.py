@@ -26,23 +26,23 @@ _UNSET = object()
 INPUT_CLASS = (
     "block w-full rounded-md bg-gray-700 border border-gray-600 text-gray-100 "
     "placeholder-gray-400 px-3 py-2 text-sm focus:outline-none focus:ring-2 "
-    "focus:ring-indigo-500 focus:border-indigo-500"
+    "focus:ring-needs focus:border-ink"
 )
 INPUT_ERROR_CLASS = (
-    "block w-full rounded-md bg-gray-700 border border-red-500 text-gray-100 "
+    "block w-full rounded-md bg-gray-700 border border-fail/40 text-gray-100 "
     "placeholder-gray-400 px-3 py-2 text-sm focus:outline-none focus:ring-2 "
-    "focus:ring-red-500 focus:border-red-500"
+    "focus:ring-needs focus:border-fail/40"
 )
 SELECT_CLASS = INPUT_CLASS
 TEXTAREA_CLASS = INPUT_CLASS + " min-h-[100px]"
 CHECKBOX_CLASS = (
-    "h-4 w-4 rounded bg-gray-700 border-gray-600 text-indigo-500 "
-    "focus:ring-indigo-500 focus:ring-offset-gray-800"
+    "h-4 w-4 rounded bg-gray-700 border-gray-600 text-ink "
+    "focus:ring-needs focus:ring-offset-gray-800"
 )
 LABEL_CLASS = "block text-sm font-medium text-gray-300 mb-1"
 DESCRIPTION_CLASS = "text-xs text-gray-400 mt-1"
-ERROR_CLASS = "text-xs text-red-400 mt-1"
-REQUIRED_MARKER = '<span class="text-red-400 ml-0.5">*</span>'
+ERROR_CLASS = "text-xs text-fail mt-1"
+REQUIRED_MARKER = '<span class="text-fail ml-0.5">*</span>'
 
 
 @register.simple_tag

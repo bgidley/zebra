@@ -9,12 +9,12 @@ F135 renders the workflow-choice decision/rationale fields here as well.
 {% if run_chain %}
 <div class="bg-gray-800 rounded-lg border border-gray-700" id="run-chain">
     <div class="px-6 py-4 border-b border-gray-700">
-        <h2 class="text-lg font-semibold text-white">Continuation Chain</h2>
+        <h2 class="text-lg font-semibold text-ink">Continuation Chain</h2>
     </div>
     <ol class="p-6 space-y-3">
         {% for link in run_chain %}
-        <li class="flex gap-3 {% if link.is_current %}text-white{% else %}text-gray-300{% endif %}">
-            <span class="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full {% if link.success %}bg-green-500{% else %}bg-red-500{% endif %}"></span>
+        <li class="flex gap-3 {% if link.is_current %}text-ink{% else %}text-gray-300{% endif %}">
+            <span class="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full {% if link.success %}bg-ok{% else %}bg-fail{% endif %}"></span>
             <div class="min-w-0">
                 <div class="text-sm">
                     {% if link.position == 0 %}Original{% else %}Continuation {{ link.position }}{% endif %}
@@ -22,7 +22,7 @@ F135 renders the workflow-choice decision/rationale fields here as well.
                     {% if link.is_current %}
                     <span class="font-semibold">{{ link.workflow_name }}</span> <span class="text-xs text-gray-500">(this run)</span>
                     {% else %}
-                    <a href="/runs/{{ link.id }}/" class="text-indigo-400 hover:text-indigo-300">{{ link.workflow_name }}</a>
+                    <a href="/runs/{{ link.id }}/" class="text-ink hover:underline">{{ link.workflow_name }}</a>
                     {% endif %}
                     <span class="text-xs text-gray-500">{{ link.started_at|date:"M d, H:i" }}</span>
                 </div>
@@ -31,7 +31,7 @@ F135 renders the workflow-choice decision/rationale fields here as well.
                 {% endif %}
                 {% if link.decision %}
                 <p class="text-xs text-gray-500 mt-1">
-                    Route: <span class="text-gray-300">{{ link.decision }}</span>{% if link.rationale %} &mdash; {{ link.rationale }}{% endif %}
+                    Route: <span class="text-gray-300">{{ link.decision }}</span>{% if link.rationale %}: {{ link.rationale }}{% endif %}
                 </p>
                 {% endif %}
             </div>

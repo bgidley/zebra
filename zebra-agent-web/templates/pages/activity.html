@@ -8,18 +8,18 @@
     <!-- Header -->
     <div class="flex items-center justify-between flex-wrap gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-white">Activity</h1>
+            <h1 class="text-2xl font-bold text-ink">Activity</h1>
             <p class="text-gray-400 mt-1">Goals and their tasks</p>
         </div>
         <div class="flex items-center gap-4">
             <!-- Group-by toggle -->
             <div class="flex items-center bg-gray-800 rounded-lg border border-gray-700 p-0.5">
                 <a href="{% url 'activity' %}?group_by=status&human_only={{ human_only|yesno:'true,false' }}&show_completed={{ show_completed|yesno:'true,false' }}"
-                   class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors {% if group_by == 'status' %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-gray-300{% endif %}">
+                   class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors {% if group_by == 'status' %}bg-gray-700 text-ink{% else %}text-gray-400 hover:text-gray-300{% endif %}">
                     By Status
                 </a>
                 <a href="{% url 'activity' %}?group_by=date&human_only={{ human_only|yesno:'true,false' }}&show_completed={{ show_completed|yesno:'true,false' }}"
-                   class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors {% if group_by == 'date' %}bg-gray-700 text-white{% else %}text-gray-400 hover:text-gray-300{% endif %}">
+                   class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors {% if group_by == 'date' %}bg-gray-700 text-ink{% else %}text-gray-400 hover:text-gray-300{% endif %}">
                     By Date
                 </a>
             </div>
@@ -32,7 +32,7 @@
                            hx-target="#activity-list"
                            hx-swap="outerHTML"
                            hx-vals='js:{"human_only": event.target.checked ? "true" : "false", "show_completed": document.getElementById("show-completed-toggle").checked ? "true" : "false", "group_by": "{{ group_by }}"}'
-                           class="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-800"
+                           class="rounded bg-gray-700 border-gray-600 text-ink focus:ring-needs focus:ring-offset-gray-800"
                            id="human-only-toggle">
                     <span class="text-gray-300">Human tasks only</span>
                 </label>
@@ -44,13 +44,13 @@
                            hx-target="#activity-list"
                            hx-swap="outerHTML"
                            hx-vals='js:{"show_completed": event.target.checked ? "true" : "false", "human_only": document.getElementById("human-only-toggle").checked ? "true" : "false", "group_by": "{{ group_by }}"}'
-                           class="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-800"
+                           class="rounded bg-gray-700 border-gray-600 text-ink focus:ring-needs focus:ring-offset-gray-800"
                            id="show-completed-toggle">
                     <span class="text-gray-300">Show full history</span>
                 </label>
             </div>
             <a href="/run/"
-               class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors">
+               class="inline-flex items-center gap-2 px-4 py-2 bg-ink hover:opacity-90 text-ground rounded-lg transition-colors">
                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>

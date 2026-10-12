@@ -13,19 +13,19 @@ to the budget daemon. Context: run (needs run.id, run.completed_at).
           x-data="{ comment: '' }">
         {% csrf_token %}
         <textarea name="comment" x-model="comment" rows="3" required
-                  placeholder="e.g. It found two sources but stopped before summarising — find three more and write the summary."
+                  placeholder="e.g. It found two sources but stopped before summarising. Find three more and write the summary."
                   class="w-full rounded-lg bg-gray-900 border border-gray-600 text-gray-200 text-sm px-3 py-2
-                         placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500
+                         placeholder-gray-500 focus:border-ink focus:ring-1 focus:ring-needs
                          focus:outline-none resize-y"></textarea>
         <div class="mt-2 flex items-center gap-3">
             <button type="submit" name="mode" value="now" :disabled="!comment.trim()"
-                    :class="comment.trim() ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-700 cursor-not-allowed'"
-                    class="px-4 py-2 text-white text-sm rounded-lg transition-colors">
+                    :class="comment.trim() ? 'bg-ink text-ground hover:opacity-90' : 'bg-gray-700 text-muted cursor-not-allowed'"
+                    class="px-4 py-2 text-sm rounded-lg transition-colors">
                 Continue now
             </button>
             <button type="submit" name="mode" value="queue" :disabled="!comment.trim()"
                     :class="comment.trim() ? 'bg-gray-600 hover:bg-gray-500' : 'bg-gray-700 cursor-not-allowed'"
-                    class="px-4 py-2 text-white text-sm rounded-lg transition-colors">
+                    class="px-4 py-2 text-sm rounded-lg transition-colors">
                 Queue
             </button>
         </div>

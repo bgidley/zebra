@@ -569,19 +569,19 @@ async def _run_chain(metrics, run: WorkflowRun) -> list[dict[str, Any]]:
 def _queued_html(process_id: str, priority: int, deadline: str | None) -> str:
     """Success partial shown after a goal is queued for the daemon."""
     return (
-        f'<div class="bg-green-900/30 border border-green-700 rounded-lg p-6 text-center">'
-        f'<svg class="mx-auto h-10 w-10 text-green-400 mb-3" fill="none"'
+        f'<div class="bg-ok/15 border border-ok/40 rounded-lg p-6 text-center">'
+        f'<svg class="mx-auto h-10 w-10 text-ok mb-3" fill="none"'
         f' viewBox="0 0 24 24" stroke="currentColor">'
         f'<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"'
         f' d="M5 13l4 4L19 7" />'
         f"</svg>"
-        f'<h3 class="text-lg font-semibold text-green-300">Goal Queued</h3>'
+        f'<h3 class="text-lg font-semibold text-ok">Goal Queued</h3>'
         f'<p class="text-sm text-gray-400 mt-1">Priority {priority}'
         f"{' | Deadline: ' + deadline if deadline else ''}</p>"
         f'<p class="text-xs text-gray-500 mt-2">Process ID: {process_id[:12]}... '
         f"The budget daemon will start this goal when budget allows.</p>"
-        f'<a href="/activity/" class="inline-block mt-3 text-indigo-400'
-        f' hover:text-indigo-300 text-sm">View Activity</a>'
+        f'<a href="/activity/" class="inline-block mt-3 text-ink'
+        f' hover:underline text-sm">View Activity</a>'
         f"</div>"
     )
 
@@ -1484,7 +1484,7 @@ async def run_rate(request, run_id):
         await agent_loop.record_rating(run_id, rating)
 
         if request.headers.get("HX-Request"):
-            return HttpResponse(f'<span class="text-green-400">Rated {rating}/5</span>')
+            return HttpResponse(f'<span class="text-ok">Rated {rating}/5</span>')
         return redirect("run_detail", run_id=run_id)
     except ValueError:
         return HttpResponse("Invalid rating", status=400)
@@ -1508,11 +1508,11 @@ async def run_feedback(request, run_id):
         if request.headers.get("HX-Request"):
             if found:
                 return HttpResponse(
-                    '<span class="text-green-400">Feedback saved — it will be '
+                    '<span class="text-ok">Feedback saved — it will be '
                     "used to improve future runs of this workflow.</span>"
                 )
             return HttpResponse(
-                '<span class="text-amber-300">Feedback saved, but no matching '
+                '<span class="text-needs">Feedback saved, but no matching '
                 "memory entry was found (the run may still be processing).</span>"
             )
         return redirect("run_detail", run_id=run_id)
@@ -1548,12 +1548,12 @@ async def _review_action(request, task_id: str, action) -> HttpResponse | None:
     try:
         await action()
     except TaskNotFoundError:
-        return _review_response(request, "Task not found", "text-red-400", status=404)
+        return _review_response(request, "Task not found", "text-fail", status=404)
     except InvalidStateTransitionError as e:
-        return _review_response(request, str(e), "text-red-400", status=409)
+        return _review_response(request, str(e), "text-fail", status=409)
     except Exception as e:
         logger.exception("Manual review action failed for task %s", task_id)
-        return _review_response(request, f"Error: {e}", "text-red-400", status=500)
+        return _review_response(request, f"Error: {e}", "text-fail", status=500)
     return None
 
 
@@ -1565,7 +1565,7 @@ async def review_task_retry(request, task_id):
     error = await _review_action(
         request, task_id, lambda: manual_review.retry_review_task(wf_engine, task_id)
     )
-    return error or _review_response(request, "Retrying — task re-queued", "text-green-400")
+    return error or _review_response(request, "Retrying — task re-queued", "text-ok")
 
 
 @require_POST
@@ -1577,7 +1577,7 @@ async def review_task_fail(request, task_id):
     error = await _review_action(
         request, task_id, lambda: manual_review.fail_review_task(wf_engine, task_id, reason)
     )
-    return error or _review_response(request, "Run failed", "text-red-300")
+    return error or _review_response(request, "Run failed", "text-fail")
 
 
 # =============================================================================
@@ -2212,7 +2212,7 @@ async def human_task_form(request, task_id):
         }
         if request.headers.get("HX-Request"):
             return HttpResponse(
-                '<div class="p-4 text-amber-300">This task has already been completed.</div>',
+                '<div class="p-4 text-needs">This task has already been completed.</div>',
                 status=404,
             )
         return render(request, "pages/task_not_found.html", context, status=404)

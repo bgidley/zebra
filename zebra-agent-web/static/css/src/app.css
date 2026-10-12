@@ -42,7 +42,7 @@
   --color-gray-200: #d8d9de;
   --color-gray-300: #b9bbc3;
   --color-gray-400: #9a9da6;
-  --color-gray-500: #6c6f78;
+  --color-gray-500: #83868f;
   --color-gray-600: #4b4d55;
   --color-gray-700: #303238;
   --color-gray-750: #25272c;
@@ -61,7 +61,7 @@
   --color-line: #26282e;
   --color-ink: #ececef;
   --color-muted: #9a9da6;
-  --color-faint: #6c6f78;
+  --color-faint: #83868f;
 
   /* State: colour only ever means one of these. */
   --color-ok: #5cbf86;
@@ -73,21 +73,63 @@
 }
 
 /*
- * Keep Tailwind v3 defaults the existing templates were written against.
- * Temporary: remove in the sweep (#163) once every page uses the tokens above.
+ * Light mode (#163). Dark is the default; the viewer's system setting picks
+ * light. The gray scale is mirrored so templates written against the dark
+ * frame (gray-900 page, gray-800 cards, gray-400 secondary text) read the same
+ * way on a light ground. Unlayered, so it overrides the @theme defaults.
+ * Contrast: muted and faint text meet WCAG AA on surface in both themes.
  */
+:root {
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --color-gray-50: #121316;
+    --color-gray-100: #1b1c20;
+    --color-gray-200: #2a2c31;
+    --color-gray-300: #3f4148;
+    --color-gray-400: #575a63;
+    --color-gray-500: #686b74;
+    --color-gray-600: #b7b9c0;
+    --color-gray-700: #dcdde2;
+    --color-gray-750: #e9eaee;
+    --color-gray-800: #fbfbfc;
+    --color-gray-850: #fdfdfd;
+    --color-gray-900: #f3f3f5;
+    --color-gray-950: #f5f5f6;
+
+    --color-ground: #f5f5f6;
+    --color-surface: #fdfdfd;
+    --color-surface-2: #efeff2;
+    --color-line: #dcdde2;
+    --color-ink: #16171a;
+    --color-muted: #575a63;
+    --color-faint: #686b74;
+
+    --color-ok: #27744a;
+    --color-fail: #b8342c;
+    --color-needs: #995c08;
+
+    --color-voice: #3558b0;
+  }
+}
+
+/* Base defaults on the tokens (replace Tailwind's currentColor borders). */
 @layer base {
   *,
   ::after,
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentColor);
+    border-color: var(--color-line);
   }
 
   input::placeholder,
   textarea::placeholder {
-    color: var(--color-gray-400);
+    color: var(--color-faint);
   }
 
   button:not(:disabled),

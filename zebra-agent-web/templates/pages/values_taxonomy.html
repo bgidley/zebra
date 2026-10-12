@@ -5,22 +5,22 @@
 {% block content %}
 <div class="space-y-6">
     <div>
-        <h1 class="text-2xl font-bold text-white">Values Tags</h1>
+        <h1 class="text-2xl font-bold text-ink">Values Tags</h1>
         <p class="text-gray-400 mt-1">
             Tags you confirm in the values-profile wizard start as candidates. Promote the good ones so
             the tag extractor uses them next time, reject the noise, and merge duplicates.
-            Candidates confirmed {{ threshold }}+ times are marked <span class="text-amber-300">suggested</span>.
+            Candidates confirmed {{ threshold }}+ times are marked <span class="text-needs">suggested</span>.
         </p>
     </div>
 
     {% if message %}
-    <div class="bg-green-900/50 border border-green-700 text-green-300 rounded-lg px-4 py-3">{{ message }}</div>
+    <div class="bg-ok/15 border border-ok/40 text-ok rounded-lg px-4 py-3">{{ message }}</div>
     {% endif %}
     {% if error %}
-    <div class="bg-red-900/50 border border-red-700 text-red-300 rounded-lg px-4 py-3">{{ error }}</div>
+    <div class="bg-fail/15 border border-fail/40 text-fail rounded-lg px-4 py-3">{{ error }}</div>
     {% endif %}
     {% if suggested_count %}
-    <div class="bg-amber-900/40 border border-amber-700 text-amber-200 rounded-lg px-4 py-3" data-testid="suggested-banner">
+    <div class="bg-needs/15 border border-needs/40 text-needs rounded-lg px-4 py-3" data-testid="suggested-banner">
         {{ suggested_count }} candidate tag{{ suggested_count|pluralize }} suggested for promotion.
     </div>
     {% endif %}
@@ -28,7 +28,7 @@
     {% for section in sections %}
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-6" data-testid="taxonomy-{{ section.field }}">
         <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-white">{{ section.label }}</h2>
+            <h2 class="text-lg font-semibold text-ink">{{ section.label }}</h2>
             <span class="text-xs text-gray-500">{{ section.seeded_count }} seeded · {{ section.promoted|length }} promoted</span>
         </div>
 
@@ -36,12 +36,12 @@
         {% if section.candidates %}
         <div class="space-y-3 mb-5">
             {% for tag in section.candidates %}
-            <div class="border {% if tag.suggested %}border-amber-700{% else %}border-gray-700{% endif %} rounded-lg p-3" data-testid="candidate-{{ tag.slug }}">
+            <div class="border {% if tag.suggested %}border-needs/40{% else %}border-gray-700{% endif %} rounded-lg p-3" data-testid="candidate-{{ tag.slug }}">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                        <span class="text-white font-medium">{{ tag.label }}</span>
+                        <span class="text-ink font-medium">{{ tag.label }}</span>
                         <span class="text-xs text-gray-500 ml-2">{{ tag.slug }}</span>
-                        {% if tag.suggested %}<span class="ml-2 inline-block px-2 py-0.5 rounded text-xs font-semibold bg-amber-900 text-amber-300">suggested</span>{% endif %}
+                        {% if tag.suggested %}<span class="ml-2 inline-block px-2 py-0.5 rounded text-xs font-semibold bg-needs/15 text-needs">suggested</span>{% endif %}
                         {% if tag.description %}<p class="text-sm text-gray-400 mt-1">{{ tag.description }}</p>{% endif %}
                     </div>
                     <span class="text-xs text-gray-400">used {{ tag.usage_count }}×</span>
@@ -51,19 +51,19 @@
                         {% csrf_token %}
                         <input type="hidden" name="field" value="{{ section.field }}">
                         <input type="hidden" name="slug" value="{{ tag.slug }}">
-                        <button name="action" value="promote" class="px-3 py-1.5 rounded bg-green-700 hover:bg-green-600 text-white text-sm">Promote</button>
-                        <button name="action" value="reject" class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm">Reject</button>
+                        <button name="action" value="promote" class="px-3 py-1.5 rounded bg-ok hover:opacity-90 text-ground text-sm">Promote</button>
+                        <button name="action" value="reject" class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-ink text-sm">Reject</button>
                     </form>
                     <form method="post" action="/profile/taxonomy/action/" class="flex gap-2 items-center">
                         {% csrf_token %}
                         <input type="hidden" name="field" value="{{ section.field }}">
                         <input type="hidden" name="slug" value="{{ tag.slug }}">
-                        <select name="target" class="bg-gray-700 text-white text-sm rounded px-2 py-1.5 border border-gray-600">
+                        <select name="target" class="bg-gray-700 text-ink text-sm rounded px-2 py-1.5 border border-gray-600">
                             {% for target in section.merge_targets %}{% if target.slug != tag.slug %}
                             <option value="{{ target.slug }}">{{ target.label }} ({{ target.status }})</option>
                             {% endif %}{% endfor %}
                         </select>
-                        <button name="action" value="merge" class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-white text-sm">Merge into</button>
+                        <button name="action" value="merge" class="px-3 py-1.5 rounded bg-ink hover:opacity-90 text-ground text-sm">Merge into</button>
                     </form>
                 </div>
             </div>
@@ -79,15 +79,15 @@
             {% for tag in section.promoted %}
             <div class="flex flex-wrap items-center justify-between gap-2 border border-gray-700 rounded-lg px-3 py-2" data-testid="promoted-{{ tag.slug }}">
                 <div>
-                    <span class="text-white">{{ tag.label }}</span>
+                    <span class="text-ink">{{ tag.label }}</span>
                     <span class="text-xs text-gray-500 ml-2">{{ tag.slug }} · used {{ tag.usage_count }}× · promoted {{ tag.promoted_at|date:"Y-m-d" }}</span>
                 </div>
                 <form method="post" action="/profile/taxonomy/action/" class="flex gap-2">
                     {% csrf_token %}
                     <input type="hidden" name="field" value="{{ section.field }}">
                     <input type="hidden" name="slug" value="{{ tag.slug }}">
-                    <button name="action" value="demote" class="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-xs">Demote</button>
-                    <button name="action" value="reject" class="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-xs">Archive</button>
+                    <button name="action" value="demote" class="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-ink text-xs">Demote</button>
+                    <button name="action" value="reject" class="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-ink text-xs">Archive</button>
                 </form>
             </div>
             {% endfor %}
@@ -105,7 +105,7 @@
                         {% csrf_token %}
                         <input type="hidden" name="field" value="{{ section.field }}">
                         <input type="hidden" name="slug" value="{{ tag.slug }}">
-                        <button name="action" value="promote" class="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-xs">Promote</button>
+                        <button name="action" value="promote" class="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-ink text-xs">Promote</button>
                     </form>
                 </div>
                 {% endfor %}
