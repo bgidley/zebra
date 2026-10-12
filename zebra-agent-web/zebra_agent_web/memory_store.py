@@ -32,7 +32,10 @@ def _nearest_ids(table: str, goal: str, limit: int) -> list[str] | None:
     if not goal or not goal.strip() or not embeddings.vector_search_ready():
         return None
     uid = get_current_user_id()
-    where, params = ("t.user_id = %(uid)s", {"uid": uid}) if uid is not None else ("", None)
+    # Bind names must not be Oracle reserved words (UID → ORA-01745).
+    where, params = (
+        ("t.user_id = %(owner_id)s", {"owner_id": uid}) if uid is not None else ("", None)
+    )
     try:
         return embeddings.nearest_ids(table, goal, limit, where=where, params=params)
     except Exception as e:  # noqa: BLE001 - retrieval must degrade, not fail the goal

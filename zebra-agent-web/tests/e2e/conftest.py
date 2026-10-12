@@ -1,5 +1,7 @@
 import asyncio
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # Ensure django is set up
@@ -8,6 +10,41 @@ import pytest
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "zebra_agent_web.settings")
 django.setup()
+
+# Worker threads per test for sync_to_async(thread_sensitive=False) store calls.
+E2E_DB_THREADS = 4
+
+
+@pytest.fixture(autouse=True)
+async def _bounded_db_threads():
+    """Bound and clean up the DB connections opened by store worker threads.
+
+    Stores run ORM calls via ``sync_to_async(thread_sensitive=False)``, i.e. in
+    the event loop's default executor, and each worker thread opens its own
+    Django connection. pytest-asyncio gives every test a new loop, so without
+    this every test leaked a pool of Oracle sessions — enough to hit the Always
+    Free ADB's 30-session cap (shared with prod) and fail with DPY-4011 (#169).
+    """
+    loop = asyncio.get_running_loop()
+    executor = ThreadPoolExecutor(max_workers=E2E_DB_THREADS, thread_name_prefix="e2e-db")
+    loop.set_default_executor(executor)
+    yield
+    # Run one close on each worker: the barrier stops a thread taking two.
+    barrier = threading.Barrier(E2E_DB_THREADS)
+
+    def close_worker_connections() -> None:
+        from django.db import connections
+
+        connections.close_all()
+        try:
+            barrier.wait(timeout=10)
+        except threading.BrokenBarrierError:
+            pass
+
+    await asyncio.gather(
+        *(loop.run_in_executor(executor, close_worker_connections) for _ in range(E2E_DB_THREADS))
+    )
+    executor.shutdown(wait=True)
 
 
 @pytest.fixture(scope="session")

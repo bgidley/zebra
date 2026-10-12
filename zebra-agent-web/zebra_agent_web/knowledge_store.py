@@ -183,8 +183,9 @@ class DjangoPersonalKnowledgeStore(PersonalKnowledgeStore):
                     "zebra_knowledge_entries",
                     query,
                     limit,
-                    where="t.user_id = %(uid)s AND t.deleted_at IS NULL",
-                    params={"uid": user_id},
+                    # Bind names must not be Oracle reserved words (UID → ORA-01745).
+                    where="t.user_id = %(owner_id)s AND t.deleted_at IS NULL",
+                    params={"owner_id": user_id},
                 )
             except Exception as e:  # noqa: BLE001 - retrieval must degrade, not fail the goal
                 logger.warning("Vector knowledge search failed, using keyword ranking: %s", e)

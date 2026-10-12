@@ -48,9 +48,24 @@ def _run(goal: str, workflow: str):  # type: ignore[no-untyped-def]
     )
 
 
+@pytest.fixture
+def request_user():
+    """Act as a request user: rows are stamped with it and search is scoped to it.
+
+    Exercises the user-id bind — a reserved bind name (UID) once made vector
+    search fall back silently.
+    """
+    from zebra_agent_web.middleware import _current_user_id_var
+
+    user_id = 990_000 + uuid.uuid4().int % 10_000
+    token = _current_user_id_var.set(user_id)
+    yield user_id
+    _current_user_id_var.reset(token)
+
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_memories_are_embedded_and_ranked_by_meaning():
+async def test_memories_are_embedded_and_ranked_by_meaning(request_user, caplog):
     _oracle_only()
     from asgiref.sync import sync_to_async
     from zebra_agent.memory import ConceptualMemoryEntry
@@ -87,11 +102,12 @@ async def test_memories_are_embedded_and_ranked_by_meaning():
 
     concepts = await store.search_conceptual_memories("arrange a trip abroad", 5)
     assert concept.id in [c.id for c in concepts]
+    assert "using keyword ranking" not in caplog.text, "vector search fell back"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_knowledge_search_is_semantic_and_skips_deleted():
+async def test_knowledge_search_is_semantic_and_skips_deleted(caplog):
     _oracle_only()
     from zebra_agent.knowledge import KnowledgeEntry
     from zebra_agent_web import embeddings
@@ -126,3 +142,4 @@ async def test_knowledge_search_is_semantic_and_skips_deleted():
     ids = [e.id for e in found]
     assert ids and ids[0] == seat.id
     assert diet.id not in ids
+    assert "using keyword ranking" not in caplog.text, "vector search fell back"
