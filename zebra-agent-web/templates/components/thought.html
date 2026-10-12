@@ -6,7 +6,7 @@ href (optional link for the source line); at (optional datetime).
 Voice lines are Zebra's own first-person words, set in ink. Recorded reasoning
 without a voice line is quoted in muted text. The certainty stripe appears only
 when Zebra recorded a confidence; otherwise a plain voice-coloured rule.
-{% endcomment %}<div class="flex gap-3 py-3{% if thought.quiet %} opacity-70{% endif %}" data-thought="{{ thought.kind }}">
+{% endcomment %}{% load format_tags %}<div class="flex gap-3 py-3{% if thought.quiet %} opacity-70{% endif %}" data-thought="{{ thought.kind }}">
     {% if thought.confidence is not None %}
     {% include "components/certainty.html" with confidence=thought.confidence %}
     {% else %}
@@ -18,7 +18,7 @@ when Zebra recorded a confidence; otherwise a plain voice-coloured rule.
             {% if href %}<a href="{{ href }}" class="font-medium text-voice hover:underline">{{ thought.label }}</a>{% else %}<span class="font-medium text-voice">{{ thought.label }}</span>{% endif %}
             {% if context_text %}<span class="truncate max-w-[32ch]">{{ context_text }}</span>{% endif %}
             {% if not thought.is_voice %}<span>recorded reasoning</span>{% endif %}
-            {% if at %}<span class="font-mono">{{ at|timesince }} ago</span>{% endif %}
+            {% if at %}<span class="font-mono">{{ at|ago }}</span>{% endif %}
         </p>
     </div>
 </div>

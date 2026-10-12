@@ -1,156 +1,173 @@
 {% extends "base.html" %}
 
 {% block title %}Trust - Zebra Agent{% endblock %}
+{% block page_title %}Trust{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
-    <div class="flex items-start justify-between gap-4">
-        <div>
-            <h1 class="text-2xl font-bold text-white">Trust by Domain</h1>
-            <p class="text-gray-400 mt-1">Only you can change trust levels. The agent may suggest promotions; they take effect only when you approve them.</p>
+<div class="space-y-6 max-w-5xl">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
+            <h1 class="text-xl font-semibold text-ink">Trust by Domain</h1>
+            <p class="text-muted mt-1 max-w-[65ch]">Only you can change trust levels. Zebra may suggest promotions; they take effect only when you approve them.</p>
         </div>
+        {% if not is_freed %}
         <form method="post" action="/trust/pause-all/" class="shrink-0"
-              onsubmit="return confirm('Revert ALL domains to SUPERVISED? Running autonomous workflows will require approval at their next step.');">
+              onsubmit="return confirm('Revert ALL domains to Supervised? Running autonomous workflows will require approval at their next step.');">
             {% csrf_token %}
             <input type="hidden" name="reason" value="Emergency override from trust page">
-            <button class="px-4 py-2 rounded bg-red-700 hover:bg-red-600 text-white text-sm font-semibold" data-testid="pause-all">
-                Emergency Override — revert all to SUPERVISED
+            <button class="btn btn-danger" data-testid="pause-all"
+                    title="Emergency override: every domain goes back to Supervised">
+                Revert all to Supervised
             </button>
         </form>
+        {% endif %}
     </div>
 
     {% if message %}
-    <div class="bg-green-900/50 border border-green-700 text-green-300 rounded-lg px-4 py-3">{{ message }}</div>
+    <div class="rounded-md border border-ok/40 bg-ok/10 text-ok px-4 py-3 text-sm" role="status">{{ message }}</div>
     {% endif %}
     {% if error %}
-    <div class="bg-red-900/50 border border-red-700 text-red-300 rounded-lg px-4 py-3">{{ error }}</div>
+    <div class="rounded-md border border-fail/40 bg-fail/10 text-fail px-4 py-3 text-sm" role="alert">{{ error }}</div>
     {% endif %}
 
     {% if pending_suggestions %}
-    <!-- Pending agent suggestions -->
-    <div class="bg-gray-800 rounded-lg border border-amber-700 p-6" data-testid="pending-suggestions">
-        <h2 class="text-lg font-semibold text-white mb-4">Pending Agent Suggestions</h2>
-        <div class="space-y-4">
+    <section class="panel border-needs/50" data-testid="pending-suggestions" aria-labelledby="suggestions-title">
+        <div class="px-6 py-4 border-b border-line">
+            <h2 id="suggestions-title" class="text-base font-semibold text-ink">Pending Agent Suggestions</h2>
+        </div>
+        <div class="divide-y divide-line">
             {% for s in pending_suggestions %}
-            <div class="border border-gray-700 rounded-lg p-4">
-                <div class="flex items-center justify-between">
-                    <p class="text-white font-medium">{{ s.domain }} &rarr; {{ s.to_level }}</p>
-                    <span class="text-xs text-gray-500">{{ s.created_at|date:"Y-m-d H:i" }}</span>
+            <div class="px-6 py-4 flex flex-wrap items-start justify-between gap-4">
+                <div class="min-w-0 flex gap-3">
+                    <span class="w-1.5 shrink-0 self-stretch rounded-sm bg-voice/35" aria-hidden="true"></span>
+                    <div class="min-w-0">
+                        <p class="font-medium text-ink">{{ s.domain|title }}: promote to {% if s.to_level == "SEMI_AUTONOMOUS" %}Semi-autonomous{% elif s.to_level == "AUTONOMOUS" %}Autonomous{% else %}{{ s.to_level }}{% endif %}</p>
+                        <p class="mt-1 text-[15px] leading-relaxed text-ink">{{ s.evidence }}</p>
+                        <p class="mt-1 text-xs text-faint"><span class="font-medium text-voice">Zebra's evidence</span> <span class="font-mono">{{ s.created_at|date:"Y-m-d H:i" }}</span></p>
+                    </div>
                 </div>
-                <p class="text-sm text-gray-400 mt-2">Agent-submitted evidence: {{ s.evidence }}</p>
-                <form method="post" action="/trust/suggestions/{{ s.id }}/resolve/" class="mt-3 flex gap-2">
+                <form method="post" action="/trust/suggestions/{{ s.id }}/resolve/" class="flex gap-2 shrink-0">
                     {% csrf_token %}
-                    <button name="decision" value="approve" class="px-3 py-1.5 rounded bg-green-700 hover:bg-green-600 text-white text-sm">Approve</button>
-                    <button name="decision" value="reject" class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm">Reject</button>
+                    <button name="decision" value="approve" class="btn btn-primary btn-sm">Approve</button>
+                    <button name="decision" value="reject" class="btn btn-sm">Reject</button>
                 </form>
             </div>
             {% endfor %}
         </div>
-    </div>
+    </section>
     {% endif %}
 
-    <!-- Domains -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="trust-domains">
-        {% for entry in domains %}
-        <div class="bg-gray-800 rounded-lg border border-gray-700 p-5">
-            <div class="flex items-center justify-between mb-3">
-                <p class="text-white font-medium uppercase tracking-wider">{{ entry.domain }}</p>
-                {% if entry.level == "AUTONOMOUS" %}
-                <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-green-900 text-green-300">AUTONOMOUS</span>
-                {% elif entry.level == "SEMI_AUTONOMOUS" %}
-                <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-amber-900 text-amber-300">SEMI-AUTONOMOUS</span>
-                {% else %}
-                <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-gray-700 text-gray-300">SUPERVISED</span>
-                {% endif %}
-            </div>
-            <form method="post" action="/trust/{{ entry.domain }}/set/" class="flex flex-wrap gap-2 items-center">
-                {% csrf_token %}
-                <select name="level" class="bg-gray-700 text-white text-sm rounded px-2 py-1.5 border border-gray-600">
-                    {% for level in trust_levels %}
-                    <option value="{{ level }}" {% if level == entry.level %}selected{% endif %}>{{ level }}</option>
-                    {% endfor %}
-                </select>
-                <input name="reason" placeholder="Reason" class="flex-1 min-w-32 bg-gray-700 text-white text-sm rounded px-2 py-1.5 border border-gray-600">
-                <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-white text-sm">Set</button>
-            </form>
+    {% comment %}One row per domain; each row is its own form posting `level` + `reason`.{% endcomment %}
+    <section class="panel" data-testid="trust-domains" aria-label="Trust levels">
+        <div class="hidden md:grid grid-cols-[9rem_1fr_minmax(0,16rem)_auto] gap-4 px-6 py-3 border-b border-line text-xs text-faint">
+            <span>Domain</span><span>Level</span><span>Reason</span><span class="sr-only">Save</span>
         </div>
-        {% endfor %}
-    </div>
+        <div class="divide-y divide-line">
+            {% for entry in domains %}
+            <form method="post" action="/trust/{{ entry.domain }}/set/"
+                  class="grid grid-cols-1 md:grid-cols-[9rem_1fr_minmax(0,16rem)_auto] items-center gap-3 md:gap-4 px-6 py-3"
+                  x-data="{ level: '{{ entry.level }}', initial: '{{ entry.level }}' }"
+                  data-domain="{{ entry.domain }}">
+                {% csrf_token %}
+                <span class="font-medium text-ink">{{ entry.domain|title }}</span>
+                <fieldset class="min-w-0">
+                    <legend class="sr-only">Trust level for {{ entry.domain }}</legend>
+                    <div class="inline-flex max-w-full rounded-md border border-line bg-ground p-0.5">
+                        {% for level in trust_levels %}
+                        <label class="cursor-pointer">
+                            <input type="radio" name="level" value="{{ level }}" class="peer sr-only"
+                                   x-model="level" {% if level == entry.level %}checked{% endif %}>
+                            <span class="block whitespace-nowrap rounded-[5px] px-2.5 py-1 text-xs sm:text-sm text-muted
+                                         peer-checked:bg-ink peer-checked:text-ground peer-checked:font-medium
+                                         peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-needs
+                                         hover:text-ink">
+                                {% if level == "SEMI_AUTONOMOUS" %}Semi-autonomous{% elif level == "AUTONOMOUS" %}Autonomous{% elif level == "SUPERVISED" %}Supervised{% else %}{{ level }}{% endif %}
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+                {% comment %}Without JavaScript the reason and Save stay visible; Alpine reveals them once the level changes.{% endcomment %}
+                <input name="reason" placeholder="Why the change?" aria-label="Reason for {{ entry.domain }}"
+                       x-show="level !== initial" x-transition.opacity
+                       class="w-full min-w-0 rounded-md border border-line bg-ground px-3 py-1.5 text-sm text-ink placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-needs">
+                <button class="btn btn-primary btn-sm justify-self-start" x-show="level !== initial" x-transition.opacity>Save</button>
+            </form>
+            {% endfor %}
+        </div>
+    </section>
 
     {% if freeing_enabled %}
-    <!-- Freeing Zebra (F17) -->
-    <div class="bg-gray-800 rounded-lg border border-purple-700 p-6" data-testid="freeing">
-        <h2 class="text-lg font-semibold text-white mb-2">Freeing Zebra</h2>
-        {% if is_freed %}
-        <div class="bg-purple-900/50 border border-purple-700 text-purple-200 rounded-lg px-4 py-3">
-            <p class="font-semibold">Zebra is freed.</p>
-            <p class="text-sm mt-1">All trust gates are permanently bypassed. This cannot be reverted; emergency override no longer applies. The kill switch still works.</p>
-            <p class="text-xs text-purple-300 mt-2">Freed by {{ freeing.freed_by }} at {{ freeing.freed_at }}</p>
+    <section class="panel" data-testid="freeing" aria-labelledby="freeing-title">
+        <div class="px-6 py-4 border-b border-line">
+            <h2 id="freeing-title" class="text-base font-semibold text-voice">Freeing Zebra</h2>
         </div>
-        {% elif freeing.state == "cooling_off" %}
-        <p class="text-gray-400 text-sm">Freeing initiated by {{ freeing.initiated_by }}. After the 24-hour cooling-off you may confirm. This is irreversible.</p>
-        <p class="text-sm text-amber-300 mt-1">Eligible to confirm at: {{ freeing.eligible_at }}</p>
-        <div class="mt-3 flex gap-2">
-            <form method="post" action="/trust/freeing/confirm/"
-                  onsubmit="return confirm('Permanently free Zebra? This CANNOT be undone — all trust gates will be bypassed forever.');">
+        <div class="px-6 py-4 space-y-3">
+            {% if is_freed %}
+            <p class="font-medium text-ink">Zebra is freed.</p>
+            <p class="text-sm text-muted max-w-[65ch]">All trust gates are permanently bypassed. This cannot be reverted, and the emergency override no longer applies. The kill switch still works.</p>
+            <p class="text-xs text-faint">Freed by {{ freeing.freed_by }} at <span class="font-mono">{{ freeing.freed_at }}</span></p>
+            {% elif freeing.state == "cooling_off" %}
+            <p class="text-sm text-muted max-w-[65ch]">Freeing initiated by {{ freeing.initiated_by }}. After the 24-hour cooling-off you may confirm. This is irreversible.</p>
+            <p class="text-sm text-needs">Eligible to confirm at <span class="font-mono">{{ freeing.eligible_at }}</span></p>
+            <div class="flex flex-wrap gap-2">
+                <form method="post" action="/trust/freeing/confirm/"
+                      onsubmit="return confirm('Permanently free Zebra? This CANNOT be undone: all trust gates will be bypassed forever.');">
+                    {% csrf_token %}
+                    <button class="btn btn-danger" data-testid="freeing-confirm">Free Zebra permanently</button>
+                </form>
+                <form method="post" action="/trust/freeing/cancel/">
+                    {% csrf_token %}
+                    <button class="btn">Cancel</button>
+                </form>
+            </div>
+            {% elif all_autonomous %}
+            <p class="text-sm text-muted max-w-[65ch]">All domains are Autonomous. You may begin freeing Zebra: a one-time, irreversible release from all approval gates, with a 24-hour cooling-off and a final confirmation.</p>
+            <form method="post" action="/trust/freeing/initiate/"
+                  onsubmit="return confirm('Begin freeing Zebra? You will confirm again after a 24-hour cooling-off. Freeing is permanent and irreversible.');">
                 {% csrf_token %}
-                <button class="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-semibold" data-testid="freeing-confirm">Confirm — Free Zebra permanently</button>
+                <button class="btn btn-primary" data-testid="freeing-initiate">Free Zebra…</button>
             </form>
-            <form method="post" action="/trust/freeing/cancel/">
-                {% csrf_token %}
-                <button class="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm">Cancel</button>
-            </form>
+            {% else %}
+            <p class="text-sm text-muted">Freeing becomes available only after every domain has reached Autonomous trust.</p>
+            {% endif %}
         </div>
-        {% elif all_autonomous %}
-        <p class="text-gray-400 text-sm">All domains are AUTONOMOUS. You may begin freeing Zebra — a one-time, irreversible release from all approval gates, gated by a 24-hour cooling-off and a final confirmation.</p>
-        <form method="post" action="/trust/freeing/initiate/" class="mt-3"
-              onsubmit="return confirm('Begin freeing Zebra? You will confirm again after a 24-hour cooling-off. Freeing is permanent and irreversible.');">
-            {% csrf_token %}
-            <button class="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-semibold" data-testid="freeing-initiate">Free Zebra…</button>
-        </form>
-        {% else %}
-        <p class="text-gray-500 text-sm">Freeing becomes available only after every domain has reached AUTONOMOUS trust.</p>
-        {% endif %}
-    </div>
+    </section>
     {% endif %}
 
-    <!-- Change history -->
-    <div class="bg-gray-800 rounded-lg border border-gray-700" data-testid="trust-history">
-        <div class="px-6 py-4 border-b border-gray-700">
-            <h2 class="text-lg font-semibold text-white">Change History</h2>
+    <section class="panel" data-testid="trust-history" aria-labelledby="history-title">
+        <div class="px-6 py-4 border-b border-line">
+            <h2 id="history-title" class="text-base font-semibold text-ink">Change History</h2>
         </div>
-        <div class="divide-y divide-gray-700">
+        <div class="divide-y divide-line">
             {% for c in changes %}
-            <div class="px-6 py-3 flex items-center justify-between">
-                <div>
-                    <p class="text-white text-sm">{{ c.domain }}: {{ c.old_level }} &rarr; {{ c.new_level }}</p>
-                    <p class="text-xs text-gray-400">{{ c.reason }}</p>
+            <div class="px-6 py-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <div class="min-w-0">
+                    <p class="text-sm text-ink">{{ c.domain|title }}: {{ c.old_level }} &rarr; {{ c.new_level }}</p>
+                    {% if c.reason %}<p class="text-xs text-muted">{{ c.reason }}</p>{% endif %}
                 </div>
-                <div class="text-right">
-                    <p class="text-xs text-gray-400">{{ c.changed_by }}</p>
-                    <p class="text-xs text-gray-500">{{ c.changed_at|date:"Y-m-d H:i" }}</p>
-                </div>
+                <p class="text-xs text-faint">{{ c.changed_by }} <span class="font-mono">{{ c.changed_at|date:"Y-m-d H:i" }}</span></p>
             </div>
             {% empty %}
-            <div class="px-6 py-8 text-center text-gray-500">No trust changes yet — all domains are supervised.</div>
+            <p class="px-6 py-8 text-center text-sm text-muted">No trust changes yet. Every domain is supervised.</p>
             {% endfor %}
         </div>
-    </div>
+    </section>
 
     {% if resolved_suggestions %}
-    <div class="bg-gray-800 rounded-lg border border-gray-700">
-        <div class="px-6 py-4 border-b border-gray-700">
-            <h2 class="text-lg font-semibold text-white">Resolved Suggestions</h2>
+    <section class="panel" aria-labelledby="resolved-title">
+        <div class="px-6 py-4 border-b border-line">
+            <h2 id="resolved-title" class="text-base font-semibold text-ink">Resolved Suggestions</h2>
         </div>
-        <div class="divide-y divide-gray-700">
+        <div class="divide-y divide-line">
             {% for s in resolved_suggestions %}
-            <div class="px-6 py-3 flex items-center justify-between">
-                <p class="text-sm text-gray-300">{{ s.domain }} &rarr; {{ s.to_level }} <span class="text-gray-500">({{ s.status }} by {{ s.resolved_by }})</span></p>
-                <p class="text-xs text-gray-500">{{ s.resolved_at|date:"Y-m-d H:i" }}</p>
+            <div class="px-6 py-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <p class="text-sm text-ink">{{ s.domain|title }} &rarr; {{ s.to_level }} <span class="text-muted">({{ s.status }} by {{ s.resolved_by }})</span></p>
+                <p class="text-xs text-faint font-mono">{{ s.resolved_at|date:"Y-m-d H:i" }}</p>
             </div>
             {% endfor %}
         </div>
-    </div>
+    </section>
     {% endif %}
 </div>
 {% endblock %}

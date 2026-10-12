@@ -72,7 +72,7 @@ def test_every_icon_used_in_templates_is_vendored():
         used.update(re.findall(r'{%\s*icon\s+"([a-z0-9-]+)"', source))
         # Names passed to the nav and stat-card partials.
         for include in re.findall(
-            r"{%\s*include\s+\"(?:partials/nav_item|components/stat_card)"
+            r"{%\s*include\s+\"(?:partials/nav_item)"
             r"\.html\"[^%]*%}",
             source,
         ):
@@ -162,9 +162,3 @@ def test_stylesheet_source_defines_design_tokens():
         assert f"--color-{token}:" in source, token
     assert '--font-sans: "Geist"' in source
     assert '--font-mono: "Geist Mono"' in source
-
-
-def test_stat_card_has_no_dynamic_class_names():
-    source = (TEMPLATE_DIR / "components" / "stat_card.html").read_text()
-
-    assert not re.search(r"-\{\{", source)

@@ -1,17 +1,13 @@
 {% extends "base.html" %}
-{% load icon_tags %}
+{% load icon_tags format_tags %}
 
 {% block title %}Dashboard - Zebra Agent{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="space-y-8">
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-        <div>
-            <h1 class="text-2xl font-bold text-white">Agent Dashboard</h1>
-            <p class="text-gray-400 mt-1">Workflow selection and goal execution</p>
-        </div>
+<div class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <h1 class="text-xl font-semibold text-ink">Dashboard</h1>
         {% comment %}Below lg the mobile top bar carries Run goal, so the header only adds Export from sm (#166).{% endcomment %}
         <div class="hidden sm:flex items-center gap-2">
             <a href="/api/export/" class="btn">
@@ -24,188 +20,164 @@
             </a>
         </div>
     </div>
-    
-    <!-- Stats Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {% include "components/stat_card.html" with title="Running" value=running_count href="/activity/" color="amber" icon="play-circle" %}
-        {% include "components/stat_card.html" with title="Workflows" value=workflows_count href="/workflows/" color="indigo" icon="tree-structure" %}
-        {% include "components/stat_card.html" with title="Total Runs" value=total_runs href="/activity/?show_completed=true" color="blue" icon="play-circle" %}
-        <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="text-sm text-gray-400">Success Rate</p>
-                    <p class="text-3xl font-bold text-white mt-1">{{ success_rate }}</p>
-                </div>
-                <div class="p-3 rounded-lg bg-green-600">
-                    {% icon "check-circle" class="h-6 w-6 text-white" %}
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- Running Activities (#126) -->
-    <div class="bg-gray-800 rounded-lg border border-gray-700" data-testid="running-activities">
-        <div class="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-white">Running Activities</h2>
-            <a href="/activity/" class="text-sm text-indigo-400 hover:text-indigo-300">View all</a>
-        </div>
-        <div class="divide-y divide-gray-700">
-            {% for a in running_activities %}
-            <div class="flex items-center justify-between px-6 py-4 hover:bg-gray-750">
-                <a href="{% if a.run_id %}/runs/{{ a.run_id }}/{% else %}/activity/{% endif %}" class="min-w-0 flex-1">
-                    <p class="text-white font-medium truncate">{{ a.goal }}</p>
-                    <p class="text-sm text-gray-400 truncate">
-                        {{ a.workflow_name }}
-                        {% if a.current_tasks %}&middot; {{ a.current_tasks|join:", " }}{% endif %}
-                    </p>
-                </a>
-                <div class="ml-4 flex items-center gap-3 shrink-0 text-right">
-                    {% if a.awaiting_human %}
-                    <a href="/tasks/{{ a.human_task_id }}/"
-                       class="px-2 py-1 text-xs font-medium rounded bg-amber-900 text-amber-300 hover:bg-amber-800">awaiting input</a>
-                    {% else %}
-                    <span class="px-2 py-1 text-xs font-medium rounded bg-blue-900 text-blue-300">running</span>
-                    {% endif %}
-                    <div>
-                        <p class="text-sm text-white">{{ a.started_at|timesince }}</p>
-                        <p class="text-xs text-gray-400">${{ a.cost|floatformat:4 }}</p>
-                    </div>
+    {% comment %}Needs you (#162): goals waiting on a human task come first, in the only amber on the page.{% endcomment %}
+    {% if needs_you %}
+    <section class="rounded-[10px] border border-needs/45 bg-needs/10" data-testid="needs-you" aria-labelledby="needs-you-title">
+        <h2 id="needs-you-title" class="sr-only">Needs you</h2>
+        <div class="divide-y divide-needs/20">
+            {% for a in needs_you %}
+            <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                <div class="min-w-0">
+                    <p class="truncate text-ink"><span class="font-semibold text-needs">Needs you</span>&ensp;{{ a.goal }}</p>
+                    <p class="truncate text-sm text-muted">{{ a.workflow_name }}{% if a.current_tasks %}, {{ a.current_tasks|join:", " }}{% endif %}, started {{ a.started_at|ago }}</p>
                 </div>
-            </div>
-            {% empty %}
-            <div class="px-6 py-8 text-center text-gray-500">
-                <p>Nothing running</p>
+                <a href="/tasks/{{ a.human_task_id }}/" class="btn btn-sm shrink-0">Open task</a>
             </div>
             {% endfor %}
         </div>
-    </div>
-
-    {% comment %}Zebra's voice layer (#161){% endcomment %}
-    {% include "partials/on_my_mind.html" with feed=on_my_mind %}
-
-    {% if budget %}
-    <!-- Budget Status -->
-    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
-        <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-white">Budget Status</h2>
-            <span class="text-sm text-gray-400">Resets at {{ budget.reset_hour }}:00 UTC</span>
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-            <div>
-                <p class="text-xs text-gray-500 uppercase tracking-wider">Daily Budget</p>
-                <p class="text-xl font-bold text-white mt-1">${{ budget.daily_budget|floatformat:2 }}</p>
-            </div>
-            <div>
-                <p class="text-xs text-gray-500 uppercase tracking-wider">Spent Today</p>
-                <p class="text-xl font-bold text-white mt-1">${{ budget.spent_today|floatformat:4 }}</p>
-            </div>
-            <div>
-                <p class="text-xs text-gray-500 uppercase tracking-wider">Remaining</p>
-                <p class="text-xl font-bold {% if budget.remaining > 0 %}text-green-400{% else %}text-red-400{% endif %} mt-1">${{ budget.remaining|floatformat:4 }}</p>
-            </div>
-            <div>
-                <p class="text-xs text-gray-500 uppercase tracking-wider">Paced Available</p>
-                <p class="text-xl font-bold {% if budget.available > 0 %}text-green-400{% else %}text-amber-400{% endif %} mt-1">${{ budget.available|floatformat:4 }}</p>
-            </div>
-            <div>
-                <p class="text-xs text-gray-500 uppercase tracking-wider">Queue Depth</p>
-                <p class="text-xl font-bold text-indigo-400 mt-1">{{ budget.queue_depth }}</p>
-            </div>
-        </div>
-        <!-- Budget progress bar -->
-        <div class="w-full bg-gray-700 rounded-full h-2.5">
-            <div class="h-2.5 rounded-full {% if budget.spent_today > budget.paced_allowance %}bg-amber-500{% else %}bg-indigo-500{% endif %}"
-                 style="width: min({{ budget.pct_used }}, 100%)"></div>
-        </div>
-        <p class="text-xs text-gray-500 mt-1">{{ budget.pct_used }} of daily budget used ({{ budget.hours_since_reset }}h since reset)</p>
-    </div>
+    </section>
     {% endif %}
 
-    {% if trust_levels %}
-    <!-- Trust by Domain (F12) -->
-    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6" data-testid="trust-by-domain">
-        <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-white">Trust by Domain</h2>
-            <a href="/trust/" class="text-sm text-indigo-400 hover:text-indigo-300">Manage</a>
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {% for entry in trust_levels %}
-            <div>
-                <p class="text-xs text-gray-500 uppercase tracking-wider">{{ entry.domain }}</p>
-                <p class="mt-1">
-                    {% if entry.level == "AUTONOMOUS" %}
-                    <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-green-900 text-green-300">AUTONOMOUS</span>
-                    {% elif entry.level == "SEMI_AUTONOMOUS" %}
-                    <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-amber-900 text-amber-300">SEMI-AUTONOMOUS</span>
-                    {% else %}
-                    <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-gray-700 text-gray-300">SUPERVISED</span>
-                    {% endif %}
-                </p>
+    {% comment %}Vitals: spend against the paced budget, success, queue.{% endcomment %}
+    <section class="panel grid grid-cols-1 md:grid-cols-[1.6fr_1fr_1fr] divide-y md:divide-y-0 md:divide-x divide-line" data-testid="vitals" aria-label="Vitals">
+        <div class="px-5 py-4 space-y-2 min-w-0">
+            <p class="text-sm text-muted">Spent today</p>
+            {% if budget %}
+            <p class="font-mono text-2xl font-medium tabular-nums text-ink">{{ budget.spent_today|usd }} <span class="text-sm text-faint">of {{ budget.daily_budget|usd }}</span></p>
+            <div class="relative h-1.5 rounded-full bg-surface-2 overflow-hidden"
+                 role="img" aria-label="{{ budget.pct_used }} of the daily budget used; paced allowance so far {{ budget.paced_allowance|usd }}">
+                <span class="absolute inset-y-0 left-0 bg-[repeating-linear-gradient(-45deg,var(--color-line)_0_3px,transparent_3px_6px)]" style="width: {{ budget.paced_pct }}%"></span>
+                <span class="absolute inset-y-0 left-0 rounded-full {% if budget.over_pace %}bg-needs{% else %}bg-ink{% endif %}" style="width: {{ budget.spent_pct }}%"></span>
             </div>
-            {% endfor %}
+            <p class="text-xs text-faint">{{ budget.available|usd }} paced allowance left, resets {{ budget.reset_hour|stringformat:"02d" }}:00 UTC</p>
+            {% else %}
+            <p class="text-sm text-faint">Budget unavailable</p>
+            {% endif %}
         </div>
-    </div>
-    {% endif %}
+        <div class="px-5 py-4 space-y-2">
+            <p class="text-sm text-muted">Success rate</p>
+            <p class="font-mono text-2xl font-medium tabular-nums text-ink">{{ success_rate }} <span class="text-sm text-faint">of {{ total_runs }} run{{ total_runs|pluralize }}</span></p>
+            <p class="text-xs text-faint">{{ workflows_count }} workflow{{ workflows_count|pluralize }} in the library</p>
+        </div>
+        <div class="px-5 py-4 space-y-2">
+            <p class="text-sm text-muted">Queue</p>
+            <p class="font-mono text-2xl font-medium tabular-nums text-ink">{% if budget %}{{ budget.queue_depth }}{% else %}0{% endif %} <span class="text-sm text-faint">queued</span></p>
+            <p class="text-xs text-faint">{{ running_count }} running now</p>
+        </div>
+    </section>
 
-    <!-- Content Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- Top Workflows -->
-        <div class="bg-gray-800 rounded-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-white">Top Workflows</h2>
-                <a href="/workflows/" class="text-sm text-indigo-400 hover:text-indigo-300">View all</a>
-            </div>
-            <div class="divide-y divide-gray-700">
-                {% for workflow in top_workflows %}
-                <a href="/workflows/{{ workflow.name }}/" 
-                   class="flex items-center justify-between px-6 py-4 hover:bg-gray-750">
-                    <div>
-                        <p class="text-white font-medium">{{ workflow.name }}</p>
-                        <p class="text-sm text-gray-400">{{ workflow.description }}</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-sm text-white">{{ workflow.use_count }} runs</p>
-                        <p class="text-xs text-gray-400">{{ workflow.success_rate }} success{% if workflow.continuation_rate %} &middot; <span class="text-amber-400" title="Runs the user had to continue">{{ workflow.continuation_rate }} continued</span>{% endif %}</p>
-                    </div>
-                </a>
-                {% empty %}
-                <div class="px-6 py-8 text-center text-gray-500">
-                    <p>No workflows yet</p>
-                    <a href="/workflows/" class="text-indigo-400 hover:text-indigo-300 text-sm">Add workflows</a>
+    <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-6 items-start">
+        <div class="space-y-6 min-w-0">
+            <section class="panel" data-testid="running-activities" aria-labelledby="running-title">
+                <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+                    <h2 id="running-title" class="text-base font-semibold text-ink">Running Activities</h2>
+                    <a href="/activity/" class="text-sm text-muted hover:text-ink">View all</a>
                 </div>
-                {% endfor %}
-            </div>
+                <div class="divide-y divide-line">
+                    {% for a in running_activities %}
+                    <div class="flex items-center gap-3 px-5 py-3 hover:bg-surface-2">
+                        {% if a.awaiting_human %}{% include "components/state_dot.html" with state="needs" %}{% else %}{% include "components/state_dot.html" with state="running" %}{% endif %}
+                        <a href="{% if a.run_id %}/runs/{{ a.run_id }}/{% else %}/activity/{% endif %}" class="min-w-0 flex-1">
+                            <p class="truncate text-ink">{{ a.goal }}</p>
+                            <p class="truncate text-sm text-muted">{{ a.workflow_name }}{% if a.current_tasks %}, {{ a.current_tasks|join:", " }}{% endif %}</p>
+                        </a>
+                        <div class="shrink-0 text-right">
+                            {% if a.awaiting_human %}
+                            <a href="/tasks/{{ a.human_task_id }}/" class="text-xs font-medium text-needs hover:underline">awaiting input</a>
+                            {% else %}
+                            <p class="text-xs text-faint">running</p>
+                            {% endif %}
+                            <p class="font-mono text-xs text-faint tabular-nums">{{ a.started_at|ago }}, {{ a.cost|usd }}</p>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <p class="px-5 py-6 text-sm text-muted">Nothing running</p>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="panel" aria-labelledby="recent-title">
+                <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+                    <h2 id="recent-title" class="text-base font-semibold text-ink">Recent Runs</h2>
+                    <a href="/activity/?show_completed=true" class="text-sm text-muted hover:text-ink">View all</a>
+                </div>
+                <div class="divide-y divide-line">
+                    {% for run in recent_runs %}
+                    <a href="/runs/{{ run.id }}/" class="flex items-center gap-3 px-5 py-3 hover:bg-surface-2">
+                        {% if run.success %}{% include "components/state_dot.html" with state="ok" %}{% else %}{% include "components/state_dot.html" with state="fail" %}{% endif %}
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-ink">{{ run.goal }}</span>
+                            <span class="block truncate text-sm text-muted">{{ run.workflow_name }}</span>
+                        </span>
+                        <span class="shrink-0 text-xs {% if run.success %}text-faint{% else %}text-fail{% endif %}">{% if run.success %}success{% else %}failed{% endif %}</span>
+                    </a>
+                    {% empty %}
+                    <div class="px-5 py-6 text-sm text-muted">
+                        <p>No runs yet. <a href="/run/" class="text-ink underline underline-offset-2">Run your first goal</a></p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
         </div>
-        
-        <!-- Recent Runs -->
-        <div class="bg-gray-800 rounded-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-white">Recent Runs</h2>
-                <a href="/activity/?show_completed=true" class="text-sm text-indigo-400 hover:text-indigo-300">View all</a>
-            </div>
-            <div class="divide-y divide-gray-700">
-                {% for run in recent_runs %}
-                <a href="/runs/{{ run.id }}/" 
-                   class="flex items-center justify-between px-6 py-4 hover:bg-gray-750">
-                    <div class="min-w-0 flex-1">
-                        <p class="text-white font-medium truncate">{{ run.goal }}</p>
-                        <p class="text-sm text-gray-400">{{ run.workflow_name }}</p>
-                    </div>
-                    <div class="ml-4">
-                        {% if run.success %}
-                        <span class="px-2 py-1 text-xs font-medium rounded bg-green-900 text-green-300">success</span>
-                        {% else %}
-                        <span class="px-2 py-1 text-xs font-medium rounded bg-red-900 text-red-300">failed</span>
-                        {% endif %}
-                    </div>
-                </a>
-                {% empty %}
-                <div class="px-6 py-8 text-center text-gray-500">
-                    <p>No runs yet</p>
-                    <a href="/run/" class="text-indigo-400 hover:text-indigo-300 text-sm">Run your first goal</a>
+
+        <div class="space-y-6 min-w-0">
+            {% comment %}Zebra's voice layer (#161){% endcomment %}
+            {% include "partials/on_my_mind.html" with feed=on_my_mind %}
+
+            {% if trust_levels %}
+            <section class="panel" data-testid="trust-by-domain" aria-labelledby="trust-title">
+                <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+                    <h2 id="trust-title" class="text-base font-semibold text-ink">Trust by Domain</h2>
+                    <a href="/trust/" class="text-sm text-muted hover:text-ink">Manage</a>
                 </div>
-                {% endfor %}
-            </div>
+                <div class="divide-y divide-line">
+                    {% for entry in trust_levels %}
+                    <div class="flex items-center justify-between gap-3 px-5 py-2 text-sm">
+                        <span class="text-ink">{{ entry.domain }}</span>
+                        <span class="flex items-center gap-3">
+                            {% if entry.level == "AUTONOMOUS" %}
+                            <span class="font-mono text-[11px] text-muted">AUTONOMOUS</span>
+                            {% elif entry.level == "SEMI_AUTONOMOUS" %}
+                            <span class="font-mono text-[11px] text-muted">SEMI-AUTONOMOUS</span>
+                            {% else %}
+                            <span class="font-mono text-[11px] text-faint">SUPERVISED</span>
+                            {% endif %}
+                            <span class="inline-flex gap-0.5" aria-hidden="true">
+                                <i class="block h-1.5 w-3.5 rounded-sm bg-ink"></i>
+                                <i class="block h-1.5 w-3.5 rounded-sm {% if entry.level == "SEMI_AUTONOMOUS" or entry.level == "AUTONOMOUS" %}bg-ink{% else %}bg-surface-2 border border-line{% endif %}"></i>
+                                <i class="block h-1.5 w-3.5 rounded-sm {% if entry.level == "AUTONOMOUS" %}bg-ink{% else %}bg-surface-2 border border-line{% endif %}"></i>
+                            </span>
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
+            <section class="panel" aria-labelledby="top-workflows-title">
+                <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+                    <h2 id="top-workflows-title" class="text-base font-semibold text-ink">Top Workflows</h2>
+                    <a href="/workflows/" class="text-sm text-muted hover:text-ink">View all</a>
+                </div>
+                <div class="divide-y divide-line">
+                    {% for workflow in top_workflows %}
+                    <a href="/workflows/{{ workflow.name }}/" class="flex items-center justify-between gap-3 px-5 py-3 hover:bg-surface-2">
+                        <span class="min-w-0">
+                            <span class="block truncate text-ink">{{ workflow.name }}</span>
+                            <span class="block truncate text-sm text-muted">{{ workflow.description }}</span>
+                        </span>
+                        <span class="shrink-0 text-right font-mono text-xs text-faint tabular-nums">
+                            {{ workflow.use_count }} runs<br>{{ workflow.success_rate }}{% if workflow.continuation_rate %}<br><span class="text-needs" title="Runs you had to continue">{{ workflow.continuation_rate }} continued</span>{% endif %}
+                        </span>
+                    </a>
+                    {% empty %}
+                    <div class="px-5 py-6 text-sm text-muted">
+                        <p>No workflows yet. <a href="/workflows/" class="text-ink underline underline-offset-2">Add workflows</a></p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
         </div>
     </div>
 </div>

@@ -1,109 +1,100 @@
 {% extends "base.html" %}
+{% load icon_tags %}
 
 {% block title %}{{ workflow_name }} - Zebra Agent{% endblock %}
 {% block page_title %}Workflow{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-        <div>
-            <div class="flex items-center gap-3">
-                <a href="/workflows/" class="text-gray-400 hover:text-white">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                    </svg>
-                </a>
-                <h1 class="text-2xl font-bold text-white">{{ workflow_name }}</h1>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
+            <a href="/workflows/" class="text-sm text-muted hover:text-ink">Workflows</a>
+            <h1 class="mt-1 text-xl font-semibold text-ink break-words">{{ workflow_name }}</h1>
+            {% if description %}<p class="text-muted mt-1 max-w-[65ch]">{{ description }}</p>{% endif %}
+            {% if tags %}
+            <div class="mt-3 flex flex-wrap gap-1.5">
+                {% for tag in tags %}<span class="rounded-full border border-line px-2.5 py-0.5 text-xs text-muted">{{ tag }}</span>{% endfor %}
             </div>
-            <p class="text-gray-400 mt-1 ml-8">{{ description }}</p>
+            {% endif %}
         </div>
-        <div class="flex items-center gap-3">
-            <a href="/run/?workflow={{ workflow_name }}" 
-               class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors">
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="/run/?workflow={{ workflow_name|urlencode }}" class="btn btn-primary">
+                {% icon "lightning" class="h-4 w-4" %}
                 Run
             </a>
             {% if retired %}
-            <button hx-post="/workflows/{{ workflow_name }}/restore/"
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
-                Restore
-            </button>
+            <button hx-post="/workflows/{{ workflow_name }}/restore/" class="btn">Restore</button>
             {% else %}
             <button hx-post="/workflows/{{ workflow_name }}/retire/"
                     hx-confirm="Retire this workflow? It will be hidden from selection but can be restored."
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
-                Retire
-            </button>
+                    class="btn">Retire</button>
             {% endif %}
             <button hx-delete="/workflows/{{ workflow_name }}/delete/"
-                    hx-confirm="Are you sure you want to delete this workflow?"
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors">
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                Delete
-            </button>
+                    hx-confirm="Delete this workflow permanently? This cannot be undone."
+                    class="btn btn-danger">Delete</button>
         </div>
     </div>
 
     {% if retired %}
-    <div class="rounded-lg border border-amber-700 bg-amber-900/30 px-4 py-3 text-sm text-amber-200">
-        <span class="font-medium">Retired</span> {{ retired.retired_at|slice:":10" }}: {{ retired.reason }}
-        {% if retired.superseded_by %}&middot; replaced by <a href="/workflows/{{ retired.superseded_by }}/" class="underline">{{ retired.superseded_by }}</a>{% endif %}
+    <div class="rounded-md border border-needs/40 bg-needs/10 px-4 py-3 text-sm text-ink">
+        <span class="font-medium text-needs">Retired</span> <span class="font-mono text-xs">{{ retired.retired_at|slice:":10" }}</span>: {{ retired.reason }}
+        {% if retired.superseded_by %}, replaced by <a href="/workflows/{{ retired.superseded_by }}/" class="underline">{{ retired.superseded_by }}</a>{% endif %}
     </div>
     {% endif %}
 
-    <!-- Tags -->
-    {% if tags %}
-    <div class="flex gap-2 ml-8">
-        {% for tag in tags %}
-        <span class="px-3 py-1 text-sm rounded bg-gray-700 text-gray-300">{{ tag }}</span>
-        {% endfor %}
+    <section class="panel grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-line [&>div]:px-5 [&>div]:py-3" data-testid="workflow-stats" aria-label="Workflow stats">
+        <div><p class="text-xs text-muted">Runs</p><p class="font-mono text-lg tabular-nums text-ink">{{ stats.total_runs }}</p></div>
+        <div><p class="text-xs text-muted">Succeeded</p><p class="font-mono text-lg tabular-nums text-ink">{{ stats.successful_runs }}</p></div>
+        <div><p class="text-xs text-muted">Success rate</p><p class="font-mono text-lg tabular-nums text-ink">{{ stats.success_rate }}</p></div>
+        <div title="Runs you had to continue with a follow-up comment"><p class="text-xs text-muted">Continued</p><p class="font-mono text-lg tabular-nums {% if stats.continued_runs %}text-needs{% else %}text-ink{% endif %}">{{ stats.continuation_rate }}</p><p class="text-xs text-faint">{{ stats.continued_runs }} of {{ stats.total_runs }} runs</p></div>
+        <div><p class="text-xs text-muted">Avg rating</p><p class="font-mono text-lg tabular-nums text-ink">{{ stats.avg_rating }}</p></div>
+        <div><p class="text-xs text-muted">Last used</p><p class="font-mono text-sm tabular-nums text-ink">{{ stats.last_used }}</p></div>
+    </section>
+
+    {% if steps %}
+    <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] gap-6 items-start">
+        <section class="panel" data-testid="workflow-steps" aria-labelledby="steps-title">
+            <div class="px-5 py-3 border-b border-line">
+                <h2 id="steps-title" class="text-base font-semibold text-ink">Steps</h2>
+            </div>
+            <ol class="divide-y divide-line">
+                {% for step in steps %}
+                <li class="flex items-start gap-3 px-5 py-2.5">
+                    <span class="w-5 shrink-0 pt-0.5 text-right font-mono text-xs text-faint">{{ forloop.counter }}</span>
+                    <span class="min-w-0">
+                        <span class="block text-sm text-ink">{{ step.name }}</span>
+                        <span class="block truncate font-mono text-xs text-faint">{{ step.action|default:step.id }}{% if step.human %}, needs you{% endif %}{% if step.synchronized %}, waits for branches{% endif %}</span>
+                    </span>
+                </li>
+                {% endfor %}
+            </ol>
+        </section>
+
+        {% if diagram_svg %}
+        <section class="panel min-w-0" data-testid="workflow-diagram" aria-labelledby="diagram-title">
+            <div class="px-5 py-3 border-b border-line">
+                <h2 id="diagram-title" class="text-base font-semibold text-ink">Flow</h2>
+            </div>
+            <div class="overflow-x-auto p-4 [&_svg]:max-w-none">{{ diagram_svg|safe }}</div>
+        </section>
+        {% endif %}
     </div>
     {% endif %}
-    
-    <!-- Stats Grid -->
-    <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <p class="text-sm text-gray-400">Total Runs</p>
-            <p class="text-2xl font-bold text-white mt-1">{{ stats.total_runs }}</p>
+
+    {% comment %}The raw definition sits behind a disclosure; it is long and rarely needed.{% endcomment %}
+    <details class="panel group" data-testid="workflow-definition">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 [&::-webkit-details-marker]:hidden">
+            <span class="text-base font-semibold text-ink">Definition</span>
+            <span class="text-sm text-muted group-open:hidden">Show YAML</span>
+            <span class="hidden text-sm text-muted group-open:inline">Hide YAML</span>
+        </summary>
+        <div class="border-t border-line">
+            <div class="flex justify-end px-5 pt-3">
+                <button type="button" class="btn btn-sm"
+                        onclick="navigator.clipboard.writeText(document.getElementById('yaml-content').textContent).then(() => { this.textContent = 'Copied'; }).catch(() => {});">Copy YAML</button>
+            </div>
+            <pre id="yaml-content" class="overflow-x-auto px-5 pb-5 pt-2 font-mono text-[13px] leading-relaxed text-muted">{{ yaml_content }}</pre>
         </div>
-        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <p class="text-sm text-gray-400">Successful</p>
-            <p class="text-2xl font-bold text-green-400 mt-1">{{ stats.successful_runs }}</p>
-        </div>
-        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <p class="text-sm text-gray-400">Success Rate</p>
-            <p class="text-2xl font-bold text-white mt-1">{{ stats.success_rate }}</p>
-        </div>
-        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700" title="Runs the user had to continue with a follow-up comment">
-            <p class="text-sm text-gray-400">Continued</p>
-            <p class="text-2xl font-bold text-amber-400 mt-1">{{ stats.continuation_rate }}</p>
-            <p class="text-xs text-gray-500 mt-1">{{ stats.continued_runs }} of {{ stats.total_runs }} runs</p>
-        </div>
-        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <p class="text-sm text-gray-400">Avg Rating</p>
-            <p class="text-2xl font-bold text-white mt-1">{{ stats.avg_rating }}</p>
-        </div>
-        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <p class="text-sm text-gray-400">Last Used</p>
-            <p class="text-lg font-bold text-white mt-1">{{ stats.last_used }}</p>
-        </div>
-    </div>
-    
-    <!-- YAML Content -->
-    <div class="bg-gray-800 rounded-lg border border-gray-700">
-        <div class="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-white">Workflow Definition</h2>
-            <button onclick="navigator.clipboard.writeText(document.getElementById('yaml-content').textContent)"
-                    class="text-sm text-indigo-400 hover:text-indigo-300">
-                Copy YAML
-            </button>
-        </div>
-        <pre id="yaml-content" class="p-6 text-sm text-gray-300 font-mono overflow-x-auto">{{ yaml_content }}</pre>
-    </div>
+    </details>
 </div>
 {% endblock %}
