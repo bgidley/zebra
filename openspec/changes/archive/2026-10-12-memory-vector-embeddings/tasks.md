@@ -1,8 +1,8 @@
 ## 1. Infrastructure
 
 - [x] 1.1 Upload Oracle's prebuilt all-MiniLM-L12-v2 ONNX to private bucket `zebra-models` (sha256 recorded as object metadata)
-- [ ] 1.2 IAM policy letting the ADB resource principal read `zebra-models` (manual, tenancy admin)
-- [x] 1.3 ADMIN: enable resource principal for ADMIN, prod schema and `E2E_PROVISIONER` (grant option); provisioner grants
+- [x] 1.2 IAM policy `zebra-adb-read-models` letting the Zebra ADB resource principal read `zebra-models`
+- [x] 1.3 ADMIN: enable resource principal for ADMIN and the prod schema; `ADMIN.ZEBRA_E2E_GRANT_EMBEDDING` (E2E_* only) for test schemas; CI variable `E2E_PROVISIONER_DSN` so branch e2e runs on Oracle
 
 ## 2. Database
 

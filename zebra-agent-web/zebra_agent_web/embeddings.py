@@ -250,7 +250,12 @@ def vector_search_ready() -> bool:
         _ready_cache["ready"] = True
     else:
         _ready_cache["ready"] = time.monotonic()
-        logger.info("Vector memory search not available — using keyword ranking")
+        # On Oracle this is a degraded state (model not loaded): make it visible.
+        logger.warning(
+            "Vector memory search not ready (model %s or embedding columns missing) — "
+            "using keyword ranking; run manage.py load_embedding_model",
+            model_name(),
+        )
     return ready
 
 
