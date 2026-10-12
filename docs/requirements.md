@@ -772,7 +772,7 @@ This is the culmination of the trust journey: the human has seen enough evidence
 
 ### REQ-DATA-004: Context Minimisation (P1)
 
-**Description**: The agent sends only the minimum necessary context to external LLM APIs. Rather than vector-search or RAG over raw history, Zebra relies on its existing **three-tier memory consolidation model** — the same dreaming architecture that powers self-improvement — to keep LLM context bounded and relevant.
+**Description**: The agent sends only the minimum necessary context to external LLM APIs. Rather than RAG over raw history, Zebra relies on its existing **three-tier memory consolidation model** — the same dreaming architecture that powers self-improvement — to keep LLM context bounded, and retrieves the consolidated entries most relevant to the current goal. Where the database supports it (Oracle AI Database), relevance is computed with the database's own embeddings; otherwise by keyword overlap (#169).
 
 **Context Management via Memory Tiers**:
 
@@ -781,28 +781,28 @@ The three memory tiers form a natural compression pipeline. Each tier is smaller
 | Tier | Scope | Token Budget | Retrieval Method |
 |---|---|---|---|
 | **Working Memory** (process properties) | Current workflow execution only | Unbounded within process | Template resolution (`{{variable}}`) — automatic, no LLM query needed |
-| **Episodic Memory** (WorkflowMemoryEntry) | Per-run records with LLM-assessed effectiveness | ~300 tokens per workflow (last 5 runs via `get_workflow_context_for_llm`) | Loaded only for the *selected* workflow, not all workflows |
-| **Conceptual Memory** (ConceptualMemoryEntry) | Goal-pattern → workflow index | ~500 tokens for all concepts (via `get_conceptual_context_for_llm`, limit 50 entries) | Always loaded into workflow selector prompt as a compact shortlist |
-| **Personal Knowledge** (PersonalKnowledgeStore) | Long-term facts and preferences | Task-relevant subset only | Category + query filtering before inclusion |
+| **Episodic Memory** (WorkflowMemoryEntry) | Per-run records with LLM-assessed effectiveness | ~300 tokens per workflow (last 5 runs via `get_workflow_context_for_llm`); ~300 tokens for the 5 most similar past goals | Loaded for the *selected* workflow; the most similar past goals at selection |
+| **Conceptual Memory** (ConceptualMemoryEntry) | Goal-pattern → workflow index | ~500 tokens (the 10 entries most relevant to the goal) | Loaded into the workflow selector prompt as a compact shortlist |
+| **Personal Knowledge** (PersonalKnowledgeStore) | Long-term facts and preferences | Task-relevant subset only (≤20 entries) | Relevance to the goal |
 
 **How dreaming keeps context bounded**:
 
 1. **After every goal** (`assess_and_record`): The full workflow output (potentially thousands of tokens) is compressed into a ~2-3 sentence `effectiveness_notes` assessment stored as episodic memory. Raw output is truncated to 500 chars.
 2. **After every goal** (`update_conceptual_memory`): Episodic memories are further consolidated into conceptual entries — abstract goal patterns with workflow recommendations. This is LLM-powered categorisation, not vector similarity.
 3. **During the dream cycle** (`dream_cycle.yaml`): The `metrics_analyzer` reviews 7 days of run data, the `workflow_evaluator` assesses patterns, and the `workflow_optimizer` acts on findings. The dream cycle itself operates on aggregated metrics, not raw history.
-4. **At goal selection** (`consult_memory`): Only the conceptual index (~500 tokens) is injected into the workflow selector prompt. Episodic detail is loaded only for the specific workflow chosen (~300 tokens).
+4. **At goal selection** (`consult_memory`): Only the goal-relevant part of the conceptual index and the most similar past goals (~800 tokens) are injected into the workflow selector prompt. Episodic detail is loaded only for the specific workflow chosen (~300 tokens).
 
 This means the LLM context for any given task contains: the current task's working memory + a compact conceptual shortlist + recent history for the selected workflow only. Total memory overhead is bounded regardless of how many goals the agent has processed.
 
 **Acceptance Criteria**:
 - LLM prompts include only the data relevant to the current task
-- Conceptual memory context injected into workflow selection prompts is bounded (≤50 entries, ~500 tokens)
+- Conceptual memory context injected into workflow selection prompts is bounded (≤10 goal-relevant entries plus ≤5 similar past goals)
 - Episodic memory retrieval is scoped to the selected workflow (≤5 recent runs, ~300 tokens)
 - Personal knowledge is filtered to task-relevant entries by category and query before inclusion in prompts
 - Sensitive categories (finance, health) require explicit workflow-level opt-in to include in prompts
 - The dream cycle consolidates raw execution history into progressively more abstract tiers, preventing unbounded context growth
 - The human can audit what data was sent to the LLM for any workflow execution
-- No vector database or embedding infrastructure is required — context selection uses structured queries and LLM-powered categorisation
+- No separate vector database or external embedding service is required — relevance uses the database's own embeddings where available (Oracle AI Database), otherwise keyword overlap, plus LLM-powered categorisation
 
 ### REQ-DATA-005: Data Deletion (P1)
 

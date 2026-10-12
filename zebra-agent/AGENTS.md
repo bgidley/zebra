@@ -128,7 +128,7 @@ consult_memory --> consult_knowledge --> assess_history_need
 
 **Steps:**
 
-1. **consult_memory**: `ConsultMemoryAction` reads conceptual memory to produce a workflow shortlist
+1. **consult_memory**: `ConsultMemoryAction` retrieves the conceptual memory entries and similar past runs most relevant to the goal (`MemoryStore.search_*`; Oracle vector search, keyword overlap elsewhere — #169) to produce a workflow shortlist
 2. **select_workflow**: `WorkflowSelectorAction` uses LLM to pick best workflow (informed by memory shortlist)
 3. **create_workflow**: `WorkflowCreatorAction` creates new workflow if no match (route: `create_new`)
 4. **create_variant**: `WorkflowVariantCreatorAction` modifies existing workflow (route: `create_variant`)

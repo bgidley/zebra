@@ -13,6 +13,11 @@ cd /app/zebra-agent-web
 echo "Running migrations..."
 python manage.py migrate --noinput
 
+# In-database embedding model + triggers for vector memory search (#169).
+# Idempotent; never blocks startup (falls back to keyword ranking on failure).
+echo "Setting up memory embeddings..."
+python manage.py load_embedding_model || echo "Embedding setup skipped"
+
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 

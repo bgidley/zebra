@@ -251,7 +251,7 @@ KnowledgeStore:
 
 Categories (initial set): `preferences`, `facts`, `relationships`, `routines`, `skills`, `history`, `dilemma_resolutions`.
 
-**No vector database** — search is structured (category + LIKE / FTS) plus LLM reranking within a tight candidate set. This preserves local-first operation without embedding infrastructure.
+**No separate vector database** — search is structured (category + LIKE / FTS) plus goal relevance: Oracle's in-database embeddings where available (#169, see [memory-vector-embeddings-design.md](memory-vector-embeddings-design.md)), keyword overlap otherwise. Local-first installs keep working without embedding infrastructure.
 
 ### `retrieve_knowledge` task action
 

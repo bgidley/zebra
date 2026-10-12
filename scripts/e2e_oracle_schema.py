@@ -15,6 +15,12 @@ and privs must be held WITH ADMIN OPTION:
     GRANT CREATE SESSION, CREATE USER, ALTER USER, DROP USER TO E2E_PROVISIONER;
     GRANT CONNECT, RESOURCE, CREATE VIEW TO E2E_PROVISIONER WITH ADMIN OPTION;
     GRANT SELECT_CATALOG_ROLE TO E2E_PROVISIONER;   -- for `reap`
+    -- in-database embedding model (#169): an ADMIN-owned procedure grants an
+    -- E2E_* schema CREATE MINING MODEL, EXECUTE ON DBMS_CLOUD and the resource
+    -- principal. (grant_option on ENABLE_RESOURCE_PRINCIPAL does not let the
+    -- provisioner call DBMS_CLOUD_ADMIN, and that package is too broad to grant.)
+    GRANT EXECUTE ON ADMIN.ZEBRA_E2E_GRANT_EMBEDDING TO E2E_PROVISIONER;
+    -- see specs/memory-vector-embeddings-design.md for the procedure source
 
 Usage:
     E2E_SCHEMA_PASSWORD=<alnum,12+> e2e_oracle_schema.py create --schema E2E_FOO_123
@@ -96,8 +102,23 @@ def cmd_create(args: argparse.Namespace) -> None:
         # tablespace on ADB is DATA.
         cur.execute(f"GRANT CONNECT, RESOURCE, CREATE VIEW TO {schema}")
         cur.execute(f"ALTER USER {schema} QUOTA UNLIMITED ON DATA")
+        _grant_embedding_access(cur, schema)
         conn.commit()
     print(schema)
+
+
+def _grant_embedding_access(cur, schema: str) -> None:
+    """Let the schema load the in-database embedding model from Object Storage (#169).
+
+    Calls the ADMIN-owned ``ZEBRA_E2E_GRANT_EMBEDDING`` procedure (see the module
+    docstring). A failure is reported but does not fail provisioning;
+    ``load_embedding_model --strict`` then fails the e2e job with the real
+    Oracle error.
+    """
+    try:
+        cur.execute("BEGIN ADMIN.ZEBRA_E2E_GRANT_EMBEDDING(:s); END;", {"s": schema})
+    except oracledb.DatabaseError as exc:
+        print(f"WARNING: embedding grants for {schema} failed: {exc}", file=sys.stderr)
 
 
 def cmd_drop(args: argparse.Namespace) -> None:

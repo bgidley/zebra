@@ -42,6 +42,9 @@ e2e:
   # Auto-recover transient ADB connection drops (e.g. DPY-4011). The per-pipeline
   # schema is dropped in after_script and re-created (drop-if-exists) on retry.
   retry: 2
+  # One Oracle e2e at a time: the Always Free ADB caps sessions at 30, shared
+  # with prod (#169).
+  resource_group: oracle-e2e
   script:
     # Per-job workflow library. The shell runner shares $HOME across branches, so
     # the default ~/.zebra/workflows would let one branch's newer built-in YAML
@@ -61,6 +64,8 @@ e2e:
         export ORACLE_USERNAME="$E2E_SCHEMA"
         export ORACLE_PASSWORD="$E2E_SCHEMA_PASSWORD"
         uv run python zebra-agent-web/manage.py migrate --noinput
+        # In-database embedding model for vector memory search (#169).
+        uv run python zebra-agent-web/manage.py load_embedding_model --strict
         uv run pytest zebra-agent-web/tests/e2e/ -m e2e
       else
         # Fallback (no provisioner creds): SQLite.
