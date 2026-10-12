@@ -95,11 +95,11 @@
          x-data="{ toasts: [] }"
          @toast.window="toasts.push({message: $event.detail.message, type: $event.detail.type || 'info'}); setTimeout(() => toasts.shift(), 5000)">
         <template x-for="(toast, index) in toasts" :key="index">
-            <div class="px-4 py-3 rounded-lg shadow-lg text-white text-sm"
+            <div class="px-4 py-3 rounded-lg shadow-lg text-ink text-sm"
                  :class="{
-                     'bg-green-600': toast.type === 'success',
-                     'bg-red-600': toast.type === 'error',
-                     'bg-blue-600': toast.type === 'info'
+                     'bg-ok': toast.type === 'success',
+                     'bg-fail': toast.type === 'error',
+                     'bg-ink': toast.type === 'info'
                  }"
                  x-text="toast.message"
                  x-transition></div>

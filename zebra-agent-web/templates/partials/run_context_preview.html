@@ -7,9 +7,9 @@ Parameters passed via include or HTMX fetch:
         <span class="text-gray-500">Workflow:</span>
         <span class="text-gray-300">{{ run.workflow_name|default:"-" }}</span>
         {% if run.success %}
-        <span class="px-1.5 py-0.5 rounded bg-green-900/60 text-green-300">success</span>
+        <span class="px-1.5 py-0.5 rounded bg-ok/15 text-ok">success</span>
         {% elif run.success == False %}
-        <span class="px-1.5 py-0.5 rounded bg-red-900/60 text-red-300">failed</span>
+        <span class="px-1.5 py-0.5 rounded bg-fail/15 text-fail">failed</span>
         {% endif %}
         {% if run.completed_at %}
         <span class="text-gray-600 ml-auto">{{ run.completed_at|date:"M d, H:i" }}</span>

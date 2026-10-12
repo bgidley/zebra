@@ -2,8 +2,8 @@
 <div id="goal-progress" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
     <!-- Header with spinner -->
     <div class="flex items-center gap-3">
-        <div id="progress-spinner" class="animate-spin h-6 w-6 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
-        <span id="progress-title" class="text-lg font-medium text-white">Processing your goal...</span>
+        <div id="progress-spinner" class="animate-spin h-6 w-6 border-2 border-ink border-t-transparent rounded-full"></div>
+        <span id="progress-title" class="text-lg font-medium text-ink">Processing your goal...</span>
     </div>
     
     <!-- Goal text -->
@@ -78,17 +78,17 @@
         stopDiagramRefresh();
         
         if (success) {
-            progressSpinner.classList.remove('border-indigo-500');
-            progressSpinner.classList.add('border-green-500', 'border-2');
-            progressSpinner.innerHTML = '<svg class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+            progressSpinner.classList.remove('border-ink');
+            progressSpinner.classList.add('border-ok/40', 'border-2');
+            progressSpinner.innerHTML = '<svg class="h-6 w-6 text-ok" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
             progressTitle.textContent = 'Goal completed successfully!';
-            progressTitle.classList.add('text-green-400');
+            progressTitle.classList.add('text-ok');
             
             // Add link to full result
             const linkDiv = document.createElement('div');
             linkDiv.className = 'mt-4 pt-4 border-t border-gray-700';
             linkDiv.innerHTML = `
-                <a href="/runs/${runId}/" class="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300">
+                <a href="/runs/${runId}/" class="inline-flex items-center gap-2 text-ink hover:underline">
                     <span>View full result</span>
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -108,16 +108,16 @@
                 progressContainer.insertBefore(outputDiv, linkDiv);
             }
         } else {
-            progressSpinner.classList.remove('border-indigo-500');
-            progressSpinner.classList.add('border-red-500', 'border-2');
-            progressSpinner.innerHTML = '<svg class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+            progressSpinner.classList.remove('border-ink');
+            progressSpinner.classList.add('border-fail/40', 'border-2');
+            progressSpinner.innerHTML = '<svg class="h-6 w-6 text-fail" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
             progressTitle.textContent = 'Goal execution failed';
-            progressTitle.classList.add('text-red-400');
+            progressTitle.classList.add('text-fail');
             
             // Show error
             if (data.error) {
                 const errorDiv = document.createElement('div');
-                errorDiv.className = 'mt-4 p-4 bg-red-900/20 border border-red-800 rounded-lg text-red-300';
+                errorDiv.className = 'mt-4 p-4 bg-fail/15 border border-fail/40 rounded-lg text-fail';
                 errorDiv.textContent = data.error;
                 progressContainer.appendChild(errorDiv);
             }
@@ -135,7 +135,7 @@
         ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/goal/${runId}/`);
         
         ws.onopen = () => {
-            addLog('Connected to server', 'text-green-400');
+            addLog('Connected to server', 'text-ok');
             reconnectAttempts = 0;
         };
         
@@ -156,12 +156,12 @@
                     break;
                     
                 case 'creating_workflow':
-                    addLog(`Creating new workflow${data.suggested_name ? ': ' + data.suggested_name : ''}...`, 'text-yellow-400');
+                    addLog(`Creating new workflow${data.suggested_name ? ': ' + data.suggested_name : ''}...`, 'text-needs');
                     break;
                     
                 case 'workflow_selected':
                     const createdText = data.created_new ? ' (newly created)' : '';
-                    addLog(`Selected workflow: ${data.workflow_name}${createdText}`, 'text-indigo-400');
+                    addLog(`Selected workflow: ${data.workflow_name}${createdText}`, 'text-ink');
                     if (data.reasoning) {
                         addLog(`  Reason: ${data.reasoning}`, 'text-gray-500 ml-4');
                     }
@@ -178,7 +178,7 @@
                     break;
                     
                 case 'task_started':
-                    addLog(`Starting task: ${data.task_name}`, 'text-blue-400');
+                    addLog(`Starting task: ${data.task_name}`, 'text-ink');
                     // Refresh diagram to show task in progress
                     if (workflowDiagram) {
                         workflowDiagram.refresh();
@@ -186,7 +186,7 @@
                     break;
                     
                 case 'task_completed':
-                    addLog(`Task ${data.task_index}/${data.total_tasks}: ${data.task_name}`, 'text-green-400');
+                    addLog(`Task ${data.task_index}/${data.total_tasks}: ${data.task_name}`, 'text-ok');
                     if (data.output_preview) {
                         addLog(`  ${data.output_preview.substring(0, 100)}...`, 'text-gray-500 ml-4 truncate');
                     }
@@ -197,15 +197,15 @@
                     break;
                     
                 case 'human_task_pending':
-                    addLog(`Waiting for input: ${data.task_name}`, 'text-amber-400 font-medium');
+                    addLog(`Waiting for input: ${data.task_name}`, 'text-needs font-medium');
                     // Show link to the task form
                     const taskLink = document.createElement('div');
-                    taskLink.className = 'mt-2 p-3 bg-amber-900/20 border border-amber-700 rounded-lg';
+                    taskLink.className = 'mt-2 p-3 bg-needs/15 border border-needs/40 rounded-lg';
                     taskLink.innerHTML = `
                         <div class="flex items-center justify-between">
-                            <span class="text-sm text-amber-200">This workflow needs your input to continue.</span>
+                            <span class="text-sm text-needs">This workflow needs your input to continue.</span>
                             <a href="/tasks/${escapeHtml(data.task_id)}/" 
-                               class="px-3 py-1.5 text-sm rounded-md bg-amber-600 hover:bg-amber-500 text-white font-medium">
+                               class="px-3 py-1.5 text-sm rounded-md bg-needs hover:opacity-90 text-ground font-medium">
                                 Open Form
                             </a>
                         </div>
@@ -218,7 +218,7 @@
                     break;
                     
                 case 'completed':
-                    addLog('Workflow execution completed!', 'text-green-400 font-bold');
+                    addLog('Workflow execution completed!', 'text-ok font-bold');
                     if (data.tokens_used) {
                         addLog(`Tokens used: ${data.tokens_used}`, 'text-gray-500');
                     }
@@ -227,13 +227,13 @@
                     break;
                     
                 case 'failed':
-                    addLog(`Execution failed: ${data.error}`, 'text-red-400 font-bold');
+                    addLog(`Execution failed: ${data.error}`, 'text-fail font-bold');
                     showCompletion(false, data);
                     ws.close();
                     break;
                     
                 case 'error':
-                    addLog(`Error: ${data.message}`, 'text-red-400');
+                    addLog(`Error: ${data.message}`, 'text-fail');
                     break;
                     
                 default:
@@ -242,18 +242,18 @@
         };
         
         ws.onerror = (error) => {
-            addLog('WebSocket error', 'text-yellow-400');
+            addLog('WebSocket error', 'text-needs');
         };
         
         ws.onclose = (event) => {
             // Only try to reconnect if we haven't completed
-            if (!progressContainer.querySelector('.text-green-400.font-bold, .text-red-400.font-bold')) {
+            if (!progressContainer.querySelector('.text-ok.font-bold, .text-fail.font-bold')) {
                 if (reconnectAttempts < maxReconnectAttempts) {
                     reconnectAttempts++;
-                    addLog(`Connection lost, reconnecting (${reconnectAttempts}/${maxReconnectAttempts})...`, 'text-yellow-400');
+                    addLog(`Connection lost, reconnecting (${reconnectAttempts}/${maxReconnectAttempts})...`, 'text-needs');
                     setTimeout(connectWebSocket, reconnectDelay(reconnectAttempts));
                 } else {
-                    addLog('Connection lost. Checking status via API...', 'text-yellow-400');
+                    addLog('Connection lost. Checking status via API...', 'text-needs');
                     pollStatus();
                 }
             }
@@ -270,10 +270,10 @@
             .then(data => {
                 pollFailures = 0;
                 if (data.status === 'completed') {
-                    addLog('Workflow completed!', 'text-green-400 font-bold');
+                    addLog('Workflow completed!', 'text-ok font-bold');
                     showCompletion(true, data);
                 } else if (data.status === 'failed') {
-                    addLog('Workflow failed', 'text-red-400 font-bold');
+                    addLog('Workflow failed', 'text-fail font-bold');
                     showCompletion(false, data);
                 } else if (data.status === 'processing') {
                     addLog('Still processing...', 'text-gray-400');
@@ -290,11 +290,11 @@
                 pollFailures++;
                 if (pollFailures < maxPollFailures) {
                     if (pollFailures === 1) {
-                        addLog(`Server unavailable (${err.message}), retrying...`, 'text-yellow-400');
+                        addLog(`Server unavailable (${err.message}), retrying...`, 'text-needs');
                     }
                     setTimeout(pollStatus, 5000);
                 } else {
-                    addLog(`Failed to check status: ${err.message}. Refresh the page to retry.`, 'text-red-400');
+                    addLog(`Failed to check status: ${err.message}. Refresh the page to retry.`, 'text-fail');
                 }
             });
     }

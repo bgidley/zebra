@@ -16,14 +16,14 @@ Parameters passed via context:
     {% comment %} Header {% endcomment %}
     <div class="mb-6">
         <div class="flex items-center gap-2 mb-1">
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-900 text-amber-200">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-needs/15 text-needs">
                 Awaiting Input
             </span>
             {% if process_name %}
             <span class="text-xs text-gray-500">{{ process_name }}</span>
             {% endif %}
         </div>
-        <h3 class="text-lg font-semibold text-white">{{ form.title|default:task_def.name }}</h3>
+        <h3 class="text-lg font-semibold text-ink">{{ form.title|default:task_def.name }}</h3>
         {% if form_description %}
         <p class="text-sm text-gray-400 mt-1 whitespace-pre-line">{{ form_description }}</p>
         {% endif %}
@@ -56,22 +56,22 @@ Parameters passed via context:
                 {% for route in routes %}
                 <button type="submit" name="next_route" value="{{ route }}"
                         class="px-4 py-2 rounded-md text-sm font-medium
-                               {% if forloop.first %}bg-indigo-600 hover:bg-indigo-500 text-white{% else %}bg-gray-700 hover:bg-gray-600 text-gray-200{% endif %}
-                               focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                               {% if forloop.first %}bg-ink hover:opacity-90 text-ground{% else %}bg-gray-700 hover:bg-gray-600 text-gray-200{% endif %}
+                               focus:outline-none focus:ring-2 focus:ring-needs">
                     {{ route|title }}
                 </button>
                 {% endfor %}
             {% else %}
                 <button type="submit"
-                        class="px-4 py-2 rounded-md text-sm font-medium bg-indigo-600
-                               hover:bg-indigo-500 text-white focus:outline-none
-                               focus:ring-2 focus:ring-indigo-500">
+                        class="px-4 py-2 rounded-md text-sm font-medium bg-ink
+                               hover:opacity-90 text-ground focus:outline-none
+                               focus:ring-2 focus:ring-needs">
                     Submit
                 </button>
             {% endif %}
 
             <span class="htmx-indicator">
-                <svg class="animate-spin h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24">
+                <svg class="animate-spin h-5 w-5 text-ink" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                 </svg>

@@ -322,14 +322,13 @@ def test_run_page_task_headers_shrink_on_phones(page):
     source = (TEMPLATES / "pages" / page).read_text()
 
     assert (
-        '<span class="min-w-0 truncate font-medium text-white">{{ task.task_name }}</span>'
-        in source
+        '<span class="min-w-0 truncate font-medium text-ink">{{ task.task_name }}</span>' in source
     )
     assert (
         '<span class="hidden sm:inline truncate text-sm text-gray-500">({{ task.task_id }})</span>'
         in (source)
     )
-    assert '<span class="font-medium text-white">{{ task.task_name }}</span>' not in source
+    assert '<span class="font-medium text-ink">{{ task.task_name }}</span>' not in source
 
 
 @pytest.mark.parametrize(

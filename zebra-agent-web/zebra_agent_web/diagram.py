@@ -25,19 +25,21 @@ FONT_SIZE = 12
 SMALL_FONT_SIZE = 10
 
 # Colors (dark theme compatible)
+# Theme tokens with the original hex as a fallback, so the diagram follows the
+# page's light/dark palette (#163) and still renders as a standalone SVG.
 COLORS = {
-    "complete": "#22c55e",  # green-500
-    "failed": "#ef4444",  # red-500
-    "running": "#3b82f6",  # blue-500
-    "skipped": "#6b7280",  # gray-500
-    "not_executed": "#374151",  # gray-700
-    "node_stroke": "#4b5563",  # gray-600
-    "node_fill": "#1f2937",  # gray-800
-    "text": "#f3f4f6",  # gray-100
-    "text_dim": "#9ca3af",  # gray-400
-    "edge": "#6b7280",  # gray-500
-    "edge_parallel": "#8b5cf6",  # purple-500
-    "edge_executed": "#22c55e",  # green-500
+    "complete": "var(--color-ok, #22c55e)",
+    "failed": "var(--color-fail, #ef4444)",
+    "running": "var(--color-ink, #3b82f6)",
+    "skipped": "var(--color-faint, #6b7280)",
+    "not_executed": "var(--color-line, #374151)",
+    "node_stroke": "var(--color-gray-600, #4b5563)",
+    "node_fill": "var(--color-surface, #1f2937)",
+    "text": "var(--color-ink, #f3f4f6)",
+    "text_dim": "var(--color-muted, #9ca3af)",
+    "edge": "var(--color-faint, #6b7280)",
+    "edge_parallel": "var(--color-muted, #8b5cf6)",
+    "edge_executed": "var(--color-ok, #22c55e)",
 }
 
 
@@ -313,7 +315,7 @@ class WorkflowDiagramGenerator:
             f'<rect class="node-rect" '
             f'x="{pos.x}" y="{pos.y}" '
             f'width="{NODE_WIDTH}" height="{NODE_HEIGHT}" '
-            f'fill="{fill_color}" stroke="{stroke_color}" stroke-width="2"/>',
+            f'style="fill: {fill_color}; stroke: {stroke_color}" stroke-width="2"/>',
             # Task name
             f'<text class="node-text" x="{cx}" y="{cy}">{html.escape(name)}</text>',
         ]
@@ -348,7 +350,7 @@ class WorkflowDiagramGenerator:
             return (
                 f'<g class="status-icon" transform="translate({x}, {y})">'
                 f'<circle cx="{size / 2}" cy="{size / 2}" r="{size / 2}" '
-                f'fill="{COLORS["complete"]}"/>'
+                f'style="fill: {COLORS["complete"]}"/>'
                 f'<path d="M{size * 0.25} {size * 0.5} L{size * 0.45} {size * 0.7} '
                 f'L{size * 0.75} {size * 0.3}" '
                 f'stroke="white" stroke-width="1.5" fill="none"/>'
@@ -359,7 +361,7 @@ class WorkflowDiagramGenerator:
             return (
                 f'<g class="status-icon" transform="translate({x}, {y})">'
                 f'<circle cx="{size / 2}" cy="{size / 2}" r="{size / 2}" '
-                f'fill="{COLORS["failed"]}"/>'
+                f'style="fill: {COLORS["failed"]}"/>'
                 f'<path d="M{size * 0.3} {size * 0.3} L{size * 0.7} {size * 0.7} '
                 f'M{size * 0.7} {size * 0.3} L{size * 0.3} {size * 0.7}" '
                 f'stroke="white" stroke-width="1.5"/>'
@@ -370,9 +372,9 @@ class WorkflowDiagramGenerator:
             return (
                 f'<g class="status-icon" transform="translate({x}, {y})">'
                 f'<circle cx="{size / 2}" cy="{size / 2}" r="{size / 2}" '
-                f'fill="{COLORS["running"]}"/>'
+                f'style="fill: {COLORS["running"]}"/>'
                 f'<circle cx="{size / 2}" cy="{size / 2}" r="{size * 0.3}" '
-                f'fill="white"/>'
+                f'style="fill: var(--color-ground, white)"/>'
                 f"</g>"
             )
         else:
@@ -380,7 +382,7 @@ class WorkflowDiagramGenerator:
             return (
                 f'<g class="status-icon" transform="translate({x}, {y})">'
                 f'<circle cx="{size / 2}" cy="{size / 2}" r="{size / 2 - 1}" '
-                f'fill="none" stroke="{COLORS["node_stroke"]}" stroke-width="1"/>'
+                f'fill="none" style="stroke: {COLORS["node_stroke"]}" stroke-width="1"/>'
                 f"</g>"
             )
 
@@ -420,7 +422,7 @@ class WorkflowDiagramGenerator:
                     refX="{ARROW_HEAD_SIZE}" refY="{ARROW_HEAD_SIZE / 2}" 
                     orient="auto">
                 <polygon points="0 0, {ARROW_HEAD_SIZE} {ARROW_HEAD_SIZE / 2}, 0 {ARROW_HEAD_SIZE}" 
-                         fill="{COLORS["edge_parallel"]}"/>
+                         style="fill: {COLORS["edge_parallel"]}"/>
             </marker>
         </defs>
         """
@@ -473,7 +475,7 @@ class WorkflowDiagramGenerator:
 
         return (
             f'<path class="edge" d="{path}" '
-            f'stroke="{stroke_color}" stroke-width="{stroke_width}" '
+            f'style="stroke: {stroke_color}" stroke-width="{stroke_width}" '
             f'{dash} marker-end="{marker}"/>'
         )
 
