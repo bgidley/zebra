@@ -170,21 +170,21 @@
                     <!-- Task Header -->
                     <div class="px-6 py-3 cursor-pointer hover:bg-gray-700/30 transition-colors"
                          @click="expanded = !expanded; selectedTask = 'parent-{{ task.task_id }}'">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="flex min-w-0 items-center gap-3">
                                 {% if task.execution_order %}
-                                <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-700 text-xs text-gray-300 font-mono">
+                                <span class="inline-flex shrink-0 items-center justify-center h-6 w-6 rounded-full bg-gray-700 text-xs text-gray-300 font-mono">
                                     {{ task.execution_order }}
                                 </span>
                                 {% else %}
-                                <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-800 text-xs text-gray-500 font-mono">
+                                <span class="inline-flex shrink-0 items-center justify-center h-6 w-6 rounded-full bg-gray-800 text-xs text-gray-500 font-mono">
                                     -
                                 </span>
                                 {% endif %}
-                                <span class="font-medium text-white">{{ task.task_name }}</span>
-                                <span class="text-sm text-gray-500">({{ task.task_id }})</span>
+                                <span class="min-w-0 truncate font-medium text-white">{{ task.task_name }}</span>
+                                <span class="hidden sm:inline truncate text-sm text-gray-500">({{ task.task_id }})</span>
                             </div>
-                            <div class="flex items-center gap-3">
+                            <div class="flex shrink-0 items-center gap-3">
                                 {% if task.state == "complete" %}
                                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-900/50 text-green-400 text-xs">Complete</span>
                                 {% else %}
@@ -268,17 +268,17 @@
                 <!-- Task Header -->
                 <div class="px-6 py-4 cursor-pointer hover:bg-gray-700/30 transition-colors"
                      @click="expanded = !expanded; selectedTask = '{{ task.task_id }}'">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex min-w-0 items-center gap-3">
                             <!-- Execution order -->
-                            <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-700 text-xs text-gray-300 font-mono">
+                            <span class="inline-flex shrink-0 items-center justify-center h-6 w-6 rounded-full bg-gray-700 text-xs text-gray-300 font-mono">
                                 {{ task.execution_order }}
                             </span>
                             <!-- Task name -->
-                            <span class="font-medium text-white">{{ task.task_name }}</span>
-                            <span class="text-sm text-gray-500">({{ task.task_id }})</span>
+                            <span class="min-w-0 truncate font-medium text-white">{{ task.task_name }}</span>
+                            <span class="hidden sm:inline truncate text-sm text-gray-500">({{ task.task_id }})</span>
                         </div>
-                        <div class="flex items-center gap-3">
+                        <div class="flex shrink-0 items-center gap-3">
                             <!-- Duration -->
                             {% if task.duration %}
                             <span class="text-sm text-gray-400">{{ task.duration }}</span>

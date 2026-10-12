@@ -6,11 +6,37 @@ Usage in templates::
     {{ run.cost|usd }}        -> $1,234.50, <$0.01, $0.00
 """
 
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from django import template
+from django.utils import timezone
 
 register = template.Library()
+
+_UNITS = (("d", 86400), ("h", 3600), ("m", 60))
+
+
+@register.filter
+def ago(value: datetime | None) -> str:
+    """Compact relative time with one unit: ``now``, ``5m``, ``3h``, ``2d`` (then ``ago``).
+
+    Args:
+        value: An aware or naive datetime in the past.
+
+    Returns:
+        e.g. ``"3h ago"``; ``""`` for empty or invalid values.
+    """
+    if not isinstance(value, datetime):
+        return ""
+    now = timezone.now() if timezone.is_aware(value) else datetime.now()
+    seconds = int((now - value).total_seconds())
+    if seconds < 60:
+        return "now"
+    for suffix, size in _UNITS:
+        if seconds >= size:
+            return f"{seconds // size}{suffix} ago"
+    return "now"
 
 
 @register.filter

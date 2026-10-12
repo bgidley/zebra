@@ -11,6 +11,7 @@ All URLs are simplified since this is an agent-only application:
 
 import asyncio
 import logging
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -142,6 +143,30 @@ async def _running_activities(store, limit: int = RUNNING_ACTIVITIES_LIMIT) -> l
     return activities
 
 
+def _budget_bars(status: dict) -> dict:
+    """Widths (percent of the daily budget) for the dashboard spend bar (#162).
+
+    ``spent_pct`` is today's spend; ``paced_pct`` is the paced allowance so far,
+    drawn as a hatched band. ``over_pace`` is true once spend passes the allowance.
+    """
+
+    def _num(key: str) -> float:
+        try:
+            return float(status.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    daily = _num("daily_budget")
+    spent, paced = _num("spent_today"), _num("paced_allowance")
+    if daily <= 0:
+        return {"spent_pct": 0.0, "paced_pct": 0.0, "over_pace": spent > paced}
+    return {
+        "spent_pct": round(min(100.0, max(0.0, spent / daily * 100)), 1),
+        "paced_pct": round(min(100.0, max(0.0, paced / daily * 100)), 1),
+        "over_pace": spent > paced,
+    }
+
+
 async def dashboard(request):
     """Agent dashboard with overview of workflows and recent activity."""
     await agent_engine.ensure_initialized()
@@ -176,6 +201,8 @@ async def dashboard(request):
         budget_status["queue_depth"] = len(created_processes)
     except RuntimeError:
         pass  # Budget manager not initialized
+    if budget_status:
+        budget_status.update(_budget_bars(budget_status))
 
     # Trust by domain (F12) — read-only display of the current trust levels
     trust_levels = None
@@ -211,6 +238,8 @@ async def dashboard(request):
         "total_runs": total_runs,
         "running_count": len(running_activities),
         "running_activities": running_activities,
+        # Goals waiting on a human task lead the dashboard (#162)
+        "needs_you": [a for a in running_activities if a["awaiting_human"]],
         "success_rate": f"{success_rate:.0%}",
         "budget": budget_status,
         "trust_levels": trust_levels,
@@ -293,6 +322,53 @@ async def workflow_library(request):
     return render(request, "pages/workflow_library.html", context)
 
 
+def _workflow_structure(library, workflow_name: str) -> dict:
+    """Diagram and ordered steps for the workflow detail page (#162).
+
+    Steps follow the routings breadth-first from the first task, so they read in
+    roughly the order the workflow runs; unreachable tasks come last. Returns
+    empty values (and logs) if the definition can't be loaded or drawn, so the
+    page still shows its stats and YAML.
+    """
+    try:
+        from zebra_agent_web.diagram import generate_workflow_svg
+
+        definition = library.get_workflow(workflow_name)
+        order: list[str] = []
+        queue = [definition.first_task_id]
+        while queue:
+            task_id = queue.pop(0)
+            if task_id in order or task_id not in definition.tasks:
+                continue
+            order.append(task_id)
+            queue.extend(r.dest_task_id for r in definition.routings if r.source_task_id == task_id)
+        order += [t for t in definition.tasks if t not in order]
+        steps = [
+            {
+                "id": task_id,
+                "name": definition.tasks[task_id].name or task_id,
+                "action": definition.tasks[task_id].action,
+                "human": not definition.tasks[task_id].auto,
+                "synchronized": definition.tasks[task_id].synchronized,
+            }
+            for task_id in order
+        ]
+        svg = generate_workflow_svg(definition)
+        # Long workflows are unreadable when squeezed to the panel width; draw at
+        # natural size and let the panel scroll sideways instead.
+        size = re.search(r'viewBox="0 0 ([\d.]+) ', svg)
+        if size:
+            svg = svg.replace(
+                'style="max-width: 100%; height: auto;"',
+                f'width="{size.group(1)}" style="max-width: none; height: auto;"',
+                1,
+            )
+        return {"diagram_svg": svg, "steps": steps}
+    except Exception:
+        logger.warning("Could not build structure for workflow %s", workflow_name, exc_info=True)
+        return {"diagram_svg": None, "steps": []}
+
+
 async def workflow_detail(request, workflow_name):
     """View a specific workflow's YAML and stats."""
     await agent_engine.ensure_initialized()
@@ -313,6 +389,7 @@ async def workflow_detail(request, workflow_name):
     context = {
         "workflow_name": workflow_name,
         "retired": workflow_info.retired if workflow_info else None,
+        **_workflow_structure(library, workflow_name),
         "yaml_content": yaml_content,
         "description": workflow_info.description if workflow_info else "",
         "tags": workflow_info.tags if workflow_info else [],
