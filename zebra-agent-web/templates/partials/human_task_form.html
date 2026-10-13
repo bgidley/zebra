@@ -10,7 +10,7 @@ Parameters passed via context:
   - process_name: name of the parent process/workflow
   - form_description: resolved description from schema (may include template vars)
 {% endcomment %}
-{% load form_tags %}
+{% load form_tags markdown_tags %}
 
 <div id="task-form-{{ task.id }}" class="bg-gray-800 rounded-lg border border-gray-700 p-6">
     {% comment %} Header {% endcomment %}
@@ -35,7 +35,7 @@ Parameters passed via context:
         {% for label, value in prior_outputs.items %}
         <div class="bg-gray-900 rounded-md border border-gray-600 p-4">
             <div class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">{{ label }}</div>
-            <div class="text-sm text-gray-200 whitespace-pre-wrap">{% if value is not None %}{{ value }}{% endif %}</div>
+            <div class="md-body overflow-auto max-h-[32rem]">{{ value|markdown }}</div>
         </div>
         {% endfor %}
     </div>
