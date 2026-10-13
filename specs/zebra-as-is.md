@@ -91,6 +91,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 - Convention-based: `auto: false` + a JSON Schema under `properties.schema`. No action runs; the task sits `READY` until externally completed.
 - `zebra.forms` converts JSON Schema to a `FormSchema` (list of `FormField`), with `coerce_form_data` and `validate_form_data` helpers. Enum fields can drive named routes (e.g., approve / reject).
+- **Generated forms (#179):** `schema` may instead be a single `{{reference}}` (`{{key}}`, `{{key.field}}`, `{{task_id.output}}`) to a JSON Schema an earlier task wrote, typically an `llm_call` with `response_format: json`, so follow-up questions become one field each. `zebra.forms.resolve_task_schema()` resolves it; every schema reader (web form/submit/task lists, complete-task and pending-tasks APIs, `execute_goal_workflow` `user_inputs`) uses it. An unresolvable reference falls back to the single `response` field. The workflow creator prompt teaches the pattern and `check_generated_workflow` rejects non-reference schema strings. See `openspec/specs/dynamic-human-forms/spec.md`.
 
 ### Strengths
 

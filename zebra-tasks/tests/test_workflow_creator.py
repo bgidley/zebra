@@ -185,6 +185,41 @@ async def test_route_name_after_llm_call_is_rejected(task, context):
     assert "llm_call tasks never choose a route" in result.error
 
 
+_STATIC_SCHEMA = (
+    "    properties:\n      schema:\n        type: object\n        properties:\n"
+    "          savings:\n            type: number\n"
+)
+
+
+async def test_generated_form_reference_is_accepted(task, context):
+    """A human task may take its schema from an earlier task's JSON output (#179)."""
+    assert _STATIC_SCHEMA in _VALID_YAML
+    yaml_text = _VALID_YAML.replace(_STATIC_SCHEMA, '    properties:\n      schema: "{{form}}"\n')
+
+    result, _ = await _run(task, context, _response(yaml_text))
+
+    assert result.success is True
+
+
+async def test_prose_schema_string_is_rejected(task, context):
+    yaml_text = _VALID_YAML.replace(
+        _STATIC_SCHEMA, '    properties:\n      schema: "Answer these: {{questions}}"\n'
+    )
+
+    result, _ = await _run(task, context, _response(yaml_text))
+
+    assert result.success is False
+    assert "single {{reference}}" in result.error
+
+
+async def test_system_prompt_teaches_generated_forms(task, context):
+    _, provider = await _run(task, context, _response(_VALID_YAML))
+
+    system_prompt = provider.complete.call_args.kwargs["messages"][0].content
+    assert 'schema: "{{followup_form}}"' in system_prompt
+    assert "one field per" in system_prompt
+
+
 def test_prompt_template_forms_resolve():
     """The Data Flow forms the prompt teaches must resolve with the real resolver."""
     from zebra.tasks.base import ExecutionContext

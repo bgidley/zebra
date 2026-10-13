@@ -677,7 +677,7 @@ my_task:
           format: multiline
 ```
 
-Use `readOnly: true` on schema fields to display computed/read-only values. Use `default: "{{template}}"` to pre-populate fields from workflow properties.
+Use `readOnly: true` on schema fields to display computed/read-only values. Use `default: "{{template}}"` to pre-populate fields from workflow properties. A whole schema can also be generated at runtime: `schema: "{{followup_form}}"` resolves to a JSON Schema an earlier `llm_call` (`response_format: json`) wrote, giving one field per follow-up question (#179).
 
 See `zebra-py/AGENTS.md` for JSON Schema widget mapping and form utility functions (`zebra.forms` module).
 

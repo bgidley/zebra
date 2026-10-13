@@ -44,3 +44,27 @@ def test_user_inputs_are_human_task_answers_without_readonly_fields():
     }
     inputs = ExecuteGoalWorkflowAction._extract_user_inputs(properties, definition)
     assert inputs == {"Where from?": {"origin": "York"}}
+
+
+def test_user_inputs_use_generated_schema_for_readonly_fields():
+    """A runtime-generated form schema (#179) is resolved before filtering."""
+    static_schema = (
+        "      schema:\n        type: object\n        properties:\n"
+        "          goal:\n            type: string\n            readOnly: true\n"
+        "          origin:\n            type: string\n"
+    )
+    assert static_schema in _YAML
+    definition = load_definition_from_yaml(
+        _YAML.replace(static_schema, '      schema: "{{ask_form}}"\n')
+    )
+    properties = {
+        "ask_form": {
+            "properties": {
+                "goal": {"type": "string", "readOnly": True},
+                "origin": {"type": "string"},
+            }
+        },
+        "__task_output_ask": {"goal": "plan my commute", "origin": "York"},
+    }
+    inputs = ExecuteGoalWorkflowAction._extract_user_inputs(properties, definition)
+    assert inputs == {"Where from?": {"origin": "York"}}

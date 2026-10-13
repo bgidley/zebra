@@ -4,6 +4,7 @@ import re
 
 from zebra.core.models import ProcessDefinition, TaskInstance, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml, validate_definition
+from zebra.forms import SCHEMA_REF
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import with_previous_run
@@ -33,6 +34,14 @@ def check_generated_workflow(response: LLMResponse, definition: ProcessDefinitio
             errors.append(
                 f"Routing from '{routing.source_task_id}' uses condition route_name, "
                 "but llm_call tasks never choose a route"
+            )
+    # A runtime-built form schema must be a single {{reference}} (#179).
+    for task_id, task_def in definition.tasks.items():
+        schema = task_def.properties.get("schema")
+        if isinstance(schema, str) and not SCHEMA_REF.match(schema):
+            errors.append(
+                f"Task '{task_id}' schema must be a JSON Schema object or a "
+                "single {{reference}} to one"
             )
     if errors:
         return "; ".join(errors)
@@ -251,6 +260,40 @@ routings:
     condition: route_name
     name: "no"
 ```
+
+### Generated forms (follow-up questions)
+When the questions to ask depend on earlier answers, let an `llm_call` with
+`response_format: json` write the form, and set the human task's `schema` to a
+reference to it: `schema: "{{output_key}}"`. The form then has one field per
+question. Never put questions in a description with a single "answer by number"
+field. The LLM must return a JSON Schema object: `title`, a markdown
+`description` (e.g. what it has understood so far), `required`, and
+`properties`, one string field per question with `title` = the question and
+`description` = why it matters. If the reference does not resolve to a schema
+the user gets a single free-text field.
+```yaml
+  prepare_followups:
+    name: "Prepare Follow-up Questions"
+    action: llm_call
+    auto: true
+    properties:
+      response_format: json
+      prompt: |
+        Answers so far: {{first_form.output}}
+        Return ONLY a JSON Schema object for a form with at most 6 follow-up
+        questions: {"type": "object", "title": "...", "description": "...",
+        "required": ["q1"], "properties": {"q1": {"type": "string",
+        "title": "<question>", "description": "<why it matters>",
+        "format": "multiline"}}}
+      output_key: followup_form
+
+  followups:
+    name: "Follow-up Questions"
+    auto: false
+    properties:
+      schema: "{{followup_form}}"
+```
+Later tasks read the answers with `{{followups.output}}`.
 
 ## Guidelines
 
