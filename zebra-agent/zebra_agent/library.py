@@ -30,6 +30,7 @@ class WorkflowInfo:
     success_rate: float = 0.0
     use_count: int = 0
     retired: dict[str, Any] | None = None  # {reason, retired_at, superseded_by} (#148)
+    inputs: dict[str, Any] | None = None  # JSON Schema of tool arguments; None = {goal} (#146)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -124,7 +125,8 @@ async def list_goal_workflows(library: "WorkflowLibrary") -> list[dict[str, Any]
 
     This is the single source of the Agent Main Loop's ``available_workflows``:
     every entry point that creates a goal process, and the workflow selector
-    itself, build the list here. Workflows tagged ``system`` are excluded.
+    itself, build the list here. Workflows tagged ``system`` are excluded, and so
+    are tool-only workflows whose ``inputs`` require more than a ``goal`` (#146).
 
     Args:
         library: The workflow library to list.
@@ -144,8 +146,18 @@ async def list_goal_workflows(library: "WorkflowLibrary") -> list[dict[str, Any]
             "use_when": w.use_when,
         }
         for w in workflows
-        if SYSTEM_TAG not in (w.tags or [])
+        if SYSTEM_TAG not in (w.tags or []) and not is_tool_only(w)
     ]
+
+
+def is_tool_only(info: WorkflowInfo) -> bool:
+    """True when the workflow needs arguments a goal cannot supply (only ``goal`` can).
+
+    Such workflows (e.g. *Read Web Page*, which needs a ``url``) are called as
+    ``llm_agent`` tools, never selected for a goal (#146).
+    """
+    required = (info.inputs or {}).get("required") or []
+    return any(name != "goal" for name in required)
 
 
 def _recover_name(raw: str) -> str | None:
@@ -237,6 +249,7 @@ class WorkflowLibrary:
             tags = data.get("tags", [])
             version = data.get("version", 1)
             use_when = data.get("use_when")  # LLM selection hint
+            inputs = data.get("inputs") or (data.get("properties") or {}).get("inputs")
 
             # Get stats from metrics store (if available)
             stats = WorkflowStats(workflow_name=name)  # Default stats
@@ -256,6 +269,7 @@ class WorkflowLibrary:
                 use_when=use_when,
                 success_rate=stats.success_rate,
                 use_count=stats.total_runs,
+                inputs=inputs if isinstance(inputs, dict) else None,
             )
         except Exception as e:
             logger.warning(f"Failed to load workflow info from {yaml_file}: {e}")

@@ -22,6 +22,7 @@ This directory contains requirements and design specifications for Zebra.
 | [f22-dilemma-escalation.md](f22-dilemma-escalation.md) | F22: Dilemma escalation — ethics gate `escalate` verdict + human resolution task showing both sides | Implemented |
 | [f28-event-bus.md](f28-event-bus.md) | F28: Event-driven trigger bus — forward spec (NOT YET IMPLEMENTED, deferred from original close) | Forward spec |
 | [memory-vector-embeddings-design.md](memory-vector-embeddings-design.md) | #169: Goal-relevant memory/knowledge retrieval via Oracle 26ai in-database embeddings (ONNX model from Object Storage, triggers, `VECTOR_DISTANCE`), keyword fallback elsewhere | Implemented |
+| [llm-agent-tools-design.md](llm-agent-tools-design.md) | #146: LLM tool use via workflows: engine suspend-on-subflow (`AWAITING_SUBFLOW`, `TaskResult.suspend`), `llm_agent` action, workflow `inputs:` schemas, `define_workflow` | Implemented |
 | [web-ui-design.md](web-ui-design.md) | #159–#163: web UI frame and voice rules: tokens, light/dark theme with enforced WCAG AA, components, voice layer, copy | Implemented |
 | [podman-single-host-design.md](podman-single-host-design.md) | F117: Single-host rootless Podman deployment (Quadlet web + daemon, GitLab shell runner) — replaces the lost OKE cluster (F108–F111) | Implemented |
 

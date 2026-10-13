@@ -20,6 +20,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/llm/` | LLM provider integrations |
 | `zebra_tasks/llm/base.py` | LLMProvider base class, Message model |
 | `zebra_tasks/llm/action.py` | LLMCallAction task action |
+| `zebra_tasks/llm/agent.py` | LLMAgentAction (`llm_agent`): workflows as tools, each call a child process the task suspends on; `define_workflow`; cost roll-up; zero-cost tool `WorkflowRun`s (#146) |
 | `zebra_tasks/llm/providers/` | Provider implementations |
 | `zebra_tasks/llm/providers/anthropic.py` | Anthropic (Claude) provider: no `temperature` for Claude 4.6+/5 models; `output_config.effort: xhigh` for Sonnet/Haiku 5.5, which otherwise reason aloud in the reply on short prompts, plus `THINKING_HEADROOM_TOKENS` (4096) added to `max_tokens` so thinking does not eat the answer budget (#168) |
 | `zebra_tasks/llm/providers/openai.py` | OpenAI provider |
@@ -181,6 +182,23 @@ Call an LLM provider from a workflow task.
 | `model` | string | null | Model name override (supports aliases: `haiku`, `sonnet`, `opus`) |
 
 **Cost Tracking:** `LLMCallAction._track_tokens()` calculates cost via `pricing.calculate_cost()`, accumulates `__total_cost__` and `__token_history__` on process properties, and soft-warns via `__budget_manager__` from `context.extras` if the per-goal cost exceeds a threshold.
+
+### LLMAgentAction (`llm_agent`, #146)
+
+An LLM task whose tools are workflows. A tool call creates a child process of the calling process (arguments become its properties; `__` keys are dropped; user identity, provider/model and `__agent_depth__`+1 are copied) and returns `TaskResult.suspend`. On resume the child results become tool results, child cost is added to the caller, and the tool run is recorded as a `WorkflowRun` with cost 0. Unknown tools and failed children are error tool results.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `prompt` / `system_prompt` / `messages` | | - | As `llm_call`, resolved once |
+| `tools` | list | [] | Workflow names to offer |
+| `tool_tags` | list | [] | Also offer workflows with these tags (no `system`), best `success_rate` first |
+| `max_tag_tools` | int | 8 | Cap on tag-selected tools |
+| `allow_define_workflow` | bool | false | Offer `define_workflow` (runs *Define Workflow*: ethics gate → `workflow_creator`) |
+| `max_tool_turns` | int | 8 | Tool-calling turns before the task fails |
+| `max_depth` | int | 3 | Run without tools at this `__agent_depth__` |
+| `output_key` | string | `agent_response` | Where to store the final answer |
+
+**Output:** `{response, transcript: [{tool, workflow, arguments, process_id, success, result}], turns, tools}`. Declare the task `idempotent: true`. Missing `__workflow_library__` → plain LLM call, no tools.
 
 ### SubworkflowAction
 

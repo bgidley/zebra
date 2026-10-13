@@ -1,0 +1,58 @@
+name: "Define Workflow"
+description: "Check, design and save a new reusable workflow. Run by llm_agent's define_workflow tool (#146)."
+tags: ["system", "workflow-creation"]
+version: 1
+first_task: ethics_check
+result_key: created_workflow
+inputs:
+  type: object
+  required: [goal]
+  properties:
+    goal:
+      type: string
+      description: "What the new workflow should do"
+    suggested_name:
+      type: string
+      description: "Short name for the workflow"
+
+tasks:
+  ethics_check:
+    name: "Ethics Check"
+    action: ethics_gate
+    auto: true
+    properties:
+      goal: "Create a reusable workflow that will: {{goal}}"
+      check_type: "input_gate"
+      output_key: ethics_assessment
+
+  create:
+    name: "Create Workflow"
+    action: workflow_creator
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      suggested_name: "{{suggested_name}}"
+      output_key: created_workflow
+
+  # A dilemma needs a human; a tool call cannot wait for one, so it is a refusal.
+  rejected:
+    name: "Rejected"
+    action: propagate_failure
+    auto: true
+    properties:
+      success: false
+      error: "The ethics gate did not approve this workflow: {{ethics_assessment.overall_reasoning}}"
+
+routings:
+  - from: ethics_check
+    to: create
+    condition: route_name
+    name: "proceed"
+  - from: ethics_check
+    to: rejected
+    condition: route_name
+    name: "reject"
+  - from: ethics_check
+    to: rejected
+    condition: route_name
+    name: "escalate"

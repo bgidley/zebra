@@ -67,11 +67,13 @@ class TaskState(str, Enum):
 
     Lifecycle for auto tasks: PENDING -> READY -> RUNNING -> COMPLETE
     Lifecycle for sync tasks: PENDING -> AWAITING_SYNC -> READY -> RUNNING -> COMPLETE
+    Suspended tasks: RUNNING -> AWAITING_SUBFLOW -> READY -> RUNNING -> ... (#146)
     Manual tasks wait in READY state until explicitly transitioned.
     """
 
     PENDING = "pending"  # Created but not yet processed
     AWAITING_SYNC = "awaiting_sync"  # Waiting for parallel branches (join point)
+    AWAITING_SUBFLOW = "awaiting_subflow"  # Suspended until its child processes finish
     READY = "ready"  # Ready to execute (manual tasks wait here)
     RUNNING = "running"  # Currently executing
     COMPLETE = "complete"  # Terminal state - success
@@ -313,6 +315,11 @@ class TaskResult(BaseModel):
         default=None,
         description="For decision tasks: name of the routing to follow (overrides conditions)",
     )
+    suspend_children: list[str] | None = Field(
+        default=None,
+        description="Child process ids to wait for. When set, the task suspends in "
+        "AWAITING_SUBFLOW and its action is re-run once every child is terminal (#146).",
+    )
 
     @classmethod
     def ok(cls, output: Any = None) -> "TaskResult":
@@ -323,3 +330,16 @@ class TaskResult(BaseModel):
     def fail(cls, error: str) -> "TaskResult":
         """Create a failed result."""
         return cls(success=False, error=error)
+
+    @classmethod
+    def suspend(cls, children: list[str]) -> "TaskResult":
+        """Suspend the task until the given child processes are terminal.
+
+        The children must be processes the action created (left in CREATED, or
+        already started) with ``parent_task_id`` set to this task. The engine
+        starts any still in CREATED, then re-runs the action with
+        ``context.subflow_results`` once all of them are COMPLETE or FAILED.
+        """
+        if not children:
+            raise ValueError("suspend() needs at least one child process id")
+        return cls(success=True, suspend_children=list(children))

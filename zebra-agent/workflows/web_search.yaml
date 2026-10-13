@@ -2,9 +2,16 @@ name: "Web Research"
 description: "Search the web for information on a topic and summarise the findings."
 tags: ["web", "research", "search", "internet", "kagi"]
 use_when: "The user wants to find information from the internet, look up recent events, facts, prices, news, or research any topic that requires up-to-date or external knowledge."
-version: 1
+version: 2
 first_task: search
 result_key: summary
+inputs:
+  type: object
+  required: [goal]
+  properties:
+    goal:
+      type: string
+      description: "The search query, or the question to research"
 
 tasks:
   search:

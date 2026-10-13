@@ -41,6 +41,7 @@ dev = [
 [project.entry-points."zebra.tasks"]
 # LLM
 llm_call = "zebra_tasks.llm.action:LLMCallAction"
+llm_agent = "zebra_tasks.llm.agent:LLMAgentAction"
 # Subtasks
 subworkflow = "zebra_tasks.subtasks.spawn:SubworkflowAction"
 wait_subworkflow = "zebra_tasks.subtasks.wait:WaitForSubworkflowAction"

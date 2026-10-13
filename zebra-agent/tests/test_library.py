@@ -184,6 +184,24 @@ class TestListGoalWorkflows:
     async def test_empty_library(self, library):
         assert await list_goal_workflows(library) == []
 
+    async def test_excludes_tool_only_workflows(self, library):
+        """A workflow that needs more than a goal is an llm_agent tool only (#146)."""
+        (library.library_path / "a.yaml").write_text(
+            _workflow_yaml("Web Research", ["web"])
+            + "inputs:\n  type: object\n  required: [goal]\n"
+        )
+        (library.library_path / "b.yaml").write_text(
+            _workflow_yaml("Read Web Page", ["web"])
+            + "inputs:\n  type: object\n  required: [url]\n"
+        )
+
+        names = [w["name"] for w in await list_goal_workflows(library)]
+
+        assert names == ["Web Research"]
+        infos = {w.name: w for w in await library.list_workflows()}
+        assert infos["Read Web Page"].inputs["required"] == ["url"]
+        assert infos["Web Research"].inputs["required"] == ["goal"]
+
 
 class TestListWorkflows:
     """Tests for listing workflows."""
