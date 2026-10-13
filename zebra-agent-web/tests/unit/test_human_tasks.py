@@ -640,6 +640,41 @@ class TestHumanTaskForm:
         assert "Q1: What is 1+1?" in content
         assert "{{questions}}" not in content
 
+    async def test_prior_outputs_render_as_markdown(self, client, wf_engine):
+        """Earlier task outputs are rendered as markdown HTML, not raw text."""
+        defn = _template_default_definition()
+        process, pending = await _start_workflow(wf_engine, defn)
+        task = pending[0]
+
+        running = await wf_engine.store.load_process(process.id)
+        resp = "## Plan\n\n- **first** step\n\n<script>alert(1)</script>"
+        props = {"__task_output_draft": {"response": resp}}
+        await wf_engine.store.save_process(running.model_copy(update={"properties": props}))
+
+        response = await client.get(f"/tasks/{task.id}/")
+        content = response.content.decode()
+        assert "<h2>Plan</h2>" in content
+        assert "<li><strong>first</strong> step</li>" in content
+        assert "## Plan" not in content
+        assert "<script>alert(1)</script>" not in content
+
+    async def test_read_only_markdown_field_renders_server_side(self, client, wf_engine):
+        """readOnly string fields render markdown on the server, no marked.js needed."""
+        defn = _template_default_definition()
+        schema = defn.tasks["show_questions"].properties["schema"]
+        schema["properties"]["questions"]["readOnly"] = True
+        process, pending = await _start_workflow(wf_engine, defn)
+        task = pending[0]
+
+        running = await wf_engine.store.load_process(process.id)
+        props = {"questions": "1. **What** is 1+1?"}
+        await wf_engine.store.save_process(running.model_copy(update={"properties": props}))
+
+        response = await client.get(f"/tasks/{task.id}/")
+        content = response.content.decode()
+        assert "<li><strong>What</strong> is 1+1?</li>" in content
+        assert "marked" not in content
+
     async def test_404_for_unknown_task(self, client):
         """Unknown task_id returns 404 with a styled error page.
 
