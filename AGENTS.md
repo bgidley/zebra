@@ -97,6 +97,8 @@ git push github master          # closes the GitHub PR
 git branch -d fN/short-description
 git push origin --delete fN/short-description
 ```
+From a git worktree you can't `git checkout master` (it's checked out in the main checkout);
+use the worktree recipe under **Forks, worktrees & background agents** below.
 
 ### Linting (MUST before every commit)
 
@@ -135,6 +137,59 @@ If the merge cannot be done (merge conflicts you can't resolve safely, a red pip
 fix, missing credentials/access, or the change is risky or ambiguous), **stop and ask the user for
 input/permission** before proceeding — explain what blocked the merge and what you propose. Never
 force-push or discard others' work to get a merge through.
+
+**Merging from a worktree.** Merge on a detached HEAD at the latest master and push it:
+```bash
+git fetch origin master
+git log --oneline fN/short-description..origin/master   # did master move? check for overlap
+git checkout --detach origin/master
+git merge --no-ff fN/short-description -m "Merge fN/short-description — Closes #N"
+# if master moved since the branch pipeline: re-run ruff + unit tests on the merged tree first
+git push origin HEAD:master
+git push github HEAD:master
+git push origin --delete fN/short-description
+git push github --delete fN/short-description
+```
+
+**After the master pipeline is green, clean up (MUST).** In this order:
+
+1. **Remove your worktree** (leave it first; the main checkout is off-limits from inside a
+   worktree). Check it's safe: `git status --porcelain` is empty and
+   `git merge-base --is-ancestor HEAD origin/master` succeeds. Then `ExitWorktree` with
+   `action: "remove"`. If it warns "N commits will be discarded" but the check above passed, that
+   count is against the worktree's original branch name, not master: re-run with
+   `discard_changes: true`.
+2. **Update the main checkout** so the user's working copy matches what was deployed —
+   fast-forward only, and only if it is on `master` with no local changes:
+   ```bash
+   git fetch origin master
+   [ "$(git branch --show-current)" = master ] \
+     && [ -z "$(git status --porcelain --untracked-files=no)" ] \
+     && git merge --ff-only origin/master
+   ```
+   If it is on another branch, has local changes, or can't fast-forward, leave it alone and say
+   so in your report.
+3. **Delete the local branch** once it is in `origin/master`:
+   `git merge-base --is-ancestor fN/short-description origin/master && git branch -D fN/short-description`.
+
+Never remove another session's worktree or branch unless it is clean, already in
+`origin/master` (nothing ahead), and idle for over a day; otherwise report it and ask.
+
+### Agent-mode practicalities
+
+- **Worktree guard:** in a worktree-isolated session, run git as plain, separate commands. Chained
+  commands, heredocs or scripts that mention git may be refused; put larger edits in a script file
+  or use the Edit tool.
+- **Never use port 8000** (prod). Run a local server on another port with a throwaway SQLite
+  settings module and `ZEBRA_DAEMON_AUTO_START=0` (only one daemon may touch prod Oracle). Build
+  the CSS first: `uv run python scripts/build_css.py`.
+- **Browser checks:** the host lacks Chromium's system libraries. Use the Playwright container:
+  `podman run --rm --network=host -v <dir>:/job:Z mcr.microsoft.com/playwright/python:v1.55.0-noble …`.
+  It also has WebKit for Safari / iPad checks (`p.webkit` with `p.devices["iPad (gen 7)"]`).
+- **Claude Code settings:** shared project settings live in `.claude/settings.json` (committed);
+  personal overrides go in `.claude/settings.local.json` (git-ignored).
+- **Async Django tests** that create rows (e.g. users via `sync_to_async`) need
+  `@pytest.mark.django_db(transaction=True)`, or the rows leak into later tests.
 
 ### Pipeline verification (MUST after every push)
 

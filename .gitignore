@@ -19,3 +19,6 @@ tmp
 
 # Compiled by scripts/build_css.py (built in the Docker image and CI, never committed)
 zebra-agent-web/static/css/app.css
+
+# Personal Claude Code overrides (shared settings live in .claude/settings.json)
+.claude/settings.local.json
