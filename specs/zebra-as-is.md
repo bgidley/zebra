@@ -130,8 +130,8 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 ### LLM integration
 
-- Provider abstraction supports **Anthropic Claude** (primary) and **OpenAI**, registered lazily via a factory registry.
-- Pricing table hardcoded in `pricing.py` (per-1M-token Anthropic rates); Sonnet defaults for unknowns.
+- Provider abstraction supports **Anthropic Claude** (primary), **OpenAI**, **Kimi** and **OpenRouter** (#182), registered lazily via a factory registry.
+- Pricing table hardcoded in `pricing.py` (per-1M-token Anthropic/Kimi rates); Sonnet defaults for unknowns. Providers that report a call's cost (OpenRouter's `usage.cost` → `TokenUsage.cost_usd`) bypass the table via `usage_cost()`.
 - Every call updates process properties: `__total_cost__`, `__total_tokens__`, `__token_history__`.
 - Soft budget warnings via an injected `__budget_manager__` (non-blocking).
 

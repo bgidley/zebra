@@ -79,6 +79,18 @@ def calculate_cost(
     return _cost(pricing, input_tokens, output_tokens)
 
 
+def usage_cost(model: str | None, usage) -> float:
+    """USD cost of one call: the provider-reported cost if any, else priced from the tables.
+
+    Args:
+        model: Model ID used for table pricing.
+        usage: The call's ``TokenUsage``.
+    """
+    if getattr(usage, "cost_usd", None) is not None:
+        return usage.cost_usd
+    return calculate_cost(model, usage.input_tokens, usage.output_tokens)
+
+
 def _cost(pricing: dict[str, float], input_tokens: int, output_tokens: int) -> float:
     return (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
 

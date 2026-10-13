@@ -23,7 +23,7 @@ QUADLET_DIR="$HOME/.config/containers/systemd"
 KEEP_IMAGES="${KEEP_IMAGES:-5}"
 # Secrets copied from GitLab CI variables into prod.env when present in the environment.
 SECRET_VARS=(ORACLE_DSN ORACLE_USERNAME ORACLE_PASSWORD ANTHROPIC_API_KEY KAGI_API_KEY
-             KIMI_API_KEY KIMI_BASE_URL
+             KIMI_API_KEY KIMI_BASE_URL OPENROUTER_API_KEY OPENROUTER_MODEL
              ZEBRA_SMTP_USERNAME ZEBRA_SMTP_PASSWORD ZEBRA_NOTIFY_WEBHOOK_URL)
 
 # CI jobs run via `su` without a login session; point systemctl at opc's user manager.

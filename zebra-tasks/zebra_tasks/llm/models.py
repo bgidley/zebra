@@ -27,6 +27,14 @@ KIMI_TIER_MODELS: dict[str, str] = {
     "opus": "kimi-k3",
 }
 
+# Anthropic tier names mapped to OpenRouter slugs, so `model: haiku` still works when the
+# provider is openrouter (#182).
+OPENROUTER_TIER_MODELS: dict[str, str] = {
+    "haiku": "anthropic/claude-haiku-5.5",
+    "sonnet": "anthropic/claude-sonnet-5.5",
+    "opus": "anthropic/claude-opus-5.5",
+}
+
 # Ordered list of friendly names for UI dropdowns / API validation.
 MODEL_CHOICES: list[str] = ["haiku", "sonnet", "opus"]
 

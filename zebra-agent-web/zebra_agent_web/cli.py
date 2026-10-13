@@ -82,7 +82,7 @@ def dev_public():
 # ---------------------------------------------------------------------------
 
 # Model aliases that require a non-default LLM provider.
-_MODEL_PROVIDERS = {"kimi": "kimi"}
+_MODEL_PROVIDERS = {"kimi": "kimi", "openrouter": "openrouter"}
 
 
 def _init_django() -> None:
@@ -232,7 +232,7 @@ def main() -> None:
     goal_p.add_argument(
         "--model",
         default="haiku",
-        choices=["haiku", "sonnet", "opus", "kimi"],
+        choices=["haiku", "sonnet", "opus", "kimi", "openrouter"],
         help="LLM model to use (default: haiku)",
     )
     goal_p.add_argument(
