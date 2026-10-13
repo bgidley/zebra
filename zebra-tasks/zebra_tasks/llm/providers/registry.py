@@ -81,6 +81,13 @@ def _try_auto_register(name: str) -> None:
             register_provider("kimi", lambda m: KimiProvider(model=m))
         except ImportError:
             pass
+    elif name == "openrouter":
+        try:
+            from zebra_tasks.llm.providers.openrouter import OpenRouterProvider
+
+            register_provider("openrouter", lambda m: OpenRouterProvider(model=m))
+        except ImportError:
+            pass
 
 
 def list_providers() -> list[str]:

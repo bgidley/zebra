@@ -26,7 +26,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--model",
             default="haiku",
-            choices=["haiku", "sonnet", "opus", "kimi"],
+            choices=["haiku", "sonnet", "opus", "kimi", "openrouter"],
             help="LLM model to use (default: haiku)",
         )
         parser.add_argument(
@@ -73,7 +73,7 @@ class Command(BaseCommand):
         run_id = str(uuid.uuid4())
 
         # Derive provider from model alias so non-Anthropic models route correctly
-        _MODEL_PROVIDERS = {"kimi": "kimi"}
+        _MODEL_PROVIDERS = {"kimi": "kimi", "openrouter": "openrouter"}
         provider = _MODEL_PROVIDERS.get(model)
 
         original_provider = agent_loop.provider_name

@@ -71,6 +71,8 @@ class TokenUsage:
 
     input_tokens: int
     output_tokens: int
+    # USD cost reported by the provider (e.g. OpenRouter); None means price it from tables.
+    cost_usd: float | None = None
 
     @property
     def total_tokens(self) -> int:

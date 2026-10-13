@@ -155,12 +155,12 @@ def _get_provider(task: TaskInstance, context: ExecutionContext) -> Any:
 
 
 def _track_cost(context: ExecutionContext, response: Any) -> None:
-    from zebra_tasks.llm.pricing import calculate_cost
+    from zebra_tasks.llm.pricing import usage_cost
 
     usage = response.usage
     tokens = context.get_process_property("__total_tokens__", 0)
     context.set_process_property("__total_tokens__", tokens + usage.total_tokens)
-    cost = calculate_cost(response.model, usage.input_tokens, usage.output_tokens)
+    cost = usage_cost(response.model, usage)
     total = context.get_process_property("__total_cost__", 0.0)
     context.set_process_property("__total_cost__", total + cost)
 

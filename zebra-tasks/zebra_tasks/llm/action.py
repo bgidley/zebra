@@ -292,13 +292,13 @@ class LLMCallAction(TaskAction):
         self, context: ExecutionContext, usage: TokenUsage, model: str | None = None
     ) -> None:
         """Track token usage and dollar cost in process properties."""
-        from zebra_tasks.llm.pricing import calculate_cost
+        from zebra_tasks.llm.pricing import usage_cost
 
         current = context.get_process_property("__total_tokens__", 0)
         context.set_process_property("__total_tokens__", current + usage.total_tokens)
 
         # Calculate cost for this call
-        call_cost = calculate_cost(model, usage.input_tokens, usage.output_tokens)
+        call_cost = usage_cost(model, usage)
         current_cost = context.get_process_property("__total_cost__", 0.0)
         new_total_cost = current_cost + call_cost
         context.set_process_property("__total_cost__", new_total_cost)
