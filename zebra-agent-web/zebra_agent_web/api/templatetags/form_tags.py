@@ -17,6 +17,8 @@ from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from zebra.forms import FormField, FormSchema
 
+from zebra_agent_web.api.templatetags.markdown_tags import render_markdown
+
 register = template.Library()
 
 # Sentinel to distinguish "no value submitted" from None/empty string
@@ -246,38 +248,19 @@ def _render_select(field: FormField, errors: list[str], value: Any = _UNSET) -> 
 def _render_markdown(field: FormField, value: Any = _UNSET) -> str:
     """Render a read-only markdown display panel (not a form input).
 
-    Uses marked.js (loaded from CDN) to convert markdown to HTML client-side.
-    A hidden input carries the raw value so it is submitted with the form if needed.
+    Markdown is rendered server-side with the same filter as run output, so it
+    displays without any client-side library. A hidden input carries the raw
+    value so it is submitted with the form if needed.
     """
     effective = _effective_value(value, field.default)
     content = str(effective) if effective is not None else ""
-    # Escape for embedding in a JS string literal (JSON.stringify handles this)
-    import json
-
-    content_json = json.dumps(content)
-    field_id = f"md_{escape(field.name)}"
 
     return f"""<div class="mb-4">
     <label class="{LABEL_CLASS}">{escape(field.title)}</label>
-    <div id="{field_id}"
-         class="prose prose-invert prose-sm max-w-none rounded-md bg-gray-750
-                border border-gray-600 px-4 py-3 text-gray-100 overflow-auto max-h-96">
-    </div>
+    <div id="md_{escape(field.name)}"
+         class="md-body rounded-md bg-gray-750 border border-gray-600 px-4 py-3
+                overflow-auto max-h-96">{render_markdown(content)}</div>
     <input type="hidden" name="{escape(field.name)}" value="{escape(content)}" />
-    <script>
-    (function() {{
-        var content = {content_json};
-        var el = document.getElementById("{field_id}");
-        if (window.marked) {{
-            el.innerHTML = marked.parse(content);
-        }} else {{
-            var script = document.createElement("script");
-            script.src = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
-            script.onload = function() {{ el.innerHTML = marked.parse(content); }};
-            document.head.appendChild(script);
-        }}
-    }})();
-    </script>
     {_render_description(field)}
 </div>"""
 
