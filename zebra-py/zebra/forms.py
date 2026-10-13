@@ -291,6 +291,75 @@ def coerce_form_data(schema: dict[str, Any], raw_data: dict[str, Any]) -> dict[s
     return result
 
 
+SCHEMA_REF = re.compile(r"^\s*\{\{\s*(\w+(?:\.\w+)?)\s*\}\}\s*$")
+
+
+def resolve_task_schema(
+    schema: dict[str, Any] | str | None, process_properties: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Resolve a human task's schema, which may be built at runtime.
+
+    A static schema (a dict) is returned unchanged. A schema written as a single
+    ``{{key}}`` (or ``{{task_id.output}}``) template is looked up in the process
+    properties, so an earlier task (typically ``llm_call`` with
+    ``response_format: json``) can generate the form fields, e.g. one field per
+    follow-up question. The value may be a dict, a JSON string, or a task output
+    wrapping either under ``response``.
+
+    Args:
+        schema: The task definition's ``schema`` property.
+        process_properties: Properties of the process the task belongs to.
+
+    Returns:
+        A JSON Schema dict with at least one property, or None when the schema is
+        missing or the reference does not resolve to a usable schema.
+    """
+    if isinstance(schema, dict):
+        return schema or None
+    if not isinstance(schema, str):
+        return None
+    match = SCHEMA_REF.match(schema)
+    if not match:
+        logger.warning("Task schema string is not a {{reference}}: %.80s", schema)
+        return None
+
+    var = match.group(1)
+    key, _, field_name = var.partition(".")
+    if field_name == "output":
+        value = process_properties.get(f"__task_output_{key}")
+    else:
+        value = process_properties.get(key)
+        if field_name:
+            value = value.get(field_name) if isinstance(value, dict) else None
+    resolved = _as_schema(value)
+    if resolved is None:
+        logger.warning("Task schema reference {{%s}} did not resolve to a JSON Schema", var)
+    return resolved
+
+
+def _as_schema(value: Any) -> dict[str, Any] | None:
+    """Coerce a resolved schema value into a JSON Schema object, or None."""
+    if isinstance(value, str):
+        text = value.strip()
+        fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, re.DOTALL)
+        if fenced:
+            text = fenced.group(1)
+        try:
+            value = json.loads(text)
+        except ValueError:
+            return None
+    if not isinstance(value, dict):
+        return None
+    if "properties" not in value and "response" in value:
+        return _as_schema(value["response"])
+    properties = value.get("properties")
+    if not isinstance(properties, dict) or not properties:
+        return None
+    if not all(isinstance(prop, dict) for prop in properties.values()):
+        return None
+    return {"type": "object", **value}
+
+
 def get_routes_from_definition(
     task_definition_id: str, routings: list[dict[str, Any]]
 ) -> list[str]:

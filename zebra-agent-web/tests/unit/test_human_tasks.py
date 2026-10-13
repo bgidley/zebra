@@ -161,6 +161,54 @@ def _template_default_definition():
     )
 
 
+def _generated_schema_definition():
+    """A human task whose schema is generated at runtime by an earlier task (#179)."""
+    return ProcessDefinition(
+        id="generated-schema-wf",
+        name="Generated Schema Test",
+        version=1,
+        first_task_id="followups",
+        tasks={
+            "followups": TaskDefinition(
+                id="followups",
+                name="Follow-up Questions",
+                auto=False,
+                properties={"schema": "{{followup_form}}"},
+            ),
+        },
+        routings=[],
+    )
+
+
+GENERATED_FORM = {
+    "type": "object",
+    "title": "A few follow-up questions",
+    "description": "You paddle weekly at Symonds Yat.",
+    "required": ["venues"],
+    "properties": {
+        "venues": {
+            "type": "string",
+            "title": "Which rivers do you plan to tour?",
+            "description": "Decides boat length.",
+        },
+        "paddle_feather": {"type": "string", "title": "What feather angle do you use?"},
+    },
+}
+
+
+async def _start_generated_schema_workflow(wf_engine, form=GENERATED_FORM):
+    """Start the generated-schema workflow with ``followup_form`` set."""
+    process, pending = await _start_workflow(wf_engine, _generated_schema_definition())
+    running = await wf_engine.store.load_process(process.id)
+    props = {
+        **running.properties,
+        "followup_form": form,
+        "__task_output_prepare": {"response": form},
+    }
+    await wf_engine.store.save_process(running.model_copy(update={"properties": props}))
+    return process, pending[0]
+
+
 def _no_schema_human_task_definition():
     """A workflow with a human task that has NO schema (tests fallback)."""
     return ProcessDefinition(
@@ -640,6 +688,32 @@ class TestHumanTaskForm:
         assert "Q1: What is 1+1?" in content
         assert "{{questions}}" not in content
 
+    async def test_renders_generated_schema_one_field_per_question(self, client, wf_engine):
+        """A {{reference}} schema renders the generated questions as fields (#179)."""
+        _, task = await _start_generated_schema_workflow(wf_engine)
+
+        response = await client.get(f"/tasks/{task.id}/")
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Which rivers do you plan to tour?" in content
+        assert "What feather angle do you use?" in content
+        assert 'name="venues"' in content
+        assert 'name="paddle_feather"' in content
+        assert "You paddle weekly at Symonds Yat." in content
+        # The generated schema itself is not dumped as a prior output
+        assert "&#x27;properties&#x27;" not in content
+        assert "{{followup_form}}" not in content
+
+    async def test_unresolved_generated_schema_falls_back(self, client, wf_engine):
+        """If the referenced schema is missing, the user still gets a response field."""
+        _, task = await _start_generated_schema_workflow(wf_engine, form="not a schema")
+
+        response = await client.get(f"/tasks/{task.id}/")
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert 'name="response"' in content
+        assert "Follow-up Questions" in content
+
     async def test_404_for_unknown_task(self, client):
         """Unknown task_id returns 404 with a styled error page.
 
@@ -736,6 +810,24 @@ class TestHumanTaskSubmit:
         updated = await store.load_process(process.id)
         assert updated is not None
 
+    async def test_submit_validates_against_generated_schema(self, client, wf_engine, store):
+        """Submit validates and stores answers using the generated schema (#179)."""
+        process, task = await _start_generated_schema_workflow(wf_engine)
+
+        response = await client.post(f"/tasks/{task.id}/submit/", data={"paddle_feather": "0"})
+        assert "required" in response.content.decode().lower()
+
+        response = await client.post(
+            f"/tasks/{task.id}/submit/",
+            data={"venues": "The Wye", "paddle_feather": "0"},
+        )
+        assert response.status_code == 200
+        updated = await store.load_process(process.id)
+        assert updated.properties["__task_output_followups"] == {
+            "venues": "The Wye",
+            "paddle_feather": "0",
+        }
+
     async def test_submit_fallback_schema_requires_response(self, client, wf_engine):
         """Fallback schema requires the 'response' field."""
         defn = _no_schema_human_task_definition()
@@ -785,6 +877,17 @@ class TestAPITaskComplete:
         data = response.json()
         assert data["completed"] is True
         assert data["task_id"] == task.id
+
+    async def test_complete_validates_against_generated_schema(self, client, wf_engine):
+        """The complete API validates against a runtime-generated schema (#179)."""
+        _, task = await _start_generated_schema_workflow(wf_engine)
+
+        response = await client.post(
+            f"/api/tasks/{task.id}/complete/",
+            data={"result": {"paddle_feather": "0"}},
+            content_type="application/json",
+        )
+        assert response.status_code == 400
 
     async def test_complete_validates_against_schema(self, client, wf_engine):
         """Invalid data against the task schema returns 400."""

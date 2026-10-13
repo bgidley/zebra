@@ -20,6 +20,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from zebra.core.models import TaskResult
+from zebra.forms import resolve_task_schema
 
 from zebra_agent_web.api import agent_engine, engine, manual_review
 from zebra_agent_web.api.serializers import (
@@ -944,6 +945,10 @@ def process_pending_tasks(request, process_id):
                 "auto": task_def.auto,
                 "properties": task_def.properties,
             }
+            # The schema to render, resolved when it is built at runtime (#179)
+            task_data["schema"] = resolve_task_schema(
+                task_def.properties.get("schema"), process.properties or {}
+            )
             result.append(task_data)
 
         return Response(result)
@@ -996,7 +1001,9 @@ def task_complete(request, task_id):
         if definition:
             task_def = definition.tasks.get(task.task_definition_id)
             if task_def:
-                schema = task_def.properties.get("schema")
+                schema = resolve_task_schema(
+                    task_def.properties.get("schema"), process.properties or {}
+                )
 
         return task, schema, None
 
