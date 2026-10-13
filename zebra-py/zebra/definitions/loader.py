@@ -181,13 +181,18 @@ def load_definition_from_dict(data: dict[str, Any], source: str = "dict") -> Pro
     if first_task_id and first_task_id not in tasks:
         errors.append(f"First task '{first_task_id}' not found in tasks")
 
+    if data.get("inputs") is not None and not isinstance(data["inputs"], dict):
+        errors.append("'inputs' must be a mapping (a JSON Schema object)")
+
     if errors:
         raise ValidationError(f"Invalid definition from {source}: {'; '.join(errors)}")
 
-    # Top-level result_key is the documented form; an explicit properties.result_key wins.
+    # Top-level result_key / inputs are the documented form; explicit properties win.
+    # ``inputs`` is a JSON Schema for the workflow's arguments when called as a tool (#146).
     properties = dict(data.get("properties") or {})
-    if data.get("result_key") and "result_key" not in properties:
-        properties["result_key"] = data["result_key"]
+    for key in ("result_key", "inputs"):
+        if data.get(key) and key not in properties:
+            properties[key] = data[key]
 
     return ProcessDefinition(
         id=definition_id,

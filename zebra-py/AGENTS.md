@@ -20,6 +20,8 @@ This file provides coding agent guidelines specific to the `zebra-py` package - 
 
 Manual tasks wait in `ready` state until explicitly transitioned. Auto tasks execute immediately.
 
+**Suspend on subflow (#146)**: an action may return `TaskResult.suspend([child_process_ids])` for children it created (`create_process(..., parent_process_id=, parent_task_id=)`, left `CREATED`). The task waits in `awaiting_subflow`; the engine starts the children after releasing the parent's lock and re-runs the action with `context.subflow_results` once all are COMPLETE/FAILED. Never resume a task nested inside its own process's transition: locks are re-entrant per engine and the inner release drops the outer lock. See `specs/llm-agent-tools-design.md`.
+
 ### Flow of Execution (FOE)
 
 FOE tracks parallel execution branches. Serial routings inherit the parent FOE; parallel routings create new FOEs. Synchronized tasks wait for all incoming FOEs before executing (join point).

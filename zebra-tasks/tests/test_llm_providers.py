@@ -261,6 +261,34 @@ class TestAnthropicProvider:
                 assert call_kwargs["system"] == "Be helpful"
                 assert len(call_kwargs["messages"]) == 1
 
+    @pytest.mark.asyncio
+    async def test_parallel_tool_results_share_one_user_turn(self, mock_anthropic_module):
+        """Results of tool calls made in one turn go back in one user message (#146)."""
+        mock_module, mock_client = mock_anthropic_module
+
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch.dict("sys.modules", {"anthropic": mock_module}):
+                import importlib
+
+                import zebra_tasks.llm.providers.anthropic as anthropic_provider
+
+                importlib.reload(anthropic_provider)
+
+                provider = anthropic_provider.AnthropicProvider()
+                calls = [ToolCall(id="a", name="t", arguments={}), ToolCall("b", "t", {})]
+                messages = [
+                    Message.user("Hi"),
+                    Message.assistant("", tool_calls=calls),
+                    Message.tool("one", "a"),
+                    Message.tool("two", "b"),
+                ]
+
+                await provider.complete(messages)
+
+                sent = mock_client.messages.create.call_args.kwargs["messages"]
+                assert [m["role"] for m in sent] == ["user", "assistant", "user"]
+                assert [b["tool_use_id"] for b in sent[2]["content"]] == ["a", "b"]
+
     def test_missing_api_key_raises(self):
         """Test that missing API key raises error."""
         # Create a mock module that doesn't raise ImportError

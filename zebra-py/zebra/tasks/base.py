@@ -116,6 +116,10 @@ class ExecutionContext:
         extras: Optional dict for passing arbitrary objects (like memory stores)
             that don't need to be JSON-serializable. Use this for dependency
             injection of services that tasks need but shouldn't be persisted.
+        subflow_results: Set when a task resumes after ``TaskResult.suspend()``:
+            one dict per child process, in the order given, with ``process_id``,
+            ``workflow``, ``success``, ``output``, ``error`` and ``properties``
+            (#146). None on a normal run.
     """
 
     engine: "WorkflowEngine"
@@ -124,6 +128,7 @@ class ExecutionContext:
     process_definition: ProcessDefinition
     task_definition: TaskDefinition
     extras: dict[str, Any] = field(default_factory=dict)
+    subflow_results: list[dict[str, Any]] | None = None
 
     def get_task_output(self, task_id: str) -> Any | None:
         """Get the output from a previously completed task.

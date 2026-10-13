@@ -68,6 +68,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 - **Process lifecycle**: `CREATED → RUNNING → COMPLETE` (with `PAUSED`, `FAILED`). When no active tasks remain and any task is `FAILED` (returned `TaskResult.fail` / raised, so never routed), the process ends `FAILED` with `__error__` = the task's error and `__failed_task__` = its definition id (#131); only an all-`COMPLETE` drain ends `COMPLETE`. Handled failures (success + `next_route`) route and complete normally.
 - **Task lifecycle**: `PENDING → AWAITING_SYNC → READY → RUNNING → COMPLETE` / `FAILED`.
+- **Suspend on subflow (#146)**: an action returns `TaskResult.suspend([child ids])`; the task waits in `AWAITING_SUBFLOW` (pending ids in `__pending_subflows__`), the engine starts the children after releasing the parent's lock, and when all are terminal re-runs the action with `context.subflow_results`. A failed child is a result, not a task failure; failing the parent fails its waiting children; a task is resumed once even when children finish together. Recovery starts never-started children and resumes waits that finished while down. See [llm-agent-tools-design.md](llm-agent-tools-design.md).
 - **Flow of Execution (FOE)**: tracks parallel branches. Serial routings inherit the parent FOE; parallel routings fork new FOEs. Synchronised (`synchronized: true`) tasks wait for all incoming FOEs via backward-reachability.
 
 ### Routing
@@ -85,6 +86,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 ### Definition model
 
 - `ProcessDefinition` / `TaskDefinition` are **frozen** Pydantic models. YAML or JSON loaders produce them.
+- Top-level `result_key` and `inputs` (JSON Schema of the workflow's arguments when called as a tool, #146) are copied into `ProcessDefinition.properties`.
 - Template resolution is regex-based: `{{var}}` and `{{task_id.output.key}}`. No arithmetic, no conditionals, no loops inside templates.
 
 ### Human tasks & forms
@@ -115,7 +117,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 | Category | Actions |
 |---|---|
-| LLM | `llm_call` |
+| LLM | `llm_call`, `llm_agent` (#146: workflows as tools; each tool call is a child process the task suspends on; `define_workflow` runs the *Define Workflow* system workflow; transcript in the output; child cost rolled up; tool runs recorded as zero-cost `WorkflowRun`s — see [llm-agent-tools-design.md](llm-agent-tools-design.md)) |
 | Subtasks | `subworkflow`, `wait_subworkflow`, `parallel_subworkflows` |
 | Filesystem | `file_read`, `file_write`, `file_copy`, `file_move`, `file_delete`, `file_search`, `file_exists`, `file_info` (9 actions) |
 | Compute | `python_exec` (sandboxed) |
@@ -140,7 +142,8 @@ A legacy Java implementation sits in `legacy/` and is archived.
 ### Weaknesses
 
 - **Agent actions are coupled to `zebra-agent`** (import its memory / library / metrics types). Soft-decoupled via `context.extras`, but still a layering leak.
-- **Subtasks don't roll up cost** — child `__total_cost__` isn't propagated into the parent automatically for all paths. (The web daemon does its own propagation in `assess_and_record`.)
+- **Subtasks don't roll up cost** — child `__total_cost__` isn't propagated into the parent automatically for all paths. (The web daemon does its own propagation in `assess_and_record`; `llm_agent` rolls up its tool children.)
+- **`subworkflow` / `wait_subworkflow` still busy-poll** — moving them to `TaskResult.suspend` is #181.
 - **Ethics gate is advisory** — it only evaluates; workflows must explicitly route on its output to block.
 - **No structured-output guarantees** on LLM calls — JSON is extracted post-hoc by regex.
 - **Filesystem actions have minimal sandboxing** — path sanitisation only; no whitelist.
@@ -228,7 +231,7 @@ Workflows tagged `system`, and the core system names, are never touched. A per-c
 
 The web library page lists retired workflows with a Restore button. The detail page has Retire / Restore buttons and a retired banner (`/workflows/<name>/retire/`, `/restore/`). Spec: [workflow-curation](../openspec/specs/workflow-curation/spec.md).
 
-`list_goal_workflows(library)` (`zebra_agent/library.py`) is the single builder of the selector's candidates: one dict per non-`system` workflow (`name`, `description`, `tags`, `success_rate` float, `use_count`, `use_when`). `AgentLoop.process_goal`, the web/daemon `api/goals.queue_goal` helper and the `queue_goal` action all use it for `available_workflows`. At selection time `workflow_selector` rebuilds the list from the live `__workflow_library__` (falling back to the queued property), so queued goals see workflows added since; the prompt shows "N/A" success for never-run workflows (#144).
+`list_goal_workflows(library)` (`zebra_agent/library.py`) is the single builder of the selector's candidates: one dict per non-`system`, non-tool-only workflow (tool-only = `inputs.required` names anything but `goal`, e.g. *Read Web Page*; #146) (`name`, `description`, `tags`, `success_rate` float, `use_count`, `use_when`). `AgentLoop.process_goal`, the web/daemon `api/goals.queue_goal` helper and the `queue_goal` action all use it for `available_workflows`. At selection time `workflow_selector` rebuilds the list from the live `__workflow_library__` (falling back to the queued property), so queued goals see workflows added since; the prompt shows "N/A" success for never-run workflows (#144).
 
 ### Budget
 

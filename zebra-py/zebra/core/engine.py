@@ -42,6 +42,11 @@ logger = logging.getLogger(__name__)
 #: Task property set by recovery on interrupted non-idempotent tasks (#130).
 MANUAL_REVIEW_FLAG = "__requires_manual_review__"
 
+#: Task property holding the child process ids a suspended task waits for (#146).
+PENDING_SUBFLOWS_KEY = "__pending_subflows__"
+
+_TERMINAL_PROCESS_STATES = frozenset({ProcessState.COMPLETE, ProcessState.FAILED})
+
 
 def _children_first(processes: list[ProcessInstance]) -> list[ProcessInstance]:
     """Order processes deepest-first by their parent chain within *processes*.
@@ -107,6 +112,15 @@ class WorkflowEngine:
         self.engine_id = engine_id or str(uuid.uuid4())
         self.extras = extras or {}
         self._task_sync = TaskSync()
+        # Processes this engine is driving right now (process id -> nesting depth).
+        # A suspended task whose children finish while its process is being driven
+        # is left for that driver to run, never run nested inside it (#146).
+        self._driving: dict[str, int] = {}
+        # Resumed tasks a driven process runs once it unlocks (process id -> task ids).
+        self._deferred: dict[str, list[str]] = {}
+        # Suspended tasks whose children are being checked, and those needing a recheck.
+        self._checking: set[str] = set()
+        self._recheck: set[str] = set()
 
     # =========================================================================
     # Process Lifecycle
@@ -357,8 +371,11 @@ class WorkflowEngine:
         terminal_task_states = {TaskState.COMPLETE, TaskState.FAILED}
         now = datetime.now(UTC)
         tasks = await self.store.load_tasks_for_process(process_id)
+        abandoned: list[str] = []
         for task in tasks:
             if task.state not in terminal_task_states:
+                if task.state == TaskState.AWAITING_SUBFLOW:
+                    abandoned.extend(task.properties.get(PENDING_SUBFLOWS_KEY, []))
                 task = task.model_copy(
                     update={
                         "state": TaskState.FAILED,
@@ -382,6 +399,12 @@ class WorkflowEngine:
         )
         await self.store.save_process(process)
         logger.info("Process %s failed: %s", process_id, reason)
+        await self._on_process_terminal(process)
+        # Children a suspended task was waiting on are no longer wanted (#146).
+        for child_id in abandoned:
+            child = await self.store.load_process(child_id)
+            if child is not None and child.state not in _TERMINAL_PROCESS_STATES:
+                await self.fail_process(child_id, f"Parent process {process_id} failed: {reason}")
         return process
 
     # =========================================================================
@@ -410,6 +433,40 @@ class WorkflowEngine:
         """
         task = await self._load_task(task_id)
         process = await self._load_process(task.process_id)
+        suspended: list[str] = []
+
+        self._driving[process.id] = self._driving.get(process.id, 0) + 1
+        try:
+            all_created_tasks, terminal = await self._transition_locked(task, process, suspended)
+        finally:
+            self._driving[process.id] -= 1
+            if not self._driving[process.id]:
+                del self._driving[process.id]
+
+        # After the lock is released (#146): notify a waiting parent, start the
+        # children of tasks that just suspended, and run tasks that resumed while
+        # this process was being driven.
+        if terminal is not None:
+            await self._on_process_terminal(terminal)
+        for suspended_task_id in suspended:
+            await self._start_subflows(suspended_task_id)
+        if process.id not in self._driving:
+            for resumed_task_id in self._deferred.pop(process.id, []):
+                resumed = await self.store.load_task(resumed_task_id)
+                if resumed is not None and resumed.state == TaskState.READY:
+                    await self.transition_task(resumed_task_id)
+
+        return all_created_tasks
+
+    async def _transition_locked(
+        self, task: TaskInstance, process: ProcessInstance, suspended: list[str]
+    ) -> tuple[list[TaskInstance], ProcessInstance | None]:
+        """Run *task* and its auto successors under the process lock.
+
+        Returns the created tasks and, if the process ended, the terminal process.
+        Ids of tasks that suspended on subflows are appended to *suspended*.
+        """
+        terminal: ProcessInstance | None = None
 
         # Acquire lock on process
         async with self.store.lock(process.id, self.engine_id) as acquired:
@@ -424,7 +481,9 @@ class WorkflowEngine:
                 current_task = task_stack.pop()
 
                 try:
-                    created_tasks = await self._transition_task_internal(current_task, process)
+                    created_tasks = await self._transition_task_internal(
+                        current_task, process, suspended
+                    )
                     all_created_tasks.extend(created_tasks)
 
                     # Add auto tasks to stack for processing
@@ -454,11 +513,11 @@ class WorkflowEngine:
                 # (#131). Handled failures route via next_route and complete.
                 failed_task = next((t for t in tasks if t.state == TaskState.FAILED), None)
                 if failed_task is not None:
-                    await self._fail_process_for_task(process, failed_task)
+                    terminal = await self._fail_process_for_task(process, failed_task)
                 else:
-                    await self._complete_process(process)
+                    terminal = await self._complete_process(process)
 
-        return all_created_tasks
+        return all_created_tasks, terminal
 
     async def complete_task(
         self, task_id: str, result: TaskResult | None = None
@@ -561,13 +620,18 @@ class WorkflowEngine:
     # =========================================================================
 
     async def _transition_task_internal(
-        self, task: TaskInstance, process: ProcessInstance
+        self,
+        task: TaskInstance,
+        process: ProcessInstance,
+        suspended: list[str] | None = None,
     ) -> list[TaskInstance]:
         """Internal task transition logic.
 
         Args:
             task: The task to transition
             process: The owning process
+            suspended: If given, the task's id is appended when it suspends on
+                subflows, so the caller can start the children (#146)
 
         Returns:
             List of newly created task instances
@@ -598,6 +662,8 @@ class WorkflowEngine:
 
         # Check if task completed
         if task.state != TaskState.COMPLETE:
+            if task.state == TaskState.AWAITING_SUBFLOW and suspended is not None:
+                suspended.append(task.id)
             logger.info(f"Task {task.id} is in state {task.state}, not transitioning further")
             return []
 
@@ -639,6 +705,9 @@ class WorkflowEngine:
             await self.store.save_task(task)
             logger.debug(f"Generated idempotency token for task {task.id}: {token}")
 
+        # A resumed task gets its children's results. The pending ids stay on the
+        # task until this run ends, so a crash mid-resume re-runs with them (#146).
+        pending = task.properties.get(PENDING_SUBFLOWS_KEY)
         context = ExecutionContext(
             engine=self,
             store=self.store,
@@ -646,6 +715,7 @@ class WorkflowEngine:
             process_definition=definition,
             task_definition=task_def,
             extras=self.extras,
+            subflow_results=await self._subflow_results(pending) if pending else None,
         )
 
         result: TaskResult
@@ -671,6 +741,14 @@ class WorkflowEngine:
         else:
             # No action - auto-complete
             result = TaskResult.ok()
+
+        if result.suspend_children:
+            await self._suspend_task(task, result.suspend_children)
+            # Keep what the action wrote to the process (e.g. cost) for the resume.
+            process = process.model_copy(update={"updated_at": datetime.now(UTC)})
+            await self.store.save_process(process)
+            return
+        task.properties.pop(PENDING_SUBFLOWS_KEY, None)
 
         # Update task with result
         # Store full result as dict to preserve next_route for routing conditions
@@ -832,7 +910,7 @@ class WorkflowEngine:
         await self.store.save_foe(foe)
         return foe
 
-    async def _complete_process(self, process: ProcessInstance) -> None:
+    async def _complete_process(self, process: ProcessInstance) -> ProcessInstance:
         """Mark a process as complete."""
         definition = await self._load_definition(process.definition_id)
 
@@ -849,8 +927,11 @@ class WorkflowEngine:
         )
         await self.store.save_process(process)
         logger.info(f"Process {process.id} completed")
+        return process
 
-    async def _fail_process_for_task(self, process: ProcessInstance, task: TaskInstance) -> None:
+    async def _fail_process_for_task(
+        self, process: ProcessInstance, task: TaskInstance
+    ) -> ProcessInstance:
         """Mark a process FAILED because *task* failed with no route onward.
 
         Sets ``__error__`` to the task's error and ``__failed_task__`` to its
@@ -877,6 +958,7 @@ class WorkflowEngine:
             task.task_definition_id,
             error,
         )
+        return process
 
     async def _run_process_construct(
         self, process: ProcessInstance, definition: ProcessDefinition
@@ -942,6 +1024,173 @@ class WorkflowEngine:
         except Exception as e:
             logger.error(f"Error running process destruct: {e}")
             # Don't raise - process completion should still happen
+
+    # =========================================================================
+    # Subflow Suspension (#146)
+    # =========================================================================
+
+    async def _suspend_task(self, task: TaskInstance, children: list[str]) -> None:
+        """Persist *task* as AWAITING_SUBFLOW on *children* (before they start)."""
+        props = dict(task.properties)
+        props[PENDING_SUBFLOWS_KEY] = list(children)
+        task = task.model_copy(
+            update={
+                "state": TaskState.AWAITING_SUBFLOW,
+                "properties": props,
+                "error": None,
+                "updated_at": datetime.now(UTC),
+            }
+        )
+        await self.store.save_task(task)
+        logger.info("Task %s suspended on %d subflow(s)", task.id, len(children))
+
+    async def _subflow_results(self, child_ids: list[str]) -> list[dict]:
+        """Build the ``context.subflow_results`` entries for a resumed task."""
+        results: list[dict] = []
+        for child_id in child_ids:
+            child = await self.store.load_process(child_id)
+            if child is None:
+                results.append(
+                    {
+                        "process_id": child_id,
+                        "workflow": None,
+                        "success": False,
+                        "output": None,
+                        "error": "Child process not found",
+                        "properties": {},
+                    }
+                )
+                continue
+            definition = await self.store.load_definition(child.definition_id)
+            success = child.state == ProcessState.COMPLETE
+            output = None
+            error = None
+            if success:
+                result_key = definition.properties.get("result_key") if definition else None
+                output = child.properties.get(result_key or "__output__")
+            elif child.state == ProcessState.FAILED:
+                error = child.properties.get("__error__", "Child process failed")
+            else:
+                error = f"Child process is still {child.state.value}"
+            results.append(
+                {
+                    "process_id": child.id,
+                    "workflow": definition.name if definition else child.definition_id,
+                    "success": success,
+                    "output": output,
+                    "error": error,
+                    "properties": child.properties,
+                }
+            )
+        return results
+
+    async def _start_subflows(self, task_id: str) -> None:
+        """Start the pending children of a suspended task that are still CREATED.
+
+        A child that cannot be started is failed, so the task still resumes.
+        """
+        task = await self.store.load_task(task_id)
+        if task is None or task.state != TaskState.AWAITING_SUBFLOW:
+            return
+        for child_id in task.properties.get(PENDING_SUBFLOWS_KEY, []):
+            child = await self.store.load_process(child_id)
+            if child is None or child.state != ProcessState.CREATED:
+                continue
+            try:
+                await self.start_process(child_id)
+            except Exception as e:
+                logger.exception("Failed to start subflow %s of task %s", child_id, task_id)
+                child = await self.store.load_process(child_id)
+                if child is not None and child.state not in _TERMINAL_PROCESS_STATES:
+                    await self.fail_process(child_id, f"Subflow failed to start: {e}")
+        await self._resume_if_subflows_done(task_id)
+
+    async def _on_process_terminal(self, process: ProcessInstance) -> None:
+        """Resume the task waiting on *process*, if this was its last child."""
+        if not process.parent_task_id:
+            return
+        try:
+            await self._resume_if_subflows_done(process.parent_task_id)
+        except Exception:
+            logger.exception(
+                "Failed to resume task %s after subflow %s ended",
+                process.parent_task_id,
+                process.id,
+            )
+
+    async def _resume_if_subflows_done(self, task_id: str) -> None:
+        """Move a suspended task to READY once all its children are terminal, and run it.
+
+        Only the caller that makes the AWAITING_SUBFLOW -> READY move runs the task,
+        so children finishing together resume it once. If this engine is already
+        driving the task's process, the driver runs it after it unlocks; running it
+        here would nest inside that transition.
+        """
+        # One check per task at a time in this engine. A child that finishes during
+        # a check asks for a recheck, so the last completion is never missed.
+        if task_id in self._checking:
+            self._recheck.add(task_id)
+            return
+        self._checking.add(task_id)
+        try:
+            while True:
+                self._recheck.discard(task_id)
+                task = await self._resume_subflow_wait(task_id)
+                if task is not None or task_id not in self._recheck:
+                    break
+        finally:
+            self._checking.discard(task_id)
+            self._recheck.discard(task_id)
+        if task is None:
+            return
+
+        if task.process_id in self._driving:
+            self._deferred.setdefault(task.process_id, []).append(task.id)
+            return
+        process = await self.store.load_process(task.process_id)
+        if process is None or process.state != ProcessState.RUNNING:
+            return
+        await self.transition_task(task.id)
+
+    async def _resume_subflow_wait(self, task_id: str) -> TaskInstance | None:
+        """Move *task_id* AWAITING_SUBFLOW -> READY if all its children are terminal.
+
+        Returns the task if this call moved it, else None. Across engines the
+        parent's lock serialises the move; while this engine drives the parent it
+        already holds that lock, and re-acquiring would release it early.
+        """
+        task = await self.store.load_task(task_id)
+        if task is None or task.state != TaskState.AWAITING_SUBFLOW:
+            return None
+        if task.process_id in self._driving:
+            return await self._ready_if_children_done(task_id)
+        async with self.store.lock(task.process_id, self.engine_id) as acquired:
+            if not acquired:
+                logger.warning(
+                    "Could not lock process %s to resume task %s", task.process_id, task_id
+                )
+                return None
+            return await self._ready_if_children_done(task_id)
+
+    async def _ready_if_children_done(self, task_id: str) -> TaskInstance | None:
+        task = await self.store.load_task(task_id)
+        if task is None or task.state != TaskState.AWAITING_SUBFLOW:
+            return None
+        for child_id in task.properties.get(PENDING_SUBFLOWS_KEY, []):
+            child = await self.store.load_process(child_id)
+            if child is not None and child.state not in _TERMINAL_PROCESS_STATES:
+                return None
+        task = task.model_copy(update={"state": TaskState.READY, "updated_at": datetime.now(UTC)})
+        await self.store.save_task(task)
+        logger.info("Task %s resumed: all subflows finished", task_id)
+        return task
+
+    async def _reconcile_subflow_waits(self, process: ProcessInstance) -> None:
+        """Recovery: start never-started children and resume finished waits."""
+        for task in await self.store.load_tasks_for_process(process.id):
+            if task.state == TaskState.AWAITING_SUBFLOW:
+                logger.info("Recovering suspended task %s", task.id)
+                await self._start_subflows(task.id)
 
     async def _process_pending_auto_tasks(self, process: ProcessInstance) -> None:
         """Process any pending auto tasks after resume."""
@@ -1345,6 +1594,10 @@ class WorkflowEngine:
                         logger.error("Failing process %s: %s", process.id, capped_reason)
                         await self.fail_process(process.id, capped_reason)
                         continue
+
+                # Suspended tasks stay suspended; start children that never
+                # started and resume waits that finished while we were down (#146)
+                await self._reconcile_subflow_waits(process)
 
                 # Process is already in RUNNING state, just need to trigger execution
                 # Re-enter the task processing loop to continue where we left off

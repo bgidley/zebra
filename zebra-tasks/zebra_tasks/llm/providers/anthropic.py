@@ -221,18 +221,23 @@ class AnthropicProvider(LLMProvider):
                     }
                 )
             elif msg.role == MessageRole.TOOL:
-                anthropic_messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": msg.tool_call_id,
-                                "content": msg.content,
-                            }
-                        ],
-                    }
-                )
+                block = {
+                    "type": "tool_result",
+                    "tool_use_id": msg.tool_call_id,
+                    "content": msg.content,
+                }
+                previous = anthropic_messages[-1] if anthropic_messages else None
+                if (
+                    previous is not None
+                    and previous["role"] == "user"
+                    and isinstance(previous["content"], list)
+                    and previous["content"]
+                    and previous["content"][-1].get("type") == "tool_result"
+                ):
+                    # Results of parallel tool calls go back in one user turn.
+                    previous["content"].append(block)
+                else:
+                    anthropic_messages.append({"role": "user", "content": [block]})
 
         return anthropic_messages, system
 

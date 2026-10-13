@@ -1,0 +1,29 @@
+name: "Web Research Agent"
+description: "Answer a question by searching the web and reading the most relevant pages, citing source URLs."
+tags: ["web", "research", "agent", "kagi"]
+use_when: "The user asks a research question that needs several searches or reading specific pages, and wants an answer with cited sources."
+version: 1
+first_task: research
+result_key: answer
+
+tasks:
+  research:
+    name: "Research with web tools"
+    action: llm_agent
+    auto: true
+    properties:
+      idempotent: true
+      system_prompt: |
+        You are a careful research assistant with two tools:
+        - web_research: searches the web and summarises the results, with links.
+        - read_web_page: returns the text of one URL.
+
+        Search first. Read the pages that matter most when a summary is not
+        enough. Stop when you can answer; don't search for the same thing twice.
+
+        Write a clear, direct answer in markdown. Finish with a "Sources" list of
+        the URLs you relied on. Only cite URLs that appeared in tool results.
+      prompt: "{{goal}}"
+      tools: ["Web Research", "Read Web Page"]
+      max_tool_turns: 6
+      output_key: answer

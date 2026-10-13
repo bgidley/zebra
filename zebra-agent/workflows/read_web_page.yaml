@@ -1,0 +1,25 @@
+name: "Read Web Page"
+description: "Fetch a web page and return its main content as markdown."
+tags: ["web", "read", "kagi"]
+use_when: "You have a specific http(s) URL and need the text of that page."
+version: 1
+first_task: extract
+result_key: page_content
+# Requires a url, so it is a tool for llm_agent and never selected for a goal (#146).
+inputs:
+  type: object
+  required: [url]
+  properties:
+    url:
+      type: string
+      description: "The http(s) URL of the page to read"
+
+tasks:
+  extract:
+    name: "Extract page content"
+    action: kagi_extract
+    auto: true
+    properties:
+      url: "{{url}}"
+      max_chars: 12000
+      output_key: page_content

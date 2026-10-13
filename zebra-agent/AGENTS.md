@@ -329,6 +329,7 @@ These workflows are internal to the agent and excluded from LLM selection:
 | `Agent Main Loop` | `agent_main_loop.yaml` | Main orchestration workflow |
 | `Dream Cycle` | `dream_cycle.yaml` | Self-improvement: analyze, evaluate, optimize workflows |
 | `Create Goal` | `create_goal.yaml` | Human input → queue goal as CREATED process |
+| `Define Workflow` | `define_workflow.yaml` | `llm_agent`'s `define_workflow` tool: ethics gate → `workflow_creator` (#146) |
 
 System workflows are identified by the `system` tag in their YAML (`tags: [..., "system"]`) —
 tag any new internal workflow. `list_goal_workflows(library)` in `library.py` is the single
@@ -395,6 +396,8 @@ routings:
   - from: analyze
     to: present_review
 ```
+
+**Tool workflows (#146):** an optional top-level `inputs:` JSON Schema describes the workflow's arguments when an `llm_agent` calls it as a tool (default `{goal: string}`; `WorkflowInfo.inputs`). A workflow whose `inputs.required` names anything other than `goal` is tool-only and never selected for a goal (`is_tool_only`). Bump `version` when changing a built-in workflow, or prod keeps the old copy.
 
 **Key metadata fields for LLM selection:**
 - `name`: Human-readable workflow name

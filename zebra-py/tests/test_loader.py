@@ -64,6 +64,33 @@ tasks:
 
         assert definition.properties == {"result_key": "explicit", "other": 1}
 
+    def test_top_level_inputs_go_into_properties(self):
+        yaml_content = """
+name: "Tool"
+inputs:
+  type: object
+  required: [url]
+  properties:
+    url: {type: string}
+tasks:
+  start:
+    name: Start
+"""
+        definition = load_definition_from_yaml(yaml_content)
+
+        assert definition.properties["inputs"]["required"] == ["url"]
+
+    def test_inputs_must_be_a_mapping(self):
+        yaml_content = """
+name: "Tool"
+inputs: [url]
+tasks:
+  start:
+    name: Start
+"""
+        with pytest.raises(ValidationError, match="'inputs' must be a mapping"):
+            load_definition_from_yaml(yaml_content)
+
     def test_load_with_parallel_routing(self):
         yaml_content = """
 name: "Parallel Test"
