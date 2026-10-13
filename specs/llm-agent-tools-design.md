@@ -1,12 +1,12 @@
 # LLM tool use via workflows (#146)
 
-OpenSpec change: `openspec/changes/llm-agent-workflow-tools` (capabilities `subflow-suspension`, `llm-agent-tools`).
+Specs: [subflow-suspension](../openspec/specs/subflow-suspension/spec.md), [llm-agent-tools](../openspec/specs/llm-agent-tools/spec.md) (change archived as `2026-10-13-llm-agent-workflow-tools`).
 
 ## 1. Goal & scope
 
 An LLM task can call tools, and **every tool is a Zebra workflow**. A tool call runs the workflow as a child process. It therefore gets the same tracking, cost roll-up, metrics and dream-cycle learning as any other run. The LLM never calls an external API or MCP server directly; that only happens inside a workflow's task actions. If no workflow fits, the model can define one (`define_workflow`), and it is saved and callable on the next turn.
 
-Not in scope: per-tool-call timeouts (the goal's `GOAL_TIMEOUT_SECONDS` bounds the whole run), MCP tools (they belong below the workflow layer, as task actions), streaming, cancelling running children when a parent fails.
+Not in scope: per-tool-call timeouts (the goal's `GOAL_TIMEOUT_SECONDS` bounds the whole run), MCP tools (they belong below the workflow layer, as task actions), streaming.
 
 ## 2. Data model changes
 
@@ -23,7 +23,7 @@ Not in scope: per-tool-call timeouts (the goal's `GOAL_TIMEOUT_SECONDS` bounds t
 ## 3. API / interface changes
 
 - **Engine:** an action returns `TaskResult.suspend([...child ids])`. The children are processes it created with `parent_process_id` / `parent_task_id` set (left `CREATED`, so the engine starts them after persisting the suspension).
-- **`llm_agent` action** (`zebra_tasks/llm/agent.py`, entry point `llm_agent`). Properties: `prompt` / `system_prompt` / `messages`, `tools` (workflow names), `tool_tags` + `max_tag_tools` (default 8, ranked by `success_rate`, system workflows excluded), `allow_define_workflow`, `max_tool_turns` (8), `max_depth` (3), `output_key` (`agent_response`), plus `llm_call`'s `model` / `provider` / `temperature` / `max_tokens` / `response_format`. Output: `{response, transcript, turns, tools}`. Declare `idempotent: true` so recovery re-runs an interrupted turn.
+- **`llm_agent` action** (`zebra_tasks/llm/agent.py`, entry point `llm_agent`). Properties: `prompt` / `system_prompt` / `messages`, `tools` (workflow names), `tool_tags` + `max_tag_tools` (default 8, ranked by `success_rate`, system workflows excluded), `allow_define_workflow`, `max_tool_turns` (8), `max_parallel_tools` (4; extra calls in a turn get an error result), `max_depth` (3), `output_key` (`agent_response`), plus `llm_call`'s `model` / `provider` / `temperature` / `max_tokens` / `response_format`. Output: `{response, transcript, turns, tools}`. Declare `idempotent: true` so recovery re-runs an interrupted turn.
 - **Tool names** are slugs of workflow names (`Web Research` → `web_research`). The definition is the workflow's `description` + `use_when` and its `inputs` schema.
 - **`list_goal_workflows`** excludes *tool-only* workflows (`inputs.required` names anything other than `goal`).
 - **Workflows:** `web_search.yaml` v2 gains `inputs`. New: `read_web_page.yaml` (tool-only, `kagi_extract`), `define_workflow.yaml` (system: `ethics_gate` → `workflow_creator`; reject/escalate → `propagate_failure`), `web_research_agent.yaml`.
@@ -44,7 +44,9 @@ resumed run: context.subflow_results ─► tool_result messages, cost roll-up,
              tool run recorded in metrics ─► next model turn (repeat or finish)
 ```
 
-- **No nesting inside the parent's lock.** Locks are re-entrant per engine and an inner release would drop the outer lock. So children start, and resumed tasks run, only after `transition_task` releases its lock. `WorkflowEngine._driving` counts the processes this engine is driving.
+- **No nesting inside the parent's lock.** Locks are re-entrant per engine and an inner release would drop the outer lock. So children start, and resumed tasks run, only after `transition_task` releases its lock. `WorkflowEngine._driving` counts the processes this engine is driving, and `_deferred` holds the resumed tasks a driver runs once it unlocks.
+- **Resumed once.** Only the caller that moves the task `AWAITING_SUBFLOW → READY` runs it. Within an engine, one check per task runs at a time and a completion arriving mid-check forces a recheck. Across engines the move happens under the parent process's lock.
+- **Cancellation.** `fail_process` on a parent also fails the non-terminal children its suspended tasks were waiting on (`Parent process … failed: …`), so a cancelled or timed-out goal leaves no orphan tool runs or human tasks.
 - **A failed child is a result.** The model sees `Error: the workflow failed: …` and decides what to do. Unknown tools get an error tool result and no child.
 - **Recovery:** `resume_all_processes` leaves `AWAITING_SUBFLOW` tasks alone (they are not `RUNNING`). `_reconcile_subflow_waits` starts children that never left `CREATED` and resumes waits whose children finished while the engine was down. Children are recovered first (children-first order), so their completion resumes the parent.
 - **Cost:** each child's `__total_cost__` / `__total_tokens__` / `__token_history__` is added to the calling process, so `execute_goal_workflow` reports the full goal cost.
@@ -60,6 +62,7 @@ No new settings. Limits are task properties (`max_tool_turns`, `max_depth`, `max
 
 - Tool children run inline in the same call stack, as `subworkflow` does, so the goal timeout bounds them. The task holds no coroutine, which is what lets human-in-the-loop tools and restarts work.
 - Tool runs appear in the runs list (marked `[tool]`). If that gets noisy, filter them in the web views.
-- Failing a parent does not cancel running children; their later completion is ignored.
+- A tool child parked on a human task is treated like any human task: the goal timeout covers only the inline auto-task chain, and the daemon hands the goal off as awaiting a human (the process-tree search finds the child's task).
+- LLM-defined workflows can be picked up by `tool_tags`. That is the same exposure as goal selection today; `workflow_creator`'s prompt keeps side-effecting actions out unless asked and puts a human task in front of them.
 - The issue asks for LLM-defined workflows to carry the id of the run that created them; only the `llm-defined` tag is stored today.
-- `subworkflow` / `wait_subworkflow` still poll; they could move to `TaskResult.suspend` later.
+- `subworkflow` / `wait_subworkflow` still poll; moving them to `TaskResult.suspend` is tracked in #181.

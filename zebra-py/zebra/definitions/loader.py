@@ -181,6 +181,9 @@ def load_definition_from_dict(data: dict[str, Any], source: str = "dict") -> Pro
     if first_task_id and first_task_id not in tasks:
         errors.append(f"First task '{first_task_id}' not found in tasks")
 
+    if data.get("inputs") is not None and not isinstance(data["inputs"], dict):
+        errors.append("'inputs' must be a mapping (a JSON Schema object)")
+
     if errors:
         raise ValidationError(f"Invalid definition from {source}: {'; '.join(errors)}")
 

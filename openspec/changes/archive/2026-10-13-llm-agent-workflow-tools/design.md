@@ -15,5 +15,5 @@ See `specs/llm-agent-tools-design.md` for the narrative design. Issue #146.
 ## Risks / Trade-offs
 
 - Children run inline in the same call stack (as `subworkflow` does), so a goal's wall clock still bounds tool calls via `start_process_with_timeout`. Not holding a coroutine applies to the *task*, which is what makes human-in-the-loop tools and restarts work.
-- Failing a parent does not cancel its running children; their completion is ignored because the parent task is no longer `AWAITING_SUBFLOW`.
+- Failing a parent fails the children its suspended tasks wait on. Double resume is prevented by letting only the caller that makes the `AWAITING_SUBFLOW → READY` move run the task (per-engine check guard with recheck; parent lock across engines).
 - `tool_tags` lists are capped and ranked by `success_rate` (answers the open question) to keep the tool list small.

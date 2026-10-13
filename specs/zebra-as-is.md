@@ -68,7 +68,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 - **Process lifecycle**: `CREATED → RUNNING → COMPLETE` (with `PAUSED`, `FAILED`). When no active tasks remain and any task is `FAILED` (returned `TaskResult.fail` / raised, so never routed), the process ends `FAILED` with `__error__` = the task's error and `__failed_task__` = its definition id (#131); only an all-`COMPLETE` drain ends `COMPLETE`. Handled failures (success + `next_route`) route and complete normally.
 - **Task lifecycle**: `PENDING → AWAITING_SYNC → READY → RUNNING → COMPLETE` / `FAILED`.
-- **Suspend on subflow (#146)**: an action returns `TaskResult.suspend([child ids])`; the task waits in `AWAITING_SUBFLOW` (pending ids in `__pending_subflows__`), the engine starts the children after releasing the parent's lock, and when all are terminal re-runs the action with `context.subflow_results`. A failed child is a result, not a task failure. Recovery starts never-started children and resumes waits that finished while down. See [llm-agent-tools-design.md](llm-agent-tools-design.md).
+- **Suspend on subflow (#146)**: an action returns `TaskResult.suspend([child ids])`; the task waits in `AWAITING_SUBFLOW` (pending ids in `__pending_subflows__`), the engine starts the children after releasing the parent's lock, and when all are terminal re-runs the action with `context.subflow_results`. A failed child is a result, not a task failure; failing the parent fails its waiting children; a task is resumed once even when children finish together. Recovery starts never-started children and resumes waits that finished while down. See [llm-agent-tools-design.md](llm-agent-tools-design.md).
 - **Flow of Execution (FOE)**: tracks parallel branches. Serial routings inherit the parent FOE; parallel routings fork new FOEs. Synchronised (`synchronized: true`) tasks wait for all incoming FOEs via backward-reachability.
 
 ### Routing
@@ -142,7 +142,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 - **Agent actions are coupled to `zebra-agent`** (import its memory / library / metrics types). Soft-decoupled via `context.extras`, but still a layering leak.
 - **Subtasks don't roll up cost** — child `__total_cost__` isn't propagated into the parent automatically for all paths. (The web daemon does its own propagation in `assess_and_record`; `llm_agent` rolls up its tool children.)
-- **`subworkflow` / `wait_subworkflow` still busy-poll** — they could move to `TaskResult.suspend` (#146).
+- **`subworkflow` / `wait_subworkflow` still busy-poll** — moving them to `TaskResult.suspend` is #181.
 - **Ethics gate is advisory** — it only evaluates; workflows must explicitly route on its output to block.
 - **No structured-output guarantees** on LLM calls — JSON is extracted post-hoc by regex.
 - **Filesystem actions have minimal sandboxing** — path sanitisation only; no whitelist.

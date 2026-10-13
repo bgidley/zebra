@@ -415,6 +415,23 @@ async def test_parallel_tool_calls_resume_once(engine, store, provider):
     ]
 
 
+async def test_parallel_tool_calls_are_capped(engine, store, provider):
+    provider.script = [
+        use(*[("web_research", {"goal": f"q{i}"}) for i in range(3)]),
+        say("done"),
+    ]
+
+    process = await run_agent(
+        engine, agent_definition(tools=["Web Research"], max_parallel_tools=2)
+    )
+
+    assert process.state == ProcessState.COMPLETE
+    assert len(await children_of(store, process.id)) == 2
+    results = [m.content for m in tool_messages(provider.calls[1])]
+    assert len(results) == 3
+    assert sum(r.startswith("Error: Too many tool calls") for r in results) == 1
+
+
 async def test_turn_limit_fails_the_task(engine, provider):
     provider.script = [use(("web_research", {"goal": f"q{i}"})) for i in range(3)]
 

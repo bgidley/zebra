@@ -1,4 +1,9 @@
-## ADDED Requirements
+# llm-agent-tools Specification
+
+## Purpose
+TBD - created by archiving change llm-agent-workflow-tools. Update Purpose after archive.
+
+## Requirements
 
 ### Requirement: Workflows declare an input schema
 A workflow YAML MAY declare a top-level `inputs:` JSON Schema. The loader SHALL keep it in the definition's properties and the library SHALL expose it as `WorkflowInfo.inputs`. A workflow without `inputs:` SHALL be treated as taking `{goal: string}`.
@@ -23,11 +28,15 @@ The `llm_agent` action SHALL offer the workflows named in `tools`, plus up to `m
 - **THEN** the model receives an error tool result naming the available tools and no child is spawned
 
 ### Requirement: Tool calls are bounded and tracked
-`llm_agent` SHALL stop after `max_tool_turns` model turns that request tools and fail the task. The transcript (tool name, arguments, child process id, success, result excerpt) SHALL be in the task output. Each child's `__total_cost__`, `__total_tokens__` and `__token_history__` SHALL be added to the calling process. An `llm_agent` running at `__agent_depth__` >= `max_depth` SHALL run without tools.
+`llm_agent` SHALL stop after `max_tool_turns` model turns that request tools and fail the task, and SHALL run at most `max_parallel_tools` tool calls per turn, answering the rest with an error tool result. The transcript (tool name, arguments, child process id, success, result excerpt) SHALL be in the task output. Each child's `__total_cost__`, `__total_tokens__` and `__token_history__` SHALL be added to the calling process. An `llm_agent` running at `__agent_depth__` >= `max_depth` SHALL run without tools.
 
 #### Scenario: Turn limit
 - **WHEN** the model keeps requesting tools past `max_tool_turns`
 - **THEN** the task fails with a message naming the limit
+
+#### Scenario: Too many calls in one turn
+- **WHEN** the model makes three tool calls in one turn with `max_parallel_tools: 2`
+- **THEN** two children run and the third call gets an error result
 
 #### Scenario: Cost roll-up
 - **WHEN** a tool child spent $0.02

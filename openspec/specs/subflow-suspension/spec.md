@@ -1,4 +1,9 @@
-## ADDED Requirements
+# subflow-suspension Specification
+
+## Purpose
+TBD - created by archiving change llm-agent-workflow-tools. Update Purpose after archive.
+
+## Requirements
 
 ### Requirement: Actions can suspend on child processes
 A task action SHALL be able to return `TaskResult.suspend(children=[process_id, ...])`. The engine SHALL move the task to `AWAITING_SUBFLOW`, persist the pending child ids on the task, start every pending child still in `CREATED`, and SHALL NOT route the task onward while it is suspended.
@@ -20,6 +25,20 @@ A task suspended on several children SHALL resume only once all of them are term
 - **WHEN** a task suspends on two children and only the first has completed
 - **THEN** the task stays `AWAITING_SUBFLOW`
 - **AND** when the second completes the task resumes with two results
+
+### Requirement: A suspended task resumes once
+Only the caller that moves a task from `AWAITING_SUBFLOW` to `READY` SHALL run it, so children that finish at the same time resume the task exactly once.
+
+#### Scenario: Children finish together
+- **WHEN** both children of a suspended task are completed concurrently
+- **THEN** the task's action is re-run once, with both results
+
+### Requirement: Failing a parent fails its waiting children
+When a process is failed, the engine SHALL fail every non-terminal child that one of its suspended tasks was waiting on, with an error naming the parent.
+
+#### Scenario: Goal cancelled during a tool call
+- **WHEN** a process is failed while its task waits on a child parked on a human task
+- **THEN** the child process is failed and its human task is no longer pending
 
 ### Requirement: A failed child is a result, not a task failure
 A child that ends `FAILED` SHALL be reported to the resumed action with `success: false` and the child's `__error__`; the engine SHALL NOT fail the suspended task because of it.

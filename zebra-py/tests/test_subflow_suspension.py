@@ -1,5 +1,7 @@
 """Engine: a task suspends on child processes and resumes when they finish (#146)."""
 
+import asyncio
+
 import pytest
 
 from zebra.core.engine import PENDING_SUBFLOWS_KEY, WorkflowEngine
@@ -236,16 +238,34 @@ async def test_waits_for_every_child(engine, store):
     assert [s["output"] for s in process.properties["__task_output_spawn"]] == [2, 4]
 
 
-async def test_failing_the_parent_ignores_a_later_child_completion(engine, store):
-    process = await _run(engine, _parent(["human_child"]))
+async def test_failing_the_parent_fails_its_waiting_children(engine, store):
+    process = await _run(engine, _parent(["auto_child", "human_child"]))
+
     await engine.fail_process(process.id, "cancelled")
-    (child,) = await _children(store, process.id)
 
-    await _complete_human_task(engine, child.id)
-
+    children = {c.definition_id: c for c in await _children(store, process.id)}
+    assert children["auto_child"].state == ProcessState.COMPLETE
+    human = children["human_child"]
+    assert human.state == ProcessState.FAILED
+    assert human.properties["__error__"] == f"Parent process {process.id} failed: cancelled"
+    assert await engine.get_pending_tasks(human.id) == []
     process = await store.load_process(process.id)
     assert process.state == ProcessState.FAILED
     assert len(SpawnAction.calls) == 1
+
+
+async def test_children_finishing_together_resume_the_task_once(engine, store):
+    process = await _run(engine, _parent(["human_child", "human_child"]))
+    first, second = await _children(store, process.id)
+
+    await asyncio.gather(
+        _complete_human_task(engine, first.id), _complete_human_task(engine, second.id)
+    )
+
+    process = await store.load_process(process.id)
+    assert process.state == ProcessState.COMPLETE
+    assert len(SpawnAction.calls) == 2
+    assert len(process.properties["__task_output_spawn"]) == 2
 
 
 async def test_recovery_resumes_wait_whose_children_finished_while_down(store, registry):

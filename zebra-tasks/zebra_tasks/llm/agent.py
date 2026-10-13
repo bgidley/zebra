@@ -143,6 +143,8 @@ class LLMAgentAction(LLMCallAction):
             *Define Workflow* system workflow (ethics gate, then
             ``workflow_creator``); the new workflow is a tool from the next turn
         max_tool_turns: Model turns that may call tools before failing (default: 8)
+        max_parallel_tools: Tool calls run per turn; extra calls get an error
+            result asking the model to make them next turn (default: 4)
         max_depth: Run without tools at this tool-call depth (default: 3)
         temperature, max_tokens, response_format, provider, model: As for ``llm_call``
         output_key: Where to store the final answer (default: "agent_response")
@@ -217,6 +219,13 @@ class LLMAgentAction(LLMCallAction):
             default=8,
         ),
         ParameterDef(
+            name="max_parallel_tools",
+            type="int",
+            description="Tool calls run per turn; extra calls get an error result",
+            required=False,
+            default=4,
+        ),
+        ParameterDef(
             name="max_depth",
             type="int",
             description="Tool-call nesting depth at which the agent runs without tools",
@@ -282,6 +291,7 @@ class LLMAgentAction(LLMCallAction):
             return TaskResult.fail("No LLM provider available")
 
         max_turns = int(task.properties.get("max_tool_turns", 8))
+        max_parallel = int(task.properties.get("max_parallel_tools", 4))
         temperature = task.properties.get("temperature", 0.7)
         max_tokens = task.properties.get("max_tokens", 4096)
 
@@ -314,11 +324,18 @@ class LLMAgentAction(LLMCallAction):
                     Message.assistant(response.content or "", tool_calls=response.tool_calls)
                 )
             )
-            children = [
-                child_id
-                for call in response.tool_calls
-                if (child_id := await self._spawn(call, state, task, context)) is not None
-            ]
+            children = []
+            for i, call in enumerate(response.tool_calls):
+                if i >= max_parallel:
+                    error = (
+                        f"Too many tool calls in one turn (max {max_parallel}); "
+                        "make this call next turn."
+                    )
+                    self._answer(state, call.id, call.name, f"Error: {error}")
+                    continue
+                child_id = await self._spawn(call, state, task, context)
+                if child_id is not None:
+                    children.append(child_id)
             if children:
                 return TaskResult.suspend(children)
             # Every call was rejected (unknown tool): let the model try again.
