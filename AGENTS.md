@@ -171,6 +171,13 @@ git push github --delete fN/short-description
    so in your report.
 3. **Delete the local branch** once it is in `origin/master`:
    `git merge-base --is-ancestor fN/short-description origin/master && git branch -D fN/short-description`.
+4. **Check it's all done and tidy, then say so.** Re-read the ask and confirm every part is
+   delivered: merged to `master` on both remotes, master pipeline green, issue closed, OpenSpec
+   change archived, no stray worktree, branch, temp file or running local server left behind.
+   Then end your final report with this exact line, on its own:
+   `I'm done please delete me`
+   Only say it when everything is genuinely finished. If anything is outstanding or you are
+   blocked, say what instead and do not use the line.
 
 Never remove another session's worktree or branch unless it is clean, already in
 `origin/master` (nothing ahead), and idle for over a day; otherwise report it and ask.
@@ -670,7 +677,7 @@ my_task:
           format: multiline
 ```
 
-Use `readOnly: true` on schema fields to display computed/read-only values. Use `default: "{{template}}"` to pre-populate fields from workflow properties.
+Use `readOnly: true` on schema fields to display computed/read-only values. Use `default: "{{template}}"` to pre-populate fields from workflow properties. A whole schema can also be generated at runtime: `schema: "{{followup_form}}"` resolves to a JSON Schema an earlier `llm_call` (`response_format: json`) wrote, giving one field per follow-up question (#179).
 
 See `zebra-py/AGENTS.md` for JSON Schema widget mapping and form utility functions (`zebra.forms` module).
 

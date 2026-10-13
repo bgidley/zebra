@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from zebra.core.models import ProcessInstance, ProcessState, TaskInstance, TaskResult
+from zebra.forms import resolve_task_schema
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import with_previous_run
@@ -515,7 +516,8 @@ class ExecuteGoalWorkflowAction(TaskAction):
             if answer in (None, "", {}):
                 continue
             if isinstance(answer, dict):
-                schema_props = (task_def.properties.get("schema") or {}).get("properties") or {}
+                schema = resolve_task_schema(task_def.properties.get("schema"), properties)
+                schema_props = (schema or {}).get("properties") or {}
                 answer = {
                     k: v
                     for k, v in answer.items()

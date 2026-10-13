@@ -1738,9 +1738,9 @@ async def activity(request):
         is_human = not task_def.auto
         if human_only and not is_human:
             continue
-        schema = task_def.properties.get("schema", {})
         # Try to recover goal/run context from process properties
         proc_props = process.properties or {}
+        schema = _task_schema(task_def, proc_props)
         run_id = proc_props.get("run_id")
         goal = proc_props.get("goal", "")
         workflow_name = proc_props.get("workflow_name")
@@ -2042,7 +2042,7 @@ async def _get_tasks_for_processes(
             if human_only and not is_human:
                 continue
 
-            schema = task_def.properties.get("schema", {})
+            schema = _task_schema(task_def, process.properties or {})
             tasks_data.append(
                 {
                     "id": task.id,
@@ -2172,6 +2172,20 @@ def _resolve_schema_defaults(schema: dict, process_properties: dict) -> dict:
     return schema
 
 
+def _task_schema(task_def, process_properties: dict) -> dict:
+    """The JSON Schema a human task renders and validates against.
+
+    Resolves a runtime ``{{reference}}`` schema (#179), falls back to a single
+    response field when there is none, and resolves ``{{template}}`` defaults.
+    """
+    from zebra.forms import resolve_task_schema
+
+    schema = resolve_task_schema(task_def.properties.get("schema"), process_properties)
+    if not schema:
+        schema = _fallback_schema(task_def.name)
+    return _resolve_schema_defaults(schema, process_properties)
+
+
 def _fallback_schema(task_name: str) -> dict:
     """Build a fallback schema for tasks without a JSON Schema definition.
 
@@ -2230,14 +2244,8 @@ async def human_task_form(request, task_id):
     if not task_def:
         return HttpResponse("Task definition not found", status=404)
 
-    # Extract schema and build form
-    schema = task_def.properties.get("schema", {})
-    if not schema:
-        schema = _fallback_schema(task_def.name)
-
-    # Resolve {{template}} variables in schema defaults from process properties
     proc_props = process.properties or {}
-    schema = _resolve_schema_defaults(schema, proc_props)
+    schema = _task_schema(task_def, proc_props)
 
     form = schema_to_form(schema)
 
@@ -2266,6 +2274,11 @@ async def human_task_form(request, task_id):
                 display_value = value["response"]
             else:
                 display_value = value
+            # A generated form schema (#179) is rendered as the form, not shown raw
+            if isinstance(display_value, dict) and isinstance(
+                display_value.get("properties"), dict
+            ):
+                continue
             prior_outputs[label] = display_value
 
     context = {
@@ -2310,9 +2323,7 @@ async def human_task_submit(request, task_id):
     definition = await store.load_definition(process.definition_id)
     task_def = definition.tasks.get(task.task_definition_id)
 
-    schema = task_def.properties.get("schema", {})
-    if not schema:
-        schema = _fallback_schema(task_def.name)
+    schema = _task_schema(task_def, process.properties or {})
 
     # Coerce and validate form data
     raw_data = dict(request.POST)

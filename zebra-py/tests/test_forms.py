@@ -6,6 +6,7 @@ from zebra.forms import (
     FormSchema,
     coerce_form_data,
     get_routes_from_definition,
+    resolve_task_schema,
     schema_to_form,
     validate_form_data,
 )
@@ -485,3 +486,59 @@ class TestGetRoutesFromDefinition:
         ]
         routes = get_routes_from_definition("review", routings)
         assert routes == ["approve"]
+
+
+class TestResolveTaskSchema:
+    """Runtime-built human task schemas (#179)."""
+
+    GENERATED = {
+        "title": "Follow-ups",
+        "properties": {"q1": {"type": "string", "title": "Where do you paddle?"}},
+    }
+
+    def test_static_schema_unchanged(self):
+        schema = {"type": "object", "properties": {"a": {"type": "string"}}}
+        assert resolve_task_schema(schema, {}) is schema
+
+    def test_missing_schema_is_none(self):
+        assert resolve_task_schema(None, {}) is None
+        assert resolve_task_schema({}, {}) is None
+
+    def test_reference_resolves_dict_property(self):
+        schema = resolve_task_schema("{{followup_form}}", {"followup_form": self.GENERATED})
+        assert schema["type"] == "object"
+        assert schema["properties"]["q1"]["title"] == "Where do you paddle?"
+
+    def test_reference_resolves_json_string_in_code_fence(self):
+        text = '```json\n{"properties": {"q1": {"type": "string"}}}\n```'
+        schema = resolve_task_schema(" {{ form }} ", {"form": text})
+        assert list(schema["properties"]) == ["q1"]
+
+    def test_task_output_reference_unwraps_response(self):
+        props = {"__task_output_prepare": {"response": self.GENERATED}}
+        schema = resolve_task_schema("{{prepare.output}}", props)
+        assert schema["title"] == "Follow-ups"
+
+    def test_dotted_field_reference(self):
+        props = {"analysis": {"form": self.GENERATED, "notes": "x"}}
+        assert resolve_task_schema("{{analysis.form}}", props)["title"] == "Follow-ups"
+
+    @pytest.mark.parametrize(
+        "value",
+        [None, "not json", "## Follow-up questions\n1. Where?", {"properties": {}}, [1, 2]],
+    )
+    def test_unusable_value_is_none(self, value):
+        assert resolve_task_schema("{{form}}", {"form": value}) is None
+
+    def test_non_reference_string_is_none(self):
+        assert resolve_task_schema("Questions: {{form}}", {"form": self.GENERATED}) is None
+
+    def test_resolved_schema_drives_validation(self):
+        generated = {
+            "required": ["q1"],
+            "properties": {"q1": {"type": "string", "title": "Q1"}, "q2": {"type": "string"}},
+        }
+        schema = resolve_task_schema("{{form}}", {"form": generated})
+        fields = schema_to_form(schema).fields
+        assert [f.name for f in fields] == ["q1", "q2"]
+        assert validate_form_data(schema, {"q2": "x"})[0].field == "q1"

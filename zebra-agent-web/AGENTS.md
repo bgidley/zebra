@@ -538,7 +538,7 @@ diagram.refresh(); // Manual refresh
 
 ### Human Task Forms (`zebra.forms` + Template Tags)
 
-The web UI renders human task forms from JSON Schema definitions stored in `task_def.properties.schema`. The form system has two layers:
+The web UI renders human task forms from JSON Schema definitions stored in `task_def.properties.schema`. It may also be a `"{{reference}}"` to a schema generated at runtime, resolved by `_task_schema()` via `zebra.forms.resolve_task_schema()` (#179). The form system has two layers:
 
 **Server-side form model** (`zebra.forms` in `zebra-py`):
 - `schema_to_form(schema)` converts JSON Schema to `FormSchema` (list of `FormField` dataclasses)
