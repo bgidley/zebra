@@ -350,7 +350,8 @@ class WorkflowEngine:
 
         All non-terminal tasks (PENDING, AWAITING_SYNC, READY, RUNNING) are
         moved to FAILED. FOEs are left in place for debugging. The process
-        is marked FAILED with ``__error__`` set to *reason*.
+        is marked FAILED with ``__error__`` set to *reason*. Its live child
+        processes are failed too, so none is left waiting on a human (#185).
 
         This is useful for cancelling stale/stuck processes that will never
         complete on their own (e.g. abandoned human tasks, timed-out goals).
@@ -408,11 +409,21 @@ class WorkflowEngine:
         await self.store.save_process(process)
         logger.info("Process %s failed: %s", process_id, reason)
         await self._on_process_terminal(process)
-        # Children a suspended task was waiting on are no longer wanted (#146).
+        # Children a suspended task was waiting on are no longer wanted (#146), nor
+        # is any other live child, e.g. one a still-running action spawned (#185).
+        for child in await self.store.list_child_processes(process_id):
+            if child.state not in _TERMINAL_PROCESS_STATES and child.id not in abandoned:
+                abandoned.append(child.id)
         for child_id in abandoned:
             child = await self.store.load_process(child_id)
-            if child is not None and child.state not in _TERMINAL_PROCESS_STATES:
+            if child is None or child.state in _TERMINAL_PROCESS_STATES:
+                continue
+            try:
                 await self.fail_process(child_id, f"Parent process {process_id} failed: {reason}")
+            except InvalidStateTransitionError:
+                pass  # finished meanwhile
+            except Exception:
+                logger.exception("Failed to fail child %s of process %s", child_id, process_id)
         return process
 
     # =========================================================================

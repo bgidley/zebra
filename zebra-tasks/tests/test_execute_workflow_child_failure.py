@@ -93,7 +93,12 @@ async def _run_parent_action(**extra_props):
         extras={"__workflow_library__": library},
     )
 
-    result = await ExecuteGoalWorkflowAction().run(parent_task, context)
+    action = ExecuteGoalWorkflowAction()
+    result = await action.run(parent_task, context)
+    if result.suspend_children:
+        # The child already failed inline; resume the task as the engine would (#185).
+        context.subflow_results = [{"process_id": pid} for pid in result.suspend_children]
+        result = await action.run(parent_task, context)
     return result, store, parent
 
 
