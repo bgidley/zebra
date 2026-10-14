@@ -365,12 +365,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
             # Check timeout (skip when human tasks are pending)
             elapsed = asyncio.get_event_loop().time() - start_time
             if elapsed > timeout:
-                return {
-                    "success": False,
-                    "output": None,
-                    "tokens_used": 0,
-                    "error": f"Timeout after {timeout}s",
-                }, task_executions
+                return await self._time_out_child(context, process_id, timeout), task_executions
 
             # Get process status
             process = await context.store.load_process(process_id)
@@ -499,6 +494,37 @@ class ExecuteGoalWorkflowAction(TaskAction):
 
             # Wait before checking again
             await asyncio.sleep(0.1)
+
+    @staticmethod
+    async def _time_out_child(
+        context: ExecutionContext, process_id: str, timeout: float
+    ) -> dict[str, Any]:
+        """Fail a child that overran *timeout* and report what it spent (#183).
+
+        Without this the child keeps running with nobody waiting on it (a hung
+        action in a chain resumed by ``complete_task`` is not bounded by
+        ``start_process_with_timeout``), and the run records $0 although the child
+        already paid for its earlier LLM calls.
+        """
+        error = f"Timeout after {timeout}s"
+        process = await context.store.load_process(process_id)
+        if process is not None and process.state not in (
+            ProcessState.COMPLETE,
+            ProcessState.FAILED,
+        ):
+            logger.warning("Failing child process %s: %s", process_id, error)
+            process = await context.engine.fail_process(process_id, error)
+        properties = process.properties if process is not None else {}
+        token_history = properties.get("__token_history__", [])
+        return {
+            "success": False,
+            "output": None,
+            "tokens_used": properties.get("__total_tokens__", 0),
+            "cost": properties.get("__total_cost__", 0.0),
+            "input_tokens": sum(e.get("input", 0) for e in token_history),
+            "output_tokens": sum(e.get("output", 0) for e in token_history),
+            "error": error,
+        }
 
     @staticmethod
     def _extract_user_inputs(properties: dict[str, Any], definition: Any) -> dict[str, Any]:

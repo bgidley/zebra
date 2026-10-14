@@ -18,7 +18,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 |-----------|---------|
 | `zebra_tasks/` | Package root |
 | `zebra_tasks/llm/` | LLM provider integrations |
-| `zebra_tasks/llm/base.py` | LLMProvider base class, Message model |
+| `zebra_tasks/llm/base.py` | LLMProvider base class, Message model; `llm_request_timeout()` (`ZEBRA_LLM_TIMEOUT_SECONDS`, default 180s) + `LLM_MAX_RETRIES` (2), passed to every provider's SDK client (#183) |
 | `zebra_tasks/llm/action.py` | LLMCallAction task action |
 | `zebra_tasks/llm/agent.py` | LLMAgentAction (`llm_agent`): workflows as tools, each call a child process the task suspends on; `define_workflow`; cost roll-up; zero-cost tool `WorkflowRun`s (#146) |
 | `zebra_tasks/llm/providers/` | Provider implementations |
@@ -329,6 +329,8 @@ Execute a workflow by name and capture its output.
 | `error` | string | Error message if failed |
 
 **Store Access:** Reads `__workflow_library__` from `context.extras` (engine-level dependency injection).
+
+**Timeout (#183):** if the wait times out (e.g. an auto task hangs after a human-task submit, which `start_process_with_timeout` does not cover), the child is `fail_process`ed and the result carries the child's `cost`/token counts so far.
 
 **Resumable (#129):** records the child process id on its task (`__child_process_id__`) before starting it; a re-run (e.g. after crash recovery) re-attaches to that child while it is still linked via `parent_process_id`/`parent_task_id`, instead of spawning a duplicate. Declare the task `idempotent: true` so recovery re-runs it.
 

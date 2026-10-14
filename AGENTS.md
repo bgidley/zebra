@@ -716,6 +716,7 @@ See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking fl
 | `GOAL_COST_WARNING_USD` | `ZEBRA_GOAL_COST_WARNING_USD` | 5.00 | Per-goal soft warning threshold |
 | `GOAL_TIMEOUT_SECONDS` | `ZEBRA_GOAL_TIMEOUT_SECONDS` | 900 | Max seconds a goal's auto tasks may run before it is failed (#142) |
 | `DAEMON_AUTO_START` | `ZEBRA_DAEMON_AUTO_START` | true | Auto-start daemon in ASGI server |
+| — | `ZEBRA_LLM_TIMEOUT_SECONDS` | 180 | Per-attempt LLM API timeout in every provider (2 retries), so a stalled call fails inside the goal budget (#183) |
 | `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | `ZEBRA_RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | 3 | Recovery fails a process once a task has been interrupted this many times (#130) |
 
 ### Configurable LLM Model Selection

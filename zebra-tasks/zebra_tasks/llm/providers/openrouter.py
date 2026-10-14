@@ -11,7 +11,7 @@ OPENROUTER_BASE_URL (override endpoint).
 import logging
 import os
 
-from zebra_tasks.llm.base import LLMResponse
+from zebra_tasks.llm.base import LLM_MAX_RETRIES, LLMResponse, llm_request_timeout
 from zebra_tasks.llm.providers.openai import OpenAIProvider
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,8 @@ class OpenRouterProvider(OpenAIProvider):
             api_key=self._api_key,
             base_url=os.environ.get("OPENROUTER_BASE_URL", self.BASE_URL),
             default_headers={"X-Title": "Zebra"},
+            timeout=llm_request_timeout(),
+            max_retries=LLM_MAX_RETRIES,
         )
 
     @classmethod

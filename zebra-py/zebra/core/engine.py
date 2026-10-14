@@ -515,7 +515,7 @@ class WorkflowEngine:
                 t for t in tasks if t.state not in {TaskState.COMPLETE, TaskState.FAILED}
             ]
 
-            if not active_tasks:
+            if not active_tasks and process.state not in _TERMINAL_PROCESS_STATES:
                 # A FAILED task never routes, so if one remains the workflow did
                 # not finish its work — fail the process rather than complete it
                 # (#131). Handled failures route via next_route and complete.
@@ -751,6 +751,20 @@ class WorkflowEngine:
         else:
             # No action - auto-complete
             result = TaskResult.ok()
+
+        # The process may have been failed while the action ran (e.g. a parent's
+        # goal timeout, #183). fail_process already failed this task; applying the
+        # result would route on a dead process and saving the stale copy below
+        # would revert it to RUNNING.
+        current = await self.store.load_process(process.id)
+        if current is not None and current.state in _TERMINAL_PROCESS_STATES:
+            logger.warning(
+                "Discarding result of task %s: process %s became %s while it ran",
+                task.id,
+                process.id,
+                current.state.value,
+            )
+            return
 
         if result.suspend_children:
             await self._suspend_task(task, result.suspend_children)
