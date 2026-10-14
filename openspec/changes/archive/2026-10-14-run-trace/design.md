@@ -1,4 +1,4 @@
-See [specs/run-trace-design.md](../../../specs/run-trace-design.md) for the narrative design.
+See [specs/run-trace-design.md](../../../../specs/run-trace-design.md) for the narrative design.
 
 ## Decisions
 
