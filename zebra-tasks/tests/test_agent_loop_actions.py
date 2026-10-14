@@ -32,6 +32,7 @@ def mock_context():
     context.process.id = "process-1"
     context.process.properties = {}
     context.extras = {}  # For engine-level dependency injection (non-serializable objects)
+    context.subflow_results = None  # Set only when a suspended task resumes (#146)
     context.get_process_property = MagicMock(
         side_effect=lambda k, d=None: context.process.properties.get(k, d)
     )
@@ -608,7 +609,21 @@ class TestExecuteGoalWorkflowAction:
         store.load_process = AsyncMock()
         store.save_process = AsyncMock()
         store.save_task = AsyncMock()  # F129: child id is recorded on the task
+        store.load_definition = AsyncMock()
         return store
+
+    @staticmethod
+    async def _run_and_resume(task, context, definition):
+        """Run the action, check it suspends on the child, then resume it (#185)."""
+        from zebra_tasks.agent.execute_workflow import ExecuteGoalWorkflowAction
+
+        action = ExecuteGoalWorkflowAction()
+        suspended = await action.run(task, context)
+        assert suspended.suspend_children == ["sub-process-1"]
+
+        context.store.load_definition.return_value = definition
+        context.subflow_results = [{"process_id": "sub-process-1"}]
+        return await action.run(task, context)
 
     async def test_no_workflow_name(self, mock_task, mock_context):
         """Test error when no workflow_name provided."""
@@ -678,8 +693,6 @@ class TestExecuteGoalWorkflowAction:
         """Test successful workflow execution."""
         from zebra.core.models import ProcessState
 
-        from zebra_tasks.agent.execute_workflow import ExecuteGoalWorkflowAction
-
         # Setup mocks
         mock_workflow_library.get_workflow.return_value = mock_definition
         mock_context.extras["__workflow_library__"] = mock_workflow_library
@@ -700,8 +713,7 @@ class TestExecuteGoalWorkflowAction:
             "timeout": 5,
         }
 
-        action = ExecuteGoalWorkflowAction()
-        result = await action.run(mock_task, mock_context)
+        result = await self._run_and_resume(mock_task, mock_context, mock_definition)
 
         assert result.success is True
         assert result.output["success"] is True
@@ -719,8 +731,6 @@ class TestExecuteGoalWorkflowAction:
     ):
         """Test failed workflow execution."""
         from zebra.core.models import ProcessState
-
-        from zebra_tasks.agent.execute_workflow import ExecuteGoalWorkflowAction
 
         # Setup mocks
         mock_workflow_library.get_workflow.return_value = mock_definition
@@ -742,8 +752,7 @@ class TestExecuteGoalWorkflowAction:
             "timeout": 5,
         }
 
-        action = ExecuteGoalWorkflowAction()
-        result = await action.run(mock_task, mock_context)
+        result = await self._run_and_resume(mock_task, mock_context, mock_definition)
 
         assert result.success is False
         assert "Task failed" in result.error
@@ -759,8 +768,6 @@ class TestExecuteGoalWorkflowAction:
     ):
         """Test using a custom output key."""
         from zebra.core.models import ProcessState
-
-        from zebra_tasks.agent.execute_workflow import ExecuteGoalWorkflowAction
 
         # Setup mocks
         mock_workflow_library.get_workflow.return_value = mock_definition
@@ -782,8 +789,7 @@ class TestExecuteGoalWorkflowAction:
             "output_key": "custom_result",
         }
 
-        action = ExecuteGoalWorkflowAction()
-        result = await action.run(mock_task, mock_context)
+        result = await self._run_and_resume(mock_task, mock_context, mock_definition)
 
         assert result.success is True
         # Verify custom key was set

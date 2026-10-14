@@ -39,6 +39,7 @@ def _context(properties: dict) -> MagicMock:
     context.process.id = "process-1"
     context.process.properties = properties
     context.extras = {}
+    context.subflow_results = None
     context.resolve_template = MagicMock(side_effect=lambda x: x)
     return context
 

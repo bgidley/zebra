@@ -1,6 +1,5 @@
 """ExecuteGoalWorkflowAction - Execute a goal workflow by name."""
 
-import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -16,7 +15,6 @@ from zebra_tasks.agent.user_context import copy_user_properties
 
 if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
-    from zebra_agent.metrics import TaskExecution
 
 logger = logging.getLogger(__name__)
 
@@ -151,14 +149,24 @@ class ExecuteGoalWorkflowAction(TaskAction):
         self.workflow_library = workflow_library
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        """Execute the goal workflow."""
-        workflow_name = task.properties.get("workflow_name")
-        goal = task.properties.get("goal")
-        timeout = float(task.properties.get("timeout", 120))
+        """Start the goal workflow and suspend on it; collect its result on resume.
+
+        The task suspends on the child (#185) instead of polling it, so a goal parked
+        on the child's human task returns from ``start_process`` (no goal timeout
+        runs while a human answers) and failing the goal fails the child.
+        """
         output_key = task.properties.get("output_key", "execution_result")
         continue_on_failure = task.properties.get("continue_on_failure", False)
         if isinstance(continue_on_failure, str):
             continue_on_failure = continue_on_failure.lower() in ("true", "1", "yes")
+
+        if context.subflow_results is not None:
+            result = await self._collect_child(task, context)
+            return self._finish(result, context, output_key, continue_on_failure)
+
+        workflow_name = task.properties.get("workflow_name")
+        goal = task.properties.get("goal")
+        timeout = float(task.properties.get("timeout", 120))
 
         # Resolve templates if needed
         if isinstance(workflow_name, str) and "{{" in workflow_name:
@@ -186,6 +194,17 @@ class ExecuteGoalWorkflowAction(TaskAction):
             return TaskResult.fail(f"Failed to load workflow: {e}")
 
         try:
+            # Emit progress event: workflow starting
+            callback = context.extras.get("__progress_callback__")
+            if callback:
+                await callback(
+                    "workflow_starting",
+                    {
+                        "total_tasks": len(definition.tasks),
+                        "workflow_name": workflow_name,
+                    },
+                )
+
             # F129: re-attach to a child spawned by an earlier, interrupted run of
             # this task instead of creating a duplicate — makes re-running safe.
             sub_process = await self._find_existing_child(task, context)
@@ -199,59 +218,6 @@ class ExecuteGoalWorkflowAction(TaskAction):
                     await context.engine.start_process_with_timeout(sub_process.id, timeout)
             else:
                 sub_process = await self._spawn_child(task, context, definition, goal, timeout)
-
-            # Emit progress event: workflow starting
-            callback = context.extras.get("__progress_callback__")
-            if callback:
-                await callback(
-                    "workflow_starting",
-                    {
-                        "total_tasks": len(definition.tasks),
-                        "workflow_name": workflow_name,
-                    },
-                )
-
-            # Wait for completion with task tracking
-            result, task_executions = await self._wait_for_completion(
-                context, sub_process.id, definition, timeout, callback
-            )
-
-            logger.info(
-                f"ExecuteGoalWorkflowAction completed: success={result.get('success')}, "
-                f"output={str(result.get('output'))[:100] if result.get('output') else None}"
-            )
-
-            # Store task executions for metrics recording
-            # Convert TaskExecution dataclasses to JSON-serializable dicts
-            if task_executions:
-                current_execs = context.process.properties.get("__task_executions__", [])
-                for te in task_executions:
-                    current_execs.append(
-                        {
-                            "id": te.id,
-                            "run_id": te.run_id,
-                            "task_definition_id": te.task_definition_id,
-                            "task_name": te.task_name,
-                            "execution_order": te.execution_order,
-                            "state": te.state,
-                            "started_at": te.started_at.isoformat() if te.started_at else None,
-                            "completed_at": te.completed_at.isoformat()
-                            if te.completed_at
-                            else None,
-                            "output": str(te.output)[:500] if te.output else None,
-                            "error": te.error,
-                        }
-                    )
-                context.set_process_property("__task_executions__", current_execs)
-
-            # Store result
-            context.set_process_property(output_key, result)
-
-            if result["success"] or continue_on_failure:
-                return TaskResult.ok(output=result)
-            logger.warning(f"ExecuteGoalWorkflowAction returning fail: {result.get('error')}")
-            return TaskResult.fail(result.get("error", "Workflow execution failed"))
-
         except Exception as e:
             error_result = {
                 "success": False,
@@ -262,10 +228,126 @@ class ExecuteGoalWorkflowAction(TaskAction):
                 "output_tokens": 0,
                 "error": str(e),
             }
-            context.set_process_property(output_key, error_result)
-            if continue_on_failure:
-                return TaskResult.ok(output=error_result)
-            return TaskResult.fail(f"Workflow execution failed: {e}")
+            return self._finish(error_result, context, output_key, continue_on_failure)
+
+        # The child has finished, failed, or parked on a human task. The engine
+        # re-runs this action with subflow_results once it is terminal (#146).
+        return TaskResult.suspend([sub_process.id])
+
+    def _finish(
+        self,
+        result: dict[str, Any],
+        context: ExecutionContext,
+        output_key: str,
+        continue_on_failure: bool,
+    ) -> TaskResult:
+        """Store *result* on the process and turn it into this task's result."""
+        context.set_process_property(output_key, result)
+        if result["success"] or continue_on_failure:
+            return TaskResult.ok(output=result)
+        logger.warning(f"ExecuteGoalWorkflowAction returning fail: {result.get('error')}")
+        return TaskResult.fail(result.get("error", "Workflow execution failed"))
+
+    async def _collect_child(self, task: TaskInstance, context: ExecutionContext) -> dict[str, Any]:
+        """Build the execution result from the finished child this task waited on."""
+        child_id = task.properties.get(CHILD_PROCESS_ID_KEY)
+        child = await context.store.load_process(child_id) if child_id else None
+        if child is None:
+            return {
+                "success": False,
+                "output": None,
+                "tokens_used": 0,
+                "cost": 0.0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "error": "Process not found",
+            }
+        definition = await context.store.load_definition(child.definition_id)
+        properties = child.properties
+        token_history = properties.get("__token_history__", [])
+        success = child.state == ProcessState.COMPLETE
+        error = None
+        if child.state == ProcessState.FAILED:
+            error = str(properties.get("__error__", "Process failed"))
+        elif not success:
+            error = f"Child process is still {child.state.value}"
+
+        self._record_task_executions(child, definition, error, context)
+        callback = context.extras.get("__progress_callback__")
+        if callback:
+            await self._emit_task_progress(callback, child, definition)
+
+        logger.info("ExecuteGoalWorkflowAction collected child %s: success=%s", child.id, success)
+        return {
+            "success": success,
+            "output": self._extract_output(properties, definition) if success else None,
+            "tokens_used": properties.get("__total_tokens__", 0),
+            "cost": properties.get("__total_cost__", 0.0),
+            "input_tokens": sum(e.get("input", 0) for e in token_history),
+            "output_tokens": sum(e.get("output", 0) for e in token_history),
+            "error": error,
+            "user_inputs": self._extract_user_inputs(properties, definition),
+        }
+
+    @staticmethod
+    def _completed_task_ids(child: ProcessInstance) -> list[str]:
+        """Task definition ids of the child's completed tasks, in completion order."""
+        prefix = "__task_output_"
+        return [k[len(prefix) :] for k in child.properties if k.startswith(prefix)]
+
+    def _record_task_executions(
+        self,
+        child: ProcessInstance,
+        definition: Any,
+        error: str | None,
+        context: ExecutionContext,
+    ) -> None:
+        """Append the child's task executions to ``__task_executions__`` for metrics."""
+        tasks = getattr(definition, "tasks", None) or {}
+        now = datetime.now(UTC).isoformat()
+        executions = []
+        for order, task_id in enumerate(self._completed_task_ids(child), start=1):
+            output = child.properties.get(f"__task_output_{task_id}")
+            task_def = tasks.get(task_id)
+            executions.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "run_id": context.process.properties.get("run_id", child.id),
+                    "task_definition_id": task_id,
+                    "task_name": task_def.name if task_def else task_id,
+                    "execution_order": order,
+                    "state": "complete",
+                    "started_at": now,
+                    "completed_at": now,
+                    "output": str(output)[:500] if output else None,
+                    "error": None,
+                }
+            )
+        if not executions:
+            return
+        if error:
+            executions[-1]["state"] = "failed"
+            executions[-1]["error"] = error
+        current = context.process.properties.get("__task_executions__", [])
+        context.set_process_property("__task_executions__", current + executions)
+
+    async def _emit_task_progress(
+        self, callback: Any, child: ProcessInstance, definition: Any
+    ) -> None:
+        """Emit ``task_completed`` progress events for the child's completed tasks."""
+        tasks = getattr(definition, "tasks", None) or {}
+        for index, task_id in enumerate(self._completed_task_ids(child), start=1):
+            output = child.properties.get(f"__task_output_{task_id}")
+            task_def = tasks.get(task_id)
+            await callback(
+                "task_completed",
+                {
+                    "task_name": task_def.name if task_def else task_id,
+                    "task_index": index,
+                    "total_tasks": len(tasks),
+                    "output_preview": str(output)[:200] if output else None,
+                },
+            )
 
     async def _find_existing_child(
         self, task: TaskInstance, context: ExecutionContext
@@ -302,7 +384,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
         """Create, link, record and start a new child process for this task.
 
         The child's inline auto-task chain is bounded by *timeout* (#142); on expiry
-        the child is failed and ``_wait_for_completion`` reports its error.
+        the child is failed and ``_collect_child`` reports its error on resume.
         """
         # F116: a follow-up goal carries the previous run's context into the
         # executed workflow, which only sees the goal.
@@ -340,191 +422,6 @@ class ExecuteGoalWorkflowAction(TaskAction):
 
         await context.engine.start_process_with_timeout(sub_process.id, timeout)
         return sub_process
-
-    async def _wait_for_completion(
-        self,
-        context: ExecutionContext,
-        process_id: str,
-        definition: Any,
-        timeout: float,
-        callback: Any = None,
-    ) -> tuple[dict[str, Any], list["TaskExecution"]]:
-        """Wait for sub-process to complete and extract results."""
-        from zebra_agent.metrics import TaskExecution
-
-        start_time = asyncio.get_event_loop().time()
-        task_executions: list[TaskExecution] = []
-        processed_tasks: set[str] = set()
-        notified_human_tasks: set[str] = set()
-        execution_order = 0
-        total_tasks = len(definition.tasks)
-
-        while True:
-            has_pending_human_tasks = False
-
-            # Check timeout (skip when human tasks are pending)
-            elapsed = asyncio.get_event_loop().time() - start_time
-            if elapsed > timeout:
-                return await self._time_out_child(context, process_id, timeout), task_executions
-
-            # Get process status
-            process = await context.store.load_process(process_id)
-            if process is None:
-                return {
-                    "success": False,
-                    "output": None,
-                    "tokens_used": 0,
-                    "error": "Process not found",
-                }, task_executions
-
-            # Track task completions
-            for key in process.properties:
-                if key.startswith("__task_output_"):
-                    task_id = key.replace("__task_output_", "")
-
-                    if task_id in processed_tasks:
-                        continue
-
-                    processed_tasks.add(task_id)
-                    execution_order += 1
-
-                    # Get task definition
-                    task_def = definition.tasks.get(task_id)
-                    task_name = task_def.name if task_def else task_id
-
-                    # Emit progress event: task completed
-                    if callback:
-                        await callback(
-                            "task_completed",
-                            {
-                                "task_name": task_name,
-                                "task_index": execution_order,
-                                "total_tasks": total_tasks,
-                                "output_preview": (
-                                    str(process.properties.get(key))[:200]
-                                    if process.properties.get(key)
-                                    else None
-                                ),
-                            },
-                        )
-
-                    # Create task execution record
-                    task_exec = TaskExecution(
-                        id=str(uuid.uuid4()),
-                        run_id=context.process.properties.get("run_id", process_id),
-                        task_definition_id=task_id,
-                        task_name=task_name,
-                        execution_order=execution_order,
-                        state="complete",
-                        started_at=datetime.now(UTC),
-                        completed_at=datetime.now(UTC),
-                        output=process.properties.get(key),
-                    )
-                    task_executions.append(task_exec)
-
-            # Check completion
-            if process.state == ProcessState.COMPLETE:
-                output = self._extract_output(process.properties, definition)
-                tokens = process.properties.get("__total_tokens__", 0)
-                cost = process.properties.get("__total_cost__", 0.0)
-                token_history = process.properties.get("__token_history__", [])
-                input_tok = sum(e.get("input", 0) for e in token_history)
-                output_tok = sum(e.get("output", 0) for e in token_history)
-
-                return {
-                    "success": True,
-                    "output": output,
-                    "tokens_used": tokens,
-                    "cost": cost,
-                    "input_tokens": input_tok,
-                    "output_tokens": output_tok,
-                    "error": None,
-                    "user_inputs": self._extract_user_inputs(process.properties, definition),
-                }, task_executions
-
-            if process.state == ProcessState.FAILED:
-                error = process.properties.get("__error__", "Process failed")
-                tokens = process.properties.get("__total_tokens__", 0)
-                cost = process.properties.get("__total_cost__", 0.0)
-                token_history = process.properties.get("__token_history__", [])
-                input_tok = sum(e.get("input", 0) for e in token_history)
-                output_tok = sum(e.get("output", 0) for e in token_history)
-
-                # Mark last task as failed
-                if task_executions:
-                    task_executions[-1].state = "failed"
-                    task_executions[-1].error = str(error)
-
-                return {
-                    "success": False,
-                    "output": None,
-                    "tokens_used": tokens,
-                    "cost": cost,
-                    "input_tokens": input_tok,
-                    "output_tokens": output_tok,
-                    "error": str(error),
-                    "user_inputs": self._extract_user_inputs(process.properties, definition),
-                }, task_executions
-
-            # Detect pending human tasks
-            pending = await context.engine.get_pending_tasks(process_id)
-            for pt in pending:
-                task_def = definition.tasks.get(pt.task_definition_id)
-                if task_def and not task_def.auto:
-                    has_pending_human_tasks = True
-                    # Only emit event for newly discovered human tasks
-                    if pt.id not in notified_human_tasks:
-                        notified_human_tasks.add(pt.id)
-                        if callback:
-                            await callback(
-                                "human_task_pending",
-                                {
-                                    "task_id": pt.id,
-                                    "task_name": task_def.name,
-                                    "task_definition_id": pt.task_definition_id,
-                                },
-                            )
-
-            # When human tasks are pending, use longer sleep and skip timeout
-            if has_pending_human_tasks:
-                await asyncio.sleep(0.5)
-                # Reset start_time so human wait doesn't count toward timeout
-                start_time = asyncio.get_event_loop().time()
-                continue
-
-            # Wait before checking again
-            await asyncio.sleep(0.1)
-
-    @staticmethod
-    async def _time_out_child(
-        context: ExecutionContext, process_id: str, timeout: float
-    ) -> dict[str, Any]:
-        """Fail a child that overran *timeout* and report what it spent (#183).
-
-        Without this the child keeps running with nobody waiting on it (a hung
-        action in a chain resumed by ``complete_task`` is not bounded by
-        ``start_process_with_timeout``), and the run records $0 although the child
-        already paid for its earlier LLM calls.
-        """
-        error = f"Timeout after {timeout}s"
-        process = await context.store.load_process(process_id)
-        if process is not None and process.state not in (
-            ProcessState.COMPLETE,
-            ProcessState.FAILED,
-        ):
-            logger.warning("Failing child process %s: %s", process_id, error)
-            process = await context.engine.fail_process(process_id, error)
-        properties = process.properties if process is not None else {}
-        token_history = properties.get("__token_history__", [])
-        return {
-            "success": False,
-            "output": None,
-            "tokens_used": properties.get("__total_tokens__", 0),
-            "cost": properties.get("__total_cost__", 0.0),
-            "input_tokens": sum(e.get("input", 0) for e in token_history),
-            "output_tokens": sum(e.get("output", 0) for e in token_history),
-            "error": error,
-        }
 
     @staticmethod
     def _extract_user_inputs(properties: dict[str, Any], definition: Any) -> dict[str, Any]:

@@ -265,6 +265,18 @@ class DjangoStore(StateStore):
 
         return await _get()
 
+    async def get_child_processes(self, parent_process_id: str) -> list[ProcessInstance]:
+        """Get a process's non-terminal children (not user-scoped: the parent scopes them)."""
+
+        @sync_to_async(thread_sensitive=False)
+        def _get():
+            qs = ProcessInstanceModel.objects.filter(parent_process_id=parent_process_id).exclude(
+                state__in=[ProcessState.COMPLETE.value, ProcessState.FAILED.value]
+            )
+            return [self._model_to_process(m) for m in qs.order_by("created_at")]
+
+        return await _get()
+
     def _model_to_process(self, model: ProcessInstanceModel) -> ProcessInstance:
         """Convert Django model to ProcessInstance."""
         properties = json.loads(model.properties) if model.properties else {}

@@ -134,7 +134,7 @@ consult_memory --> consult_knowledge --> assess_history_need
 4. **create_variant**: `WorkflowVariantCreatorAction` modifies existing workflow (route: `create_variant`)
 4b. **flag_concerns**: `FlagConcernsAction` proactively flags planning concerns (advisory, non-blocking; F21) before the ethics plan-review gate
 4c. **ethics_plan_review → escalate**: when values genuinely conflict on a Kantian-permissible plan, the gate routes `escalate` to the `ethics_dilemma_resolution` human task (both sides shown); `record_dilemma_resolution` records the choice and routes proceed/reject (F22)
-5. **execute_workflow**: `ExecuteGoalWorkflowAction` runs the selected/created workflow
+5. **execute_workflow**: `ExecuteGoalWorkflowAction` runs the selected/created workflow as a child process and suspends on it (#185), so a human task in the child parks the whole goal (no goal timeout while waiting) and failing the goal fails the child
 6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
 7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
 8. **ethics_post_review → record_ethics_review**: advisory LLM review of the completed run, then `RecordEthicsReviewAction` audits it (`check_type="post_review"`). Runs after the memory update so a failed review cannot skip it (#143)

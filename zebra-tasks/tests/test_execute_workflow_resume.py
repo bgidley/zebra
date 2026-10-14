@@ -1,15 +1,15 @@
 """F129: ExecuteGoalWorkflowAction is resumable after an interruption.
 
-A goal's ``execute_workflow`` task spawns a child workflow process. If the
-process driving it dies (e.g. a redeploy kills the web thread), re-running the
-task must re-attach to that child rather than spawn a duplicate, and crash
-recovery (``resume_all_processes``) must re-drive the goal to completion.
+A goal's ``execute_workflow`` task spawns a child workflow process and suspends on
+it (#185). If the task is interrupted while running (e.g. a redeploy kills the web
+thread), re-running it must re-attach to that child rather than spawn a duplicate,
+and crash recovery (``resume_all_processes``) must re-drive the goal to completion.
 """
 
 import asyncio
 
 import pytest
-from zebra.core.engine import WorkflowEngine
+from zebra.core.engine import PENDING_SUBFLOWS_KEY, WorkflowEngine
 from zebra.core.models import (
     ProcessDefinition,
     ProcessState,
@@ -92,41 +92,35 @@ async def _children(store: InMemoryStore) -> list:
     return [p for p in processes if p.definition_id == CHILD_DEF.id]
 
 
-async def _wait_for(predicate, timeout: float = 3.0) -> None:
-    deadline = asyncio.get_event_loop().time() + timeout
-    while not await predicate():
-        assert asyncio.get_event_loop().time() < deadline, "condition not met in time"
-        await asyncio.sleep(0.02)
-
-
 async def _human_task(engine: WorkflowEngine, child_id: str) -> TaskInstance:
     pending = await engine.get_pending_tasks(child_id)
     return next(t for t in pending if t.task_definition_id == "ask")
 
 
-async def _interrupted_goal(engine: WorkflowEngine, store: InMemoryStore):
-    """Start a goal, wait until its child is spawned, then kill the driver.
+async def _interrupt(store: InMemoryStore, task_id: str) -> TaskInstance:
+    """Leave the task RUNNING with its child recorded, as a killed driver would.
 
-    Mirrors a redeploy killing the web thread: the parent process and its
-    ``execute_workflow`` task are left RUNNING; the child keeps its own state.
+    Before #185 the task polled its child while RUNNING, so a redeploy left it in
+    exactly this state; prod goals in flight at deploy time are still like this.
     """
+    task = await store.load_task(task_id)
+    props = {k: v for k, v in task.properties.items() if k != PENDING_SUBFLOWS_KEY}
+    task = task.model_copy(update={"state": TaskState.RUNNING, "properties": props})
+    await store.save_task(task)
+    return task
+
+
+async def _interrupted_goal(engine: WorkflowEngine, store: InMemoryStore):
+    """Start a goal whose child parks on a human task, then interrupt its task."""
     parent = await engine.create_process(PARENT_DEF)
-    driver = asyncio.create_task(engine.start_process(parent.id))
-
-    async def child_waiting() -> bool:
-        children = await _children(store)
-        return bool(children) and bool(await engine.get_pending_tasks(children[0].id))
-
-    await _wait_for(child_waiting)
-    driver.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await driver
+    await engine.start_process(parent.id)
 
     (child,) = await _children(store)
+    assert await engine.get_pending_tasks(child.id)
     (task,) = await store.load_tasks_for_process(parent.id)
-    assert task.state == TaskState.RUNNING
+    assert task.state == TaskState.AWAITING_SUBFLOW
     assert task.properties[CHILD_PROCESS_ID_KEY] == child.id
-    return parent, child, task
+    return parent, child, await _interrupt(store, task.id)
 
 
 def _context(engine, store, parent) -> ExecutionContext:
@@ -140,22 +134,20 @@ def _context(engine, store, parent) -> ExecutionContext:
     )
 
 
+async def test_parked_child_suspends_the_task(engine, store):
+    """#185: the goal's run returns while the child waits on a human."""
+    parent, child, _ = await _interrupted_goal(engine, store)
+    assert (await store.load_process(parent.id)).state == ProcessState.RUNNING
+    assert AnswerAction.calls == 0
+
+
 async def test_rerun_reattaches_to_running_child(engine, store):
     parent, child, task = await _interrupted_goal(engine, store)
 
-    rerun = asyncio.create_task(
-        ExecuteGoalWorkflowAction().run(task, _context(engine, store, parent))
-    )
-    await asyncio.sleep(0.1)
-    assert not rerun.done()  # waiting on the still-running child
+    result = await ExecuteGoalWorkflowAction().run(task, _context(engine, store, parent))
 
-    await engine.complete_task((await _human_task(engine, child.id)).id, TaskResult.ok())
-    result = await asyncio.wait_for(rerun, timeout=3)
-
-    assert result.success is True
-    assert result.output["output"] == "42"
+    assert result.suspend_children == [child.id]  # waits on the same child
     assert len(await _children(store)) == 1  # no duplicate child
-    assert AnswerAction.calls == 1
 
 
 async def test_rerun_collects_already_completed_child(engine, store):
@@ -164,9 +156,12 @@ async def test_rerun_collects_already_completed_child(engine, store):
     await engine.complete_task((await _human_task(engine, child.id)).id, TaskResult.ok())
     assert (await store.load_process(child.id)).state == ProcessState.COMPLETE
 
-    result = await asyncio.wait_for(
-        ExecuteGoalWorkflowAction().run(task, _context(engine, store, parent)), timeout=3
-    )
+    action = ExecuteGoalWorkflowAction()
+    context = _context(engine, store, parent)
+    result = await action.run(task, context)
+    assert result.suspend_children == [child.id]
+    context.subflow_results = [{"process_id": child.id}]
+    result = await action.run(task, context)
 
     assert result.success is True
     assert result.output["output"] == "42"
@@ -179,38 +174,27 @@ async def test_rerun_spawns_new_child_when_recorded_child_is_not_linked(engine, 
     stranger = await engine.create_process(CHILD_DEF)  # not linked to this task
     task.properties[CHILD_PROCESS_ID_KEY] = stranger.id
 
-    rerun = asyncio.create_task(
-        ExecuteGoalWorkflowAction().run(task, _context(engine, store, parent))
-    )
+    result = await ExecuteGoalWorkflowAction().run(task, _context(engine, store, parent))
 
-    async def new_child_waiting() -> bool:
-        new_id = task.properties[CHILD_PROCESS_ID_KEY]
-        return new_id not in (stranger.id, child.id) and bool(
-            await engine.get_pending_tasks(new_id)
-        )
-
-    await _wait_for(new_child_waiting)
-    new_child_id = task.properties[CHILD_PROCESS_ID_KEY]
-    await engine.complete_task((await _human_task(engine, new_child_id)).id, TaskResult.ok())
-    result = await asyncio.wait_for(rerun, timeout=3)
-
-    assert result.success is True
+    (new_child_id,) = result.suspend_children
+    assert new_child_id not in (stranger.id, child.id)
+    assert task.properties[CHILD_PROCESS_ID_KEY] == new_child_id
     new_child = await store.load_process(new_child_id)
     assert new_child.parent_process_id == parent.id
     assert new_child.parent_task_id == task.id
+    assert await engine.get_pending_tasks(new_child_id)
 
 
 async def test_recovery_resumes_interrupted_goal_without_duplicate_child(engine, store):
-    parent, child, _ = await _interrupted_goal(engine, store)
+    parent, child, task = await _interrupted_goal(engine, store)
 
-    recovery = asyncio.create_task(engine.resume_all_processes())
-    await asyncio.sleep(0.1)
-    # Recovery re-ran execute_workflow (idempotent) — it is waiting on the same child.
-    assert not recovery.done()
-    await engine.complete_task((await _human_task(engine, child.id)).id, TaskResult.ok())
-    resumed = await asyncio.wait_for(recovery, timeout=3)
-
+    # Recovery re-runs execute_workflow (idempotent): it re-attaches and suspends.
+    resumed = await asyncio.wait_for(engine.resume_all_processes(), timeout=3)
     assert {p.id for p in resumed} == {parent.id, child.id}
+    assert (await store.load_task(task.id)).state == TaskState.AWAITING_SUBFLOW
+
+    await engine.complete_task((await _human_task(engine, child.id)).id, TaskResult.ok())
+
     parent = await store.load_process(parent.id)
     assert parent.state == ProcessState.COMPLETE
     assert parent.properties["execution_result"]["output"] == "42"
@@ -218,22 +202,34 @@ async def test_recovery_resumes_interrupted_goal_without_duplicate_child(engine,
     assert AnswerAction.calls == 1
 
 
+async def test_suspended_goal_survives_restarts(engine, store):
+    """#185: a goal waiting on a human is not RUNNING, so restarts don't count against it."""
+    parent = await engine.create_process(PARENT_DEF)
+    await engine.start_process(parent.id)
+    (task,) = await store.load_tasks_for_process(parent.id)
+
+    for _ in range(4):
+        await asyncio.wait_for(engine.resume_all_processes(max_interrupted_attempts=3), timeout=3)
+
+    assert (await store.load_process(parent.id)).state == ProcessState.RUNNING
+    reloaded = await store.load_task(task.id)
+    assert reloaded.state == TaskState.AWAITING_SUBFLOW
+    assert reloaded.execution_attempt == 0
+    assert len(await _children(store)) == 1
+
+
 async def test_goal_interrupted_three_times_auto_fails(engine, store):
     """#129 + #130: execute_workflow is idempotent, so recovery re-runs it — but each
     interruption still counts toward the recovery cap, and the 3rd fails the goal."""
     parent, child, task = await _interrupted_goal(engine, store)
 
-    # Interruptions 1 and 2: recovery re-attaches to the child, then is killed again.
+    # Interruptions 1 and 2: recovery re-attaches to the child, then is interrupted again.
     for attempt in (1, 2):
-        recovery = asyncio.create_task(engine.resume_all_processes(max_interrupted_attempts=3))
-        await asyncio.sleep(0.1)
-        assert not recovery.done()  # re-attached and waiting on the child
-        recovery.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await recovery
+        await asyncio.wait_for(engine.resume_all_processes(max_interrupted_attempts=3), timeout=3)
         reloaded = await store.load_task(task.id)
-        assert reloaded.state == TaskState.RUNNING
+        assert reloaded.state == TaskState.AWAITING_SUBFLOW
         assert reloaded.execution_attempt == attempt
+        await _interrupt(store, task.id)
 
     # Interruption 3 hits the cap: the goal fails instead of being re-run again.
     resumed = await asyncio.wait_for(
@@ -246,4 +242,8 @@ async def test_goal_interrupted_three_times_auto_fails(engine, store):
     assert "Execute Goal Workflow" in failed.properties["__error__"]
     assert "interrupted 3 times" in failed.properties["__error__"]
     assert len(await _children(store)) == 1  # never spawned a duplicate child
+    # #185: the child is failed with the goal, not left waiting on its human task.
+    child = await store.load_process(child.id)
+    assert child.state == ProcessState.FAILED
+    assert await engine.get_pending_tasks(child.id) == []
     assert AnswerAction.calls == 0

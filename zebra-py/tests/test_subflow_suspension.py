@@ -254,6 +254,39 @@ async def test_failing_the_parent_fails_its_waiting_children(engine, store):
     assert len(SpawnAction.calls) == 1
 
 
+async def test_failing_the_parent_fails_children_no_task_waits_on(engine, store):
+    """#185: a live child linked only by parent_process_id (e.g. spawned by an action
+    that was still running when the parent failed) must not be left on a human task."""
+    parent_def = ProcessDefinition(
+        id="parent_human",
+        name="Parent",
+        first_task_id="hold",
+        tasks={"hold": TaskDefinition(id="hold", name="Hold", auto=False)},
+    )
+    parent = await engine.create_process(parent_def)
+    await engine.start_process(parent.id)
+    child = await engine.create_process(HUMAN_CHILD, parent_process_id=parent.id)
+    await engine.start_process(child.id)
+    grandchild = await engine.create_process(HUMAN_CHILD, parent_process_id=child.id)
+    await engine.start_process(grandchild.id)
+    done = await engine.create_process(AUTO_CHILD, parent_process_id=parent.id)
+    await engine.start_process(done.id)
+    assert await engine.get_pending_tasks(child.id)
+
+    await engine.fail_process(parent.id, "Timed out after 900.0s")
+
+    child = await store.load_process(child.id)
+    assert child.state == ProcessState.FAILED
+    assert child.properties["__error__"] == (
+        f"Parent process {parent.id} failed: Timed out after 900.0s"
+    )
+    assert await engine.get_pending_tasks(child.id) == []
+    grandchild = await store.load_process(grandchild.id)
+    assert grandchild.state == ProcessState.FAILED
+    assert await engine.get_pending_tasks(grandchild.id) == []
+    assert (await store.load_process(done.id)).state == ProcessState.COMPLETE
+
+
 async def test_children_finishing_together_resume_the_task_once(engine, store):
     process = await _run(engine, _parent(["human_child", "human_child"]))
     first, second = await _children(store, process.id)

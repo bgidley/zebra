@@ -330,9 +330,9 @@ Execute a workflow by name and capture its output.
 
 **Store Access:** Reads `__workflow_library__` from `context.extras` (engine-level dependency injection).
 
-**Timeout (#183):** if the wait times out (e.g. an auto task hangs after a human-task submit, which `start_process_with_timeout` does not cover), the child is `fail_process`ed and the result carries the child's `cost`/token counts so far.
+**Suspends on the child (#185):** starts the child (inline chain bounded by `timeout`), then returns `TaskResult.suspend([child])` rather than polling. The engine re-runs it with `subflow_results` once the child is terminal; the result (output, cost/tokens, `user_inputs`) is built from the child then, `__task_executions__` gets the child's completed tasks and `task_completed` progress events are emitted in a batch. A goal whose child waits on a human therefore returns from its bounded run (no goal timeout while the human answers), and failing the goal fails the child. A failed or timed-out child reports what it had already spent (#183).
 
-**Resumable (#129):** records the child process id on its task (`__child_process_id__`) before starting it; a re-run (e.g. after crash recovery) re-attaches to that child while it is still linked via `parent_process_id`/`parent_task_id`, instead of spawning a duplicate. Declare the task `idempotent: true` so recovery re-runs it.
+**Resumable (#129):** records the child process id on its task (`__child_process_id__`) before starting it; a re-run (e.g. after crash recovery) re-attaches to that child while it is still linked via `parent_process_id`/`parent_task_id` and suspends on it, instead of spawning a duplicate. Declare the task `idempotent: true` so recovery re-runs it.
 
 ### PropagateFailureAction (`propagate_failure`)
 

@@ -108,6 +108,15 @@ class StateStore(ABC):
         results.sort(key=lambda p: p.created_at)
         return results
 
+    async def get_child_processes(self, parent_process_id: str) -> list[ProcessInstance]:
+        """Get the non-terminal processes whose ``parent_process_id`` is the given id.
+
+        Used to fail a process's live children along with it (#185). The default
+        implementation filters ``list_processes``; backends should override it.
+        """
+        processes = await self.list_processes(include_completed=False)
+        return [p for p in processes if p.parent_process_id == parent_process_id]
+
     # =========================================================================
     # Task Instance Operations
     # =========================================================================
