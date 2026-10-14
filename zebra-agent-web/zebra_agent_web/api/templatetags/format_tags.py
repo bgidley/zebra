@@ -4,13 +4,17 @@ Usage in templates::
 
     {% load format_tags %}
     {{ run.cost|usd }}        -> $1,234.50, <$0.01, $0.00
+    {{ step.duration_seconds|seconds }} -> 0.4s, 12s, 4m 05s, 1h 02m
+    {{ value|pretty_json }}   -> strings as-is, anything else indented JSON
 """
 
+import json
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from django import template
 from django.utils import timezone
+from zebra.core.journal import TRUNCATED_KEY
 
 register = template.Library()
 
@@ -64,3 +68,36 @@ def usd(value: object) -> str:
         return "<$0.01"
     sign = "-" if amount < 0 else ""
     return f"{sign}${abs(amount):,.2f}"
+
+
+@register.filter
+def seconds(value: object) -> str:
+    """Format a duration in seconds compactly: ``0.4s``, ``12s``, ``4m 05s``, ``1h 02m``.
+
+    Empty or unparseable values render as ``""``.
+    """
+    try:
+        total = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return ""
+    if total < 10:
+        return f"{total:.1f}s"
+    whole = int(total)
+    if whole < 60:
+        return f"{whole}s"
+    if whole < 3600:
+        return f"{whole // 60}m {whole % 60:02d}s"
+    return f"{whole // 3600}h {(whole % 3600) // 60:02d}m"
+
+
+@register.filter
+def pretty_json(value: object) -> str:
+    """Render a property value for display: strings unchanged, anything else as indented JSON.
+
+    A value the step journal truncated (#184) renders as its preview with a size note.
+    """
+    if isinstance(value, dict) and value.get(TRUNCATED_KEY):
+        return f"{value.get('preview', '')}\n... (truncated, {value.get('size', '?')} chars)"
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, indent=2, ensure_ascii=False, default=str)

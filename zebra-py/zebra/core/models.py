@@ -292,6 +292,51 @@ class ProcessInstance(BaseModel):
         return self
 
 
+class ProcessEventKind(str, Enum):
+    """What a journal entry records (#184)."""
+
+    PROCESS_STARTED = "process_started"  # changed = the initial properties
+    PROCESS_COMPLETED = "process_completed"
+    PROCESS_FAILED = "process_failed"
+    TASK_WAITING = "task_waiting"  # a manual task became available
+    TASK_STARTED = "task_started"
+    TASK_COMPLETED = "task_completed"
+    TASK_FAILED = "task_failed"
+    TASK_SUSPENDED = "task_suspended"  # waiting on subflows (#146)
+
+
+class ProcessEvent(BaseModel):
+    """One entry in a process's step journal (#184).
+
+    The engine appends an event at each process and task lifecycle step. Each
+    event carries the process-property changes made since the previous step, so
+    replaying a process's events in order rebuilds its properties at any point.
+    Task instances are deleted on completion; the journal is what remains.
+    """
+
+    id: str = Field(..., description="Unique identifier for this event")
+    process_id: str = Field(..., description="ID of the process the event belongs to")
+    kind: ProcessEventKind
+    task_instance_id: str | None = Field(default=None, description="Task instance, if any")
+    task_definition_id: str | None = Field(default=None, description="Task definition, if any")
+    attempt: int = Field(default=0, description="Task execution attempt")
+    timestamp: datetime = Field(default_factory=_utc_now)
+    changed: dict[str, Any] = Field(
+        default_factory=dict, description="Process properties set or changed by this step"
+    )
+    removed: list[str] = Field(
+        default_factory=list, description="Process properties removed by this step"
+    )
+    error: str | None = Field(default=None)
+
+    model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def _check_changed_serializable(self) -> "ProcessEvent":
+        _validate_json_serializable(self.changed, "ProcessEvent")
+        return self
+
+
 # =============================================================================
 # Task Results
 # =============================================================================

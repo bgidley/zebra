@@ -1,0 +1,29 @@
+{% load format_tags %}
+{% comment %}
+A process's properties as they stood after one step (#184).
+Context: workflow_props, internal_props (lists of (key, value)).
+{% endcomment %}
+{% if not workflow_props and not internal_props %}
+<p class="text-faint">No properties.</p>
+{% endif %}
+<dl class="space-y-2">
+    {% for key, value in workflow_props %}
+    <div>
+        <dt class="text-xs font-mono text-muted">{{ key }}</dt>
+        <dd><pre class="text-sm text-ink whitespace-pre-wrap break-words bg-ground rounded p-2 max-h-64 overflow-auto">{{ value|pretty_json }}</pre></dd>
+    </div>
+    {% endfor %}
+</dl>
+{% if internal_props %}
+<details class="mt-2">
+    <summary class="cursor-pointer text-xs text-muted hover:text-ink">Engine properties ({{ internal_props|length }})</summary>
+    <dl class="mt-2 space-y-2">
+        {% for key, value in internal_props %}
+        <div>
+            <dt class="text-xs font-mono text-faint">{{ key }}</dt>
+            <dd><pre class="text-xs text-muted whitespace-pre-wrap break-words bg-ground rounded p-2 max-h-48 overflow-auto">{{ value|pretty_json }}</pre></dd>
+        </div>
+        {% endfor %}
+    </dl>
+</details>
+{% endif %}

@@ -19,6 +19,8 @@ from zebra.core.exceptions import SerializationError
 from zebra.core.models import (
     FlowOfExecution,
     ProcessDefinition,
+    ProcessEvent,
+    ProcessEventKind,
     ProcessInstance,
     ProcessState,
     TaskInstance,
@@ -31,6 +33,7 @@ from zebra_agent_web.middleware import get_current_user_id
 from .api.models import (
     FlowOfExecutionModel,
     ProcessDefinitionModel,
+    ProcessEventModel,
     ProcessInstanceModel,
     ProcessLockModel,
     TaskInstanceModel,
@@ -213,6 +216,7 @@ class DjangoStore(StateStore):
                 TaskInstanceModel.objects.filter(process_id=process_id).delete()
                 FlowOfExecutionModel.objects.filter(process_id=process_id).delete()
                 ProcessLockModel.objects.filter(process_id=process_id).delete()
+                ProcessEventModel.objects.filter(process_id=process_id).delete()
                 deleted, _ = ProcessInstanceModel.objects.filter(id=process_id).delete()
                 return deleted > 0
 
@@ -262,6 +266,20 @@ class DjangoStore(StateStore):
                 qs = qs.filter(parent_process_id__isnull=True)
             qs = qs.order_by("created_at")
             return [self._model_to_process(m) for m in qs]
+
+        return await _get()
+
+    async def list_child_processes(self, parent_process_id: str) -> list[ProcessInstance]:
+        """Get the direct subflows of a process.
+
+        Not user-scoped: children are often not stamped with a user, so callers
+        check access on the root process instead.
+        """
+
+        @sync_to_async(thread_sensitive=False)
+        def _get():
+            qs = ProcessInstanceModel.objects.filter(parent_process_id=parent_process_id)
+            return [self._model_to_process(m) for m in qs.order_by("created_at")]
 
         return await _get()
 
@@ -463,6 +481,56 @@ class DjangoStore(StateStore):
             parent_foe_id=model.parent_foe_id,
             created_at=model.created_at,
         )
+
+    # =========================================================================
+    # Process Journal (#184)
+    # =========================================================================
+
+    async def save_process_event(self, event: ProcessEvent) -> None:
+        """Append a step-journal event."""
+
+        @sync_to_async(thread_sensitive=False)
+        def _save():
+            ProcessEventModel.objects.create(
+                id=event.id,
+                process_id=event.process_id,
+                kind=event.kind.value,
+                task_instance_id=event.task_instance_id,
+                task_definition_id=event.task_definition_id,
+                attempt=event.attempt,
+                occurred_at=event.timestamp,
+                changed=_serialize_json(event.changed, f"event '{event.id}' changed"),
+                removed=json.dumps(event.removed),
+                error=event.error,
+            )
+
+        await _save()
+
+    async def load_process_events(self, process_ids: list[str]) -> list[ProcessEvent]:
+        """Load the journal events of *process_ids*, oldest first (not user-scoped)."""
+        if not process_ids:
+            return []
+
+        @sync_to_async(thread_sensitive=False)
+        def _load():
+            qs = ProcessEventModel.objects.filter(process_id__in=list(process_ids))
+            return [
+                ProcessEvent(
+                    id=m.id,
+                    process_id=m.process_id,
+                    kind=ProcessEventKind(m.kind),
+                    task_instance_id=m.task_instance_id,
+                    task_definition_id=m.task_definition_id,
+                    attempt=m.attempt,
+                    timestamp=m.occurred_at,
+                    changed=json.loads(m.changed) if m.changed else {},
+                    removed=json.loads(m.removed) if m.removed else [],
+                    error=m.error,
+                )
+                for m in qs.order_by("occurred_at")
+            ]
+
+        return await _load()
 
     # =========================================================================
     # Locking Operations

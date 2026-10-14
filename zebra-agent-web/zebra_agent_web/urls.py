@@ -100,6 +100,14 @@ urlpatterns = [
     path("runs/<str:run_id>/rate/", web_views.run_rate, name="run_rate"),
     path("runs/<str:run_id>/feedback/", web_views.run_feedback, name="run_feedback"),
     path("runs/<str:run_id>/continue/", web_views.run_continue, name="run_continue"),
+    path("runs/<str:run_id>/trace/", web_views.run_trace_redirect, name="run_trace"),
+    # Step trace across parent and subflows (#184)
+    path("processes/<str:process_id>/trace/", web_views.process_trace, name="process_trace"),
+    path(
+        "processes/<str:process_id>/trace/<str:event_id>/properties/",
+        web_views.process_trace_properties,
+        name="process_trace_properties",
+    ),
     # Dream Cycle history
     path("dreams/", web_views.dream_cycles, name="dream_cycles"),
     # Ethics Audit Log (F20 / REQ-ETH-006)

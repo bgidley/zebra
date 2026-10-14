@@ -79,7 +79,8 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 ### Storage
 
-- `StateStore` abstract interface covers definitions, instances, FOEs, locking.
+- `StateStore` abstract interface covers definitions, instances, FOEs, locking, the step journal and `list_child_processes`.
+- **Step journal (#184)**: the engine appends a `ProcessEvent` at process start/end and task waiting/start/suspend/complete/fail, each with the process-property diff since the previous event (`zebra/core/journal.py`; values over 16k chars stored as a preview). Replaying a process's events rebuilds its properties after any step. Best effort: a write failure only logs. Stores without a journal (the base-class default) keep working with no history. See [run-trace-design.md](run-trace-design.md).
 - Implementations: `InMemoryStore` (tests), `SQLiteStore`, `PostgresStore`.
 - **JSON-serialisation is enforced at the Pydantic layer** — non-serialisable objects cannot be placed in process properties. Services pass through `engine.extras` instead (the IoC escape hatch).
 
@@ -324,6 +325,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 | `/activity/` | Recent runs (handles orphaned processes) |
 | `/runs/<id>/` | Run detail with SVG workflow diagram; Final Output markdown rendered server-side (`markdown` template filter, markdown-it-py, raw HTML escaped — #149) |
 | `/workflows/` | Library browser; `/workflows/<name>/` shows stats, ordered steps and a natural-width structure diagram (`_workflow_structure()`), with the YAML in a collapsed Definition disclosure (#162) |
+| `/processes/<id>/trace/`, `/runs/<id>/trace/` | Step trace (#184): the whole run from its root down, subflows nested under the step that spawned them, per-step state/timing/changed properties, lazy "properties after this step" snapshots, "where it is now", live refresh (`api/run_trace.py`) |
 | `/dreams/` | Dream Cycle history: last 20 cycles with health score, changes applied/rejected, retirements, continuations and the LLM summary; health trend; next scheduled run |
 | `/tasks/` & `/tasks/<id>/` | Pending human tasks + JSON-Schema form |
 | `/api/runs/<id>/diagram/` | SVG |
@@ -347,7 +349,7 @@ In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via
 
 ### Storage backends (Django ORM)
 
-- `DjangoStore` (workflow state — `ProcessInstanceModel`, `TaskInstanceModel`, `FlowOfExecutionModel`)
+- `DjangoStore` (workflow state — `ProcessInstanceModel`, `TaskInstanceModel`, `FlowOfExecutionModel`, `ProcessEventModel` step journal in `zebra_process_events`, #184)
 - `DjangoMemoryStore`, `DjangoMetricsStore`
 - Works against SQLite, PostgreSQL, Oracle (Oracle is the integration-test target).
 - Oracle uses `zebra_agent_web.db_backends.oracle`, a thin subclass of Django's backend whose `ensure_connection()` pings a connection that has seen an error and reconnects if Oracle closed it. Needed because ORM calls run in `sync_to_async(thread_sensitive=False)` workers and the daemon, where Django's request-signal `close_old_connections()` never fires — without it a dropped session wedged prod until restart (#133).
