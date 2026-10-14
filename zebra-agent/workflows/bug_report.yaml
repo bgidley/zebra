@@ -1,0 +1,59 @@
+# Bug Report (#186)
+#
+# Started by the web UI's "Report a bug" button (POST /bugs/report/). The
+# process properties are the record:
+#
+#   bug_report           the user's view: title, description, expected,
+#                        steps, severity
+#   technical_context    {"client": ..., "server": ...} collected by the
+#                        browser and the server at submission time
+#   bug_report_markdown  both views rendered for the reviewer
+#   bug_title            short title, used in headings
+#
+# The single human task holds the report for review; its output
+# (__task_output_review) is the verdict shown on /bugs/.
+#
+# This workflow is a system workflow — the goal selector never picks it.
+
+name: "Bug Report"
+version: 1
+description: "Record a bug report from the web UI and hold it for review."
+tags: ["system", "bug-report"]
+use_when: "INTERNAL USE ONLY — started by the web UI's Report a bug button"
+first_task: review
+
+tasks:
+  review:
+    name: "Review Bug Report"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Review bug report"
+        description: "{{bug_title}}"
+        required: [verdict]
+        properties:
+          report:
+            type: string
+            title: "Report"
+            readOnly: true
+            default: "{{bug_report_markdown}}"
+          verdict:
+            type: string
+            title: "Verdict"
+            enum: [confirmed, needs_info, duplicate, not_a_bug, fixed]
+            enumLabels: ["Confirmed", "Needs more info", "Duplicate", "Not a bug", "Already fixed"]
+          priority:
+            type: string
+            title: "Priority"
+            enum: [low, medium, high, critical]
+            default: "medium"
+          issue_url:
+            type: string
+            title: "Issue link"
+            description: "GitLab issue tracking the fix, if any."
+            format: url
+          notes:
+            type: string
+            title: "Notes"
+            format: multiline

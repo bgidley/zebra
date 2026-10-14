@@ -102,6 +102,9 @@ urlpatterns = [
     path("runs/<str:run_id>/continue/", web_views.run_continue, name="run_continue"),
     # Dream Cycle history
     path("dreams/", web_views.dream_cycles, name="dream_cycles"),
+    # Bug reports (#186)
+    path("bugs/", web_views.bug_reports_page, name="bug_reports"),
+    path("bugs/report/", web_views.bug_report_submit, name="bug_report_submit"),
     # Ethics Audit Log (F20 / REQ-ETH-006)
     path("ethics-audit/", web_views.ethics_audit, name="ethics_audit"),
     # Nav badge: goals waiting on a human task (HTMX, #160)

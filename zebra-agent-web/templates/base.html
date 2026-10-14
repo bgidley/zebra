@@ -4,6 +4,8 @@
     {% include "partials/head_assets.html" %}
     <title>{% block title %}Zebra Agent{% endblock %}</title>
     <script src="{% static 'js/workflow-diagram.js' %}"></script>
+    {% comment %}Not deferred: buffers JS/HTMX errors from page load for bug reports (#186){% endcomment %}
+    <script src="{% static 'js/bug-report.js' %}"></script>
     {% block extra_head %}{% endblock %}
 </head>
 <body class="h-full text-ink" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
@@ -39,6 +41,7 @@
                     {% include "partials/nav_item.html" with url="/workflows/" icon="tree-structure" label="Workflows" %}
                     {% include "partials/nav_item.html" with url="/knowledge/" icon="book-open" label="Knowledge" %}
                     {% include "partials/nav_item.html" with url="/dreams/" icon="moon" label="Dream Cycles" %}
+                    {% include "partials/nav_item.html" with url="/bugs/" icon="bug" label="Bug Reports" %}
                 </div>
 
                 <p class="px-3 pt-5 pb-1.5 text-xs text-faint">Governance</p>
@@ -64,6 +67,11 @@
                     {% endif %}
                 </div>
                 {% endif %}
+                <button type="button" data-testid="report-bug-button"
+                        class="flex items-center gap-2 text-sm text-muted hover:text-ink"
+                        @click="sidebarOpen = false; $dispatch('open-bug-report')">
+                    {% icon "bug" class="h-[18px] w-[18px]" %}Report a bug
+                </button>
                 {% include "partials/version_info.html" %}
             </div>
         </aside>
@@ -105,6 +113,8 @@
                  x-transition></div>
         </template>
     </div>
+
+    {% include "partials/bug_report_dialog.html" %}
 
     {% block extra_js %}{% endblock %}
 </body>

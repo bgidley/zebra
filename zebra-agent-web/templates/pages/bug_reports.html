@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load markdown_tags %}
+
+{% block title %}Bug Reports - Zebra Agent{% endblock %}
+{% block page_title %}Bug Reports{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-ink">Bug Reports</h1>
+            <p class="text-muted mt-1">
+                Reported from the app, newest first (last {{ limit }}).
+                {% if open_count %}<span class="text-needs">{{ open_count }} waiting for review.</span>{% endif %}
+            </p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" @click="$dispatch('open-bug-report')">Report a bug</button>
+    </div>
+
+    {% if reports %}
+    <ul class="space-y-3" data-testid="bug-report-list">
+        {% for r in reports %}
+        <li class="panel" x-data="{ expanded: false }">
+            <div class="flex items-start gap-3 px-5 py-4">
+                {% if r.state == "running" %}
+                {% include "components/state_dot.html" with state="needs" %}
+                {% elif r.state == "complete" %}
+                {% include "components/state_dot.html" with state="ok" %}
+                {% else %}
+                {% include "components/state_dot.html" with state="fail" %}
+                {% endif %}
+                <div class="min-w-0 flex-1 space-y-1">
+                    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                        <p class="font-medium text-ink">{{ r.title }}</p>
+                        <p class="text-xs text-faint whitespace-nowrap">{{ r.created_at|date:"Y-m-d H:i" }} UTC</p>
+                    </div>
+                    <p class="text-sm text-muted line-clamp-2">{{ r.description }}</p>
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-faint">
+                        {% if r.severity_label %}<span>Severity: <span class="text-ink">{{ r.severity_label }}</span></span>{% endif %}
+                        {% if r.verdict %}
+                        <span>Verdict: <span class="text-ink">{{ r.verdict_label }}</span></span>
+                        {% if r.priority %}<span>Priority: <span class="text-ink">{{ r.priority|title }}</span></span>{% endif %}
+                        {% if r.issue_url %}<a href="{{ r.issue_url }}" class="underline hover:text-ink" rel="noopener noreferrer">Issue</a>{% endif %}
+                        {% elif r.state == "running" %}
+                        <span class="text-needs">Awaiting review</span>
+                        {% else %}
+                        <span class="text-fail">{{ r.state|title }}</span>
+                        {% endif %}
+                        {% if r.page %}<span class="truncate max-w-[24rem]" title="{{ r.page }}">{{ r.page }}</span>{% endif %}
+                    </div>
+                    {% if r.notes %}<p class="text-sm text-muted">{{ r.notes }}</p>{% endif %}
+                </div>
+                <div class="flex shrink-0 flex-col items-end gap-2">
+                    {% if r.review_task_id %}
+                    <a href="{% url 'human_task_form' task_id=r.review_task_id %}" class="btn btn-primary btn-sm">Review</a>
+                    {% endif %}
+                    <button type="button" class="text-xs text-muted hover:text-ink" @click="expanded = !expanded"
+                            x-text="expanded ? 'Hide details' : 'Details'">Details</button>
+                </div>
+            </div>
+            <div x-show="expanded" x-cloak class="border-t border-line px-5 py-4">
+                <div class="md-body overflow-auto max-h-[32rem]">{{ r.markdown|markdown }}</div>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="panel px-5 py-10 text-center text-muted" data-testid="bug-report-empty">
+        No bug reports yet. Use <span class="text-ink">Report a bug</span> in the sidebar when something goes wrong.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

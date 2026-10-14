@@ -42,6 +42,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `fixtures/routines/*.yaml` | Built-in routines: `goal_queue_tick`, `dream_cycle`, `compact_memory`, `daily_news_reading` (F155) |
 | `zebra_agent_web/api/identity.py` | Single-user identity; `goal_identity()` (async views) / `goal_identity_sync()` give the identity every goal entry point stamps with `__user_id__` (#151) |
 | `zebra_agent_web/api/dream_history.py` | Load + flatten recent Dream Cycle processes for the `/dreams/` page |
+| `zebra_agent_web/api/bug_reports.py` | Bug reports (#186): validate the dialog's fields, parse the browser's `client_context`, add server context + linked process/task/run state, render the reviewer markdown, list reports for `/bugs/`. UI: `partials/bug_report_dialog.html` (in `base.html`), `static/js/bug-report.js` (buffers JS/HTMX errors from `<head>`). See `specs/bug-report-design.md` |
 | `zebra_agent_web/api/thoughts.py` | Voice layer read model (#161): `thoughts_for_process(props)` (ordered recorded reasoning, voice line preferred) and `recent_thoughts()` (per-user feed for the dashboard). Rendered by `components/thought.html`, `partials/thought_trail.html`, `partials/on_my_mind.html` |
 | `zebra_agent_web/api/manual_review.py` | Find / retry / fail tasks flagged `__requires_manual_review__` by recovery (#130) |
 | `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
@@ -623,6 +624,8 @@ POST /api/tasks/<task_id>/complete/
 | `/profile/taxonomy/` | `values_taxonomy_page` | Values-tag curation: review candidates, promote/reject/demote/merge (#106) |
 | `/profile/taxonomy/action/` | `values_taxonomy_action` | Apply one curation action (POST) |
 | `/dreams/` | `dream_cycles` | Recent Dream Cycle runs: health, changes, retirements, summary (`api/dream_history.py`) |
+| `/bugs/` | `bug_reports_page` | Recent bug reports: severity, review state / verdict, Review link, expandable report (#186) |
+| `/bugs/report/` | `bug_report_submit` | Record a report from the dialog: starts a *Bug Report* process (POST, HTMX, #186) |
 | `/trust/` | `trust_page` | Trust management page (levels, suggestions, history) |
 | `/trust/<domain>/set/` | `trust_set_level_form` | Set domain trust level (POST, human-only) |
 | `/trust/suggestions/<id>/resolve/` | `trust_suggestion_resolve_form` | Approve/reject suggestion (POST) |

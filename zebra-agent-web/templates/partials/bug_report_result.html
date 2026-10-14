@@ -1,0 +1,9 @@
+{% comment %}Response to POST /bugs/report/ (#186), swapped into the bug report dialog.{% endcomment %}
+{% if error %}
+<p class="text-sm text-fail" role="alert" data-testid="bug-report-error">{{ error }}</p>
+{% else %}
+<div class="space-y-1 text-sm" data-testid="bug-report-sent">
+    <p class="text-ok">Thanks. Your report “{{ title }}” has been recorded for review.</p>
+    <p class="text-muted">Reference <span class="font-mono text-ink">{{ process_id|truncatechars:13 }}</span>. <a href="{% url 'bug_reports' %}" class="underline hover:text-ink">See all bug reports</a></p>
+</div>
+{% endif %}
