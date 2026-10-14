@@ -1,10 +1,36 @@
 """Base LLM provider interface and message types."""
 
+import logging
+import os
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# Per-attempt timeout for an LLM API request (#183). The SDKs default to 600s and
+# retry twice, so one stalled connection could outlast the whole goal budget
+# (execute_goal_workflow ``timeout``). 180s x 3 attempts stays under 600s.
+LLM_TIMEOUT_ENV = "ZEBRA_LLM_TIMEOUT_SECONDS"
+DEFAULT_LLM_TIMEOUT_SECONDS = 180.0
+LLM_MAX_RETRIES = 2
+
+
+def llm_request_timeout() -> float:
+    """Seconds an LLM provider waits on one API attempt before retrying or failing."""
+    raw = os.environ.get(LLM_TIMEOUT_ENV)
+    if not raw:
+        return DEFAULT_LLM_TIMEOUT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 0.0
+    if value <= 0:
+        logger.warning("Ignoring invalid %s=%r", LLM_TIMEOUT_ENV, raw)
+        return DEFAULT_LLM_TIMEOUT_SECONDS
+    return value
 
 
 class MessageRole(str, Enum):

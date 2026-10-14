@@ -5,6 +5,7 @@ import os
 from collections.abc import AsyncIterator
 
 from zebra_tasks.llm.base import (
+    LLM_MAX_RETRIES,
     LLMProvider,
     LLMResponse,
     Message,
@@ -12,6 +13,7 @@ from zebra_tasks.llm.base import (
     TokenUsage,
     ToolCall,
     ToolDefinition,
+    llm_request_timeout,
 )
 
 
@@ -58,6 +60,8 @@ class OpenAIProvider(LLMProvider):
             api_key=self._api_key,
             base_url=base_url,
             organization=organization,
+            timeout=llm_request_timeout(),
+            max_retries=LLM_MAX_RETRIES,
         )
 
     @property
