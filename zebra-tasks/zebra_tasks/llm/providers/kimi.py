@@ -12,6 +12,7 @@ Set KIMI_API_KEY environment variable.
 
 import os
 
+from zebra_tasks.llm.base import LLM_MAX_RETRIES, llm_request_timeout
 from zebra_tasks.llm.providers.openai import OpenAIProvider
 
 
@@ -65,6 +66,8 @@ class KimiProvider(OpenAIProvider):
         self._client = openai.AsyncOpenAI(
             api_key=self._api_key,
             base_url=resolved_base_url,
+            timeout=llm_request_timeout(),
+            max_retries=LLM_MAX_RETRIES,
         )
 
     @classmethod
