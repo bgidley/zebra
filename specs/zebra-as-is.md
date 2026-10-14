@@ -327,6 +327,7 @@ Per-user profile of `core_values`, `ethical_positions`, `priorities`, and `deal_
 | `/workflows/` | Library browser; `/workflows/<name>/` shows stats, ordered steps and a natural-width structure diagram (`_workflow_structure()`), with the YAML in a collapsed Definition disclosure (#162) |
 | `/processes/<id>/trace/`, `/runs/<id>/trace/` | Step trace (#184): the whole run from its root down, subflows nested under the step that spawned them, per-step state/timing/changed properties, lazy "properties after this step" snapshots, "where it is now", live refresh (`api/run_trace.py`) |
 | `/dreams/` | Dream Cycle history: last 20 cycles with health score, changes applied/rejected, retirements, continuations and the LLM summary; health trend; next scheduled run |
+| `/bugs/` & `/bugs/report/` | Bug reports (#186): the sidebar **Report a bug** dialog posts the user's view plus browser context; the server adds build, user, route and linked process/run state and starts a system *Bug Report* process whose human review task records verdict, priority, issue link and notes. `/bugs/` lists reports. See [bug-report-design.md](bug-report-design.md) |
 | `/tasks/` & `/tasks/<id>/` | Pending human tasks + JSON-Schema form |
 | `/api/runs/<id>/diagram/` | SVG |
 | `/api/tasks/<id>/complete/` | Submit human task |

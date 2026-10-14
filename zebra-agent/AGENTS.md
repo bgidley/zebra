@@ -329,6 +329,7 @@ These workflows are internal to the agent and excluded from LLM selection:
 | `Agent Main Loop` | `agent_main_loop.yaml` | Main orchestration workflow |
 | `Dream Cycle` | `dream_cycle.yaml` | Self-improvement: analyze, evaluate, optimize workflows |
 | `Create Goal` | `create_goal.yaml` | Human input → queue goal as CREATED process |
+| `Bug Report` | `bug_report.yaml` | Web UI "Report a bug": one human review task over the stored report (#186) |
 | `Define Workflow` | `define_workflow.yaml` | `llm_agent`'s `define_workflow` tool: ethics gate → `workflow_creator` (#146) |
 
 System workflows are identified by the `system` tag in their YAML (`tags: [..., "system"]`) —

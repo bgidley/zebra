@@ -1,0 +1,94 @@
+{% load icon_tags %}{% comment %}
+"Report a bug" dialog (#186). Opened by dispatching `open-bug-report` on the
+window (sidebar button in base.html). On open, the browser's technical context
+(static/js/bug-report.js) is snapshotted into the hidden client_context field;
+the server adds its own view and starts a "Bug Report" process.
+{% endcomment %}
+<div x-data="{
+        isOpen: false,
+        sent: false,
+        open() {
+            this.sent = false;
+            this.$refs.result.innerHTML = '';
+            try {
+                this.$refs.context.value = JSON.stringify(window.ZebraBugReport ? window.ZebraBugReport.collect() : {});
+            } catch (e) {
+                this.$refs.context.value = '';
+            }
+            this.isOpen = true;
+            this.$nextTick(() => this.$refs.title.focus());
+        },
+        close() { this.isOpen = false; },
+     }"
+     @open-bug-report.window="open()"
+     @keydown.escape.window="close()"
+     @bug-report-sent="sent = true; $refs.form.reset()">
+    <div x-show="isOpen" x-cloak x-transition.opacity
+         class="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 p-4"
+         @click.self="close()">
+        <div role="dialog" aria-modal="true" aria-labelledby="bug-report-heading"
+             class="panel w-full max-w-lg max-h-[90vh] overflow-y-auto" data-testid="bug-report-dialog">
+            <div class="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
+                <h2 id="bug-report-heading" class="flex items-center gap-2 text-[15px] font-semibold text-ink">
+                    {% icon "bug" class="h-[18px] w-[18px] text-faint" %}Report a bug
+                </h2>
+                <button type="button" class="text-faint hover:text-ink text-sm" @click="close()" aria-label="Close">Close</button>
+            </div>
+
+            <form x-ref="form"
+                  hx-post="{% url 'bug_report_submit' %}"
+                  hx-target="#bug-report-result"
+                  hx-swap="innerHTML"
+                  hx-on::before-swap="if (event.detail.xhr.status >= 400) { event.detail.shouldSwap = true; event.detail.isError = false; }"
+                  hx-on::after-request="if (event.detail.successful && event.detail.elt === this) this.dispatchEvent(new CustomEvent('bug-report-sent', {bubbles: true}))"
+                  class="px-5 py-4 space-y-4">
+                <input type="hidden" name="client_context" x-ref="context">
+
+                <div x-show="!sent" class="space-y-4">
+                    <p class="text-sm text-muted">
+                        Tell us what went wrong. The page address, your browser, recent errors on
+                        this page and the build version are added automatically.
+                    </p>
+                    <label class="block space-y-1">
+                        <span class="text-sm text-ink">Title <span class="text-fail">*</span></span>
+                        <input type="text" name="title" x-ref="title" required maxlength="200"
+                               placeholder="Short summary, e.g. Run page shows no tasks"
+                               class="block w-full rounded-md border border-line bg-ground px-3 py-2 text-sm text-ink placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-needs">
+                    </label>
+                    <label class="block space-y-1">
+                        <span class="text-sm text-ink">What happened? <span class="text-fail">*</span></span>
+                        <textarea name="description" rows="4" required
+                                  class="block w-full resize-y rounded-md border border-line bg-ground px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-needs"></textarea>
+                    </label>
+                    <label class="block space-y-1">
+                        <span class="text-sm text-ink">What did you expect?</span>
+                        <textarea name="expected" rows="2"
+                                  class="block w-full resize-y rounded-md border border-line bg-ground px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-needs"></textarea>
+                    </label>
+                    <label class="block space-y-1">
+                        <span class="text-sm text-ink">Steps to reproduce</span>
+                        <textarea name="steps" rows="3" placeholder="1. Open …&#10;2. Click …"
+                                  class="block w-full resize-y rounded-md border border-line bg-ground px-3 py-2 text-sm text-ink placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-needs"></textarea>
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-muted">
+                        <span>How bad is it?</span>
+                        <select name="severity"
+                                class="rounded-md border border-line bg-ground px-2 py-1 text-ink focus:outline-none focus:ring-2 focus:ring-needs">
+                            <option value="blocker">Blocks me</option>
+                            <option value="major">Gets in the way</option>
+                            <option value="minor" selected>Minor annoyance</option>
+                            <option value="cosmetic">Cosmetic</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div id="bug-report-result" x-ref="result" aria-live="polite"></div>
+
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="btn btn-quiet btn-sm" @click="close()" x-text="sent ? 'Close' : 'Cancel'">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" x-show="!sent">Send report</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

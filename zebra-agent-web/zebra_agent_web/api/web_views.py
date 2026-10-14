@@ -2790,6 +2790,86 @@ async def process_trace_properties(request, process_id, event_id):
 
 
 # =============================================================================
+# Bug reports (#186)
+# =============================================================================
+
+_BUG_REPORT_LIMIT = 50
+
+
+@require_http_methods(["POST"])
+async def bug_report_submit(request):
+    """Record a bug report from the "Report a bug" dialog.
+
+    Combines the user's view (form fields) with the technical view (the
+    browser's ``client_context`` JSON plus what the server knows) and starts a
+    "Bug Report" process holding both, with a human review task.
+    """
+    from zebra_agent_web.api import bug_reports
+
+    user = await request.auser()
+    if not user.is_authenticated:
+        return HttpResponse("Sign in to report a bug", status=403)
+
+    try:
+        report = bug_reports.parse_user_report(request.POST)
+    except bug_reports.BugReportError as e:
+        return render(request, "partials/bug_report_result.html", {"error": str(e)}, status=400)
+
+    await agent_engine.ensure_initialized()
+    await engine.ensure_initialized()
+    library = agent_engine.get_library()
+    wf_engine = engine.get_engine()
+
+    client = bug_reports.parse_client_context(request.POST.get("client_context"))
+    route = bug_reports.resolve_page(client.get("url") or request.headers.get("Referer"))
+    technical = {
+        "client": client,
+        "server": bug_reports.server_context(request, route),
+        "linked": await bug_reports.linked_state(
+            route, engine.get_store(), agent_engine.get_metrics()
+        ),
+    }
+    properties = bug_reports.build_properties(report, technical, user.id)
+
+    try:
+        definition = library.get_workflow(bug_reports.BUG_REPORT_WORKFLOW)
+        process = await wf_engine.create_process(definition, properties=properties)
+        await wf_engine.start_process(process.id)
+    except Exception as e:
+        logger.exception("Failed to record bug report")
+        return render(
+            request,
+            "partials/bug_report_result.html",
+            {"error": f"Could not record the report: {e}"},
+            status=500,
+        )
+
+    logger.info("Bug report recorded as process %s: %s", process.id, report["title"])
+    return render(
+        request,
+        "partials/bug_report_result.html",
+        {"process_id": process.id, "title": report["title"]},
+    )
+
+
+async def bug_reports_page(request):
+    """List recent bug reports and their review outcome."""
+    from zebra_agent_web.api import bug_reports
+
+    reports = await sync_to_async(bug_reports.recent_bug_reports)(_BUG_REPORT_LIMIT)
+    return render(
+        request,
+        "pages/bug_reports.html",
+        {
+            "reports": reports,
+            "open_count": sum(1 for r in reports if r["state"] == "running"),
+            "limit": _BUG_REPORT_LIMIT,
+            **_identity_context(),
+        },
+    )
+
+
+# =============================================================================
 # Trust Management (F15 / REQ-TRUST-004)
 # =============================================================================
 

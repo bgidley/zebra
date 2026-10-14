@@ -25,6 +25,7 @@ This directory contains requirements and design specifications for Zebra.
 | [llm-agent-tools-design.md](llm-agent-tools-design.md) | #146: LLM tool use via workflows: engine suspend-on-subflow (`AWAITING_SUBFLOW`, `TaskResult.suspend`), `llm_agent` action, workflow `inputs:` schemas, `define_workflow` | Implemented |
 | [run-trace-design.md](run-trace-design.md) | #184: engine step journal (`ProcessEvent` with property diffs, replay) and the step trace page across parent and subflows | Implemented |
 | [web-ui-design.md](web-ui-design.md) | #159–#163: web UI frame and voice rules: tokens, light/dark theme with enforced WCAG AA, components, voice layer, copy | Implemented |
+| [bug-report-design.md](bug-report-design.md) | #186: "Report a bug" dialog capturing user + technical view, stored as a system *Bug Report* workflow with a human review task; `/bugs/` list | Implemented |
 | [podman-single-host-design.md](podman-single-host-design.md) | F117: Single-host rootless Podman deployment (Quadlet web + daemon, GitLab shell runner) — replaces the lost OKE cluster (F108–F111) | Implemented |
 
 The concrete feature backlog is tracked as [GitLab issues](https://gitlab.com/gidley/zebra/-/issues).
