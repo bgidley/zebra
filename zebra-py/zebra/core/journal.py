@@ -28,10 +28,14 @@ def snapshot(properties: dict[str, Any]) -> dict[str, Any]:
 
 
 def _cap(value: Any) -> Any:
-    """Return *value*, or a truncated preview if its JSON form is too large."""
+    """Return a detached copy of *value*, or a truncated preview if its JSON form is too large.
+
+    The copy keeps a stored event from changing when the process later mutates
+    the same nested value in place.
+    """
     text = json.dumps(value, ensure_ascii=False, default=str)
     if len(text) <= MAX_JOURNAL_VALUE_CHARS:
-        return value
+        return json.loads(text)
     return {
         TRUNCATED_KEY: True,
         "size": len(text),

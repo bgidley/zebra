@@ -1,7 +1,10 @@
 """Process step journal: events per lifecycle step with property diffs (#184)."""
 
+from unittest.mock import patch
+
 import pytest
 
+from zebra.core import engine as engine_module
 from zebra.core import journal
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import (
@@ -265,10 +268,38 @@ async def test_journal_failure_never_fails_the_workflow():
     store = BrokenJournalStore()
     engine = WorkflowEngine(store, _registry())
     process = await engine.create_process(SERIAL)
-    await engine.start_process(process.id)
+    with patch.object(engine_module.logger, "warning") as warning:
+        await engine.start_process(process.id)
 
     final = await store.load_process(process.id)
     assert final.state == ProcessState.COMPLETE
+    assert any("Could not journal" in c.args[0] for c in warning.call_args_list)
+
+
+async def test_nested_value_mutated_in_place_is_journalled(store):
+    """An action editing a nested property in place still shows in the diff."""
+
+    class AppendAction(TaskAction):
+        async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+            context.process.properties["log"]["items"].append("second")
+            return TaskResult.ok()
+
+    registry = _registry()
+    registry.register_action("append", AppendAction)
+    definition = ProcessDefinition(
+        id="append",
+        name="Append",
+        first_task_id="add",
+        tasks={"add": TaskDefinition(id="add", name="Add", action="append")},
+    )
+    engine = WorkflowEngine(store, registry)
+    process = await engine.create_process(definition, properties={"log": {"items": ["first"]}})
+    await engine.start_process(process.id)
+
+    events = await store.load_process_events([process.id])
+    completed = next(e for e in events if e.kind == K.TASK_COMPLETED)
+    assert completed.changed == {"log": {"items": ["first", "second"]}}
+    assert journal.replay(events)[0] == {"log": {"items": ["first"]}}
 
 
 async def test_delete_process_removes_its_events(engine, store):
