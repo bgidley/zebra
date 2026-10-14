@@ -9,8 +9,9 @@ import contextlib
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+from zebra.core import journal
 from zebra.core.exceptions import (
     ActionNotFoundError,
     DefinitionNotFoundError,
@@ -24,6 +25,8 @@ from zebra.core.exceptions import (
 from zebra.core.models import (
     FlowOfExecution,
     ProcessDefinition,
+    ProcessEvent,
+    ProcessEventKind,
     ProcessInstance,
     ProcessState,
     RoutingDefinition,
@@ -121,6 +124,10 @@ class WorkflowEngine:
         # Suspended tasks whose children are being checked, and those needing a recheck.
         self._checking: set[str] = set()
         self._recheck: set[str] = set()
+        # Step journal (#184): properties as last journalled, per process, and the
+        # last event time (kept strictly increasing so events replay in order).
+        self._journal_props: dict[str, dict] = {}
+        self._journal_last: datetime | None = None
 
     # =========================================================================
     # Process Lifecycle
@@ -199,6 +206,7 @@ class WorkflowEngine:
             update={"state": ProcessState.RUNNING, "updated_at": datetime.now(UTC)}
         )
         await self.store.save_process(process)
+        await self._journal(process, ProcessEventKind.PROCESS_STARTED)
 
         # Create the first FOE and task
         foe = await self._create_foe(process)
@@ -566,6 +574,7 @@ class WorkflowEngine:
             process.properties[f"__task_output_{task.task_definition_id}"] = result.output
             process = process.model_copy(update={"updated_at": datetime.now(UTC)})
             await self.store.save_process(process)
+        await self._journal_task_end(process, task)
 
         return await self.transition_task(task_id)
 
@@ -697,6 +706,7 @@ class WorkflowEngine:
         # Update state to RUNNING
         task = task.model_copy(update={"state": TaskState.RUNNING, "updated_at": datetime.now(UTC)})
         await self.store.save_task(task)
+        await self._journal(process, ProcessEventKind.TASK_STARTED, task)
 
         # Generate idempotency token if not exists (for tracking execution attempts)
         if "__idempotency_token__" not in task.properties:
@@ -747,6 +757,7 @@ class WorkflowEngine:
             # Keep what the action wrote to the process (e.g. cost) for the resume.
             process = process.model_copy(update={"updated_at": datetime.now(UTC)})
             await self.store.save_process(process)
+            await self._journal(process, ProcessEventKind.TASK_SUSPENDED, task)
             return
         task.properties.pop(PENDING_SUBFLOWS_KEY, None)
 
@@ -773,6 +784,7 @@ class WorkflowEngine:
             process.properties[f"__task_output_{task_def.id}"] = result.output
             process = process.model_copy(update={"updated_at": datetime.now(UTC)})
             await self.store.save_process(process)
+        await self._journal_task_end(process, task)
 
     async def _run_routing(
         self,
@@ -895,6 +907,8 @@ class WorkflowEngine:
 
         await self.store.save_task(task)
         logger.info(f"Created task {task.id} ({task_def.name}) in state {initial_state}")
+        if not task_def.auto:
+            await self._journal(process, ProcessEventKind.TASK_WAITING, task)
         return task
 
     async def _create_foe(
@@ -1026,6 +1040,64 @@ class WorkflowEngine:
             # Don't raise - process completion should still happen
 
     # =========================================================================
+    # Step Journal (#184)
+    # =========================================================================
+
+    async def _journal_task_end(self, process: ProcessInstance, task: TaskInstance) -> None:
+        """Journal *task* reaching COMPLETE or FAILED."""
+        if task.state == TaskState.COMPLETE:
+            await self._journal(process, ProcessEventKind.TASK_COMPLETED, task)
+        else:
+            await self._journal(process, ProcessEventKind.TASK_FAILED, task, error=task.error)
+
+    async def _journal(
+        self,
+        process: ProcessInstance,
+        kind: ProcessEventKind,
+        task: TaskInstance | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Append a step-journal event for *process* with the properties changed since the last.
+
+        The journal is a record, not part of execution: a failure to write it is
+        logged and never fails the workflow.
+        """
+        try:
+            baseline = self._journal_props.get(process.id)
+            if baseline is None and kind != ProcessEventKind.PROCESS_STARTED:
+                # Not journalled by this engine yet (e.g. after a restart): rebuild
+                # the properties as last recorded from the stored events.
+                states = journal.replay(await self.store.load_process_events([process.id]))
+                baseline = states[-1] if states else {}
+            changed, removed = journal.property_diff(baseline or {}, process.properties)
+            now = datetime.now(UTC)
+            if self._journal_last is not None and now <= self._journal_last:
+                now = self._journal_last + timedelta(microseconds=1)
+            self._journal_last = now
+            await self.store.save_process_event(
+                ProcessEvent(
+                    id=str(uuid.uuid4()),
+                    process_id=process.id,
+                    kind=kind,
+                    task_instance_id=task.id if task else None,
+                    task_definition_id=task.task_definition_id if task else None,
+                    attempt=task.execution_attempt if task else 0,
+                    timestamp=now,
+                    changed=changed,
+                    removed=removed,
+                    error=error,
+                )
+            )
+            if kind in (ProcessEventKind.PROCESS_COMPLETED, ProcessEventKind.PROCESS_FAILED):
+                self._journal_props.pop(process.id, None)
+            else:
+                self._journal_props[process.id] = journal.snapshot(process.properties)
+        except Exception:
+            logger.warning(
+                "Could not journal %s for process %s", kind.value, process.id, exc_info=True
+            )
+
+    # =========================================================================
     # Subflow Suspension (#146)
     # =========================================================================
 
@@ -1106,7 +1178,14 @@ class WorkflowEngine:
         await self._resume_if_subflows_done(task_id)
 
     async def _on_process_terminal(self, process: ProcessInstance) -> None:
-        """Resume the task waiting on *process*, if this was its last child."""
+        """Journal the end of *process*; resume the task waiting on it if it was the last child."""
+        if process.state == ProcessState.COMPLETE:
+            await self._journal(process, ProcessEventKind.PROCESS_COMPLETED)
+        else:
+            error = process.properties.get("__error__")
+            await self._journal(
+                process, ProcessEventKind.PROCESS_FAILED, error=str(error) if error else None
+            )
         if not process.parent_task_id:
             return
         try:

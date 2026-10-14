@@ -1,0 +1,81 @@
+{% load format_tags %}
+{% comment %}
+Live part of the step trace (#184). Re-fetched every 5s while the run is active;
+open <details> are re-opened after each swap (see the script below), which also
+re-fetches any property snapshot they hold.
+Context: trace (RunTrace), focus_id (process the page was opened for).
+{% endcomment %}
+<div id="trace-tree" class="space-y-6"
+     {% if trace.is_active %}hx-get="{% url 'process_trace' focus_id %}" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="panel p-4">
+            <p class="text-sm text-muted">Status</p>
+            <p class="mt-1 flex items-center gap-2 text-lg font-semibold text-ink">
+                {% include "partials/trace_state.html" with state=trace.root.state %}
+            </p>
+        </div>
+        <div class="panel p-4">
+            <p class="text-sm text-muted">Processes</p>
+            <p class="mt-1 text-lg font-semibold text-ink font-mono tabular-nums">{{ trace.process_count }}</p>
+        </div>
+        <div class="panel p-4">
+            <p class="text-sm text-muted">Steps</p>
+            <p class="mt-1 text-lg font-semibold text-ink font-mono tabular-nums">{{ trace.step_count }}</p>
+        </div>
+        <div class="panel p-4">
+            {% if trace.root.duration_seconds is not None %}
+            <p class="text-sm text-muted">Duration</p>
+            <p class="mt-1 text-lg font-semibold text-ink font-mono tabular-nums">{{ trace.root.duration_seconds|seconds }}</p>
+            {% else %}
+            <p class="text-sm text-muted">Started</p>
+            <p class="mt-1 text-lg font-semibold text-ink font-mono tabular-nums" title="{{ trace.root.created_at|date:'Y-m-d H:i:s' }} UTC">{{ trace.root.created_at|ago }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if trace.is_active %}
+    <div class="panel p-4" aria-live="polite">
+        <p class="text-sm text-muted mb-2">Where it is now</p>
+        {% if trace.current %}
+        <ul class="space-y-1">
+            {% for path in trace.current %}
+            <li class="text-sm text-ink flex flex-wrap items-center gap-1">
+                {% for name in path %}{% if not forloop.first %}<span class="text-faint" aria-hidden="true">›</span>{% endif %}<span{% if forloop.last %} class="font-semibold"{% endif %}>{{ name }}</span>{% endfor %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-faint">Between steps.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if trace.truncated %}
+    <p class="text-sm text-needs">This run has more subflows than one trace shows. Showing the first {{ trace.process_count }}.</p>
+    {% endif %}
+
+    {% include "partials/trace_process.html" with node=trace.root %}
+</div>
+
+<script>
+(function () {
+    // Keep expanded sections open across live refreshes.
+    if (window.__traceKeepOpen) return;
+    window.__traceKeepOpen = true;
+    document.body.addEventListener("htmx:beforeSwap", function (e) {
+        if (e.detail.target && e.detail.target.id === "trace-tree") {
+            window.__traceOpen = Array.from(
+                document.querySelectorAll("#trace-tree details[open]")
+            ).map(function (d) { return d.id; });
+        }
+    });
+    document.body.addEventListener("htmx:afterSettle", function () {
+        (window.__traceOpen || []).forEach(function (id) {
+            var d = document.getElementById(id);
+            if (d && !d.open) d.open = true;
+        });
+        window.__traceOpen = [];
+    });
+})();
+</script>

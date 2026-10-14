@@ -46,7 +46,7 @@ class ProcessInstanceModel(models.Model):
     properties = models.TextField(
         blank=True, default="{}", help_text="JSON serialized properties dict"
     )
-    parent_process_id = models.CharField(max_length=255, blank=True, null=True)
+    parent_process_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
     parent_task_id = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
@@ -110,6 +110,32 @@ class FlowOfExecutionModel(models.Model):
 
     def __str__(self):
         return f"FOE {self.id} (process={self.process_id})"
+
+
+class ProcessEventModel(models.Model):
+    """One step-journal entry for a process (#184). See ``zebra.core.models.ProcessEvent``."""
+
+    id = models.CharField(max_length=36, primary_key=True)
+    process_id = models.CharField(max_length=255)
+    kind = models.CharField(max_length=32)
+    task_instance_id = models.CharField(max_length=255, blank=True, null=True)
+    task_definition_id = models.CharField(max_length=255, blank=True, null=True)
+    attempt = models.IntegerField(default=0)
+    occurred_at = models.DateTimeField()
+    changed = models.TextField(blank=True, default="{}", help_text="JSON properties changed")
+    removed = models.TextField(blank=True, default="[]", help_text="JSON property keys removed")
+    error = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = "zebra_process_events"
+        verbose_name = "Process Event"
+        verbose_name_plural = "Process Events"
+        indexes = [
+            models.Index(fields=["process_id", "occurred_at"], name="zebra_pevt_proc_ts_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.kind} on {self.process_id}"
 
 
 class ProcessLockModel(models.Model):

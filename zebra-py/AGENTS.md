@@ -38,6 +38,12 @@ Abstracts persistence layer. Implementations:
 - `InMemoryStore` - For testing and simple workflows
 - `SQLiteStore` - For production with persistent state
 
+**Step journal (#184)**: the engine records a `ProcessEvent` per lifecycle step with the
+process-property diff since the last one (`zebra/core/journal.py`: `property_diff`, `replay`).
+Stores implement `save_process_event` / `load_process_events` / `list_child_processes`; the
+base-class defaults are a no-op journal and a scan, so a custom store works without history.
+Journal writes never fail a workflow. See `specs/run-trace-design.md`.
+
 ## File Locations
 
 | Directory | Purpose |

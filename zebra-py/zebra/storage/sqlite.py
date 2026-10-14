@@ -15,6 +15,8 @@ from zebra.core.exceptions import SerializationError
 from zebra.core.models import (
     FlowOfExecution,
     ProcessDefinition,
+    ProcessEvent,
+    ProcessEventKind,
     ProcessInstance,
     ProcessState,
     TaskInstance,
@@ -120,12 +122,28 @@ class SQLiteStore(StateStore):
                 expires_at TEXT NOT NULL
             );
 
+            -- Process step journal (#184)
+            CREATE TABLE IF NOT EXISTS process_events (
+                id TEXT PRIMARY KEY,
+                process_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                task_instance_id TEXT,
+                task_definition_id TEXT,
+                attempt INTEGER NOT NULL DEFAULT 0,
+                timestamp TEXT NOT NULL,
+                changed JSON NOT NULL DEFAULT '{}',
+                removed JSON NOT NULL DEFAULT '[]',
+                error TEXT
+            );
+
             -- Indexes for common queries
             CREATE INDEX IF NOT EXISTS idx_processes_definition ON process_instances(definition_id);
             CREATE INDEX IF NOT EXISTS idx_processes_state ON process_instances(state);
             CREATE INDEX IF NOT EXISTS idx_tasks_process ON task_instances(process_id);
             CREATE INDEX IF NOT EXISTS idx_tasks_state ON task_instances(state);
             CREATE INDEX IF NOT EXISTS idx_foes_process ON foes(process_id);
+            CREATE INDEX IF NOT EXISTS idx_processes_parent ON process_instances(parent_process_id);
+            CREATE INDEX IF NOT EXISTS idx_events_process ON process_events(process_id, timestamp);
             """
         )
         await self._conn.commit()
@@ -201,6 +219,8 @@ class SQLiteStore(StateStore):
             ON CONFLICT(id) DO UPDATE SET
                 state = excluded.state,
                 properties = excluded.properties,
+                parent_process_id = excluded.parent_process_id,
+                parent_task_id = excluded.parent_task_id,
                 updated_at = excluded.updated_at,
                 completed_at = excluded.completed_at
             """,
@@ -253,6 +273,7 @@ class SQLiteStore(StateStore):
         await conn.execute("DELETE FROM task_instances WHERE process_id = ?", (process_id,))
         await conn.execute("DELETE FROM foes WHERE process_id = ?", (process_id,))
         await conn.execute("DELETE FROM process_locks WHERE process_id = ?", (process_id,))
+        await conn.execute("DELETE FROM process_events WHERE process_id = ?", (process_id,))
         cursor = await conn.execute("DELETE FROM process_instances WHERE id = ?", (process_id,))
         await conn.commit()
         return cursor.rowcount > 0
@@ -296,6 +317,15 @@ class SQLiteStore(StateStore):
                 """,
                 (state.value,),
             )
+        rows = await cursor.fetchall()
+        return [self._row_to_process(row) for row in rows]
+
+    async def list_child_processes(self, parent_process_id: str) -> list[ProcessInstance]:
+        conn = self._ensure_connected()
+        cursor = await conn.execute(
+            "SELECT * FROM process_instances WHERE parent_process_id = ? ORDER BY created_at ASC",
+            (parent_process_id,),
+        )
         rows = await cursor.fetchall()
         return [self._row_to_process(row) for row in rows]
 
@@ -459,6 +489,61 @@ class SQLiteStore(StateStore):
         cursor = await conn.execute("DELETE FROM foes WHERE id = ?", (foe_id,))
         await conn.commit()
         return cursor.rowcount > 0
+
+    # =========================================================================
+    # Process Journal (#184)
+    # =========================================================================
+
+    async def save_process_event(self, event: ProcessEvent) -> None:
+        conn = self._ensure_connected()
+        await conn.execute(
+            """
+            INSERT INTO process_events
+                (id, process_id, kind, task_instance_id, task_definition_id, attempt,
+                 timestamp, changed, removed, error)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.id,
+                event.process_id,
+                event.kind.value,
+                event.task_instance_id,
+                event.task_definition_id,
+                event.attempt,
+                event.timestamp.isoformat(),
+                _serialize_json(event.changed, f"event '{event.id}' changed"),
+                json.dumps(event.removed),
+                event.error,
+            ),
+        )
+        await conn.commit()
+
+    async def load_process_events(self, process_ids: list[str]) -> list[ProcessEvent]:
+        if not process_ids:
+            return []
+        conn = self._ensure_connected()
+        placeholders = ", ".join("?" for _ in process_ids)
+        cursor = await conn.execute(
+            f"SELECT * FROM process_events WHERE process_id IN ({placeholders}) "
+            "ORDER BY timestamp ASC",
+            list(process_ids),
+        )
+        rows = await cursor.fetchall()
+        return [
+            ProcessEvent(
+                id=row["id"],
+                process_id=row["process_id"],
+                kind=ProcessEventKind(row["kind"]),
+                task_instance_id=row["task_instance_id"],
+                task_definition_id=row["task_definition_id"],
+                attempt=row["attempt"],
+                timestamp=datetime.fromisoformat(row["timestamp"]),
+                changed=json.loads(row["changed"]),
+                removed=json.loads(row["removed"]),
+                error=row["error"],
+            )
+            for row in rows
+        ]
 
     # =========================================================================
     # Locking Operations

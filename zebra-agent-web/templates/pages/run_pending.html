@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load icon_tags %}
 
 {% block title %}Run {{ state_label }} - Zebra Agent{% endblock %}
 {% block page_title %}Run {{ state_label }}{% endblock %}
@@ -16,6 +17,7 @@
             <h1 class="text-2xl font-bold text-ink">Run {{ state_label }}</h1>
             <p class="text-gray-400 mt-1 text-sm">{{ run_id }}</p>
         </div>
+        <a href="{% url 'process_trace' process_id %}" class="btn btn-quiet btn-sm ml-auto">{% icon "tree-structure" class="h-4 w-4" %} Step trace</a>
     </div>
 
     <!-- Status Badge -->

@@ -2728,6 +2728,68 @@ async def dream_cycles(request):
 
 
 # =============================================================================
+# Run Trace (#184)
+# =============================================================================
+
+
+async def process_trace(request, process_id):
+    """Step-by-step trace of the run containing *process_id*, across all its subflows.
+
+    An HTMX request (the page's live refresh) gets just the tree.
+    """
+    from zebra_agent_web.api import run_trace
+
+    await engine.ensure_initialized()
+    store = engine.get_store()
+    root = await run_trace.find_root(store, process_id)
+    if root is None:
+        return HttpResponse("Process not found", status=404)
+    trace = await run_trace.build_trace(store, root)
+    template = (
+        "partials/run_trace_tree.html"
+        if request.headers.get("HX-Request")
+        else "pages/run_trace.html"
+    )
+    return render(
+        request,
+        template,
+        {
+            "trace": trace,
+            "focus_id": process_id,
+            "run_id": root.properties.get("run_id"),
+            "goal": root.properties.get("goal"),
+        },
+    )
+
+
+async def run_trace_redirect(request, run_id):
+    """Open the trace for a run, found by its ``run_id``."""
+    from zebra_agent_web.api import run_trace
+
+    await engine.ensure_initialized()
+    root = await run_trace.find_run_root(engine.get_store(), run_id)
+    if root is None:
+        return HttpResponse("Run not found", status=404)
+    return redirect("process_trace", process_id=root.id)
+
+
+async def process_trace_properties(request, process_id, event_id):
+    """HTMX partial: a process's properties as they stood after one journalled step."""
+    from zebra_agent_web.api import run_trace
+
+    await engine.ensure_initialized()
+    props = await run_trace.properties_at(engine.get_store(), process_id, event_id)
+    if props is None:
+        return HttpResponse("Step not found", status=404)
+    workflow, internal = run_trace.split_properties(props)
+    return render(
+        request,
+        "partials/trace_properties.html",
+        {"workflow_props": workflow, "internal_props": internal},
+    )
+
+
+# =============================================================================
 # Trust Management (F15 / REQ-TRUST-004)
 # =============================================================================
 

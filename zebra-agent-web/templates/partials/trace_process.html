@@ -1,0 +1,107 @@
+{% load format_tags %}
+{% comment %}
+One process in the step trace, with its steps and, under each step, the subflows it
+spawned (recursive). Parameters: node (TraceProcess), focus_id.
+{% endcomment %}
+<section id="proc-{{ node.id }}" class="panel p-3 sm:p-4{% if node.id == focus_id and node.depth %} ring-1 ring-ink{% endif %}" aria-label="{{ node.name }}">
+    <header class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+            <h2 class="font-semibold text-ink break-words">{{ node.name }}</h2>
+            <span class="hidden sm:inline text-xs font-mono text-faint" title="{{ node.id }}">{{ node.id|truncatechars:9 }}</span>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+            <span class="flex items-center gap-1.5 text-ink">{% include "partials/trace_state.html" with state=node.state %}</span>
+            <span class="font-mono tabular-nums text-muted" title="{{ node.created_at|date:'Y-m-d H:i:s' }} UTC">{{ node.created_at|date:"H:i:s" }}</span>
+            {% if node.duration_seconds is not None %}<span class="font-mono tabular-nums text-muted">{{ node.duration_seconds|seconds }}</span>{% endif %}
+        </div>
+    </header>
+
+    {% if node.error %}
+    <p class="mt-2 text-sm text-fail whitespace-pre-wrap break-words">{{ node.error|truncatechars:600 }}</p>
+    {% endif %}
+
+    {% if node.start_event_id %}
+    <details id="init-{{ node.id }}" class="mt-2"
+             hx-get="{% url 'process_trace_properties' node.id node.start_event_id %}"
+             hx-trigger="toggle once" hx-target="find .trace-props" hx-swap="innerHTML">
+        <summary class="cursor-pointer text-sm text-muted hover:text-ink">Starting properties</summary>
+        <div class="trace-props mt-2 text-sm text-faint">Loading…</div>
+    </details>
+    {% endif %}
+
+    {% if not node.has_journal and not node.steps %}
+    <p class="mt-3 text-sm text-faint">No step history for this process. It ran before step tracing was added, or has not started.</p>
+    {% endif %}
+
+    {% if node.steps %}
+    <ol class="mt-3 space-y-2">
+        {% for step in node.steps %}
+        <li class="rounded-md border border-line {% if step.is_current %}bg-surface-2{% endif %}">
+            <div class="flex items-center justify-between flex-wrap gap-2 px-3 py-2">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-xs font-mono tabular-nums text-faint w-5 text-right">{{ forloop.counter }}</span>
+                    <span class="text-ink font-medium break-words min-w-0">{{ step.name }}</span>
+                    {% if step.name != step.task_definition_id %}<span class="hidden sm:inline text-xs font-mono text-faint">{{ step.task_definition_id }}</span>{% endif %}
+                    {% if step.is_current and node.is_active %}<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-ink text-ground">Now</span>{% endif %}
+                </div>
+                <div class="flex items-center gap-3 text-sm">
+                    <span class="flex items-center gap-1.5 text-ink">{% include "partials/trace_state.html" with state=step.state %}</span>
+                    {% if step.attempts > 1 %}<span class="text-xs text-muted">{{ step.attempts }} attempts</span>{% endif %}
+                    {% if step.started_at %}<span class="font-mono tabular-nums text-muted" title="{{ step.started_at|date:'Y-m-d H:i:s' }} UTC">{{ step.started_at|date:"H:i:s" }}</span>{% endif %}
+                    {% if step.duration_seconds is not None %}<span class="font-mono tabular-nums text-muted w-16 text-right">{{ step.duration_seconds|seconds }}</span>{% endif %}
+                </div>
+            </div>
+
+            {% if step.error %}
+            <p class="px-3 pb-2 text-sm text-fail whitespace-pre-wrap break-words">{{ step.error|truncatechars:600 }}</p>
+            {% endif %}
+
+            {% if step.changed or step.removed %}
+            <details id="chg-{{ step.task_instance_id }}" class="px-3 pb-2">
+                <summary class="cursor-pointer text-sm text-muted hover:text-ink">
+                    Changed {{ step.changed|length }} propert{{ step.changed|length|pluralize:"y,ies" }}{% if step.removed %}, removed {{ step.removed|length }}{% endif %}
+                </summary>
+                <dl class="mt-2 space-y-2">
+                    {% for key, value in step.changed.items %}
+                    <div>
+                        <dt class="text-xs font-mono text-muted">{{ key }}</dt>
+                        <dd><pre class="text-sm text-ink whitespace-pre-wrap break-words bg-ground rounded p-2 max-h-64 overflow-auto">{{ value|pretty_json }}</pre></dd>
+                    </div>
+                    {% endfor %}
+                    {% for key in step.removed %}
+                    <div><dt class="text-xs font-mono text-muted line-through">{{ key }}</dt><dd class="text-xs text-faint">removed</dd></div>
+                    {% endfor %}
+                </dl>
+            </details>
+            {% endif %}
+
+            {% if step.last_event_id %}
+            <details id="snap-{{ step.task_instance_id }}" class="px-3 pb-2"
+                     hx-get="{% url 'process_trace_properties' node.id step.last_event_id %}"
+                     hx-trigger="toggle once" hx-target="find .trace-props" hx-swap="innerHTML">
+                <summary class="cursor-pointer text-sm text-muted hover:text-ink">All properties after this step</summary>
+                <div class="trace-props mt-2 text-sm text-faint">Loading…</div>
+            </details>
+            {% endif %}
+
+            {% if step.children %}
+            <div class="ml-2 mr-2 mb-3 pl-2 sm:ml-4 sm:mr-3 sm:pl-4 border-l border-line space-y-3">
+                {% for child in step.children %}
+                {% include "partials/trace_process.html" with node=child %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+    {% endif %}
+
+    {% if node.unlinked_children %}
+    <div class="mt-3 pl-2 sm:pl-4 border-l border-line space-y-3">
+        <p class="text-xs text-faint">Subflows not linked to a step</p>
+        {% for child in node.unlinked_children %}
+        {% include "partials/trace_process.html" with node=child %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>

@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from zebra.core.models import (
     FlowOfExecution,
     ProcessDefinition,
+    ProcessEvent,
     ProcessInstance,
     ProcessState,
     TaskInstance,
@@ -29,6 +30,7 @@ class InMemoryStore(StateStore):
         self._processes: dict[str, ProcessInstance] = {}
         self._tasks: dict[str, TaskInstance] = {}
         self._foes: dict[str, FlowOfExecution] = {}
+        self._events: list[ProcessEvent] = []
         self._locks: dict[str, str] = {}  # process_id -> owner
         self._lock_events: dict[str, asyncio.Event] = {}
 
@@ -79,6 +81,7 @@ class InMemoryStore(StateStore):
         # Clean up related tasks and FOEs
         self._tasks = {k: v for k, v in self._tasks.items() if v.process_id != process_id}
         self._foes = {k: v for k, v in self._foes.items() if v.process_id != process_id}
+        self._events = [e for e in self._events if e.process_id != process_id]
         return True
 
     async def get_running_processes(self) -> list[ProcessInstance]:
@@ -96,6 +99,11 @@ class InMemoryStore(StateStore):
             results = [p for p in results if p.parent_process_id is None]
         results.sort(key=lambda p: p.created_at)
         return results
+
+    async def list_child_processes(self, parent_process_id: str) -> list[ProcessInstance]:
+        children = [p for p in self._processes.values() if p.parent_process_id == parent_process_id]
+        children.sort(key=lambda p: p.created_at)
+        return children
 
     # =========================================================================
     # Task Instance Operations
@@ -142,6 +150,19 @@ class InMemoryStore(StateStore):
             del self._foes[foe_id]
             return True
         return False
+
+    # =========================================================================
+    # Process Journal (#184)
+    # =========================================================================
+
+    async def save_process_event(self, event: ProcessEvent) -> None:
+        self._events.append(event)
+
+    async def load_process_events(self, process_ids: list[str]) -> list[ProcessEvent]:
+        wanted = set(process_ids)
+        events = [e for e in self._events if e.process_id in wanted]
+        events.sort(key=lambda e: e.timestamp)
+        return events
 
     # =========================================================================
     # Locking Operations
@@ -213,5 +234,6 @@ class InMemoryStore(StateStore):
         self._processes.clear()
         self._tasks.clear()
         self._foes.clear()
+        self._events.clear()
         self._locks.clear()
         self._lock_events.clear()

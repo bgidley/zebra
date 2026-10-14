@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from zebra.core.models import (
     FlowOfExecution,
     ProcessDefinition,
+    ProcessEvent,
     ProcessInstance,
     ProcessState,
     TaskInstance,
@@ -108,6 +109,17 @@ class StateStore(ABC):
         results.sort(key=lambda p: p.created_at)
         return results
 
+    async def list_child_processes(self, parent_process_id: str) -> list[ProcessInstance]:
+        """Get the direct subflows of a process (any state), oldest first.
+
+        The default implementation scans ``list_processes``. Backends should
+        override for efficiency.
+        """
+        processes = await self.list_processes(include_completed=True)
+        children = [p for p in processes if p.parent_process_id == parent_process_id]
+        children.sort(key=lambda p: p.created_at)
+        return children
+
     # =========================================================================
     # Task Instance Operations
     # =========================================================================
@@ -176,6 +188,24 @@ class StateStore(ABC):
     async def delete_foe(self, foe_id: str) -> bool:
         """Delete a flow of execution. Returns True if deleted, False if not found."""
         pass
+
+    # =========================================================================
+    # Process Journal (#184)
+    # =========================================================================
+
+    async def save_process_event(self, event: ProcessEvent) -> None:
+        """Append an event to a process's step journal.
+
+        The default implementation discards it: a store without a journal still
+        runs workflows, it just has no step history to show.
+        """
+
+    async def load_process_events(self, process_ids: list[str]) -> list[ProcessEvent]:
+        """Load the journal events of *process_ids*, ordered by timestamp.
+
+        The default implementation returns no events.
+        """
+        return []
 
     # =========================================================================
     # Locking Operations

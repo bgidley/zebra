@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Step trace - Zebra Agent{% endblock %}
+{% block page_title %}Step trace{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-start justify-between flex-wrap gap-4">
+        <div class="min-w-0">
+            <h1 class="text-2xl font-bold text-ink">Step trace</h1>
+            {% if goal %}<p class="text-muted mt-1 break-words">{{ goal|truncatechars:240 }}</p>{% endif %}
+            <p class="text-faint text-sm mt-1">Every step across the run and its subflows, what each one changed, and where the run is now.</p>
+        </div>
+        {% if run_id %}
+        <a href="{% url 'run_detail' run_id %}" class="btn btn-quiet btn-sm">Back to run</a>
+        {% endif %}
+    </div>
+
+    {% include "partials/run_trace_tree.html" %}
+</div>
+{% endblock %}
