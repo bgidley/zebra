@@ -29,15 +29,15 @@ The engine SHALL provide `start_process_with_timeout` that runs a process's inli
 - **THEN** the call returns the RUNNING process and later elapsed time does not fail it
 
 ### Requirement: Goal workflow timeout enforced
-`execute_goal_workflow` SHALL bound the child workflow's inline run by its `timeout` property and report a timeout as a failed execution. When its wait for the child times out (including a chain resumed by a human-task submit), it SHALL fail the child process and report the cost and tokens the child had already spent.
+`execute_goal_workflow` SHALL bound the child workflow's inline run by its `timeout` property and report a timeout as a failed execution, including the cost and tokens the child had already spent.
 
 #### Scenario: Slow goal workflow
 - **WHEN** the child workflow runs longer than `timeout`
 - **THEN** the child process is FAILED and the action fails with an error containing "Timed out after"
 
 #### Scenario: Hang after a human task
-- **WHEN** the child has spent on LLM calls, parks on a human task, and after the submit an auto task runs longer than `timeout`
-- **THEN** the action fails with "Timeout after <timeout>s", the child process is FAILED with that error, and the result reports the child's `cost`, `tokens_used`, `input_tokens` and `output_tokens`
+- **WHEN** the child has spent on LLM calls, parks on a human task, and after the submit an auto task fails (e.g. an LLM call hits `ZEBRA_LLM_TIMEOUT_SECONDS`)
+- **THEN** the goal's task stays suspended until the child is FAILED, then resumes and reports the child's error with its `cost`, `tokens_used`, `input_tokens` and `output_tokens`; the parent does not time the child out itself
 
 ### Requirement: Goal run timeout and kill switch
 `AgentLoop.process_goal` and the daemon SHALL bound a goal's inline run by the configured goal timeout (`goal_timeout` / `GOAL_TIMEOUT_SECONDS`, default 900s), and the daemon SHALL cancel an in-flight goal when the kill switch is set.
@@ -71,3 +71,14 @@ When a process is failed while one of its actions is running, the engine SHALL d
 #### Scenario: Process failed mid-action
 - **WHEN** `fail_process` is called while an auto task's action is running and the action then succeeds
 - **THEN** the process remains FAILED with its original error, the task remains FAILED, and no successor task is created
+
+### Requirement: Human wait in the goal workflow is not timed out
+`execute_goal_workflow` SHALL suspend its task on the child workflow instead of waiting inline, so a goal whose child parks on a human task returns from its bounded run and the goal timeout does not count the human's time.
+
+#### Scenario: Child parks on a human task
+- **WHEN** a goal is run with a goal timeout and its child workflow parks on a human task
+- **THEN** the bounded run returns before the timeout, the goal stays RUNNING with its `execute_workflow` task AWAITING_SUBFLOW, and it is still RUNNING after the timeout has elapsed
+
+#### Scenario: Human answers after the goal timeout
+- **WHEN** the human completes the child's task after the goal timeout has elapsed
+- **THEN** the goal resumes and its `execution_result` carries the child's output, `cost`, `tokens_used`, `input_tokens`, `output_tokens` and `user_inputs`
