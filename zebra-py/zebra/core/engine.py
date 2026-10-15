@@ -172,7 +172,9 @@ class WorkflowEngine:
         logger.info(f"Created process {process.id} from definition {definition.id}")
         return process
 
-    async def start_process(self, process_id: str) -> ProcessInstance:
+    async def start_process(
+        self, process_id: str, start_task_ids: list[str] | None = None
+    ) -> ProcessInstance:
         """Start a process that is in CREATED state.
 
         Creates the first task and begins execution. If the first task
@@ -180,6 +182,9 @@ class WorkflowEngine:
 
         Args:
             process_id: ID of the process to start
+            start_task_ids: Optional task definition ids to start at instead of the
+                definition's first task, each on its own flow of execution. Used
+                to resume a failed run where it stopped (#187).
 
         Returns:
             The updated ProcessInstance
@@ -208,16 +213,19 @@ class WorkflowEngine:
         await self.store.save_process(process)
         await self._journal(process, ProcessEventKind.PROCESS_STARTED)
 
-        # Create the first FOE and task
-        foe = await self._create_foe(process)
-        first_task_def = definition.get_task(definition.first_task_id)
-        task = await self._create_task(first_task_def, process, foe)
+        # Create the first FOE and task (one of each per start task when resuming)
+        started = []
+        for task_id in start_task_ids or [definition.first_task_id]:
+            task_def = definition.get_task(task_id)
+            task = await self._create_task(task_def, process, await self._create_foe(process))
+            started.append((task_def, task))
 
-        logger.info(f"Started process {process_id}, first task is {task.id}")
+        logger.info(f"Started process {process_id}, first task(s) {[t.id for _, t in started]}")
 
-        # If first task is auto, transition it
-        if first_task_def.auto:
-            await self.transition_task(task.id)
+        # Transition the auto-executable first task(s)
+        for task_def, task in started:
+            if task_def.auto:
+                await self.transition_task(task.id)
 
         return await self._load_process(process_id)
 
@@ -227,6 +235,7 @@ class WorkflowEngine:
         timeout: float,
         cancel_check: Callable[[], Awaitable[str | None]] | None = None,
         poll_interval: float = 1.0,
+        start_task_ids: list[str] | None = None,
     ) -> ProcessInstance:
         """Start a process, bounding its inline auto-task chain (#142).
 
@@ -247,12 +256,13 @@ class WorkflowEngine:
             cancel_check: Optional async callable polled every *poll_interval*
                 seconds; returning a non-empty string cancels with that reason.
             poll_interval: Seconds between *cancel_check* polls.
+            start_task_ids: Passed to ``start_process`` (#187).
 
         Returns:
             The process after the chain returned (COMPLETE, FAILED, or RUNNING and
             waiting on a manual task), or the FAILED process if it was cancelled.
         """
-        run = asyncio.create_task(self.start_process(process_id))
+        run = asyncio.create_task(self.start_process(process_id, start_task_ids))
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
         reason: str | None = None

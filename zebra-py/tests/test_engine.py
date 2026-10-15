@@ -497,3 +497,42 @@ class TestFailProcess:
         """Failing a non-existent process raises ProcessNotFoundError."""
         with pytest.raises(ProcessNotFoundError):
             await engine.fail_process("nonexistent-id", "reason")
+
+
+class TestStartAtTasks:
+    """start_process(start_task_ids=...) resumes a workflow mid-way (#187)."""
+
+    async def test_starts_at_given_task(self, engine, store, simple_definition):
+        CountingAction.execution_count = 0
+        process = await engine.create_process(simple_definition)
+
+        process = await engine.start_process(process.id, start_task_ids=["end"])
+
+        assert process.state == ProcessState.COMPLETE
+        assert CountingAction.execution_count == 1  # "start" was skipped
+        assert "__task_output_start" not in process.properties
+        assert process.properties["__task_output_end"] == {"count": 1}
+
+    async def test_parks_on_given_human_task(self, engine, store):
+        defn = _human_task_definition()
+        process = await engine.create_process(defn)
+
+        await engine.start_process(process.id, start_task_ids=[defn.first_task_id])
+
+        (pending,) = await engine.get_pending_tasks(process.id)
+        assert pending.task_definition_id == defn.first_task_id
+
+    async def test_starts_each_task_on_its_own_branch(self, engine, store, parallel_definition):
+        CountingAction.execution_count = 0
+        process = await engine.create_process(parallel_definition)
+
+        process = await engine.start_process(process.id, start_task_ids=["branch_a", "branch_b"])
+
+        assert process.state == ProcessState.COMPLETE
+        assert CountingAction.execution_count == 3  # both branches, then the join once
+
+    async def test_unknown_start_task_raises(self, engine, simple_definition):
+        process = await engine.create_process(simple_definition)
+
+        with pytest.raises(KeyError, match="missing"):
+            await engine.start_process(process.id, start_task_ids=["missing"])

@@ -5,11 +5,15 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from zebra.core.models import ProcessInstance, ProcessState, TaskInstance, TaskResult
+from zebra.core.models import ProcessInstance, ProcessState, TaskInstance, TaskResult, TaskState
 from zebra.forms import resolve_task_schema
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.agent.followup import with_previous_run
+from zebra_tasks.agent.followup import (
+    CONTINUATION_DECISION_KEY,
+    PREVIOUS_RUN_CONTEXT_KEY,
+    with_previous_run,
+)
 from zebra_tasks.agent.history import with_workflow_history
 from zebra_tasks.agent.user_context import copy_user_properties
 
@@ -20,6 +24,9 @@ logger = logging.getLogger(__name__)
 
 # Task property recording the child process this task spawned (F129 re-attach).
 CHILD_PROCESS_ID_KEY = "__child_process_id__"
+# Child property recording the failed process a retry resumed from (#187).
+RESUMED_FROM_KEY = "__resumed_from__"
+_DONE_TASK_STATES = {TaskState.COMPLETE}
 
 
 class ExecuteGoalWorkflowAction(TaskAction):
@@ -215,7 +222,10 @@ class ExecuteGoalWorkflowAction(TaskAction):
                     sub_process.state.value,
                 )
                 if sub_process.state == ProcessState.CREATED:
-                    await context.engine.start_process_with_timeout(sub_process.id, timeout)
+                    resumed = sub_process.properties.get(RESUMED_FROM_KEY) or {}
+                    await context.engine.start_process_with_timeout(
+                        sub_process.id, timeout, start_task_ids=resumed.get("task_ids")
+                    )
             else:
                 sub_process = await self._spawn_child(task, context, definition, goal, timeout)
         except Exception as e:
@@ -408,6 +418,24 @@ class ExecuteGoalWorkflowAction(TaskAction):
         # The goal workflow runs as the submitting user (trust gate, knowledge; #151)
         copy_user_properties(context.process.properties, sub_properties)
 
+        # #187: retrying a failed run resumes where it stopped, keeping the answers
+        # already given, instead of asking every question again.
+        start_task_ids = None
+        resume = await self._resume_point(context, definition)
+        if resume is not None:
+            previous, start_task_ids = resume
+            sub_properties = {**self._carried_properties(previous), **sub_properties}
+            sub_properties[RESUMED_FROM_KEY] = {
+                "process_id": previous.id,
+                "task_ids": start_task_ids,
+            }
+            logger.info(
+                "ExecuteGoalWorkflowAction resuming %s from failed process %s at %s",
+                definition.name,
+                previous.id,
+                start_task_ids,
+            )
+
         sub_process = await context.engine.create_process(definition, properties=sub_properties)
 
         # Link as child process
@@ -420,8 +448,80 @@ class ExecuteGoalWorkflowAction(TaskAction):
         task.properties[CHILD_PROCESS_ID_KEY] = sub_process.id
         await context.store.save_task(task)
 
-        await context.engine.start_process_with_timeout(sub_process.id, timeout)
+        await context.engine.start_process_with_timeout(
+            sub_process.id, timeout, start_task_ids=start_task_ids
+        )
         return sub_process
+
+    async def _resume_point(
+        self, context: ExecutionContext, definition: Any
+    ) -> tuple[ProcessInstance, list[str]] | None:
+        """Find where a retried run stopped, if this goal retries one (#187).
+
+        Applies when the continuation assessor chose ``same_workflow`` for a
+        previous run that failed in this same workflow. Returns that run's failed
+        goal-workflow process and the ids of its tasks that never completed (the
+        ones to start at), or None to start the workflow from the beginning.
+        """
+        props = context.process.properties
+        previous_run = props.get(PREVIOUS_RUN_CONTEXT_KEY)
+        if props.get(CONTINUATION_DECISION_KEY) != "same_workflow":
+            return None
+        if not isinstance(previous_run, dict) or previous_run.get("success", True):
+            return None
+        if previous_run.get("workflow_name") != definition.name or not previous_run.get("run_id"):
+            return None
+        try:
+            child = await self._previous_child(context, previous_run["run_id"], definition.name)
+            if child is None:
+                return None
+            tasks = await context.store.load_tasks_for_process(child.id)
+        except Exception:
+            logger.warning("Could not find where run %s stopped", previous_run, exc_info=True)
+            return None
+        start = []
+        for t in tasks:
+            if t.state in _DONE_TASK_STATES or t.task_definition_id in start:
+                continue
+            task_def = definition.tasks.get(t.task_definition_id)
+            if task_def is None or task_def.synchronized:
+                # The workflow changed since, or a join would wait on branches that
+                # never run again: start from the beginning instead.
+                logger.info("Not resuming %s at %s", child.id, t.task_definition_id)
+                return None
+            start.append(t.task_definition_id)
+        return (child, start) if start else None
+
+    @staticmethod
+    async def _previous_child(
+        context: ExecutionContext, run_id: str, workflow_name: str
+    ) -> ProcessInstance | None:
+        """The failed goal-workflow process of run *run_id*, newest first."""
+        for state in (ProcessState.FAILED, ProcessState.COMPLETE):
+            for root in await context.store.get_processes_by_state(state, exclude_children=True):
+                if (root.properties or {}).get("run_id") != run_id:
+                    continue
+                for child in reversed(await context.store.list_child_processes(root.id)):
+                    if child.state != ProcessState.FAILED:
+                        continue
+                    child_def = await context.store.load_definition(child.definition_id)
+                    if child_def is not None and child_def.name == workflow_name:
+                        return child
+                return None
+        return None
+
+    @staticmethod
+    def _carried_properties(previous: ProcessInstance) -> dict[str, Any]:
+        """Workflow state to carry into the resumed process.
+
+        The workflow's own properties and completed task outputs; engine
+        bookkeeping (errors, cost and token totals, parent links) starts afresh.
+        """
+        return {
+            k: v
+            for k, v in previous.properties.items()
+            if not k.startswith("__") or k.startswith("__task_output_")
+        }
 
     @staticmethod
     def _extract_user_inputs(properties: dict[str, Any], definition: Any) -> dict[str, Any]:
