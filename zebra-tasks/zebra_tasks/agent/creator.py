@@ -1,5 +1,6 @@
 """Workflow creator action - uses LLM to create new workflow definitions."""
 
+import logging
 import re
 
 from zebra.core.models import ProcessDefinition, TaskInstance, TaskResult
@@ -11,10 +12,78 @@ from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import LLMResponse, Message
 from zebra_tasks.llm.providers import get_provider
 
-# Generated workflows embed JSON Schemas for human forms, so they are long.
-GENERATED_WORKFLOW_MAX_TOKENS = 8000
+logger = logging.getLogger(__name__)
+
+# Generated workflows embed JSON Schemas for human forms, so they are long. Opus writes
+# ~85 tokens/s, so this stays inside the 180s per-attempt LLM timeout (#188).
+GENERATED_WORKFLOW_MAX_TOKENS = 12000
 
 TRUNCATED_FINISH_REASONS = {"max_tokens", "length"}
+
+COMPACT_RETRY_PROMPT = (
+    "A previous attempt at this workflow was cut off at the output limit. Return the "
+    "complete workflow as YAML only, but shorter: keep prompts brief, do not copy "
+    "previous-run content or long examples into the YAML (tasks receive it at runtime "
+    "via {{goal}}), and drop any task the goal does not need."
+)
+
+
+def extract_workflow_yaml(content: str) -> str:
+    """Return the YAML from an LLM reply, removing markdown code blocks."""
+    for pattern in (r"```yaml\s*(.*?)\s*```", r"```yml\s*(.*?)\s*```", r"```\s*(.*?)\s*```"):
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+    return content.strip()
+
+
+async def _generate_once(
+    provider, messages: list[Message], temperature: float
+) -> tuple[str, ProcessDefinition | None, str | None, bool]:
+    response = await provider.complete(
+        messages=messages, temperature=temperature, max_tokens=GENERATED_WORKFLOW_MAX_TOKENS
+    )
+    yaml_content = extract_workflow_yaml(response.content or "")
+    truncated = response.finish_reason in TRUNCATED_FINISH_REASONS
+    try:
+        definition = load_definition_from_yaml(yaml_content)
+    except Exception as e:
+        return yaml_content, None, f"YAML did not load: {e}", truncated
+    return yaml_content, definition, check_generated_workflow(response, definition), truncated
+
+
+async def generate_workflow(
+    provider, messages: list[Message], temperature: float
+) -> tuple[str, ProcessDefinition | None, str | None]:
+    """Ask the LLM for a workflow, check it, and give it one chance to fix it.
+
+    A truncated reply is re-requested with an instruction to be more compact; any
+    other problem is shown back to the LLM with its YAML for repair.
+
+    Returns:
+        (yaml, definition, problem) — ``problem`` is None when the workflow is valid.
+    """
+    yaml_content, definition, problem, truncated = await _generate_once(
+        provider, messages, temperature
+    )
+    if problem is None:
+        return yaml_content, definition, None
+    if truncated:
+        # Ask again without the cut-off YAML, which would only bloat the context.
+        logger.warning(
+            "Generated workflow truncated at max_tokens=%d", GENERATED_WORKFLOW_MAX_TOKENS
+        )
+        last = messages[-1]
+        messages = messages[:-1] + [Message.user(f"{last.content}\n\n{COMPACT_RETRY_PROMPT}")]
+    else:
+        messages = messages + [
+            Message.assistant(yaml_content),
+            Message.user(
+                f"That workflow is invalid: {problem}\nReturn the corrected workflow as YAML only."
+            ),
+        ]
+    yaml_content, definition, problem, _ = await _generate_once(provider, messages, temperature)
+    return yaml_content, definition, problem
 
 
 def check_generated_workflow(response: LLMResponse, definition: ProcessDefinition) -> str | None:
@@ -387,19 +456,10 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
             actions_section = context.engine.actions.format_for_prompt(user_facing_only=True)
             system_prompt = self._PROMPT_HEADER + actions_section + self._PROMPT_FOOTER
             messages = [Message.system(system_prompt), Message.user(prompt)]
-            yaml_content, definition, problem, truncated = await self._generate(provider, messages)
-            if problem and not truncated:
-                # One repair round: show the LLM its YAML and the error.
-                messages = messages + [
-                    Message.assistant(yaml_content),
-                    Message.user(
-                        f"That workflow is invalid: {problem}\n"
-                        "Return the corrected workflow as YAML only."
-                    ),
-                ]
-                yaml_content, definition, problem, truncated = await self._generate(
-                    provider, messages
-                )
+            # Structured output; creativity lives in the workflow's own tasks
+            yaml_content, definition, problem = await generate_workflow(
+                provider, messages, temperature=0.3
+            )
             if problem:
                 return TaskResult.fail(f"Generated invalid workflow: {problem}")
 
@@ -440,42 +500,3 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
 
         except Exception as e:
             return TaskResult.fail(f"Workflow creation failed: {e}")
-
-    async def _generate(
-        self, provider, messages: list[Message]
-    ) -> tuple[str, ProcessDefinition | None, str | None, bool]:
-        """Ask the LLM for a workflow and check it.
-
-        Returns:
-            (yaml, definition, problem, truncated) — ``problem`` is None when the
-            workflow is valid; ``truncated`` is True when the output hit max_tokens.
-        """
-        response = await provider.complete(
-            messages=messages,
-            temperature=0.3,  # Structured output; creativity lives in the workflow's own tasks
-            max_tokens=GENERATED_WORKFLOW_MAX_TOKENS,
-        )
-        yaml_content = self._extract_yaml(response.content or "")
-        truncated = response.finish_reason in TRUNCATED_FINISH_REASONS
-        try:
-            definition = load_definition_from_yaml(yaml_content)
-        except Exception as e:
-            return yaml_content, None, f"YAML did not load: {e}", truncated
-        return yaml_content, definition, check_generated_workflow(response, definition), truncated
-
-    def _extract_yaml(self, content: str) -> str:
-        """Extract YAML from content, removing markdown code blocks."""
-        # Try to extract from code blocks using regex
-        patterns = [
-            r"```yaml\s*(.*?)\s*```",
-            r"```yml\s*(.*?)\s*```",
-            r"```\s*(.*?)\s*```",
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                return match.group(1).strip()
-
-        # No code blocks found, return as-is
-        return content.strip()

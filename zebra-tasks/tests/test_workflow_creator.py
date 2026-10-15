@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from zebra_tasks.agent.creator import GENERATED_WORKFLOW_MAX_TOKENS, WorkflowCreatorAction
+from zebra_tasks.agent.creator import (
+    COMPACT_RETRY_PROMPT,
+    GENERATED_WORKFLOW_MAX_TOKENS,
+    WorkflowCreatorAction,
+)
 from zebra_tasks.llm.base import LLMResponse, TokenUsage
 
 _VALID_YAML = """name: FIRE Calculator
@@ -149,10 +153,28 @@ async def test_unparseable_yaml_is_repaired(task, context):
     assert "YAML did not load" in provider.complete.call_args_list[1].kwargs["messages"][-1].content
 
 
-async def test_truncated_output_is_not_repaired(task, context):
+async def test_truncated_output_is_retried_compactly(task, context):
     _, provider = await _run(task, context, _response(_VALID_YAML, "max_tokens"))
 
-    assert provider.complete.call_count == 1
+    assert provider.complete.call_count == 2
+    retry_messages = provider.complete.call_args.kwargs["messages"]
+    assert retry_messages[-1].content.endswith(COMPACT_RETRY_PROMPT)
+    assert len(retry_messages) == 2  # no cut-off YAML fed back
+
+
+async def test_truncated_then_complete_is_accepted(task, context):
+    library = MagicMock()
+    context.extras["__workflow_library__"] = library
+    provider = MagicMock()
+    provider.complete = AsyncMock(
+        side_effect=[_response(_TRUNCATED_YAML, "max_tokens"), _response(_VALID_YAML)]
+    )
+
+    with patch("zebra_tasks.agent.creator.get_provider", return_value=provider):
+        result = await WorkflowCreatorAction().run(task, context)
+
+    assert result.success is True
+    library.add_workflow.assert_called_once_with(_VALID_YAML.strip(), llm_defined=True)
 
 
 async def test_system_prompt_describes_engine_semantics(task, context):

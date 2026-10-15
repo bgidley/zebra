@@ -20,8 +20,11 @@ from zebra_tasks.llm.base import LLMResponse, Message
 
 logger = logging.getLogger(__name__)
 
-# Extra attempts (at double the token budget) when the LLM output is truncated.
+# Extra attempts (at TRUNCATION_RETRY_MAX_TOKENS) when the LLM output is truncated.
 TRUNCATION_RETRIES = 1
+# Retry budget for a truncated workflow. Not doubled from GENERATED_WORKFLOW_MAX_TOKENS:
+# Opus at ~85 tokens/s must finish inside the 180s per-attempt LLM timeout (#188).
+TRUNCATION_RETRY_MAX_TOKENS = 14000
 
 # Priority ``source`` marking continuation-driven proposals (F136).
 CONTINUATION = "continuation"
@@ -540,7 +543,7 @@ Maintain the same name and general purpose, but improve the implementation."""
     ) -> tuple[str | None, str | None]:
         """Ask the LLM for a workflow and validate it.
 
-        Retries once with double the token budget when the response is
+        Retries once with a larger token budget when the response is
         truncated. Returns ``(yaml, None)`` on success or ``(None, reason)``
         when the output must not be saved.
         """
@@ -561,7 +564,7 @@ Maintain the same name and general purpose, but improve the implementation."""
                 max_tokens,
                 attempt + 1,
             )
-            max_tokens *= 2
+            max_tokens = TRUNCATION_RETRY_MAX_TOKENS
 
         yaml_content = self._clean_yaml_response(response.content)
         error = self._validate_workflow_yaml(response, yaml_content, context)

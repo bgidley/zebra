@@ -41,11 +41,16 @@ def mock_context():
     return context
 
 
-def _llm_response(content: str, input_tokens: int = 10, output_tokens: int = 20) -> LLMResponse:
+def _llm_response(
+    content: str,
+    input_tokens: int = 10,
+    output_tokens: int = 20,
+    finish_reason: str = "end_turn",
+) -> LLMResponse:
     return LLMResponse(
         content=content,
         tool_calls=None,
-        finish_reason="end_turn",
+        finish_reason=finish_reason,
         usage=TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens),
         model="test-model",
     )
@@ -687,7 +692,7 @@ class TestWorkflowOptimizerValidation:
         self, mock_task, mock_context, tmp_path
     ):
         from zebra_tasks.agent.creator import GENERATED_WORKFLOW_MAX_TOKENS
-        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+        from zebra_tasks.agent.optimizer import TRUNCATION_RETRY_MAX_TOKENS, WorkflowOptimizerAction
 
         provider = self._setup(
             mock_task,
@@ -712,7 +717,7 @@ class TestWorkflowOptimizerValidation:
         assert "truncated" in failed[0]["reason"]
         assert list(tmp_path.iterdir()) == []
         budgets = [c.kwargs["max_tokens"] for c in provider.complete.call_args_list]
-        assert budgets == [GENERATED_WORKFLOW_MAX_TOKENS, GENERATED_WORKFLOW_MAX_TOKENS * 2]
+        assert budgets == [GENERATED_WORKFLOW_MAX_TOKENS, TRUNCATION_RETRY_MAX_TOKENS]
 
     async def test_truncated_then_complete_retry_is_saved(self, mock_task, mock_context, tmp_path):
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
@@ -1006,7 +1011,52 @@ class TestWorkflowVariantCreatorAction:
             result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
 
         assert result.success is False
-        assert "invalid variant YAML" in result.error
+        assert "Generated invalid variant: YAML did not load" in result.error
+        # One repair round before giving up (#188)
+        assert provider.complete.await_count == 2
+
+    async def test_truncated_variant_is_retried_compactly(self, mock_task, mock_context):
+        """A variant cut off at max_tokens gets one compact retry (#188)."""
+        from zebra_tasks.agent.creator import COMPACT_RETRY_PROMPT
+        from zebra_tasks.agent.variant_creator import WorkflowVariantCreatorAction
+
+        library = MagicMock()
+        library.get_workflow_yaml = MagicMock(return_value=_SIMPLE_YAML)
+        mock_context.extras["__workflow_library__"] = library
+        mock_task.properties = {"goal": "Strict code review", "source_workflow_name": "code_review"}
+
+        provider = MagicMock()
+        provider.complete = AsyncMock(
+            side_effect=[
+                _llm_response(_VARIANT_YAML, finish_reason="max_tokens"),
+                _llm_response(_VARIANT_YAML),
+            ]
+        )
+        with patch("zebra_tasks.agent.variant_creator.get_provider", return_value=provider):
+            result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
+
+        assert result.success is True
+        retry_messages = provider.complete.call_args.kwargs["messages"]
+        assert retry_messages[-1].content.endswith(COMPACT_RETRY_PROMPT)
+        assert len(retry_messages) == 2  # no cut-off YAML fed back
+        library.add_workflow.assert_called_once()
+
+    async def test_truncated_twice_variant_fails_unsaved(self, mock_task, mock_context):
+        from zebra_tasks.agent.variant_creator import WorkflowVariantCreatorAction
+
+        library = MagicMock()
+        library.get_workflow_yaml = MagicMock(return_value=_SIMPLE_YAML)
+        mock_context.extras["__workflow_library__"] = library
+        mock_task.properties = {"goal": "Strict code review", "source_workflow_name": "code_review"}
+
+        provider = _mock_provider(_VARIANT_YAML, finish_reason="max_tokens")
+        with patch("zebra_tasks.agent.variant_creator.get_provider", return_value=provider):
+            result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
+
+        assert result.success is False
+        assert "truncated" in result.error
+        assert provider.complete.await_count == 2
+        library.add_workflow.assert_not_called()
 
     async def test_custom_output_key_stored(self, mock_task, mock_context):
         from zebra_tasks.agent.variant_creator import WorkflowVariantCreatorAction
