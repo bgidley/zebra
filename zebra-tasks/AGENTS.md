@@ -47,6 +47,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/flag_concerns.py` | FlagConcernsAction - proactive, advisory concern flagging during planning (F21) |
 | `zebra_tasks/agent/voice.py` | `VOICE_SCHEMA_FIELDS`, `extract_voice()`, `voice_fields()` - Zebra's first-person `voice` + `confidence` recorded alongside reasoning outputs (ethics gate, selector, flag concerns, continuation, post-review); stored only when supplied (#161) |
 | `zebra_tasks/agent/record_dilemma_resolution.py` | RecordDilemmaResolutionAction - record a human ethics-dilemma resolution and route (F22) |
+| `zebra_tasks/agent/stuck.py` | AssessStuckAction (`assess_stuck`: route `proceed`/`ask_human`, `max_help_requests` budget in `__help_requests__`, haiku help request with plain fallback), ApplyHelpResponseAction (`apply_help_response`: route `retry`/`redirect`/`abandon`, `__help_history__`), `with_help_guidance()` appended to the child goal by `execute_goal_workflow` (#176) |
 | `zebra_tasks/agent/record_ethics_review.py` | RecordEthicsReviewAction - normalise + audit the post-execution ethics review (#143) |
 | `zebra_tasks/agent/record_ethics_rejection.py` | RecordEthicsRejectionAction - record which ethics gate rejected a goal and why (#143) |
 | `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13/F14) |

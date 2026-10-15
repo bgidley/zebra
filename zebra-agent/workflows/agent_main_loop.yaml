@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 15
+version: 16
 first_task: consult_memory
 
 tasks:
@@ -200,6 +200,70 @@ tasks:
       # report_outcome re-raises the failure at the end.
       continue_on_failure: true
       output_key: execution_result
+
+  # Step 7a: "I'm stuck" handoff (#176) - a failed run asks a human for help
+  # (what I tried, where I'm stuck, what I need) while the help budget lasts,
+  # instead of failing. Successful runs and a spent budget route "proceed".
+  assess_stuck:
+    name: "Assess If Stuck"
+    action: assess_stuck
+    auto: true
+    properties:
+      goal: "{{goal}}"
+      workflow_name: "{{workflow_name}}"
+      success: "{{execution_result.success}}"
+      error: "{{execution_result.error}}"
+      max_help_requests: 2
+      model: haiku
+      output_key: help_request
+
+  # Step 7b: The human answers the help request; the decision drives routing.
+  stuck_help_request:
+    name: "I'm Stuck — Can You Help?"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "I'm stuck — can you help?"
+        description: "The workflow for this goal failed. Tell me how to carry on."
+        required:
+          - decision
+        properties:
+          goal:
+            type: string
+            title: "Goal"
+            default: "{{goal}}"
+            readOnly: true
+          help_request:
+            type: string
+            title: "What happened"
+            format: multiline
+            default: "{{help_request_display}}"
+            readOnly: true
+          decision:
+            type: string
+            title: "What should I do?"
+            description: "retry: try the same workflow again with your guidance. redirect: work on the new goal you write below instead. abandon: stop and record the failure."
+            enum:
+              - retry
+              - redirect
+              - abandon
+            default: retry
+          guidance:
+            type: string
+            title: "Guidance or new goal"
+            description: "For retry, what I should do differently. For redirect, the new goal."
+            format: multiline
+
+  # Step 7c: Apply the answer: retry → execute_workflow, redirect → input gate,
+  # abandon → record the failure as usual.
+  apply_help_response:
+    name: "Apply Help Response"
+    action: apply_help_response
+    auto: true
+    properties:
+      response_task_id: stuck_help_request
+      result_key: execution_result
 
   # Step 8: Assess effectiveness and record to metrics + memory
   assess_and_record:
@@ -441,7 +505,36 @@ routings:
 
   # Post-execution flow
   - from: execute_workflow
+    to: assess_stuck
+
+  # "I'm stuck" handoff (#176)
+  - from: assess_stuck
     to: assess_and_record
+    condition: route_name
+    name: "proceed"
+
+  - from: assess_stuck
+    to: stuck_help_request
+    condition: route_name
+    name: "ask_human"
+
+  - from: stuck_help_request
+    to: apply_help_response
+
+  - from: apply_help_response
+    to: execute_workflow
+    condition: route_name
+    name: "retry"
+
+  - from: apply_help_response
+    to: ethics_input_gate
+    condition: route_name
+    name: "redirect"
+
+  - from: apply_help_response
+    to: assess_and_record
+    condition: route_name
+    name: "abandon"
 
   - from: assess_and_record
     to: update_conceptual_memory

@@ -113,8 +113,10 @@ consult_memory --> consult_knowledge --> assess_history_need
                        |          \
                        |           escalate → resolve dilemma → record (F22)
                        |
-                execute_workflow
-                       |
+                execute_workflow  <-------------- retry ---------------+
+                       |                                               |
+                assess_stuck  -- failed, budget left --> stuck_help_request → apply_help_response (#176)
+                       |                                  redirect → ethics_input_gate; abandon ↓
                 assess_and_record   (also runs for failed goal runs — #140)
                        |
              update_conceptual_memory
@@ -135,6 +137,7 @@ consult_memory --> consult_knowledge --> assess_history_need
 4b. **flag_concerns**: `FlagConcernsAction` proactively flags planning concerns (advisory, non-blocking; F21) before the ethics plan-review gate
 4c. **ethics_plan_review → escalate**: when values genuinely conflict on a Kantian-permissible plan, the gate routes `escalate` to the `ethics_dilemma_resolution` human task (both sides shown); `record_dilemma_resolution` records the choice and routes proceed/reject (F22)
 5. **execute_workflow**: `ExecuteGoalWorkflowAction` runs the selected/created workflow as a child process and suspends on it (#185), so a human task in the child parks the whole goal (no goal timeout while waiting) and failing the goal fails the child
+5a. **assess_stuck → stuck_help_request → apply_help_response** (#176): a failed run, while fewer than `max_help_requests` (2) help requests have been made, parks on a human task showing a haiku-written help request (what I tried / where I'm stuck / what I need). The answer routes `retry` (same workflow, guidance appended to the child goal via `with_help_guidance`), `redirect` (`goal` replaced, back to `ethics_input_gate`) or `abandon` (record and fail as #140). Successful runs and a spent budget route `proceed`
 6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
 7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
 8. **ethics_post_review → record_ethics_review**: advisory LLM review of the completed run, then `RecordEthicsReviewAction` audits it (`check_type="post_review"`). Runs after the memory update so a failed review cannot skip it (#143)
@@ -156,6 +159,7 @@ These actions (in `zebra-tasks/zebra_tasks/agent/`) power the agent loop:
 | `workflow_variant_creator` | `variant_creator.py` | LLM-powered workflow variant creation |
 | `flag_concerns` | `flag_concerns.py` | Advisory proactive concern flagging before the plan-review gate (F21) |
 | `record_dilemma_resolution` | `record_dilemma_resolution.py` | Record a human ethics-dilemma resolution and route proceed/reject (F22) |
+| `assess_stuck` / `apply_help_response` | `stuck.py` | "I'm stuck" handoff: ask a human for help on a failed run, then retry/redirect/abandon (#176) |
 | `execute_goal_workflow` | `execute_workflow.py` | Execute workflow by name |
 | `assess_and_record` | `assess_and_record.py` | LLM assessment + metrics + memory write |
 | `update_conceptual_memory` | `update_conceptual_memory.py` | Incrementally update conceptual memory index |
