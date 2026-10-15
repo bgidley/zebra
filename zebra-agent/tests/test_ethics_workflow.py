@@ -23,6 +23,7 @@ from zebra_tasks.agent.propagate_failure import PropagateFailureAction
 from zebra_tasks.agent.record_dilemma_resolution import RecordDilemmaResolutionAction
 from zebra_tasks.agent.record_ethics_rejection import RecordEthicsRejectionAction
 from zebra_tasks.agent.record_ethics_review import RecordEthicsReviewAction
+from zebra_tasks.agent.stuck import ApplyHelpResponseAction, AssessStuckAction
 from zebra_tasks.knowledge.apply_resolution import ApplyResolutionAction
 from zebra_tasks.knowledge.extract import ExtractKnowledgeAction
 from zebra_tasks.knowledge.store_learned import StoreLearnedKnowledgeAction
@@ -194,6 +195,13 @@ class StubUpdateConceptualMemory(TaskAction):
 WORKFLOW_YAML_PATH = Path(__file__).parent.parent / "workflows" / "agent_main_loop.yaml"
 
 
+@pytest.fixture(autouse=True)
+def _no_help_request_llm():
+    """#176: the help request falls back to plain text instead of calling an LLM."""
+    with patch("zebra_tasks.agent.stuck.get_provider", side_effect=RuntimeError("no LLM")):
+        yield
+
+
 @pytest.fixture
 def definition():
     """Load the real agent_main_loop.yaml."""
@@ -223,6 +231,9 @@ def _make_registry(ethics_gate_class, execute_class=None):
     registry.register_action("llm_call", StubLLMCall)
     registry.register_action("update_conceptual_memory", StubUpdateConceptualMemory)
     registry.register_action("propagate_failure", PropagateFailureAction)
+    # #176: real stuck handoff; the module fixture makes its LLM unavailable
+    registry.register_action("assess_stuck", AssessStuckAction)
+    registry.register_action("apply_help_response", ApplyHelpResponseAction)
     registry.register_action("record_ethics_review", RecordEthicsReviewAction)
     registry.register_action("record_ethics_rejection", RecordEthicsRejectionAction)
     # F152: real knowledge learning — skips without __user_id__ (no LLM call)
@@ -261,7 +272,7 @@ class TestEthicsWorkflowIntegration:
         assert len(pending) == 0
 
     async def test_failed_goal_workflow_is_recorded_then_fails_process(self, definition):
-        """#140: a failed goal run still runs assess/learn, then the loop ends FAILED."""
+        """#140: once the human abandons (#176), assess/learn run, then the loop ends FAILED."""
         registry = _make_registry(StubEthicsGateApprove, StubExecuteWorkflowFails)
         store = InMemoryStore()
         engine = WorkflowEngine(store, registry)
@@ -272,12 +283,18 @@ class TestEthicsWorkflowIntegration:
         )
         await engine.start_process(process.id)
 
+        # #176: the failure parks on a help request instead of failing outright
+        (help_task,) = await engine.get_pending_tasks(process.id)
+        assert help_task.task_definition_id == "stuck_help_request"
+        await engine.complete_task(help_task.id, TaskResult.ok(output={"decision": "abandon"}))
+
+        error = "boom (abandoned after asking for help)"
         process = await store.load_process(process.id)
-        assert process.properties["assessed_with"] == {"success": "False", "error": "boom"}
+        assert process.properties["assessed_with"] == {"success": "False", "error": error}
         assert process.properties["ethics_post_assessment"] is not None
         assert process.properties["conceptual_memory_update"] == {"updated": True}
         assert process.state == ProcessState.FAILED
-        assert process.properties["__error__"] == "boom"
+        assert process.properties["__error__"] == error
         assert process.properties["__failed_task__"] == "report_outcome"
 
     async def test_concerns_flagged_during_planning(self, definition):
@@ -812,3 +829,116 @@ class TestKnowledgeLearning:
         gp.assert_called_once()
         assert await knowledge.get_entries(1) == []
         assert "learned_knowledge" not in process.properties
+
+
+# ---------------------------------------------------------------------------
+# #176: "I'm stuck" — a failed goal asks a human for help, then resumes
+# ---------------------------------------------------------------------------
+
+
+class FailUntilHelped(TaskAction):
+    """Child task: fails unless the user's help reached its goal."""
+
+    async def run(self, task, context):
+        goal = context.get_process_property("goal")
+        if "<help_history>" not in goal:
+            return TaskResult.fail("missing the user's savings figure")
+        context.set_process_property("answer", goal)
+        return TaskResult.ok(output="done")
+
+
+class TestStuckHandoff:
+    """execute_workflow → assess_stuck → stuck_help_request → apply_help_response."""
+
+    async def _start(self, definition, **properties):
+        from zebra_tasks.agent.execute_workflow import ExecuteGoalWorkflowAction
+
+        registry = _make_registry(StubEthicsGateApprove)
+        registry.register_action("execute_goal_workflow", ExecuteGoalWorkflowAction)
+        registry.register_action("echo_goal", FailUntilHelped)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry, extras={"__workflow_library__": _ChildLibrary()})
+        process = await engine.create_process(
+            definition,
+            properties={"goal": "Plan my FIRE date", "available_workflows": [], **properties},
+        )
+        await engine.start_process(process.id)
+        return engine, store, process.id
+
+    async def _answer(self, engine, process_id, **answer):
+        (task,) = await engine.get_pending_tasks(process_id)
+        assert task.task_definition_id == "stuck_help_request"
+        await engine.complete_task(task.id, TaskResult.ok(output=answer))
+
+    async def test_failure_parks_with_help_request(self, definition):
+        engine, store, pid = await self._start(definition)
+
+        process = await store.load_process(pid)
+        assert process.state == ProcessState.RUNNING
+        display = process.properties["help_request_display"]
+        assert "Test Workflow" in display
+        assert "missing the user's savings figure" in display
+        assert process.properties["__help_requests__"] == 1
+        # Nothing was recorded yet: the goal is waiting, not finished
+        assert "assessed_with" not in process.properties
+
+    async def test_retry_with_guidance_completes(self, definition):
+        engine, store, pid = await self._start(definition)
+        await self._answer(engine, pid, decision="retry", guidance="Savings are 200k")
+
+        process = await store.load_process(pid)
+        assert process.state == ProcessState.COMPLETE
+        child_goal = process.properties["execution_result"]["output"]
+        assert child_goal.startswith("Plan my FIRE date")
+        assert "User guidance: Savings are 200k" in child_goal
+        assert "missing the user's savings figure" in child_goal
+        assert process.properties["goal"] == "Plan my FIRE date"
+        assert process.properties["assessed_with"]["success"] == "True"
+
+    async def test_redirect_reruns_input_gate_with_new_goal(self, definition):
+        engine, store, pid = await self._start(definition)
+        await self._answer(engine, pid, decision="redirect", guidance="Just list FIRE books")
+
+        process = await store.load_process(pid)
+        assert process.state == ProcessState.COMPLETE
+        assert process.properties["goal"] == "Just list FIRE books"
+        assert process.properties["original_goal"] == "Plan my FIRE date"
+        assert process.properties["execution_result"]["output"].startswith("Just list FIRE books")
+
+    async def test_budget_spent_fails_as_before(self, definition):
+        engine, store, pid = await self._start(definition, __help_requests__=2)
+
+        assert await engine.get_pending_tasks(pid) == []
+        process = await store.load_process(pid)
+        assert process.state == ProcessState.FAILED
+        assert process.properties["__error__"] == "missing the user's savings figure"
+
+    async def test_retries_that_keep_failing_end_failed_at_budget(self, definition):
+        registry = _make_registry(StubEthicsGateApprove, StubExecuteWorkflowFails)
+        store = InMemoryStore()
+        engine = WorkflowEngine(store, registry)
+        process = await engine.create_process(
+            definition, properties={"goal": "Write a poem", "available_workflows": []}
+        )
+        await engine.start_process(process.id)
+
+        await self._answer(engine, process.id, decision="retry", guidance="shorter")
+        await self._answer(engine, process.id, decision="retry", guidance="rhyme")
+        assert await engine.get_pending_tasks(process.id) == []
+
+        process = await store.load_process(process.id)
+        assert process.state == ProcessState.FAILED
+        assert process.properties["__error__"] == "boom"
+        assert process.properties["__help_requests__"] == 2
+        assert [h["guidance"] for h in process.properties["__help_history__"]] == [
+            "shorter",
+            "rhyme",
+        ]
+
+    async def test_success_never_asks(self, definition):
+        engine, store, pid = await self._start(
+            definition, __help_history__=[{"error": "x", "decision": "retry", "guidance": "y"}]
+        )
+        process = await store.load_process(pid)
+        assert process.state == ProcessState.COMPLETE
+        assert "__help_requests__" not in process.properties
