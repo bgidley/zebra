@@ -1,12 +1,9 @@
 """WorkflowVariantCreatorAction - LLM-driven copy-and-modify of an existing workflow."""
 
-import re
-
 from zebra.core.models import TaskInstance, TaskResult
-from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.agent.creator import GENERATED_WORKFLOW_MAX_TOKENS, check_generated_workflow
+from zebra_tasks.agent.creator import generate_workflow
 from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
@@ -131,6 +128,8 @@ class WorkflowVariantCreatorAction(TaskAction):
         "   default model. Available values: 'haiku' (fastest/cheapest), 'sonnet'\n"
         "   (balanced, default), 'opus' (most capable). Only set model when a task has\n"
         "   clearly different needs — most tasks should omit it.\n"
+        "9. Do not copy the previous run's content into the YAML — tasks receive it at\n"
+        "   runtime via {{goal}}. Keep prompts concise.\n"
         "\n"
         "The available task actions are the same as in the source workflow."
     )
@@ -180,23 +179,11 @@ class WorkflowVariantCreatorAction(TaskAction):
         prompt += f"\nSource workflow YAML:\n{source_yaml}"
 
         try:
-            response = await provider.complete(
-                messages=[
-                    Message.system(self.SYSTEM_PROMPT),
-                    Message.user(prompt),
-                ],
+            yaml_content, definition, problem = await generate_workflow(
+                provider,
+                [Message.system(self.SYSTEM_PROMPT), Message.user(prompt)],
                 temperature=0.5,
-                max_tokens=GENERATED_WORKFLOW_MAX_TOKENS,
             )
-
-            yaml_content = self._extract_yaml(response.content or "")
-
-            try:
-                definition = load_definition_from_yaml(yaml_content)
-            except Exception as e:
-                return TaskResult.fail(f"Generated invalid variant YAML: {e}")
-
-            problem = check_generated_workflow(response, definition)
             if problem:
                 return TaskResult.fail(f"Generated invalid variant: {problem}")
 
@@ -239,16 +226,3 @@ class WorkflowVariantCreatorAction(TaskAction):
         if isinstance(value, str) and "{{" in value:
             value = context.resolve_template(value)
         return value or default
-
-    def _extract_yaml(self, content: str) -> str:
-        """Strip markdown code blocks if present."""
-        patterns = [
-            r"```yaml\s*(.*?)\s*```",
-            r"```yml\s*(.*?)\s*```",
-            r"```\s*(.*?)\s*```",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                return match.group(1).strip()
-        return content.strip()
