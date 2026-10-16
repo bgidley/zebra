@@ -48,6 +48,13 @@ class Migration(migrations.Migration):
                 "verbose_name": "Postmortem",
                 "verbose_name_plural": "Postmortems",
                 "db_table": "zebra_postmortems",
+                "constraints": [
+                    models.UniqueConstraint(
+                        condition=models.Q(("run_id", ""), _negated=True),
+                        fields=("run_id",),
+                        name="zebra_postmortem_one_per_run",
+                    )
+                ],
                 "indexes": [
                     models.Index(fields=["-timestamp"], name="zebra_postm_timesta_1d3dd2_idx")
                 ],

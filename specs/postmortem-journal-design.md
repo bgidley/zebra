@@ -29,7 +29,7 @@ on purpose).
   `user_id` (entry's `user_id`, from the goal's `__user_id__`, else the request user, else the
   run's). Oracle adds `embedding VECTOR` on the goal (`EMBEDDED_TABLES`, trigger
   `zebra_pm_embed_trg`); `search_postmortems` uses `VECTOR_DISTANCE` like #169.
-- One postmortem per `run_id`.
+- One postmortem per `run_id`: a partial unique constraint (`zebra_postmortem_one_per_run`, non-empty `run_id`) makes racing triggers (daemon timeout + low rating) keep the first; `add_postmortem` ignores a duplicate.
 
 ## 3. Interfaces
 
@@ -65,6 +65,7 @@ None. `LESSONS_LIMIT = 3` (consult_memory), `LOW_RATING_MAX = 2`. Oracle vector 
 
 ## 6. Open questions / risks
 
+- Recalled lessons are untrusted text (failure output, user feedback): `with_lessons` strips `<lessons>` tags and labels them notes, not instructions; each is capped at 400 chars, 3 per goal. The journal relies on Django autoescaping.
 - Lessons can be wrong; they are advisory context and visible in the journal, but there is no
   delete/curate action yet (a Dream Cycle review could prune them).
 - The low-rating postmortem runs as a background task in the web process; a restart before it

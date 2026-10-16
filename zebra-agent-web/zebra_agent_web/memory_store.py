@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
+from django.db import IntegrityError, transaction
 from zebra_agent.storage.interfaces import CompactionBatch, MemoryStore, format_conceptual_context
 
 from zebra_agent_web.middleware import get_current_user_id
@@ -353,6 +354,17 @@ class DjangoMemoryStore(MemoryStore):
                 run = WorkflowRunModel.objects.filter(id=entry.run_id).first()
                 user_id = run.user_id if run is not None else None
 
+            if entry.run_id and PostmortemModel.objects.filter(run_id=entry.run_id).exists():
+                logger.info("Run %s already has a postmortem; keeping it", entry.run_id)
+                return
+            try:
+                with transaction.atomic():
+                    _save(PostmortemModel, user_id)
+            except IntegrityError:
+                # Another trigger stored this run's postmortem first (#175).
+                logger.info("Run %s already has a postmortem; keeping it", entry.run_id)
+
+        def _save(PostmortemModel, user_id):  # noqa: N803
             PostmortemModel.objects.update_or_create(
                 id=entry.id,
                 defaults={

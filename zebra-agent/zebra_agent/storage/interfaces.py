@@ -258,7 +258,10 @@ class MemoryStore(ABC):
 
     @abstractmethod
     async def add_postmortem(self, entry: PostmortemEntry) -> None:
-        """Store a postmortem (a lesson learned from an incident)."""
+        """Store a postmortem (a lesson learned from an incident).
+
+        At most one is kept per non-empty ``run_id``: a later one is ignored.
+        """
         ...
 
     @abstractmethod

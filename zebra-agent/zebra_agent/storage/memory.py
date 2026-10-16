@@ -95,8 +95,10 @@ class InMemoryMemoryStore(MemoryStore):
     # =========================================================================
 
     async def add_postmortem(self, entry: PostmortemEntry) -> None:
-        """Store a postmortem."""
+        """Store a postmortem; a second one for the same run is ignored."""
         await self._ensure_initialized()
+        if entry.run_id and any(e.run_id == entry.run_id for e in self._postmortems):
+            return
         self._postmortems.append(entry)
         self._postmortems.sort(key=lambda e: e.timestamp, reverse=True)
 

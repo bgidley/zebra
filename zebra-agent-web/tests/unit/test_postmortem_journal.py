@@ -67,6 +67,15 @@ class TestDjangoPostmortemStore:
         assert (await store.get_postmortem_by_run_id("run-2")).goal == "Other user's goal"
         assert await store.get_postmortem_by_run_id("missing") is None
 
+    async def test_second_postmortem_for_a_run_is_ignored(self):
+        """Racing triggers (daemon timeout + low rating) keep one postmortem per run."""
+        store = DjangoMemoryStore()
+        await store.add_postmortem(_entry(lesson="first"))
+        await store.add_postmortem(_entry(lesson="second"))
+
+        assert await PostmortemModel.objects.filter(run_id="run-1").acount() == 1
+        assert (await store.get_postmortem_by_run_id("run-1")).lesson == "first"
+
     async def test_search_falls_back_to_keywords_off_oracle(self):
         store = DjangoMemoryStore()
         await store.add_postmortem(_entry())
@@ -115,7 +124,7 @@ def test_journal_lists_the_users_lessons(authenticated_client, test_user, comple
         lesson="Cap web searches at one query.",
         timestamp=T0 + timedelta(hours=1),
     )
-    _row(test_user.pk + 1, id="pm-3", lesson="Someone else's lesson")
+    _row(test_user.pk + 1, id="pm-3", run_id="run-3", lesson="Someone else's lesson")
 
     response = authenticated_client.get("/journal/")
 
@@ -128,6 +137,17 @@ def test_journal_lists_the_users_lessons(authenticated_client, test_user, comple
     assert 'href="/runs/run-1/"' in html
     assert "After a timed-out run" in html
     assert "Someone else" not in html
+
+
+@pytest.mark.django_db(transaction=True)
+def test_journal_escapes_llm_text(authenticated_client, test_user, completed_setup):
+    _row(test_user.pk, lesson="<script>alert(1)</script>", voice="<b>bold</b>")
+
+    html = authenticated_client.get("/journal/").content.decode()
+
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "&lt;b&gt;bold&lt;/b&gt;" in html
 
 
 @pytest.mark.django_db(transaction=True)

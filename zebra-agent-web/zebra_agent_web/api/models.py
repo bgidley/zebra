@@ -354,6 +354,14 @@ class PostmortemModel(models.Model):
         indexes = [
             models.Index(fields=["-timestamp"]),
         ]
+        # One postmortem per run, even if two triggers race (#175).
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run_id"],
+                condition=~models.Q(run_id=""),
+                name="zebra_postmortem_one_per_run",
+            )
+        ]
 
     def __str__(self):
         return f"Postmortem ({self.trigger}): {self.goal[:60]}"
