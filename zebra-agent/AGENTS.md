@@ -178,6 +178,7 @@ These actions power the Dream Cycle self-improvement workflow:
 | `workflow_evaluator` | `evaluator.py` | LLM-based evaluation of workflow effectiveness |
 | `workflow_optimizer` | `optimizer.py` | Create/optimize workflows based on evaluation |
 | `review_knowledge` | `knowledge/review.py` | Review each active user's personal knowledge against runs since the last dream cycle; human entries only via contradiction/verification workflows (#153) |
+| `propose_zebra_improvements` | `improvements.py` | Turn findings a workflow edit cannot fix into *Zebra Improvement Request* processes for human review; capped, deduped by title (#189) |
 
 ### IoC (Inversion of Control) for Stores
 
@@ -334,6 +335,7 @@ These workflows are internal to the agent and excluded from LLM selection:
 | `Dream Cycle` | `dream_cycle.yaml` | Self-improvement: analyze, evaluate, optimize workflows |
 | `Create Goal` | `create_goal.yaml` | Human input → queue goal as CREATED process |
 | `Bug Report` | `bug_report.yaml` | Web UI "Report a bug": one human review task over the stored report (#186) |
+| `Zebra Improvement Request` | `zebra_improvement_request.yaml` | Dream cycle request for a change to Zebra's code: one human review task (accept / reject / duplicate / later, issue link) (#189) |
 | `Define Workflow` | `define_workflow.yaml` | `llm_agent`'s `define_workflow` tool: ethics gate → `workflow_creator` (#146) |
 
 System workflows are identified by the `system` tag in their YAML (`tags: [..., "system"]`) —

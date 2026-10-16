@@ -1,0 +1,53 @@
+# Zebra Improvement Request (#189)
+#
+# Started by the dream cycle's propose_zebra_improvements step for a problem
+# that needs a change to Zebra's own code (engine, task actions, web UI) rather
+# than a workflow edit. The process properties are the record:
+#
+#   improvement            title, area, problem, evidence, suggested_change, impact
+#   improvement_title      short title, used in headings and for dedupe
+#   improvement_markdown   the request rendered for the reviewer
+#   source_process_id      the Dream Cycle process that raised it
+#
+# The single human task holds the request for review; its output
+# (__task_output_review) is the verdict shown on /dreams/.
+#
+# This workflow is a system workflow — the goal selector never picks it.
+
+name: "Zebra Improvement Request"
+version: 1
+description: "Hold a dream-cycle request for an improvement to Zebra itself for human review."
+tags: ["system", "improvement-request"]
+use_when: "INTERNAL USE ONLY — started by the dream cycle"
+first_task: review
+
+tasks:
+  review:
+    name: "Review Improvement Request"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Zebra improvement request"
+        description: "{{improvement_title}}"
+        required: [verdict]
+        properties:
+          request:
+            type: string
+            title: "Request"
+            readOnly: true
+            default: "{{improvement_markdown}}"
+          verdict:
+            type: string
+            title: "Verdict"
+            enum: [accepted, rejected, duplicate, later]
+            enumLabels: ["Accept", "Reject", "Duplicate", "Later"]
+          issue_url:
+            type: string
+            title: "Issue link"
+            description: "GitLab issue tracking the work, if any."
+            format: url
+          notes:
+            type: string
+            title: "Notes"
+            format: multiline
