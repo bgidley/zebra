@@ -1,7 +1,5 @@
 """Tests for subtask actions."""
 
-import asyncio
-
 import pytest
 from zebra.core.models import (
     ProcessDefinition,
@@ -15,6 +13,34 @@ from zebra_tasks.subtasks import (
     SubworkflowAction,
     WaitForSubworkflowAction,
 )
+
+
+def subflow_entry(
+    process_id: str,
+    success: bool = True,
+    properties: dict | None = None,
+    error: str | None = None,
+) -> dict:
+    """A ``context.subflow_results`` entry as the engine builds it on resume (#146)."""
+    return {
+        "process_id": process_id,
+        "workflow": "Test",
+        "success": success,
+        "output": None,
+        "error": error,
+        "properties": properties or {},
+    }
+
+
+def child_of(mock_context, process_id: str, state: ProcessState, **properties) -> ProcessInstance:
+    """A process linked as a sub-workflow of the context's process."""
+    return ProcessInstance(
+        id=process_id,
+        definition_id="test_def",
+        state=state,
+        properties=properties,
+        parent_process_id=mock_context.process.id,
+    )
 
 
 class TestSubworkflowAction:
@@ -103,8 +129,8 @@ class TestSubworkflowAction:
         assert created.properties.get("config") == {"key": "value"}
 
     @pytest.mark.asyncio
-    async def test_spawn_subworkflow_wait_for_completion(self, mock_context, mock_task, mock_store):
-        """Test waiting for sub-workflow completion."""
+    async def test_spawn_subworkflow_wait_suspends_on_child(self, mock_context, mock_task):
+        """Waiting starts the linked child and suspends on it instead of polling (#181)."""
         mock_task.properties = {
             "workflow": {
                 "id": "test",
@@ -117,22 +143,71 @@ class TestSubworkflowAction:
             "output_key": "result",
         }
 
-        action = SubworkflowAction()
+        result = await SubworkflowAction().run(mock_task, mock_context)
 
-        # Make the process complete quickly
-        async def complete_process():
-            await asyncio.sleep(0.05)
-            proc = mock_store.processes.get("proc_0")
-            if proc:
-                proc.state = ProcessState.COMPLETE
-                proc.properties["__output__"] = {"data": "completed"}
+        assert result.suspend_children == ["proc_0"]
+        assert mock_context.engine.started_processes == ["proc_0"]
+        child = mock_context.store.processes["proc_0"]
+        assert child.parent_process_id == mock_context.process.id
+        assert child.parent_task_id == mock_task.id
+        assert "result" not in mock_context.process.properties
 
-        asyncio.create_task(complete_process())
+    @pytest.mark.asyncio
+    async def test_spawn_subworkflow_resume_with_completed_child(self, mock_context, mock_task):
+        """On resume the result is built from the child's properties."""
+        mock_task.properties = {
+            "workflow": {
+                "id": "test",
+                "name": "Test",
+                "first_task_id": "t1",
+                "tasks": {"t1": {"id": "t1", "name": "T1", "action": "test"}},
+                "routings": [],
+            },
+            "wait": True,
+            "output_key": "result",
+        }
+        mock_context.subflow_results = [
+            subflow_entry("proc_0", properties={"__output__": {"data": "completed"}})
+        ]
 
-        result = await action.run(mock_task, mock_context)
+        result = await SubworkflowAction().run(mock_task, mock_context)
 
         assert result.success is True
-        assert mock_context.process.properties.get("result")["success"] is True
+        expected = {
+            "success": True,
+            "process_id": "proc_0",
+            "properties": {"__output__": {"data": "completed"}},
+            "output": {"data": "completed"},
+        }
+        assert result.output == expected
+        assert mock_context.process.properties["result"] == expected
+        assert mock_context.engine.created_processes == []
+
+    @pytest.mark.asyncio
+    async def test_spawn_subworkflow_resume_with_failed_child(self, mock_context, mock_task):
+        """A failed child fails the task with the child's error."""
+        mock_task.properties = {
+            "workflow": {
+                "id": "test",
+                "name": "Test",
+                "first_task_id": "t1",
+                "tasks": {"t1": {"id": "t1", "name": "T1", "action": "test"}},
+                "routings": [],
+            }
+        }
+        mock_context.subflow_results = [
+            subflow_entry("proc_0", success=False, error="Something went wrong")
+        ]
+
+        result = await SubworkflowAction().run(mock_task, mock_context)
+
+        assert result.success is False
+        assert result.error == "Something went wrong"
+        assert mock_context.process.properties["subworkflow_result"] == {
+            "success": False,
+            "error": "Something went wrong",
+            "process_id": "proc_0",
+        }
 
     @pytest.mark.asyncio
     async def test_spawn_subworkflow_no_definition_fails(self, mock_context, mock_task):
@@ -150,45 +225,41 @@ class TestWaitForSubworkflowAction:
     """Tests for WaitForSubworkflowAction."""
 
     @pytest.mark.asyncio
-    async def test_wait_for_completed_process(self, mock_context, mock_task, mock_store):
-        """Test waiting for an already completed process."""
-        # Create a completed process
-        completed_process = ProcessInstance(
-            id="completed_proc",
-            definition_id="test_def",
-            state=ProcessState.COMPLETE,
-            properties={"__output__": {"result": "success"}},
+    async def test_wait_suspends_on_child(self, mock_context, mock_task, mock_store):
+        """Waiting on a sub-workflow suspends on it instead of polling (#181)."""
+        mock_store.processes["running_proc"] = child_of(
+            mock_context, "running_proc", ProcessState.RUNNING
         )
-        mock_store.processes["completed_proc"] = completed_process
+        mock_task.properties = {"process_id": "running_proc", "output_key": "wait_result"}
 
-        mock_task.properties = {
-            "process_id": "completed_proc",
-            "output_key": "wait_result",
-        }
+        result = await WaitForSubworkflowAction().run(mock_task, mock_context)
 
-        action = WaitForSubworkflowAction()
-        result = await action.run(mock_task, mock_context)
+        assert result.suspend_children == ["running_proc"]
+        assert "wait_result" not in mock_context.process.properties
+
+    @pytest.mark.asyncio
+    async def test_wait_for_completed_process(self, mock_context, mock_task):
+        """On resume a completed child's output is returned."""
+        mock_task.properties = {"process_id": "completed_proc", "output_key": "wait_result"}
+        mock_context.subflow_results = [
+            subflow_entry("completed_proc", properties={"__output__": {"result": "success"}})
+        ]
+
+        result = await WaitForSubworkflowAction().run(mock_task, mock_context)
 
         assert result.success is True
         assert mock_context.process.properties["wait_result"]["success"] is True
+        assert mock_context.process.properties["wait_result"]["output"] == {"result": "success"}
 
     @pytest.mark.asyncio
-    async def test_wait_for_failed_process(self, mock_context, mock_task, mock_store):
-        """Test waiting for a failed process."""
-        failed_process = ProcessInstance(
-            id="failed_proc",
-            definition_id="test_def",
-            state=ProcessState.FAILED,
-            properties={"__error__": "Something went wrong"},
-        )
-        mock_store.processes["failed_proc"] = failed_process
+    async def test_wait_for_failed_process(self, mock_context, mock_task):
+        """On resume a failed child fails the task."""
+        mock_task.properties = {"process_id": "failed_proc"}
+        mock_context.subflow_results = [
+            subflow_entry("failed_proc", success=False, error="Something went wrong")
+        ]
 
-        mock_task.properties = {
-            "process_id": "failed_proc",
-        }
-
-        action = WaitForSubworkflowAction()
-        result = await action.run(mock_task, mock_context)
+        result = await WaitForSubworkflowAction().run(mock_task, mock_context)
 
         assert result.success is False
         assert "Something went wrong" in result.error
@@ -196,23 +267,35 @@ class TestWaitForSubworkflowAction:
     @pytest.mark.asyncio
     async def test_wait_with_template_process_id(self, mock_context, mock_task, mock_store):
         """Test using template variable for process ID."""
-        completed_process = ProcessInstance(
-            id="proc_123",
-            definition_id="test_def",
-            state=ProcessState.COMPLETE,
-            properties={},
-        )
-        mock_store.processes["proc_123"] = completed_process
+        mock_store.processes["proc_123"] = child_of(mock_context, "proc_123", ProcessState.COMPLETE)
         mock_context.process.properties["spawned_id"] = "proc_123"
 
         mock_task.properties = {
             "process_id": "{{spawned_id}}",
         }
 
-        action = WaitForSubworkflowAction()
-        result = await action.run(mock_task, mock_context)
+        result = await WaitForSubworkflowAction().run(mock_task, mock_context)
 
-        assert result.success is True
+        assert result.suspend_children == ["proc_123"]
+
+    @pytest.mark.asyncio
+    async def test_wait_rejects_process_that_is_not_a_child(
+        self, mock_context, mock_task, mock_store
+    ):
+        """Only a child's end resumes the task, so other processes can't be waited on."""
+        mock_store.processes["other_proc"] = ProcessInstance(
+            id="other_proc",
+            definition_id="test_def",
+            state=ProcessState.RUNNING,
+            parent_process_id="someone_else",
+        )
+        mock_task.properties = {"process_id": "other_proc"}
+
+        result = await WaitForSubworkflowAction().run(mock_task, mock_context)
+
+        assert result.success is False
+        assert result.suspend_children is None
+        assert "not a sub-workflow" in result.error
 
     @pytest.mark.asyncio
     async def test_wait_no_process_id_fails(self, mock_context, mock_task):
@@ -231,7 +314,7 @@ class TestParallelSubworkflowsAction:
 
     @pytest.mark.asyncio
     async def test_spawn_multiple_workflows(self, mock_context, mock_task, mock_store):
-        """Test spawning multiple workflows in parallel."""
+        """All workflows start, and the task suspends on them with their keys kept."""
         mock_task.properties = {
             "workflows": [
                 {
@@ -258,25 +341,54 @@ class TestParallelSubworkflowsAction:
             "output_key": "parallel_results",
         }
 
-        # Complete processes quickly
-        async def complete_processes():
-            await asyncio.sleep(0.05)
-            for proc in mock_store.processes.values():
-                proc.state = ProcessState.COMPLETE
-                proc.properties["__output__"] = {"status": "done"}
+        result = await ParallelSubworkflowsAction().run(mock_task, mock_context)
 
-        asyncio.create_task(complete_processes())
-
-        action = ParallelSubworkflowsAction()
-        result = await action.run(mock_task, mock_context)
-
-        assert result.success is True
+        assert result.suspend_children == ["proc_0", "proc_1"]
         assert len(mock_context.engine.created_processes) == 2
         assert len(mock_context.engine.started_processes) == 2
+        assert mock_task.properties["__subflow_keys__"] == {
+            "proc_0": "result1",
+            "proc_1": "result2",
+        }
 
+    @pytest.mark.asyncio
+    async def test_parallel_resume_all_succeed(self, mock_context, mock_task):
+        """On resume the results are keyed by workflow key."""
+        mock_task.properties = {
+            "workflows": [{"key": "result1"}, {"key": "result2"}],
+            "output_key": "parallel_results",
+            "__subflow_keys__": {"proc_0": "result1", "proc_1": "result2"},
+        }
+        mock_context.subflow_results = [
+            subflow_entry("proc_0", properties={"__output__": {"status": "done"}}),
+            subflow_entry("proc_1", properties={"__output__": {"status": "done"}}),
+        ]
+
+        result = await ParallelSubworkflowsAction().run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.next_route is None
         results = mock_context.process.properties["parallel_results"]
-        assert "result1" in results
-        assert "result2" in results
+        assert set(results) == {"result1", "result2"}
+        assert results["result1"]["output"] == {"status": "done"}
+
+    @pytest.mark.asyncio
+    async def test_parallel_resume_partial_failure(self, mock_context, mock_task):
+        """A failed child routes partial_failure; the task itself completes."""
+        mock_task.properties = {
+            "workflows": [{"key": "a"}, {"key": "b"}],
+            "__subflow_keys__": {"proc_0": "a", "proc_1": "b"},
+        }
+        mock_context.subflow_results = [
+            subflow_entry("proc_0"),
+            subflow_entry("proc_1", success=False, error="b broke"),
+        ]
+
+        result = await ParallelSubworkflowsAction().run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.next_route == "partial_failure"
+        assert result.output["b"] == {"success": False, "error": "b broke", "process_id": "proc_1"}
 
     @pytest.mark.asyncio
     async def test_parallel_with_custom_properties(self, mock_context, mock_task, mock_store):
@@ -310,14 +422,6 @@ class TestParallelSubworkflowsAction:
             ],
         }
 
-        # Complete immediately
-        async def complete():
-            await asyncio.sleep(0.02)
-            for p in mock_store.processes.values():
-                p.state = ProcessState.COMPLETE
-
-        asyncio.create_task(complete())
-
         action = ParallelSubworkflowsAction()
         await action.run(mock_task, mock_context)
 
@@ -339,7 +443,7 @@ class TestParallelSubworkflowsAction:
 
     @pytest.mark.asyncio
     async def test_parallel_fail_fast(self, mock_context, mock_task, mock_store):
-        """Test fail_fast option stops on first failure."""
+        """With fail_fast, no further workflow starts once one has failed."""
         mock_task.properties = {
             "workflows": [
                 {
@@ -366,21 +470,17 @@ class TestParallelSubworkflowsAction:
             "fail_fast": True,
         }
 
-        # First workflow fails
-        async def fail_first():
-            await asyncio.sleep(0.02)
-            procs = list(mock_store.processes.values())
-            if procs:
-                procs[0].state = ProcessState.FAILED
-                procs[0].properties["__error__"] = "First failed"
+        # The first workflow fails during its inline run
+        async def start_and_fail(process_id: str) -> None:
+            mock_context.engine.started_processes.append(process_id)
+            mock_store.processes[process_id].state = ProcessState.FAILED
 
-        asyncio.create_task(fail_first())
+        mock_context.engine.start_process = start_and_fail
 
-        action = ParallelSubworkflowsAction()
-        result = await action.run(mock_task, mock_context)
+        result = await ParallelSubworkflowsAction().run(mock_task, mock_context)
 
-        # Should have partial results due to fail_fast
-        assert result.output is not None
+        assert result.suspend_children == ["proc_0"]
+        assert len(mock_context.engine.created_processes) == 1
 
     @pytest.mark.asyncio
     async def test_parallel_fail_fast_no_definition(self, mock_context, mock_task):
@@ -418,18 +518,11 @@ class TestParallelSubworkflowsAction:
             "fail_fast": False,
         }
 
-        async def complete_all():
-            await asyncio.sleep(0.02)
-            for p in mock_store.processes.values():
-                p.state = ProcessState.COMPLETE
-
-        asyncio.create_task(complete_all())
-
         action = ParallelSubworkflowsAction()
         result = await action.run(mock_task, mock_context)
 
-        # Should still succeed (skipping missing definition)
-        assert result.success is True
+        # Should still run the workflow it has (skipping missing definition)
+        assert result.suspend_children == ["proc_0"]
         assert len(mock_context.engine.created_processes) == 1
 
 
@@ -437,8 +530,8 @@ class TestSubworkflowTimeoutAndEdgeCases:
     """Additional tests for timeout and edge cases."""
 
     @pytest.mark.asyncio
-    async def test_subworkflow_timeout(self, mock_context, mock_task, mock_store):
-        """Test subworkflow timeout handling."""
+    async def test_subworkflow_timeout(self, mock_context, mock_task):
+        """timeout bounds the child's inline run (start_process_with_timeout)."""
         mock_task.properties = {
             "workflow": {
                 "id": "test",
@@ -448,19 +541,17 @@ class TestSubworkflowTimeoutAndEdgeCases:
                 "routings": [],
             },
             "wait": True,
-            "timeout": 0.1,  # 100ms timeout
+            "timeout": 0.1,
         }
 
-        # Don't complete the process - let it timeout
-        action = SubworkflowAction()
-        result = await action.run(mock_task, mock_context)
+        result = await SubworkflowAction().run(mock_task, mock_context)
 
-        assert result.success is False
-        assert "Timeout" in result.error
+        assert mock_context.engine.start_timeouts == {"proc_0": 0.1}
+        assert result.suspend_children == ["proc_0"]
 
     @pytest.mark.asyncio
-    async def test_subworkflow_process_not_found(self, mock_context, mock_task, mock_store):
-        """Test subworkflow with process disappearing."""
+    async def test_subworkflow_process_not_found(self, mock_context, mock_task):
+        """A child that disappeared fails the task on resume."""
         mock_task.properties = {
             "workflow": {
                 "id": "test",
@@ -471,19 +562,14 @@ class TestSubworkflowTimeoutAndEdgeCases:
             },
             "wait": True,
         }
+        mock_context.subflow_results = [
+            subflow_entry("proc_0", success=False, error="Child process not found")
+        ]
 
-        # Delete the process after creation
-        async def delete_process():
-            await asyncio.sleep(0.02)
-            mock_store.processes.clear()
-
-        asyncio.create_task(delete_process())
-
-        action = SubworkflowAction()
-        result = await action.run(mock_task, mock_context)
+        result = await SubworkflowAction().run(mock_task, mock_context)
 
         assert result.success is False
-        assert "Process not found" in result.error
+        assert "not found" in result.error
 
     @pytest.mark.asyncio
     async def test_subworkflow_with_yaml_string(self, mock_context, mock_task):
@@ -551,26 +637,18 @@ tasks:
         assert result.success is True
 
     @pytest.mark.asyncio
-    async def test_wait_timeout(self, mock_context, mock_task, mock_store):
-        """Test WaitForSubworkflowAction with timeout."""
-        # Create a running process that won't complete
-        running_process = ProcessInstance(
-            id="running_proc",
-            definition_id="test_def",
-            state=ProcessState.RUNNING,
+    async def test_wait_timeout_is_ignored(self, mock_context, mock_task, mock_store, caplog):
+        """wait_subworkflow's timeout is ignored with a warning; the child is bounded where
+        it starts."""
+        mock_store.processes["running_proc"] = child_of(
+            mock_context, "running_proc", ProcessState.RUNNING
         )
-        mock_store.processes["running_proc"] = running_process
+        mock_task.properties = {"process_id": "running_proc", "timeout": 0.1}
 
-        mock_task.properties = {
-            "process_id": "running_proc",
-            "timeout": 0.1,  # 100ms timeout
-        }
+        result = await WaitForSubworkflowAction().run(mock_task, mock_context)
 
-        action = WaitForSubworkflowAction()
-        result = await action.run(mock_task, mock_context)
-
-        assert result.success is False
-        assert "Timeout" in result.error
+        assert result.suspend_children == ["running_proc"]
+        assert "ignores timeout" in caplog.text
 
     @pytest.mark.asyncio
     async def test_wait_process_not_found(self, mock_context, mock_task, mock_store):
@@ -587,7 +665,7 @@ tasks:
 
     @pytest.mark.asyncio
     async def test_parallel_with_timeout(self, mock_context, mock_task, mock_store):
-        """Test ParallelSubworkflowsAction with timeout."""
+        """timeout bounds each child's inline run."""
         mock_task.properties = {
             "workflows": [
                 {
@@ -604,10 +682,7 @@ tasks:
             "timeout": 0.1,
         }
 
-        # Don't complete - let it timeout
-        action = ParallelSubworkflowsAction()
-        result = await action.run(mock_task, mock_context)
+        result = await ParallelSubworkflowsAction().run(mock_task, mock_context)
 
-        # Should complete with partial_failure or failure route
-        assert result.output is not None
-        assert result.next_route in ("partial_failure", "failure")
+        assert mock_context.engine.start_timeouts == {"proc_0": 0.1}
+        assert result.suspend_children == ["proc_0"]

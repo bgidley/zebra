@@ -2,9 +2,14 @@
 
 from typing import Any
 
-from zebra.core.models import ProcessDefinition, TaskInstance, TaskResult
+from zebra.core.models import ProcessDefinition, ProcessState, TaskInstance, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
+
+from zebra_tasks.subtasks.common import child_result, start_child
+
+#: Task property mapping each child process id to its workflow key (#181).
+SUBFLOW_KEYS_KEY = "__subflow_keys__"
 
 
 class ParallelSubworkflowsAction(TaskAction):
@@ -20,8 +25,8 @@ class ParallelSubworkflowsAction(TaskAction):
             - workflow_file: Path to YAML file
             - properties: Properties to pass
             - key: Key to identify this result
-        timeout: Timeout in seconds for all workflows (optional)
-        fail_fast: Stop all on first failure (default: False)
+        timeout: Seconds each child's inline auto-task run may take (optional)
+        fail_fast: Start no more workflows once one fails (default: False)
         output_key: Where to store results dict in process properties
 
     Example workflow usage:
@@ -60,13 +65,13 @@ class ParallelSubworkflowsAction(TaskAction):
         ParameterDef(
             name="timeout",
             type="float",
-            description="Timeout in seconds for all workflows",
+            description="Seconds each child's inline auto-task run may take before it fails",
             required=False,
         ),
         ParameterDef(
             name="fail_fast",
             type="bool",
-            description="Stop all workflows on first failure",
+            description="Start no more workflows once one has failed",
             required=False,
             default=False,
         ),
@@ -113,8 +118,18 @@ class ParallelSubworkflowsAction(TaskAction):
     ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        """Execute multiple sub-workflows in parallel."""
-        import asyncio
+        """Start the sub-workflows, suspend on them, and collect their results on resume.
+
+        The task suspends on its children (#181) instead of polling them. Each child's
+        key is kept on the task (``__subflow_keys__``) for the resume.
+        """
+        if context.subflow_results is not None:
+            keys = task.properties.get(SUBFLOW_KEYS_KEY, {})
+            results = {
+                keys.get(entry["process_id"], entry["process_id"]): child_result(entry)
+                for entry in context.subflow_results
+            }
+            return self._finish(task, context, results)
 
         workflows = task.properties.get("workflows", [])
         if not workflows:
@@ -123,8 +138,8 @@ class ParallelSubworkflowsAction(TaskAction):
         timeout = task.properties.get("timeout")
         fail_fast = task.properties.get("fail_fast", False)
 
-        # Spawn all workflows
-        spawned: list[tuple[str, str]] = []  # (key, process_id)
+        # Spawn the workflows; with fail_fast, stop once one has failed
+        keys: dict[str, str] = {}  # process_id -> key
         for i, wf_config in enumerate(workflows):
             key = wf_config.get("key", f"workflow_{i}")
             workflow_def = await self._get_workflow_definition(wf_config, context)
@@ -152,7 +167,7 @@ class ParallelSubworkflowsAction(TaskAction):
                 if prop_key.startswith("__") and prop_key not in resolved_properties:
                     resolved_properties[prop_key] = context.process.properties[prop_key]
 
-            # Create and start sub-process
+            # Create and start sub-process; its inline run is bounded by timeout
             sub_process = await context.engine.create_process(
                 workflow_def,
                 properties=resolved_properties,
@@ -160,56 +175,31 @@ class ParallelSubworkflowsAction(TaskAction):
             sub_process.parent_process_id = context.process.id
             sub_process.parent_task_id = task.id
             await context.store.save_process(sub_process)
-            await context.engine.start_process(sub_process.id)
+            keys[sub_process.id] = key
+            await start_child(context, sub_process.id, timeout)
 
-            spawned.append((key, sub_process.id))
-
-        # Wait for all to complete
-        results: dict[str, Any] = {}
-        all_success = True
-
-        async def wait_for_one(key: str, process_id: str) -> tuple[str, dict]:
-            result = await self._wait_for_completion(context, process_id, timeout)
-            return key, result
-
-        # Create tasks for waiting
-        wait_tasks = [asyncio.create_task(wait_for_one(key, pid)) for key, pid in spawned]
-
-        # Gather results
-        if fail_fast:
-            # Stop on first failure
-            for coro in asyncio.as_completed(wait_tasks):
-                key, result = await coro
-                results[key] = result
-                if not result.get("success", False):
-                    all_success = False
-                    # Cancel remaining tasks
-                    for t in wait_tasks:
-                        if not t.done():
-                            t.cancel()
+            if fail_fast:
+                started = await context.store.load_process(sub_process.id)
+                if started is not None and started.state == ProcessState.FAILED:
                     break
-        else:
-            # Wait for all
-            completed = await asyncio.gather(*wait_tasks, return_exceptions=True)
-            for item in completed:
-                if isinstance(item, Exception):
-                    all_success = False
-                else:
-                    key, result = item
-                    results[key] = result
-                    if not result.get("success", False):
-                        all_success = False
 
-        # Store results
+        if not keys:
+            return self._finish(task, context, {})
+
+        # The engine re-runs this action with subflow_results once all are terminal.
+        task.properties[SUBFLOW_KEYS_KEY] = keys
+        return TaskResult.suspend(list(keys))
+
+    def _finish(
+        self, task: TaskInstance, context: ExecutionContext, results: dict[str, Any]
+    ) -> TaskResult:
+        """Store *results* and route on whether every sub-workflow succeeded."""
         output_key = task.properties.get("output_key", "parallel_results")
         context.set_process_property(output_key, results)
 
-        if all_success:
+        if all(result["success"] for result in results.values()):
             return TaskResult.ok(output=results)
-        else:
-            return TaskResult(
-                success=True, output=results, next_route="partial_failure" if results else "failure"
-            )
+        return TaskResult(success=True, output=results, next_route="partial_failure")
 
     async def _get_workflow_definition(
         self, config: dict, context: ExecutionContext
@@ -234,49 +224,3 @@ class ParallelSubworkflowsAction(TaskAction):
                 return load_definition_from_yaml(f.read())
 
         return None
-
-    async def _wait_for_completion(
-        self,
-        context: ExecutionContext,
-        process_id: str,
-        timeout: float | None = None,
-    ) -> dict[str, Any]:
-        """Wait for sub-process to complete."""
-        import asyncio
-
-        start_time = asyncio.get_event_loop().time()
-
-        while True:
-            if timeout:
-                elapsed = asyncio.get_event_loop().time() - start_time
-                if elapsed > timeout:
-                    return {
-                        "success": False,
-                        "error": f"Timeout after {timeout}s",
-                        "process_id": process_id,
-                    }
-
-            process = await context.store.load_process(process_id)
-            if process is None:
-                return {
-                    "success": False,
-                    "error": "Process not found",
-                    "process_id": process_id,
-                }
-
-            if process.state.value == "complete":
-                return {
-                    "success": True,
-                    "process_id": process_id,
-                    "properties": process.properties,
-                    "output": process.properties.get("__output__"),
-                }
-
-            if process.state.value == "failed":
-                return {
-                    "success": False,
-                    "error": process.properties.get("__error__", "Process failed"),
-                    "process_id": process_id,
-                }
-
-            await asyncio.sleep(0.1)

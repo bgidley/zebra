@@ -1,9 +1,13 @@
 """WaitForSubworkflowAction - Wait for a previously spawned sub-workflow."""
 
-from typing import Any
+import logging
 
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
+
+from zebra_tasks.subtasks.common import child_result
+
+logger = logging.getLogger(__name__)
 
 
 class WaitForSubworkflowAction(TaskAction):
@@ -14,8 +18,8 @@ class WaitForSubworkflowAction(TaskAction):
     to wait for it later, or when waiting for multiple sub-workflows.
 
     Properties:
-        process_id: ID of the sub-process to wait for (or template reference)
-        timeout: Timeout in seconds (optional)
+        process_id: ID of a sub-process of this process (or template reference)
+        timeout: Ignored; bound the child where it is started (subworkflow ``timeout``)
         output_key: Where to store result in process properties
 
     Example workflow usage:
@@ -54,7 +58,7 @@ class WaitForSubworkflowAction(TaskAction):
         ParameterDef(
             name="timeout",
             type="float",
-            description="Timeout in seconds for waiting",
+            description="Ignored (#181): set timeout on the subworkflow that starts the child",
             required=False,
         ),
         ParameterDef(
@@ -100,7 +104,15 @@ class WaitForSubworkflowAction(TaskAction):
     ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        """Wait for the sub-workflow to complete."""
+        """Suspend on the sub-workflow and collect its result on resume (#181)."""
+        output_key = task.properties.get("output_key", "subworkflow_result")
+        if context.subflow_results is not None:
+            result = child_result(context.subflow_results[0])
+            context.set_process_property(output_key, result)
+            if result["success"]:
+                return TaskResult.ok(output=result)
+            return TaskResult.fail(result["error"])
+
         # Get process ID
         process_id = task.properties.get("process_id")
         if not process_id:
@@ -110,64 +122,20 @@ class WaitForSubworkflowAction(TaskAction):
         if isinstance(process_id, str) and "{{" in process_id:
             process_id = context.resolve_template(process_id)
 
-        # Wait for completion
-        timeout = task.properties.get("timeout")
-        result = await self._wait_for_completion(context, process_id, timeout)
+        process = await context.store.load_process(process_id)
+        if process is None:
+            return TaskResult.fail(f"Process not found: {process_id}")
+        # Only a child's end resumes this task, so an unrelated process can't be waited on.
+        if process.parent_process_id != context.process.id:
+            return TaskResult.fail(
+                f"Process {process_id} is not a sub-workflow of process {context.process.id}"
+            )
 
-        # Store result
-        output_key = task.properties.get("output_key", "subworkflow_result")
-        context.set_process_property(output_key, result)
+        if task.properties.get("timeout"):
+            logger.warning(
+                "wait_subworkflow ignores timeout: set it on the subworkflow that starts %s",
+                process_id,
+            )
 
-        if result.get("success", False):
-            return TaskResult.ok(output=result)
-        else:
-            return TaskResult.fail(result.get("error", "Sub-workflow failed"))
-
-    async def _wait_for_completion(
-        self,
-        context: ExecutionContext,
-        process_id: str,
-        timeout: float | None = None,
-    ) -> dict[str, Any]:
-        """Wait for sub-process to complete."""
-        import asyncio
-
-        start_time = asyncio.get_event_loop().time()
-
-        while True:
-            # Check timeout
-            if timeout:
-                elapsed = asyncio.get_event_loop().time() - start_time
-                if elapsed > timeout:
-                    return {
-                        "success": False,
-                        "error": f"Timeout after {timeout}s",
-                        "process_id": process_id,
-                    }
-
-            # Get process status
-            process = await context.store.load_process(process_id)
-            if process is None:
-                return {
-                    "success": False,
-                    "error": "Process not found",
-                    "process_id": process_id,
-                }
-
-            if process.state.value == "complete":
-                return {
-                    "success": True,
-                    "process_id": process_id,
-                    "properties": process.properties,
-                    "output": process.properties.get("__output__"),
-                }
-
-            if process.state.value == "failed":
-                return {
-                    "success": False,
-                    "error": process.properties.get("__error__", "Process failed"),
-                    "process_id": process_id,
-                }
-
-            # Wait before checking again
-            await asyncio.sleep(0.1)
+        # The engine re-runs this action with subflow_results once the child is terminal.
+        return TaskResult.suspend([process_id])

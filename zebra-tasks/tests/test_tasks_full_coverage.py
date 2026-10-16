@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from zebra.core.models import (
-    ProcessState,
     TaskInstance,
     TaskState,
 )
@@ -374,22 +373,10 @@ tasks:
                 ],
             }
 
-            # Complete immediately
-            async def complete():
-                import asyncio
-
-                await asyncio.sleep(0.02)
-                for p in mock_store.processes.values():
-                    p.state = ProcessState.COMPLETE
-
-            import asyncio
-
-            asyncio.create_task(complete())
-
             action = ParallelSubworkflowsAction()
             result = await action.run(mock_task, mock_context)
 
-            assert result.success is True
+            assert result.suspend_children == ["proc_0"]
         finally:
             os.unlink(temp_path)
 
@@ -414,21 +401,10 @@ tasks:
             ],
         }
 
-        async def complete():
-            import asyncio
-
-            await asyncio.sleep(0.02)
-            for p in mock_store.processes.values():
-                p.state = ProcessState.COMPLETE
-
-        import asyncio
-
-        asyncio.create_task(complete())
-
         action = ParallelSubworkflowsAction()
         result = await action.run(mock_task, mock_context)
 
-        assert result.success is True
+        assert result.suspend_children == ["proc_0"]
         # Verify non-string properties were passed correctly
         created = mock_context.engine.created_processes[0]
         assert created.properties.get("count") == 42
@@ -436,41 +412,22 @@ tasks:
 
     @pytest.mark.asyncio
     async def test_parallel_process_failure(self, mock_context, mock_task, mock_store):
-        """Test parallel when all workflows fail."""
+        """Test parallel when all workflows fail (on resume, #181)."""
         from zebra_tasks.subtasks.parallel import ParallelSubworkflowsAction
 
         mock_task.properties = {
-            "workflows": [
-                {
-                    "workflow": {
-                        "id": "wf1",
-                        "name": "WF1",
-                        "first_task_id": "t1",
-                        "tasks": {"t1": {"id": "t1", "name": "T1", "action": "test"}},
-                        "routings": [],
-                    },
-                    "key": "wf1",
-                },
-            ],
+            "workflows": [{"key": "wf1"}],
+            "__subflow_keys__": {"proc_0": "wf1"},
         }
-
-        async def fail_all():
-            import asyncio
-
-            await asyncio.sleep(0.02)
-            for p in mock_store.processes.values():
-                p.state = ProcessState.FAILED
-                p.properties["__error__"] = "Failed"
-
-        import asyncio
-
-        asyncio.create_task(fail_all())
+        mock_context.subflow_results = [
+            {"process_id": "proc_0", "success": False, "error": "Failed", "properties": {}}
+        ]
 
         action = ParallelSubworkflowsAction()
         result = await action.run(mock_task, mock_context)
 
-        # Should return failure or partial_failure route
-        assert result.next_route in ("failure", "partial_failure")
+        assert result.next_route == "partial_failure"
+        assert result.output["wf1"]["error"] == "Failed"
 
 
 class TestAnthropicStreamingWithTools:

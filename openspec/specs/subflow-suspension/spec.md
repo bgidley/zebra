@@ -61,3 +61,12 @@ The suspended state and pending child ids SHALL be persisted. Crash recovery SHA
 #### Scenario: Child never started
 - **WHEN** recovery finds a suspended task with a pending child still `CREATED`
 - **THEN** recovery starts the child, and the task resumes when it finishes
+
+### Requirement: A finished child resumes every task waiting on it
+When a child process becomes COMPLETE or FAILED, the engine SHALL check for resume every
+AWAITING_SUBFLOW task of the child's parent process that lists the child among its pending
+subflows, as well as the child's `parent_task_id`.
+
+#### Scenario: Waiting task is not the spawning task
+- **WHEN** task A spawns a child and completes, and task B of the same process suspends on that child
+- **THEN** B resumes when the child finishes

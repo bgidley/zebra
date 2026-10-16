@@ -362,3 +362,58 @@ async def test_recovery_leaves_running_wait_suspended(store, registry):
 
 
 MANUAL_REVIEW = "__requires_manual_review__"
+
+
+class StartChildAction(TaskAction):
+    """Starts a human child linked to this task and completes without waiting on it."""
+
+    async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+        child = await context.engine.create_process(
+            HUMAN_CHILD,
+            properties={"n": 21},
+            parent_process_id=context.process.id,
+            parent_task_id=task.id,
+        )
+        await context.engine.start_process(child.id)
+        context.set_process_property("child_id", child.id)
+        return TaskResult.ok()
+
+
+class AwaitChildAction(TaskAction):
+    """Suspends on the child another task started; returns its output on resume."""
+
+    async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+        if context.subflow_results is not None:
+            return TaskResult.ok(output=context.subflow_results[0]["output"])
+        return TaskResult.suspend([context.process.properties["child_id"]])
+
+
+async def test_child_resumes_a_waiting_task_that_did_not_spawn_it(store, registry):
+    """#181: a finished child resumes any task of its parent waiting on it, not only
+    its ``parent_task_id`` (e.g. ``wait_subworkflow``)."""
+    registry.register_action("start_child", StartChildAction)
+    registry.register_action("await_child", AwaitChildAction)
+    engine = WorkflowEngine(store, registry)
+    definition = ProcessDefinition(
+        id="start_then_await",
+        name="Start then await",
+        first_task_id="start",
+        tasks={
+            "start": TaskDefinition(id="start", name="Start", action="start_child"),
+            "await": TaskDefinition(id="await", name="Await", action="await_child"),
+        },
+        routings=[RoutingDefinition(id="r1", source_task_id="start", dest_task_id="await")],
+    )
+
+    process = await _run(engine, definition)
+
+    assert process.state == ProcessState.RUNNING
+    (waiting,) = await store.load_tasks_for_process(process.id)
+    assert waiting.task_definition_id == "await"
+    assert waiting.state == TaskState.AWAITING_SUBFLOW
+
+    await _complete_human_task(engine, process.properties["child_id"])
+
+    process = await store.load_process(process.id)
+    assert process.state == ProcessState.COMPLETE
+    assert process.properties["__task_output_await"] == 42
