@@ -109,22 +109,37 @@ uv run ruff check --fix .   # fix lint errors
 uv run ruff format .        # fix formatting
 ```
 
-### Consulting Zebra for Feedback (MUST before the closing commit)
+### Outcomes and outcome review (MUST, both ends of every feature)
 
-Before the `Closes #N` commit, submit the implementation to the **production Zebra instance** and incorporate its feedback. The script runs the review goal inside the prod `zebra-web` Podman container (`podman exec … manage.py run_goal`), so it works from any checkout or worktree. Model: `sonnet`, override with `ZEBRA_FEEDBACK_MODEL`. This embeds the XP **Feedback** principle directly in the iteration cycle — Zebra reviewing its own evolution.
+Every non-trivial feature is reviewed against outcomes agreed at its start (#190). Trivial changes
+(docs-only, one-line fixes) skip both steps. Design: [specs/outcome-review-design.md](specs/outcome-review-design.md).
 
+**At the start: agree the outcomes.** Write 3–5 observable outcomes in the OpenSpec proposal's
+`## Outcomes` table (`#`, outcome, how we'll know), post them on the issue
+(`glab issue note N --repo gidley/zebra -m "<table>"`), and ask Zebra whether they are the right ones:
 ```bash
-bash scripts/zebra-feedback.sh <issue_number> "<feature title>" \
-  "- change 1
-- change 2
-- change 3"
+bash scripts/zebra-feedback.sh <issue_number> "<feature title>" "<outcomes table>"
 ```
+Feedback is advisory: adjust the outcomes if it finds a real gap. There is no approval gate; the
+human sees the outcomes on the issue. If Zebra is unreachable or the goal fails, the script exits 0
+with a notice; note `(Zebra outcome feedback skipped — <reason>)` in a commit. Don't work around a
+broken script by hand: fix it.
 
-**Acting on feedback:**
-- Feedback is **advisory** — incorporate it if it identifies a genuine gap.
-- If you disagree, note it briefly in the commit message.
-- If Zebra is unreachable (container not running), the script exits 0 with a notice; add `(Zebra feedback skipped — server unreachable)` to the commit.
-- If the goal fails, the script prints the error and exits 0; add `(Zebra feedback skipped — <error>)` to the commit. Don't work around a broken script by hand: fix it.
+**At the end: outcome review (after the master deploy is green).**
+1. Have a fresh Claude subagent with no context review the shipped change against the outcomes:
+   give it the outcomes, `git diff <master before merge>..<merge>`, repo access and prod. It writes
+   `{"verdicts": [{"id": "O1", "verdict": "met|partial|missed", "evidence": "file:line, test, prod log"}]}`
+   to a file. It must not see Zebra's review.
+2. Run Zebra's side, which reviews blind (reading its own deployed source) and compares:
+   ```bash
+   bash scripts/zebra-outcome-review.sh run <N> "<title>" outcomes.md claude.json <base> <merge>
+   ```
+   - Exit 0: agreed (or ruled). Post the printed table on the issue and file a follow-up issue
+     (`Refs #N`) for each outcome listed under "Follow-up issues needed".
+   - Exit 2: Zebra and Claude still disagree, and a human ruling task is open at the printed link.
+     **Sign-off is blocked.** Tell the user, then poll with
+     `bash scripts/zebra-outcome-review.sh status <process_id>` until it exits 0, and act on the ruling.
+   - Exit 1: the review could not run. Fix it, or report it; never sign off without a review.
 
 ### Forks, worktrees & background agents (MUST merge their own work)
 
@@ -173,7 +188,8 @@ git push github --delete fN/short-description
    `git merge-base --is-ancestor fN/short-description origin/master && git branch -D fN/short-description`.
 4. **Check it's all done and tidy, then say so.** Re-read the ask and confirm every part is
    delivered: merged to `master` on both remotes, master pipeline green, issue closed, OpenSpec
-   change archived, no stray worktree, branch, temp file or running local server left behind.
+   change archived, outcome review complete (agreed or ruled, posted on the issue, follow-ups
+   filed), no stray worktree, branch, temp file or running local server left behind.
    Then end your final report with this exact line, on its own:
    `I'm done please delete me`
    Only say it when everything is genuinely finished. If anything is outstanding or you are
@@ -228,6 +244,8 @@ and is what the delivery flow archives.
 - **Create it first**: run `/openspec-propose` (or `openspec new change "<name>"`) to
   generate `proposal.md`, `design.md`, `specs/<capability>/spec.md`, and `tasks.md`.
   Capabilities map to spec files with `### Requirement:` + `#### Scenario:` (WHEN/THEN).
+- **Outcomes**: the proposal's `## Outcomes` table is the contract the change is reviewed against
+  after deploy (see **Outcomes and outcome review** above).
 - **Validate**: `openspec validate "<name>" --strict` must pass.
 - **Implement** against the tasks via `/opsx:apply`, ticking `tasks.md` as you go.
 - **Archive at delivery**: `/opsx:archive` (the `cicd-manager` flow expects this) and sync

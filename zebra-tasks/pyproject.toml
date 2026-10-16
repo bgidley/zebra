@@ -90,6 +90,9 @@ assess_stuck = "zebra_tasks.agent.stuck:AssessStuckAction"
 apply_help_response = "zebra_tasks.agent.stuck:ApplyHelpResponseAction"
 # Agent - postmortem journal (#175)
 write_postmortem = "zebra_tasks.agent.postmortem:WritePostmortemAction"
+# Agent - Outcome review: read own source, compare reviews (#190)
+zebra_source = "zebra_tasks.agent.zebra_source:ZebraSourceAction"
+compare_outcome_reviews = "zebra_tasks.agent.outcome_review:CompareOutcomeReviewsAction"
 # Agent - Ethics outcome recording (#143)
 record_ethics_review = "zebra_tasks.agent.record_ethics_review:RecordEthicsReviewAction"
 record_ethics_rejection = "zebra_tasks.agent.record_ethics_rejection:RecordEthicsRejectionAction"

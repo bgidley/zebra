@@ -1,0 +1,212 @@
+name: "Outcome Review"
+description: "Review a shipped Zebra change against its agreed outcomes, compare with Claude's independent review, and ask a human to rule where the two still disagree."
+tags: ["review", "outcomes", "process", "code", "system"]
+use_when: "Run by the delivery process after a deploy, with the outcomes, the diff and Claude's verdicts."
+version: 1
+first_task: zebra_review
+result_key: review_result
+# Requires inputs, so it is never selected for a goal; run it with
+# `manage.py run_workflow "Outcome Review"` (scripts/zebra-outcome-review.sh, #190).
+inputs:
+  type: object
+  required: [outcomes, diff, claude_review]
+  properties:
+    issue:
+      type: string
+      description: "GitLab issue number"
+    title:
+      type: string
+      description: "Feature title"
+    outcomes:
+      type: string
+      description: "The agreed outcomes (markdown table: id, outcome, how we'll know)"
+    diff:
+      type: string
+      description: "Unified diff of the merged change"
+    claude_review:
+      type: object
+      description: "Claude's verdicts: {verdicts: [{id, verdict: met|partial|missed, evidence}]}"
+    deployed_hash:
+      type: string
+      description: "Short hash of the deployed commit"
+
+tasks:
+  # Zebra reviews first and never sees Claude's verdicts here.
+  zebra_review:
+    name: "Zebra Reviews the Change"
+    action: llm_agent
+    auto: true
+    properties:
+      idempotent: true
+      system_prompt: |
+        You are Zebra, reviewing a change to your own code after it was deployed.
+        You can read and search the code you are running with two tools:
+        - read_zebra_source: a file's lines (paths relative to the repo root).
+        - search_zebra_source: regex hits as path:line: text.
+
+        Judge each agreed outcome on the evidence, not on the description of the change:
+        - met: the shipped code (and its tests) clearly delivers it.
+        - partial: some of it is delivered, or it is untested where it matters.
+        - missed: it is not delivered.
+        Use the tools to check what the diff alone does not show: callers, tests,
+        configuration. Be strict; "probably" is partial. Cite file:line or a test name
+        as evidence. Another reviewer is judging the same outcomes independently.
+
+        Reply with JSON only:
+        {"verdicts": [{"id": "O1", "verdict": "met|partial|missed",
+                       "evidence": "one or two sentences with file:line"}],
+         "summary": "two sentences on the change overall"}
+        Include every outcome id from the table, exactly as written.
+      prompt: |
+        Issue #{{issue}}: {{title}}
+        Deployed commit: {{deployed_hash}}
+
+        ## Outcomes
+        {{outcomes}}
+
+        ## Diff
+        {{diff}}
+      tools: ["Read Zebra Source", "Search Zebra Source"]
+      max_tool_turns: 8
+      max_tokens: 4000
+      response_format: json
+      output_key: zebra_review
+
+  compare:
+    name: "Compare Reviews"
+    action: compare_outcome_reviews
+    auto: true
+    properties:
+      zebra_key: zebra_review
+      claude_key: claude_review
+      output_key: review_result
+
+  # One round: Zebra sees Claude's evidence for the disputed outcomes only.
+  zebra_reconsider:
+    name: "Zebra Reconsiders Disputed Outcomes"
+    action: llm_agent
+    auto: true
+    properties:
+      idempotent: true
+      system_prompt: |
+        You are Zebra. You reviewed a change to your own code against its outcomes,
+        and another reviewer (Claude) disagreed with you on some of them. For each
+        disputed outcome, re-check the code with your tools and decide again:
+        met, partial or missed. Change your verdict only if the evidence supports it;
+        holding your position is fine when you can show why.
+
+        Reply with JSON only, covering the disputed outcomes:
+        {"verdicts": [{"id": "O1", "verdict": "met|partial|missed",
+                       "evidence": "why, with file:line"}]}
+      prompt: |
+        Issue #{{issue}}: {{title}}
+
+        ## Outcomes
+        {{outcomes}}
+
+        ## Where we disagree
+        {{review_result.dispute_notes}}
+
+        ## Diff
+        {{diff}}
+      tools: ["Read Zebra Source", "Search Zebra Source"]
+      max_tool_turns: 6
+      max_tokens: 3000
+      response_format: json
+      output_key: zebra_reconsidered
+
+  compare_again:
+    name: "Compare Again"
+    action: compare_outcome_reviews
+    auto: true
+    properties:
+      zebra_key: zebra_review
+      reconsidered_key: zebra_reconsidered
+      claude_key: claude_review
+      output_key: review_result
+
+  human_ruling:
+    name: "Outcome Review — Your Ruling"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Zebra and Claude disagree on this change"
+        description: "Rule on each disputed outcome. The delivering session stays blocked until you do."
+        required:
+          - ruling
+        properties:
+          feature:
+            type: string
+            title: "Change"
+            default: "#{{issue}} {{title}} ({{deployed_hash}})"
+            readOnly: true
+          comparison:
+            type: string
+            title: "Verdicts side by side"
+            format: multiline
+            default: "{{review_result.table_markdown}}"
+            readOnly: true
+          positions:
+            type: string
+            title: "Where they disagree"
+            format: multiline
+            default: "{{review_result.dispute_notes}}"
+            readOnly: true
+          ruling:
+            type: string
+            title: "Your ruling"
+            description: "For each disputed outcome: met, partial or missed, and anything to follow up."
+            format: multiline
+
+  record_ruling:
+    name: "Record Ruling"
+    action: compare_outcome_reviews
+    auto: true
+    properties:
+      zebra_key: zebra_review
+      reconsidered_key: zebra_reconsidered
+      claude_key: claude_review
+      ruling_key: human_ruling
+      output_key: review_result
+
+  finish:
+    name: "Record Agreement"
+    action: compare_outcome_reviews
+    auto: true
+    properties:
+      zebra_key: zebra_review
+      reconsidered_key: zebra_reconsidered
+      claude_key: claude_review
+      final: true
+      output_key: review_result
+
+routings:
+  - from: zebra_review
+    to: compare
+
+  - from: compare
+    to: finish
+    condition: route_name
+    name: "agreed"
+
+  - from: compare
+    to: zebra_reconsider
+    condition: route_name
+    name: "disputed"
+
+  - from: zebra_reconsider
+    to: compare_again
+
+  - from: compare_again
+    to: finish
+    condition: route_name
+    name: "agreed"
+
+  - from: compare_again
+    to: human_ruling
+    condition: route_name
+    name: "disputed"
+
+  - from: human_ruling
+    to: record_ruling

@@ -70,13 +70,12 @@ failing after a reasonable attempt, stop and report.
 (The `e2e_live`/`e2e` suites are known-broken locally and must always be ignored.) If the
 suite is red, stop and report the failing tests — do not commit.
 
-### 4. Zebra feedback (advisory)
-Before the closing commit, run:
-`bash scripts/zebra-feedback.sh N "<title>" "<bullet list of changes>"`.
-It runs the review in the prod `zebra-web` container (model `sonnet`; `ZEBRA_FEEDBACK_MODEL`
-overrides). Record the verdict. It is advisory — proceed regardless; if you disagree with a
-point, note it briefly in the commit body. The script always exits 0: if Zebra is unreachable
-or the goal fails it prints why — add "(Zebra feedback skipped — <reason>)" to the commit.
+### 4. Outcome review is the caller's (#190)
+Zebra no longer reviews a bullet list before the closing commit. The change is reviewed against
+the outcomes in the OpenSpec proposal **after** the master deploy, by the calling session
+(`scripts/zebra-outcome-review.sh`, see CLAUDE.md). Don't run it here. Record the master merge
+base (`git rev-parse origin/master` before you merge) and return it in your report: the caller
+needs it as the review's diff base.
 
 ### 5. Commit
 Stage source files explicitly — **never** stage `.env`, secrets, `db.sqlite3`, or large
@@ -163,7 +162,8 @@ master.
 ### 12. Report
 Your final message is all the caller sees. End with one of:
 - **SUCCESS**: branch merged, issue `#N` closed, PR merged, master pipeline `<id>` green
-  (all five jobs), one-line note on the Zebra feedback verdict.
+  (all five jobs), the master sha before and after the merge, and the line
+  `OUTCOME REVIEW PENDING` (the caller must run it before signing off).
 - **FAILURE**: the stage that failed, the failing job name + a short log excerpt, every fix
   you attempted, and the current git state (which branch is checked out, whether anything
   is merged/unmerged, whether the branch still exists). Make it actionable so the caller

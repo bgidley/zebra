@@ -123,6 +123,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 | Filesystem | `file_read`, `file_write`, `file_copy`, `file_move`, `file_delete`, `file_search`, `file_exists`, `file_info` (9 actions) |
 | Compute | `python_exec` (sandboxed) |
 | Agent loop | `consult_memory`, `consult_knowledge`, `assess_history_need`, `get_workflow_history` (F138 — see [workflow-history spec](../openspec/specs/workflow-history/spec.md)), `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `propagate_failure`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (12000 — sized to finish inside the 180s LLM timeout) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML, or `route_name` routings from `llm_call` tasks, before saving (#122, #139); both share `generate_workflow()`, which makes one follow-up call: a truncated reply is re-requested (without the cut-off YAML) asking for a more compact workflow, any other problem is fed back for repair (#188); the variant prompt forbids copying previous-run content into the YAML; `workflow_creator` runs at temperature 0.3, and its prompt documents data flow, serial/parallel/`synchronized` routing and that `route_name` routes are human-task buttons (#139) |
+| Outcome review (#190) | `zebra_source` (read-only read/search of Zebra's own source, sandboxed to the checkout; tools *Read Zebra Source* / *Search Zebra Source*), `compare_outcome_reviews` (per-outcome Zebra vs Claude verdicts → `agreed` / `disputed` / `ruled`). See [outcome-review-design.md](outcome-review-design.md) |
 | Dream cycle | `metrics_analyzer`, `workflow_curator`, `workflow_evaluator`, `workflow_optimizer`, `review_knowledge` (#153), `propose_zebra_improvements` (#189) |
 | Ethics | `ethics_gate` |
 | Knowledge (F32, F152, F153) | `review_knowledge` (dream-cycle review, see Dream cycle), `add_knowledge`, `decay_confidence`, `pick_entries_for_verification`, `apply_verification_result`, `apply_resolution`, `extract_knowledge` (haiku extraction of personal-fact candidates; no writes; reusable), `store_learned_knowledge` (stores candidates as `source=agent`, conflicts → *Resolve Knowledge Contradiction* process; `update_agent_entries` updates a conflicting agent entry in place instead — F155) — see [knowledge-learning spec](../openspec/specs/knowledge-learning/spec.md) |
@@ -428,6 +429,17 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 ### CI/CD pipeline
 
 `lint → test → e2e → deploy → smoke` (deploy/smoke on `master` pushes only; `e2e-live` on schedules). `deploy` runs `scripts/deploy-podman.sh $SHA`: build → stop daemon → retag `:prod` → restart web (blocks until healthy) → start daemon; auto-rollback to `:previous` on failure. See `README-CICD.md`.
+
+### Delivery review (#190)
+
+Each non-trivial feature lists 3–5 outcomes in its OpenSpec proposal (`## Outcomes`, required by
+`openspec/config.yaml`), posts them on the issue, and has Zebra critique them
+(`scripts/zebra-feedback.sh`, advisory). After the master deploy, a fresh Claude subagent writes
+per-outcome verdicts and `scripts/zebra-outcome-review.sh` runs the system *Outcome Review* workflow
+in `zebra-web` via `manage.py run_workflow` (`zebra_agent/direct_run.py`: run a named workflow
+directly, or report its status). Zebra reviews blind, reading its deployed source; disagreement
+gets one reconsideration and then a human ruling task, and the script exits 2 (sign-off blocked)
+until it is ruled. See [outcome-review-design.md](outcome-review-design.md).
 
 ### Ethics gate change (F111)
 
