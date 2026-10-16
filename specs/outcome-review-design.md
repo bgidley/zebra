@@ -25,7 +25,7 @@ None. All state lives in process properties: inputs (`issue`, `title`, `outcomes
 | `scripts/zebra-feedback.sh` | Now reviews the proposed outcomes at the start (advisory, always exits 0) |
 | `zebra_source` action | `operation: read` (line range, 12000-char cap) / `search` (regex, glob, 50 hits). Root `ZEBRA_SOURCE_ROOT` or the checkout above the installed `zebra_tasks` (`/app` in prod). Allowlist: the four packages, `specs`, `openspec`, `docs`, `scripts`, `deploy`, `pyproject.toml`, `version.json`, top-level `*.md`. Refuses dot-entries, `*.sqlite3`/`*.db`/keys, `tmp/`, `staticfiles/`, `fixtures/`, symlinks and anything resolving outside the root |
 | *Read Zebra Source*, *Search Zebra Source* | Tool-only workflows around `zebra_source` for `llm_agent` |
-| `compare_outcome_reviews` action | Parses both reviews (dict, list or fenced JSON), lines them up per outcome id, routes `agreed` / `disputed`. Missing, unknown or garbled verdicts are disputed. `reconsidered_key` overlays Zebra's second verdicts; `ruling_key` records the human ruling (`ruled`); `final` records without routing |
+| `compare_outcome_reviews` action | Parses both reviews (dict, list or fenced JSON), lines them up per outcome id, routes `agreed` / `disputed`. Missing, unknown or garbled verdicts are disputed, and every id in the outcomes table (`outcomes_key`) is compared, so an outcome neither reviewer judged is disputed too (#191). `reconsidered_key` overlays Zebra's second verdicts; `ruling_key` records the human ruling (`ruled`); `final` records without routing |
 | *Outcome Review* workflow | System, tool-only (required `inputs`), `result_key: review_result` |
 | `zebra_agent.direct_run` | `run_named_workflow()` creates and starts a named workflow from inputs (required inputs checked); `workflow_status()` → `complete` / `awaiting_input` / `failed` / `running` |
 | `manage.py run_workflow` | `<name> --input-file - [--model sonnet]` or `--status <process_id>`; prints the status JSON, exits 1 on failure |
@@ -60,5 +60,9 @@ merge → deploy green → fresh Claude subagent writes `claude.json` → `zebra
 - The model may return malformed JSON. It counts as disputed, so the failure mode is a human
   task, not a false pass.
 - Claude's side has no rebuttal round inside the workflow; the human sees both positions.
-- Cost: up to two Sonnet `llm_agent` passes per feature.
+- Cost: up to two Sonnet `llm_agent` passes per feature. Both set `answer_on_budget`, so a review
+  that spends its tool turns (12, then 6) still answers instead of failing (#191; the first real
+  run, of #190, failed after 8 turns).
+- In prod `/app` holds only the packages, `pyproject.toml` and `version.json`, so Zebra judges
+  docs and script outcomes from the diff alone.
 - A diff over 60000 chars is truncated; Zebra reads the source for the rest.

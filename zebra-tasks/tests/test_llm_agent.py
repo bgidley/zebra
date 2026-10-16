@@ -441,6 +441,25 @@ async def test_turn_limit_fails_the_task(engine, provider):
     assert "Stopped after 2 tool turns" in process.properties["__error__"]
 
 
+async def test_answer_on_budget_answers_without_tools_instead_of_failing(engine, store, provider):
+    def final(call: Call) -> LLMResponse:
+        assert call.tools is None
+        assert "used your tool budget" in call.messages[-1].content
+        return say("Best answer from q0 and q1")(call)
+
+    provider.script = [use(("web_research", {"goal": f"q{i}"})) for i in range(3)] + [final]
+
+    process = await run_agent(
+        engine,
+        agent_definition(tools=["Web Research"], max_tool_turns=2, answer_on_budget=True),
+    )
+
+    assert process.state == ProcessState.COMPLETE
+    assert process.properties["answer"] == "Best answer from q0 and q1"
+    # The over-budget turn's tool call was dropped, never run.
+    assert len(await children_of(store, process.id)) == 2
+
+
 async def test_define_workflow_then_call_it(engine, store, provider, library):
     def call_new_tool(call: Call) -> LLMResponse:
         assert "haiku_writer" in [t.name for t in call.tools]

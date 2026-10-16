@@ -9,6 +9,7 @@ from zebra.tasks.base import ExecutionContext
 from zebra_tasks.agent.outcome_review import (
     CompareOutcomeReviewsAction,
     compare_reviews,
+    outcome_ids,
     parse_review,
 )
 
@@ -148,6 +149,46 @@ async def test_ruling_records_the_human_decision_without_routing():
     assert result.output["status"] == "ruled"
     assert result.output["ruling"] == "O1 missed: no tests"
     assert result.output["disputed"] == ["O1"]
+
+
+OUTCOMES = """## Outcomes
+
+| # | Outcome | How we'll know |
+|---|---|---|
+| O1 | Reviews compare | test |
+| o2 | Disputes escalate | test |
+Not a row | O9 |
+"""
+
+
+def test_outcome_ids_come_from_the_table_rows():
+    assert outcome_ids(OUTCOMES) == {"O1", "O2"}
+    assert outcome_ids(None) == set()
+
+
+def test_an_outcome_neither_reviewer_judged_is_disputed():
+    review = parse_review(_review(("O1", "met")))
+
+    result = compare_reviews(review, review, outcome_ids(OUTCOMES))
+
+    assert result["status"] == "disputed"
+    assert result["disputed"] == ["O2"]
+    assert "| O2 | ? | ? | **no** |" in result["table_markdown"]
+
+
+async def test_action_compares_every_outcome_in_the_table():
+    context = _context(
+        {
+            "outcomes": OUTCOMES,
+            "zebra_review": _review(("O1", "met")),
+            "claude_review": _review(("O1", "met")),
+        }
+    )
+
+    result = await CompareOutcomeReviewsAction().run(_task(), context)
+
+    assert result.next_route == "disputed"
+    assert result.output["disputed"] == ["O2"]
 
 
 async def test_final_step_records_without_routing():
