@@ -3,8 +3,10 @@
 A dream cycle is a "Dream Cycle" process instance — started by the
 ``dream_cycle`` routine or ``POST /api/dream-cycle/``. Each step writes its
 report to a process property (``metrics_analysis``, ``curation``,
-``evaluation``, ``optimization_results``, ``dream_summary``); this module
-flattens those into one dict per cycle for the template.
+``evaluation``, ``optimization_results``, ``improvement_requests``,
+``dream_summary``); this module flattens those into one dict per cycle for the
+template. It also lists the *Zebra Improvement Request* processes the cycles
+started (#189) with their review outcome.
 """
 
 from __future__ import annotations
@@ -16,10 +18,19 @@ from zebra_agent_web.api.models import (
     ProcessDefinitionModel,
     ProcessInstanceModel,
     RoutineRunModel,
+    TaskInstanceModel,
 )
 
 DREAM_CYCLE_WORKFLOW = "Dream Cycle"
 DREAM_CYCLE_ROUTINE = "dream_cycle"
+IMPROVEMENT_WORKFLOW = "Zebra Improvement Request"
+IMPROVEMENT_REVIEW_TASK = "review"
+VERDICTS = {
+    "accepted": "Accepted",
+    "rejected": "Rejected",
+    "duplicate": "Duplicate",
+    "later": "Later",
+}
 
 
 def recent_dream_cycles(limit: int = 20) -> list[dict[str, Any]]:
@@ -37,6 +48,52 @@ def recent_dream_cycles(limit: int = 20) -> list[dict[str, Any]]:
     return [summarize_cycle(m) for m in models]
 
 
+def recent_improvement_requests(limit: int = 20) -> list[dict[str, Any]]:
+    """Return the newest *limit* Zebra improvement requests, newest first (sync ORM)."""
+    definition_ids = ProcessDefinitionModel.objects.filter(name=IMPROVEMENT_WORKFLOW).values_list(
+        "id", flat=True
+    )
+    models = ProcessInstanceModel.objects.filter(definition_id__in=list(definition_ids)).order_by(
+        "-created_at"
+    )[:limit]
+    return [summarize_request(m) for m in models]
+
+
+def summarize_request(model: ProcessInstanceModel) -> dict[str, Any]:
+    """Flatten one Zebra Improvement Request process into the fields the page shows."""
+    props = json.loads(model.properties) if model.properties else {}
+    improvement = _dict(props.get("improvement"))
+    review = _dict(props.get(f"__task_output_{IMPROVEMENT_REVIEW_TASK}"))
+    issue_url = str(review.get("issue_url") or "")
+
+    review_task_id = None
+    if model.state == "running":
+        review_task_id = (
+            TaskInstanceModel.objects.filter(
+                process_id=model.id, task_definition_id=IMPROVEMENT_REVIEW_TASK
+            )
+            .values_list("id", flat=True)
+            .first()
+        )
+
+    return {
+        "id": model.id,
+        "state": model.state,
+        "created_at": model.created_at,
+        "title": improvement.get("title") or props.get("improvement_title") or "(untitled)",
+        "area": improvement.get("area", ""),
+        "impact": improvement.get("impact", ""),
+        "problem": improvement.get("problem", ""),
+        "markdown": props.get("improvement_markdown", ""),
+        "source_process_id": props.get("source_process_id"),
+        "verdict": review.get("verdict"),
+        "verdict_label": VERDICTS.get(review.get("verdict"), review.get("verdict")),
+        "issue_url": issue_url if issue_url.startswith(("https://", "http://")) else None,
+        "notes": review.get("notes"),
+        "review_task_id": review_task_id,
+    }
+
+
 def next_scheduled_run():
     """Return the ``dream_cycle`` routine's run state, or None if never scheduled."""
     return RoutineRunModel.objects.filter(routine_name=DREAM_CYCLE_ROUTINE).first()
@@ -51,6 +108,7 @@ def summarize_cycle(model: ProcessInstanceModel) -> dict[str, Any]:
     optimization = _dict(props.get("optimization_results"))
     curation = _dict(props.get("curation"))
     continuations = _dict(metrics.get("continuation_analysis"))
+    improvements = _dict(props.get("improvement_requests"))
 
     duration = None
     if model.completed_at and model.created_at:
@@ -84,6 +142,7 @@ def summarize_cycle(model: ProcessInstanceModel) -> dict[str, Any]:
         "continuations": continuations.get("total_continuations", 0),
         "top_continued": _list(continuations.get("top_continued")),
         "capability_gaps": len(_list(continuations.get("capability_gaps"))),
+        "improvements_requested": _list(improvements.get("requests")),
     }
 
 

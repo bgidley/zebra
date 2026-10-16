@@ -11,6 +11,7 @@ from zebra_agent_web.api.models import (
     ProcessDefinitionModel,
     ProcessInstanceModel,
     RoutineRunModel,
+    TaskInstanceModel,
 )
 
 T0 = datetime(2026, 10, 8, 3, 0, tzinfo=UTC)
@@ -148,3 +149,95 @@ def test_page_empty_state(authenticated_client, completed_setup):
 
     assert response.status_code == 200
     assert "No dream cycles have run yet." in response.content.decode()
+
+
+# ---------------------------------------------------------------------------
+# Zebra improvement requests (#189)
+# ---------------------------------------------------------------------------
+
+IMPROVEMENT = {
+    "title": "Add an http_fetch task action",
+    "area": "task_action",
+    "problem": "Workflows cannot fetch a URL.",
+    "evidence": "Rejected change: unknown action 'http_fetch'",
+    "suggested_change": "Add http_fetch to zebra-tasks.",
+    "impact": "high",
+}
+
+
+def _request(pid: str, state: str, started: datetime, review: dict | None = None) -> None:
+    props = {
+        "improvement": IMPROVEMENT,
+        "improvement_title": IMPROVEMENT["title"],
+        "improvement_markdown": "### Add an http_fetch task action\n\n#### Problem\nNo fetch.",
+        "source_process_id": "p1",
+    }
+    if review is not None:
+        props["__task_output_review"] = review
+    _process(pid, "improve-v1", state, props, started)
+
+
+@pytest.mark.django_db
+def test_recent_improvement_requests_summarises_review_state():
+    _definition(dream_history.IMPROVEMENT_WORKFLOW, "improve-v1")
+    _request("open", "running", T0 + timedelta(hours=1))
+    _request(
+        "done",
+        "complete",
+        T0,
+        {"verdict": "accepted", "issue_url": "https://gitlab.com/x/-/issues/9", "notes": "ok"},
+    )
+    TaskInstanceModel.objects.create(
+        id="task-review",
+        process_id="open",
+        task_definition_id="review",
+        state="READY",
+        foe_id="f",
+        created_at=T0,
+        updated_at=T0,
+    )
+
+    pending, done = dream_history.recent_improvement_requests()
+
+    assert pending["id"] == "open"
+    assert pending["review_task_id"] == "task-review"
+    assert pending["verdict"] is None
+    assert pending["area"] == "task_action"
+    assert done["verdict_label"] == "Accepted"
+    assert done["issue_url"] == "https://gitlab.com/x/-/issues/9"
+    assert done["review_task_id"] is None
+
+
+@pytest.mark.django_db
+def test_unsafe_issue_link_is_dropped():
+    _definition(dream_history.IMPROVEMENT_WORKFLOW, "improve-v1")
+    _request("r", "complete", T0, {"verdict": "later", "issue_url": "javascript:alert(1)"})
+
+    (request,) = dream_history.recent_improvement_requests()
+
+    assert request["issue_url"] is None
+
+
+@pytest.mark.django_db
+def test_page_lists_improvement_requests(authenticated_client, completed_setup):
+    _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v7")
+    _definition(dream_history.IMPROVEMENT_WORKFLOW, "improve-v1")
+    props = {
+        **FULL_PROPS,
+        "improvement_requests": {
+            "requests": [{"title": IMPROVEMENT["title"], "process_id": "req"}],
+            "skipped": [],
+            "errors": [],
+        },
+    }
+    _process("p1", "dream-v7", "complete", props, T0)
+    _request("req", "running", T0)
+
+    response = authenticated_client.get("/dreams/")
+
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert 'data-testid="improvement-requests"' in html
+    assert "Add an http_fetch task action" in html
+    assert "1 improvement requested" in html
+    assert "Awaiting review" in html

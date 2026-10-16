@@ -63,6 +63,50 @@
     </div>
     {% endif %}
 
+    {% if improvement_requests %}
+    <!-- Improvement requests (#189) -->
+    <div class="bg-gray-800 rounded-xl border border-gray-700" data-testid="improvement-requests">
+        <div class="px-5 pt-4 pb-2 flex items-baseline justify-between gap-3 flex-wrap">
+            <h2 class="text-sm font-semibold text-ink">Improvements I've asked for</h2>
+            <p class="text-xs text-gray-400">Changes to Zebra's own code the cycle cannot make itself · {{ open_requests }} awaiting review</p>
+        </div>
+        <ul class="divide-y divide-gray-700">
+            {% for r in improvement_requests %}
+            <li class="px-5 py-3 flex items-start gap-4" x-data="{ expanded: false }">
+                <div class="min-w-0 flex-1 space-y-1">
+                    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                        <p class="font-medium text-ink">{{ r.title }}</p>
+                        <p class="text-xs text-gray-500 whitespace-nowrap">{{ r.created_at|date:"Y-m-d H:i" }} UTC</p>
+                    </div>
+                    <p class="text-sm text-gray-300 line-clamp-2">{{ r.problem }}</p>
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+                        {% if r.area %}<span>Area: <span class="text-ink">{{ r.area }}</span></span>{% endif %}
+                        {% if r.impact %}<span>Impact: <span class="text-ink">{{ r.impact }}</span></span>{% endif %}
+                        {% if r.verdict %}
+                        <span>Verdict: <span class="text-ink">{{ r.verdict_label }}</span></span>
+                        {% if r.issue_url %}<a href="{{ r.issue_url }}" class="underline hover:text-ink" rel="noopener noreferrer">Issue</a>{% endif %}
+                        {% elif r.state == "running" %}
+                        <span class="text-needs">Awaiting review</span>
+                        {% else %}
+                        <span class="text-fail">{{ r.state|title }}</span>
+                        {% endif %}
+                    </div>
+                    {% if r.notes %}<p class="text-sm text-gray-400">{{ r.notes }}</p>{% endif %}
+                    <div x-show="expanded" x-cloak class="mt-2 md-body">{{ r.markdown|markdown }}</div>
+                </div>
+                <div class="flex shrink-0 flex-col items-end gap-2">
+                    {% if r.review_task_id %}
+                    <a href="{% url 'human_task_form' task_id=r.review_task_id %}" class="btn btn-primary btn-sm">Review</a>
+                    {% endif %}
+                    <button type="button" class="text-xs text-gray-400 hover:text-ink" @click="expanded = !expanded"
+                            x-text="expanded ? 'Hide details' : 'Details'">Details</button>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     <!-- Cycles -->
     <div class="space-y-4">
         {% for c in cycles %}
@@ -107,6 +151,9 @@
                 {% endif %}
                 <span class="px-2 py-1 rounded bg-gray-700 {% if c.retired %}text-needs{% else %}text-gray-400{% endif %}">{{ c.retired_applied }} retired{% if c.deferred_count %} · {{ c.deferred_count }} deferred{% endif %}</span>
                 <span class="px-2 py-1 rounded bg-gray-700 text-gray-400">{{ c.continuations }} continuation{{ c.continuations|pluralize }}</span>
+                {% if c.improvements_requested %}
+                <span class="px-2 py-1 rounded bg-needs/15 text-needs">{{ c.improvements_requested|length }} improvement{{ c.improvements_requested|length|pluralize }} requested</span>
+                {% endif %}
             </div>
             {% endif %}
 

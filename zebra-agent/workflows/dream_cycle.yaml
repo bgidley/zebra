@@ -2,7 +2,7 @@ name: "Dream Cycle"
 description: "Self-improvement cycle that analyzes performance, evaluates workflows, and optimizes the system"
 tags: ["system", "optimization", "self-improvement", "dream"]
 use_when: "Use this workflow periodically (e.g., daily) to review and improve the agent's capabilities"
-version: 6
+version: 7
 first_task: analyze_metrics
 
 tasks:
@@ -66,6 +66,17 @@ tasks:
       max_changes_per_user: 10
       output_key: knowledge_review
 
+  # Problems a workflow edit cannot fix become Zebra Improvement Request
+  # processes for a human to review (#189). Never fails the cycle.
+  propose_improvements:
+    name: "Request Zebra Improvements"
+    action: propose_zebra_improvements
+    auto: true
+    properties:
+      model: haiku
+      max_requests: 2
+      output_key: improvement_requests
+
   generate_summary:
     name: "Generate Dream Cycle Summary"
     action: llm_call
@@ -112,6 +123,10 @@ tasks:
         Examples: {{knowledge_review.examples}}
         Errors: {{knowledge_review.errors}}
 
+        ### Improvements requested (changes to Zebra's own code, sent for human review)
+        Requests (title, area, impact): {{improvement_requests.requests}}
+        Not requested (duplicate or over the cap): {{improvement_requests.skipped}}
+
         Provide a brief summary (3-5 sentences) of:
         1. Current system health
         2. Key improvements made — only those listed under "Changes made"
@@ -123,7 +138,8 @@ tasks:
         6. Knowledge: entries added, updated, flagged stale, merged and reinforced (with
            examples), and how many changes to user-entered facts were sent to the user
            for confirmation instead of being applied
-        7. Recommendations for future focus
+        7. Improvements to Zebra itself requested for human review (titles), if any
+        8. Recommendations for future focus
 
         Never describe a failed change as applied or as having fixed anything.
       temperature: 0.5
@@ -142,4 +158,6 @@ routings:
   - from: optimize_workflows
     to: review_knowledge
   - from: review_knowledge
+    to: propose_improvements
+  - from: propose_improvements
     to: generate_summary
