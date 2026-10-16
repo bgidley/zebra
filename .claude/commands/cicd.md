@@ -187,12 +187,29 @@ glab issue view <N> --repo gidley/zebra
 
 ---
 
+## Step 8b — Outcome review (#190)
+
+Skip for trivial changes (docs-only, one-line fixes). Otherwise, once the master deploy is green,
+review the shipped change against the `## Outcomes` in the OpenSpec proposal, as CLAUDE.md
+describes: a fresh Claude subagent writes its verdicts to `claude.json`, then
+
+```bash
+bash scripts/zebra-outcome-review.sh run <N> "<title>" outcomes.md claude.json <master-before-merge> <merge-sha>
+```
+
+Exit 0: post the table on the issue and file follow-up issues for any outcome it lists.
+Exit 2: a human must rule; tell the user and poll `status` until it completes. Do not report
+success while the review is pending.
+
+---
+
 ## Step 9 — Final report
 
 Print a short summary:
 - Branch merged: `<branch>`
 - Issue closed: `#<N>` (or "no issue number found")
 - Pipeline: link or ID
+- Outcome review: agreed / ruled / pending (with the task link), follow-ups filed
 - Commits included: `git log --oneline master~<count>..master`
 
 ---

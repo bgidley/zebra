@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# zebra-feedback.sh — submit a feature implementation to Zebra for review.
+# zebra-feedback.sh — ask Zebra to review a feature's proposed outcomes (#190).
+#
+# Run at the START of a feature, once the OpenSpec proposal's ## Outcomes table
+# is written: Zebra says whether these are the right outcomes for the issue.
+# The shipped change is reviewed against them after deploy by
+# scripts/zebra-outcome-review.sh.
 #
 # Runs the review goal inside the production web container (rootless Podman,
 # `zebra-web`) via `manage.py run_goal`, so it uses prod's database, workflows
-# and API keys. Always exits 0 so it never blocks a commit; on failure it
-# prints why.
+# and API keys. Always exits 0 so it never blocks work; on failure it prints why.
 #
 # Usage:
-#   bash scripts/zebra-feedback.sh <issue_number> "<feature title>" \
-#     "- change 1
-#   - change 2"
+#   bash scripts/zebra-feedback.sh <issue_number> "<feature title>" "$(cat outcomes.md)"
 #
 # Env:
 #   ZEBRA_FEEDBACK_MODEL     model alias for the review (default: sonnet)
@@ -18,22 +20,23 @@ set -uo pipefail
 
 ISSUE="${1:-?}"
 TITLE="${2:-feature}"
-CHANGES="${3:-- (no summary provided)}"
+OUTCOMES="${3:-(no outcomes provided)}"
 MODEL="${ZEBRA_FEEDBACK_MODEL:-sonnet}"
 CONTAINER="${ZEBRA_FEEDBACK_CONTAINER:-zebra-web}"
 
-GOAL="You are reviewing a new feature implementation in the Zebra codebase.
+GOAL="You are reviewing the agreed outcomes for a new change to the Zebra codebase,
+before any code is written. The change will later be reviewed against exactly these.
 
 Feature: issue #${ISSUE} — ${TITLE}
 
-Changes made:
-${CHANGES}
+Proposed outcomes:
+${OUTCOMES}
 
-Please review and provide concise feedback (under 200 words) on:
-1. Does this implementation meet the stated requirements?
-2. Is it as simple as it could be (XP simplicity principle)?
-3. Are there gaps, risks, or missing test coverage?
-4. Does it follow Zebra's architectural patterns (entry points, IoC, async, pluggable storage)?
+Give concise feedback (under 200 words):
+1. Are these the right outcomes for the issue? Is anything important missing?
+2. Is each one observable, with a concrete way to check it?
+3. Is the set minimal (XP simplicity), or is something gold-plating?
+4. Which outcome is riskiest to deliver, and why?
 
 Be direct and actionable."
 

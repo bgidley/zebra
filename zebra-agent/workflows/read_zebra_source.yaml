@@ -1,0 +1,33 @@
+name: "Read Zebra Source"
+description: "Read a file from Zebra's own deployed source code, with line numbers."
+tags: ["code", "source", "read"]
+use_when: "You need to see the code of a specific file in Zebra's own codebase."
+version: 1
+first_task: read
+result_key: source
+# Requires a path, so it is a tool for llm_agent and never selected for a goal (#190).
+inputs:
+  type: object
+  required: [path]
+  properties:
+    path:
+      type: string
+      description: "Path relative to the repository root, e.g. zebra-tasks/zebra_tasks/agent/stuck.py"
+    start_line:
+      type: integer
+      description: "First line to read (default 1)"
+    end_line:
+      type: integer
+      description: "Last line to read (default: end of file)"
+
+tasks:
+  read:
+    name: "Read source file"
+    action: zebra_source
+    auto: true
+    properties:
+      operation: read
+      path: "{{path}}"
+      start_line: "{{start_line}}"
+      end_line: "{{end_line}}"
+      output_key: source

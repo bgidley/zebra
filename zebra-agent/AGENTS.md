@@ -31,6 +31,7 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/scheduler/` | Polling scheduler: `Routine` (cron/interval; `workflow`, or `goal` + `goal_priority` + `run_as` to queue a goal — F155), `RoutineRegistry`, `SchedulerLoop` (`queue_goal_fn` dispatches goal routines; skips while one is `CREATED`/`RUNNING`) |
 | `zebra_agent/scheduler/goal_tracker.py` | GoalTracker — daemon's in-flight goals: background start, human-task hand-off, reconciliation (#141) |
 | `zebra_agent/human_tasks.py` | `find_pending_human_task` — READY `auto: false` task in a process tree |
+| `zebra_agent/direct_run.py` | `run_named_workflow()` (start a named workflow from inputs, required `inputs` checked, no selection) and `workflow_status()` (`complete` + `result_key` output / `awaiting_input` + task id / `failed` / `running`) — used by `manage.py run_workflow` (#190) |
 | `zebra_agent/ioc/` | IoC (Inversion of Control) module |
 | `zebra_agent/ioc/container.py` | `ZebraContainer` - dependency injection container |
 | `zebra_agent/ioc/registry.py` | `IoCActionRegistry` - action registry with constructor injection |
@@ -336,6 +337,7 @@ These workflows are internal to the agent and excluded from LLM selection:
 | `Create Goal` | `create_goal.yaml` | Human input → queue goal as CREATED process |
 | `Bug Report` | `bug_report.yaml` | Web UI "Report a bug": one human review task over the stored report (#186) |
 | `Zebra Improvement Request` | `zebra_improvement_request.yaml` | Dream cycle request for a change to Zebra's code: one human review task (accept / reject / duplicate / later, issue link) (#189) |
+| `Outcome Review` | `outcome_review.yaml` | Delivery review of a deployed change: Zebra reviews blind with *Read/Search Zebra Source* tools, compares with Claude's verdicts, reconsiders once, then a human ruling task (#190). Run with `manage.py run_workflow` |
 | `Define Workflow` | `define_workflow.yaml` | `llm_agent`'s `define_workflow` tool: ethics gate → `workflow_creator` (#146) |
 
 System workflows are identified by the `system` tag in their YAML (`tags: [..., "system"]`) —

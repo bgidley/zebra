@@ -1,0 +1,30 @@
+name: "Search Zebra Source"
+description: "Search Zebra's own deployed source code for a regex; returns path:line: text hits."
+tags: ["code", "source", "search"]
+use_when: "You need to find where something is defined or used in Zebra's own codebase."
+version: 1
+first_task: search
+result_key: source
+# Requires a pattern, so it is a tool for llm_agent and never selected for a goal (#190).
+inputs:
+  type: object
+  required: [pattern]
+  properties:
+    pattern:
+      type: string
+      description: "Python regex matched against each line, e.g. 'class \\w+Action'"
+    glob:
+      type: string
+      description: "Files to search, relative to the repository root, e.g. 'zebra-tasks/**/*.py' (default: all source)"
+
+tasks:
+  search:
+    name: "Search source"
+    action: zebra_source
+    auto: true
+    properties:
+      operation: search
+      pattern: "{{pattern}}"
+      glob: "{{glob}}"
+      max_results: 50
+      output_key: source

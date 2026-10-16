@@ -28,6 +28,7 @@ rules:
   proposal:
     - Reference the GitLab issue number (e.g. "Closes #N") in the overview
     - Include a Non-goals section
+    - Include an "## Outcomes" table of 3-5 observable outcomes (#, outcome, how we'll know); the change is reviewed against them after deploy (#190)
     - Keep under 400 words
   design:
     - Call out data model changes (new tables, store interface changes, migrations)
