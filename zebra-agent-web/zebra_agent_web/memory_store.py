@@ -85,7 +85,7 @@ def _to_postmortem(m) -> PostmortemEntry:  # type: ignore[no-untyped-def]
     return Entry(
         id=m.id,
         timestamp=m.timestamp,
-        run_id=m.run_id,
+        run_id=m.run_id or "",
         goal=m.goal,
         workflow_name=m.workflow_name,
         trigger=m.trigger,
@@ -370,7 +370,7 @@ class DjangoMemoryStore(MemoryStore):
                 defaults={
                     "user_id": user_id,
                     "timestamp": entry.timestamp,
-                    "run_id": entry.run_id,
+                    "run_id": entry.run_id or None,
                     "goal": entry.goal,
                     "workflow_name": entry.workflow_name,
                     "trigger": entry.trigger,

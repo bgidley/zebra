@@ -76,6 +76,15 @@ class TestDjangoPostmortemStore:
         assert await PostmortemModel.objects.filter(run_id="run-1").acount() == 1
         assert (await store.get_postmortem_by_run_id("run-1")).lesson == "first"
 
+    async def test_postmortems_without_a_run_are_all_kept(self):
+        """No run id is stored as NULL, which the unique constraint allows many of."""
+        store = DjangoMemoryStore()
+        await store.add_postmortem(_entry(run_id="", lesson="first"))
+        await store.add_postmortem(_entry(run_id="", lesson="second"))
+
+        assert await PostmortemModel.objects.filter(run_id__isnull=True).acount() == 2
+        assert {e.run_id for e in await store.get_recent_postmortems()} == {""}
+
     async def test_search_falls_back_to_keywords_off_oracle(self):
         store = DjangoMemoryStore()
         await store.add_postmortem(_entry())

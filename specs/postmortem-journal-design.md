@@ -29,7 +29,7 @@ on purpose).
   `user_id` (entry's `user_id`, from the goal's `__user_id__`, else the request user, else the
   run's). Oracle adds `embedding VECTOR` on the goal (`EMBEDDED_TABLES`, trigger
   `zebra_pm_embed_trg`); `search_postmortems` uses `VECTOR_DISTANCE` like #169.
-- One postmortem per `run_id`: a partial unique constraint (`zebra_postmortem_one_per_run`, non-empty `run_id`) makes racing triggers (daemon timeout + low rating) keep the first; `add_postmortem` ignores a duplicate.
+- One postmortem per `run_id`: `run_id` is unique and NULL when there is no run (Oracle has no conditional unique constraints; migration 0029), so racing triggers (daemon timeout + low rating) keep the first; `add_postmortem` ignores a duplicate.
 
 ## 3. Interfaces
 
