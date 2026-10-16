@@ -1221,16 +1221,28 @@ class WorkflowEngine:
             await self._journal(
                 process, ProcessEventKind.PROCESS_FAILED, error=str(error) if error else None
             )
-        if not process.parent_task_id:
-            return
-        try:
-            await self._resume_if_subflows_done(process.parent_task_id)
-        except Exception:
-            logger.exception(
-                "Failed to resume task %s after subflow %s ended",
-                process.parent_task_id,
-                process.id,
-            )
+        for task_id in await self._tasks_waiting_on(process):
+            try:
+                await self._resume_if_subflows_done(task_id)
+            except Exception:
+                logger.exception(
+                    "Failed to resume task %s after subflow %s ended", task_id, process.id
+                )
+
+    async def _tasks_waiting_on(self, child: ProcessInstance) -> list[str]:
+        """Ids of tasks that may be waiting on *child*: its spawning task, plus any
+        suspended task of its parent process listing it (e.g. ``wait_subworkflow``, #181).
+        """
+        task_ids = [child.parent_task_id] if child.parent_task_id else []
+        if child.parent_process_id:
+            for task in await self.store.load_tasks_for_process(child.parent_process_id):
+                if (
+                    task.state == TaskState.AWAITING_SUBFLOW
+                    and task.id not in task_ids
+                    and child.id in task.properties.get(PENDING_SUBFLOWS_KEY, [])
+                ):
+                    task_ids.append(task.id)
+        return task_ids
 
     async def _resume_if_subflows_done(self, task_id: str) -> None:
         """Move a suspended task to READY once all its children are terminal, and run it.
