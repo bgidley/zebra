@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 16
+version: 17
 first_task: consult_memory
 
 tasks:
@@ -284,6 +284,23 @@ tasks:
       started_at: "{{__started_at__}}"
       output_key: assess_result
 
+  # Step 8b: Postmortem journal (#175) - a failed run writes what happened, the
+  # root cause and the lesson into long-term memory; consult_memory recalls it on
+  # similar goals. Successful runs skip it. Never fails the loop.
+  write_postmortem:
+    name: "Write Postmortem"
+    action: write_postmortem
+    auto: true
+    properties:
+      trigger: failure
+      run_id: "{{run_id}}"
+      goal: "{{goal}}"
+      workflow_name: "{{workflow_name}}"
+      success: "{{execution_result.success}}"
+      error: "{{execution_result.error}}"
+      model: haiku
+      output_key: postmortem
+
   # Step 9: Ethics post-execution review - did we behave ethically?
   # Runs after the memory update so a failed review cannot skip it (#143).
   ethics_post_review:
@@ -537,6 +554,9 @@ routings:
     name: "abandon"
 
   - from: assess_and_record
+    to: write_postmortem
+
+  - from: write_postmortem
     to: update_conceptual_memory
 
   - from: update_conceptual_memory

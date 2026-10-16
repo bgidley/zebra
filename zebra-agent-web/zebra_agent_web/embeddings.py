@@ -73,6 +73,12 @@ EMBEDDED_TABLES: tuple[EmbeddedTable, ...] = (
             'TO_CHAR(DBMS_LOB.SUBSTR(:new."VALUE", 800, 1))'
         ),
     ),
+    # #175: lessons are recalled by the goal of the run they were learned from.
+    EmbeddedTable(
+        table="zebra_postmortems",
+        trigger="zebra_pm_embed_trg",
+        text_sql='TO_CHAR(DBMS_LOB.SUBSTR(:new."GOAL", 1000, 1))',
+    ),
 )
 
 _TABLES_BY_NAME = {t.table: t for t in EMBEDDED_TABLES}

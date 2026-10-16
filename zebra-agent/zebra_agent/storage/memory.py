@@ -20,7 +20,7 @@ from zebra_agent.storage.interfaces import (
 
 if TYPE_CHECKING:
     from zebra_agent.knowledge import KnowledgeEntry
-    from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
+    from zebra_agent.memory import ConceptualMemoryEntry, PostmortemEntry, WorkflowMemoryEntry
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class InMemoryMemoryStore(MemoryStore):
     def __init__(self) -> None:
         self._workflow_memories: list[WorkflowMemoryEntry] = []
         self._conceptual_memories: list[ConceptualMemoryEntry] = []
+        self._postmortems: list[PostmortemEntry] = []
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -88,6 +89,26 @@ class InMemoryMemoryStore(MemoryStore):
             if entry.run_id == run_id:
                 return entry
         return None
+
+    # =========================================================================
+    # Postmortem journal (#175)
+    # =========================================================================
+
+    async def add_postmortem(self, entry: PostmortemEntry) -> None:
+        """Store a postmortem."""
+        await self._ensure_initialized()
+        self._postmortems.append(entry)
+        self._postmortems.sort(key=lambda e: e.timestamp, reverse=True)
+
+    async def get_recent_postmortems(self, limit: int = 50) -> list[PostmortemEntry]:
+        """Return the most recent postmortems, newest first."""
+        await self._ensure_initialized()
+        return self._postmortems[:limit]
+
+    async def get_postmortem_by_run_id(self, run_id: str) -> PostmortemEntry | None:
+        """Return the postmortem written for a run, or None."""
+        await self._ensure_initialized()
+        return next((e for e in self._postmortems if e.run_id == run_id), None)
 
     # =========================================================================
     # Conceptual Memory

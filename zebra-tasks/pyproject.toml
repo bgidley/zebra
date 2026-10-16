@@ -88,6 +88,8 @@ record_dilemma_resolution = "zebra_tasks.agent.record_dilemma_resolution:RecordD
 # Agent - "I'm stuck" handoff (#176)
 assess_stuck = "zebra_tasks.agent.stuck:AssessStuckAction"
 apply_help_response = "zebra_tasks.agent.stuck:ApplyHelpResponseAction"
+# Agent - postmortem journal (#175)
+write_postmortem = "zebra_tasks.agent.postmortem:WritePostmortemAction"
 # Agent - Ethics outcome recording (#143)
 record_ethics_review = "zebra_tasks.agent.record_ethics_review:RecordEthicsReviewAction"
 record_ethics_rejection = "zebra_tasks.agent.record_ethics_rejection:RecordEthicsRejectionAction"

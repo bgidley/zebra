@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% load format_tags %}
+
+{% block title %}Journal - Zebra Agent{% endblock %}
+{% block page_title %}Journal{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div>
+        <h1 class="text-2xl font-bold text-ink">Journal</h1>
+        <p class="text-gray-400 mt-1">What I learned when things went wrong, so I don't repeat it. I recall these lessons on similar goals.</p>
+    </div>
+
+    {% if entries %}
+    <div class="flex flex-wrap gap-2 text-xs">
+        <span class="px-2 py-1 rounded bg-gray-700 text-ink">{{ entries|length }} lesson{{ entries|length|pluralize }}</span>
+        <span class="px-2 py-1 rounded bg-gray-700 text-gray-300">{{ counts.failure }} from failed runs</span>
+        <span class="px-2 py-1 rounded bg-gray-700 text-gray-300">{{ counts.timeout }} from timeouts</span>
+        <span class="px-2 py-1 rounded bg-gray-700 text-gray-300">{{ counts.low_rating }} from low ratings</span>
+    </div>
+
+    <div class="space-y-4">
+        {% for item in entries %}
+        {% with pm=item.entry %}
+        <article class="bg-gray-800 rounded-xl border border-gray-700 px-5 py-2" id="postmortem-{{ pm.id }}" data-trigger="{{ pm.trigger }}">
+            {% if pm.run_id %}
+            {% include "components/thought.html" with thought=item.thought context_text=pm.goal href="/runs/"|add:pm.run_id|add:"/" at=pm.timestamp %}
+            {% else %}
+            {% include "components/thought.html" with thought=item.thought context_text=pm.goal at=pm.timestamp %}
+            {% endif %}
+            <dl class="pb-3 pl-5 space-y-2 text-sm">
+                {% if pm.voice %}
+                <div>
+                    <dt class="text-xs text-faint">Lesson</dt>
+                    <dd class="text-ink">{{ pm.lesson }}</dd>
+                </div>
+                {% endif %}
+                {% if pm.root_cause %}
+                <div>
+                    <dt class="text-xs text-faint">Root cause</dt>
+                    <dd class="text-gray-300">{{ pm.root_cause }}</dd>
+                </div>
+                {% endif %}
+                {% if pm.what_happened %}
+                <div>
+                    <dt class="text-xs text-faint">What happened</dt>
+                    <dd class="text-gray-300">{{ pm.what_happened }}</dd>
+                </div>
+                {% endif %}
+                <div class="text-xs text-faint">
+                    {% if pm.workflow_name %}Workflow <span class="font-mono text-gray-400">{{ pm.workflow_name }}</span> · {% endif %}{{ pm.timestamp|date:"Y-m-d H:i" }} UTC
+                </div>
+            </dl>
+        </article>
+        {% endwith %}
+        {% endfor %}
+    </div>
+    {% if entries|length >= limit %}
+    <p class="text-xs text-faint">Showing the latest {{ limit }}.</p>
+    {% endif %}
+    {% else %}
+    <div class="bg-gray-800 rounded-xl border border-gray-700 p-8 text-center">
+        <p class="text-ink">Nothing in my journal yet.</p>
+        <p class="text-sm text-gray-400 mt-1">When a goal fails, times out or you rate a result 1 or 2, I write down what happened and the lesson here.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

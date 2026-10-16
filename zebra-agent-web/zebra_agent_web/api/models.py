@@ -331,6 +331,34 @@ class ConceptualMemoryModel(models.Model):
         return f"Concept: {self.concept[:60]}"
 
 
+class PostmortemModel(models.Model):
+    """A lesson learned from a failed, timed-out or badly rated run (#175)."""
+
+    id = models.CharField(max_length=255, primary_key=True)
+    user_id = models.IntegerField(null=True, blank=True, db_index=True)
+    timestamp = models.DateTimeField(db_index=True)
+    run_id = models.CharField(max_length=255, blank=True, default="", db_index=True)
+    goal = models.TextField()
+    workflow_name = models.CharField(max_length=255, blank=True, default="")
+    trigger = models.CharField(max_length=20, help_text="failure | timeout | low_rating")
+    what_happened = models.TextField(blank=True, default="")
+    root_cause = models.TextField(blank=True, default="")
+    lesson = models.TextField()
+    voice = models.TextField(blank=True, null=True)
+    confidence = models.FloatField(blank=True, null=True)
+
+    class Meta:
+        db_table = "zebra_postmortems"
+        verbose_name = "Postmortem"
+        verbose_name_plural = "Postmortems"
+        indexes = [
+            models.Index(fields=["-timestamp"]),
+        ]
+
+    def __str__(self):
+        return f"Postmortem ({self.trigger}): {self.goal[:60]}"
+
+
 # =============================================================================
 # System State (Kill Switch)
 # =============================================================================

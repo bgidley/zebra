@@ -97,6 +97,7 @@ async def run_daemon_loop(
             engine=wf_engine,
             dry_run=False,
             tracker=goal_tracker,
+            library=agent_engine.get_library(),
         )
 
     # Routine-dispatched workflows (e.g. the 03:00 Dream Cycle) need the same
@@ -226,13 +227,16 @@ async def _tick(
     dry_run: bool,
     tracker: GoalTracker | None = None,
     poll_interval: float = 1.0,
+    library=None,
 ) -> None:
     """One goal-queue iteration: reconcile, pick a goal, check budget, execute.
 
     The picked goal runs in a background task; the tick waits until it finishes
     or parks on a human task, then returns so a waiting goal never blocks the
     queue (#141). *tracker* carries in-flight goals between ticks; when omitted
-    a fresh one is used (single-tick callers such as tests).
+    a fresh one is used (single-tick callers such as tests). With a workflow
+    *library*, a goal that failed before it could write its own postmortem (a
+    timeout or crash) gets one from the *Postmortem* workflow (#175).
     """
     from zebra_agent.scheduler.goal_tracker import GoalTracker
 
@@ -251,7 +255,7 @@ async def _tick(
 
     # 1. Record goals that finished since the last tick (e.g. after a human answered)
     for finished in await tracker.reconcile():
-        _log_outcome(finished)
+        await _record_finished(finished, engine, library)
 
     # 2. Keep execution serial: don't start another goal while one is still running
     active = await tracker.active_goals()
@@ -325,7 +329,16 @@ async def _tick(
         )
     else:
         for finished in await tracker.reconcile():
-            _log_outcome(finished)
+            await _record_finished(finished, engine, library)
+
+
+async def _record_finished(process, engine, library) -> None:
+    """Log a finished goal and write a postmortem if it failed unreflected (#175)."""
+    _log_outcome(process)
+    if library is not None:
+        from zebra_agent.postmortem import postmortem_failed_goal
+
+        await postmortem_failed_goal(engine, library, process)
 
 
 def _log_outcome(process) -> None:

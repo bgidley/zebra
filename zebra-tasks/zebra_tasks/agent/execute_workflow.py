@@ -15,6 +15,7 @@ from zebra_tasks.agent.followup import (
     with_previous_run,
 )
 from zebra_tasks.agent.history import with_workflow_history
+from zebra_tasks.agent.postmortem import with_lessons
 from zebra_tasks.agent.stuck import with_help_guidance
 from zebra_tasks.agent.user_context import copy_user_properties
 
@@ -402,9 +403,12 @@ class ExecuteGoalWorkflowAction(TaskAction):
         props = context.process.properties
         sub_properties = {
             # F138: append any workflow history fetched earlier in the loop;
-            # #176: and the user's answers to earlier help requests.
-            "goal": with_help_guidance(
-                with_workflow_history(with_previous_run(goal, props), props), props
+            # #176: the user's answers to earlier help requests; #175: lessons.
+            "goal": with_lessons(
+                with_help_guidance(
+                    with_workflow_history(with_previous_run(goal, props), props), props
+                ),
+                props,
             ),
             "__parent_process_id__": context.process.id,
             "__parent_task_id__": task.id,

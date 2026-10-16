@@ -47,7 +47,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/thoughts.py` | Voice layer read model (#161): `thoughts_for_process(props)` (ordered recorded reasoning, voice line preferred) and `recent_thoughts()` (per-user feed for the dashboard). Rendered by `components/thought.html`, `partials/thought_trail.html`, `partials/on_my_mind.html` |
 | `zebra_agent_web/api/manual_review.py` | Find / retry / fail tasks flagged `__requires_manual_review__` by recovery (#130) |
 | `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
-| `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory); `search_*` use Oracle vector search (#169) |
+| `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory); `search_*` use Oracle vector search (#169); postmortems (`PostmortemModel`, #175) |
 | `zebra_agent_web/embeddings.py` | In-database embeddings (#169): `embedding VECTOR` columns, ONNX model load from Object Storage (resource principal), triggers, backfill, `vector_search_ready()`, `nearest_ids()`. Run `manage.py load_embedding_model [--strict]` (entrypoint runs it after `migrate`). See `specs/memory-vector-embeddings-design.md` |
 | `zebra_agent_web/metrics_store.py` | DjangoMetricsStore (MetricsStore for metrics) |
 | `zebra_agent_web/api/models.py` | Django models for workflow data |
@@ -627,6 +627,7 @@ POST /api/tasks/<task_id>/complete/
 | `/processes/<id>/trace/` | `process_trace` | Step trace of the run containing the process, across subflows; HTMX request returns just the tree (#184) |
 | `/runs/<id>/trace/` | `run_trace_redirect` | Redirect to the trace of the run's root process |
 | `/processes/<id>/trace/<event_id>/properties/` | `process_trace_properties` | HTMX: process properties after one journalled step |
+| `/journal/` | `postmortem_journal` | Postmortem journal: lessons from failed / timed-out / badly rated runs, newest first, voice line + run link (#175) |
 | `/dreams/` | `dream_cycles` | Recent Dream Cycle runs: health, changes, retirements, summary (`api/dream_history.py`) |
 | `/bugs/` | `bug_reports_page` | Recent bug reports: severity, review state / verdict, Review link, expandable report (#186) |
 | `/bugs/report/` | `bug_report_submit` | Record a report from the dialog: starts a *Bug Report* process (POST, HTMX, #186) |

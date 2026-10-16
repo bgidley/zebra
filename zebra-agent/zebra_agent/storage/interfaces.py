@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
+from zebra_agent.memory import ConceptualMemoryEntry, PostmortemEntry, WorkflowMemoryEntry
 
 if TYPE_CHECKING:
     from zebra_agent.knowledge import KnowledgeEntry
@@ -252,6 +252,40 @@ class MemoryStore(ABC):
         entries = await self.get_recent_workflow_memories(limit=SEARCH_WINDOW)
         return keyword_rank(entries, lambda e: e.goal, goal, limit)
 
+    # =========================================================================
+    # Postmortem journal (#175)
+    # =========================================================================
+
+    @abstractmethod
+    async def add_postmortem(self, entry: PostmortemEntry) -> None:
+        """Store a postmortem (a lesson learned from an incident)."""
+        ...
+
+    @abstractmethod
+    async def get_recent_postmortems(self, limit: int = 50) -> list[PostmortemEntry]:
+        """Return the most recent postmortems, newest first."""
+        ...
+
+    @abstractmethod
+    async def get_postmortem_by_run_id(self, run_id: str) -> PostmortemEntry | None:
+        """Return the postmortem written for a run, or None."""
+        ...
+
+    async def search_postmortems(self, goal: str, limit: int = 3) -> list[PostmortemEntry]:
+        """Return the postmortems most relevant to a goal, best first.
+
+        The default ranks the most recent postmortems by keyword overlap with
+        their goal and lesson. Only overlapping entries are returned: an
+        unrelated lesson is noise in a goal's context. Backends with semantic
+        search (Oracle vector embeddings) override this.
+        """
+        keywords = set(search_keywords(goal)) if goal and goal.strip() else set()
+        if not keywords:
+            return []
+        entries = await self.get_recent_postmortems(limit=SEARCH_WINDOW)
+        matching = [e for e in entries if keywords & _words(_postmortem_text(e))]
+        return keyword_rank(matching, _postmortem_text, goal, limit)
+
 
 # #169: how many recent entries the keyword-overlap fallback ranks.
 SEARCH_WINDOW = 50
@@ -262,6 +296,14 @@ def _conceptual_text(entry: ConceptualMemoryEntry) -> str:
         f"{wf.get('name', '')} {wf.get('fit_notes', '')}" for wf in entry.recommended_workflows
     )
     return f"{entry.concept} {notes}"
+
+
+def _postmortem_text(entry: PostmortemEntry) -> str:
+    return f"{entry.goal} {entry.lesson}"
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"\w+", text.lower()))
 
 
 def keyword_rank(items: list, text_of: Any, query: str, limit: int) -> list:
@@ -327,6 +369,21 @@ def format_similar_runs_context(entries: list[WorkflowMemoryEntry]) -> str:
             lines.append(f"Notes: {entry.effectiveness_notes[:200]}")
         if entry.user_feedback:
             lines.append(f"User feedback: {entry.user_feedback[:300]}")
+    return "\n".join(lines)
+
+
+def format_lessons_context(entries: list[PostmortemEntry]) -> str:
+    """Format postmortem lessons as a context string for the LLM (#175)."""
+    if not entries:
+        return ""
+    lines = ["## Lessons From Past Incidents"]
+    for entry in entries:
+        lines.append(
+            f"\n[{entry.timestamp.strftime('%Y-%m-%d')}] {entry.workflow_name or '?'} "
+            f"({entry.trigger}): {entry.goal[:200]}"
+        )
+        lines.append(f"Root cause: {entry.root_cause[:300]}")
+        lines.append(f"Lesson: {entry.lesson[:400]}")
     return "\n".join(lines)
 
 

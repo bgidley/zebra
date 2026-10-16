@@ -19,6 +19,7 @@ from zebra.tasks.base import TaskAction
 from zebra.tasks.registry import ActionRegistry
 from zebra_tasks.agent.continuation_assessor import ContinuationAssessorAction
 from zebra_tasks.agent.history import AssessHistoryNeedAction, GetWorkflowHistoryAction
+from zebra_tasks.agent.postmortem import WritePostmortemAction
 from zebra_tasks.agent.propagate_failure import PropagateFailureAction
 from zebra_tasks.agent.record_dilemma_resolution import RecordDilemmaResolutionAction
 from zebra_tasks.agent.record_ethics_rejection import RecordEthicsRejectionAction
@@ -230,6 +231,8 @@ def _make_registry(ethics_gate_class, execute_class=None):
     registry.register_action("assess_and_record", StubAssessAndRecord)
     registry.register_action("llm_call", StubLLMCall)
     registry.register_action("update_conceptual_memory", StubUpdateConceptualMemory)
+    # #175: real postmortem — skips without a memory store in extras
+    registry.register_action("write_postmortem", WritePostmortemAction)
     registry.register_action("propagate_failure", PropagateFailureAction)
     # #176: real stuck handoff; the module fixture makes its LLM unavailable
     registry.register_action("assess_stuck", AssessStuckAction)

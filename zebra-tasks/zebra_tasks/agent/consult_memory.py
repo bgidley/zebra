@@ -4,13 +4,19 @@ import logging
 
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
-from zebra_agent.storage.interfaces import format_conceptual_context, format_similar_runs_context
+from zebra_agent.storage.interfaces import (
+    format_conceptual_context,
+    format_lessons_context,
+    format_similar_runs_context,
+)
 
 logger = logging.getLogger(__name__)
 
 # How many goal-relevant concepts / similar past runs to give the selector (#169).
 CONCEPT_LIMIT = 10
 SIMILAR_RUNS_LIMIT = 5
+# How many lessons from past incidents to recall (#175).
+LESSONS_LIMIT = 3
 
 
 class ConsultMemoryAction(TaskAction):
@@ -34,6 +40,8 @@ class ConsultMemoryAction(TaskAction):
         - shortlist: list of workflow names recommended by memory
         - memory_context: formatted LLM-ready string of conceptual memory
         - has_memory: bool indicating whether memory context exists
+        - lessons_context: lessons from past incidents relevant to the goal (#175);
+          also part of memory_context, and appended to the executed goal
 
     Routes:
         No route — always continues to next task.
@@ -102,7 +110,7 @@ class ConsultMemoryAction(TaskAction):
         memory_store = context.extras.get("__memory_store__")
         if memory_store is None:
             logger.info("No memory store available — returning empty shortlist")
-            result = {"shortlist": [], "memory_context": "", "has_memory": False}
+            result = _empty_result()
             context.set_process_property(output_key, result)
             return TaskResult.ok(output=result)
 
@@ -128,9 +136,12 @@ class ConsultMemoryAction(TaskAction):
                 if run.success and run.workflow_name not in shortlist:
                     shortlist.append(run.workflow_name)
 
+            lessons_context = await _lessons_context(memory_store, goal)
+
             sections = [
                 format_conceptual_context(conceptual_entries),
                 format_similar_runs_context(similar_runs),
+                lessons_context,
             ]
             memory_context = "\n\n".join(s for s in sections if s)
             has_memory = bool(memory_context)
@@ -144,12 +155,26 @@ class ConsultMemoryAction(TaskAction):
                 "shortlist": shortlist,
                 "memory_context": memory_context,
                 "has_memory": has_memory,
+                "lessons_context": lessons_context,
             }
             context.set_process_property(output_key, result)
             return TaskResult.ok(output=result)
 
         except Exception as e:
             logger.warning(f"ConsultMemoryAction failed — degrading gracefully: {e}")
-            result = {"shortlist": [], "memory_context": "", "has_memory": False}
+            result = _empty_result()
             context.set_process_property(output_key, result)
             return TaskResult.ok(output=result)
+
+
+def _empty_result() -> dict:
+    return {"shortlist": [], "memory_context": "", "has_memory": False, "lessons_context": ""}
+
+
+async def _lessons_context(memory_store, goal: str) -> str:  # type: ignore[no-untyped-def]
+    """Lessons from past incidents relevant to the goal; empty on any error (#175)."""
+    try:
+        return format_lessons_context(await memory_store.search_postmortems(goal, LESSONS_LIMIT))
+    except Exception as e:  # noqa: BLE001 - lessons are advisory
+        logger.warning("ConsultMemoryAction: lesson recall failed: %s", e)
+        return ""

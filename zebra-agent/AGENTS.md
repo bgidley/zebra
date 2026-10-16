@@ -30,6 +30,7 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/scheduler.py` | GoalScheduler — priority + deadline + age scoring |
 | `zebra_agent/scheduler/` | Polling scheduler: `Routine` (cron/interval; `workflow`, or `goal` + `goal_priority` + `run_as` to queue a goal — F155), `RoutineRegistry`, `SchedulerLoop` (`queue_goal_fn` dispatches goal routines; skips while one is `CREATED`/`RUNNING`) |
 | `zebra_agent/scheduler/goal_tracker.py` | GoalTracker — daemon's in-flight goals: background start, human-task hand-off, reconciliation (#141) |
+| `zebra_agent/postmortem.py` | `start_postmortem` / `postmortem_failed_goal` / `needs_failure_postmortem` — run the *Postmortem* workflow for timeouts, crashes and low ratings (#175) |
 | `zebra_agent/human_tasks.py` | `find_pending_human_task` — READY `auto: false` task in a process tree |
 | `zebra_agent/ioc/` | IoC (Inversion of Control) module |
 | `zebra_agent/ioc/container.py` | `ZebraContainer` - dependency injection container |
@@ -119,6 +120,8 @@ consult_memory --> consult_knowledge --> assess_history_need
                        |                                  redirect → ethics_input_gate; abandon ↓
                 assess_and_record   (also runs for failed goal runs — #140)
                        |
+                write_postmortem    (failed runs: lesson into memory — #175)
+                       |
              update_conceptual_memory
                        |
         ethics_post_review → record_ethics_review
@@ -139,6 +142,7 @@ consult_memory --> consult_knowledge --> assess_history_need
 5. **execute_workflow**: `ExecuteGoalWorkflowAction` runs the selected/created workflow as a child process and suspends on it (#185), so a human task in the child parks the whole goal (no goal timeout while waiting) and failing the goal fails the child
 5a. **assess_stuck → stuck_help_request → apply_help_response** (#176): a failed run, while fewer than `max_help_requests` (2) help requests have been made, parks on a human task showing a haiku-written help request (what I tried / where I'm stuck / what I need). The answer routes `retry` (same workflow, guidance appended to the child goal via `with_help_guidance`), `redirect` (`goal` replaced, back to `ethics_input_gate`) or `abandon` (record and fail as #140). Successful runs and a spent budget route `proceed`
 6. **assess_and_record**: `AssessAndRecordAction` records metrics + LLM effectiveness assessment + workflow memory entry
+6a. **write_postmortem** (#175): `WritePostmortemAction` has haiku write what happened, the root cause and the lesson for a failed run and stores a `PostmortemEntry` (`MemoryStore.add_postmortem`). `consult_memory` recalls relevant lessons on later goals into `memory_context` and `execute_goal_workflow` appends them to the child goal (`with_lessons`). Goals that fail before this step (timeout, crash) and runs rated 1–2 get one from the *Postmortem* workflow via `zebra_agent/postmortem.py` (daemon reconcile, `AgentLoop._run_agent_workflow`, `AgentLoop.record_rating`)
 7. **update_conceptual_memory**: `UpdateConceptualMemoryAction` incrementally updates the conceptual memory index
 8. **ethics_post_review → record_ethics_review**: advisory LLM review of the completed run, then `RecordEthicsReviewAction` audits it (`check_type="post_review"`). Runs after the memory update so a failed review cannot skip it (#143)
 8b. **extract_knowledge → store_learned_knowledge** (F152): haiku extracts personal-fact candidates from the goal, the child's human-task answers (`execution_result.user_inputs`), `continuation_comment` and the result; they are stored as `source="agent"` with confidence ≤ 0.5. A conflicting value starts a *Resolve Knowledge Contradiction* process instead of overwriting. Skipped when there is no `__user_id__`
@@ -162,6 +166,7 @@ These actions (in `zebra-tasks/zebra_tasks/agent/`) power the agent loop:
 | `assess_stuck` / `apply_help_response` | `stuck.py` | "I'm stuck" handoff: ask a human for help on a failed run, then retry/redirect/abandon (#176) |
 | `execute_goal_workflow` | `execute_workflow.py` | Execute workflow by name |
 | `assess_and_record` | `assess_and_record.py` | LLM assessment + metrics + memory write |
+| `write_postmortem` | `postmortem.py` | Postmortem (what happened, root cause, lesson) into memory; `with_lessons()` (#175) |
 | `update_conceptual_memory` | `update_conceptual_memory.py` | Incrementally update conceptual memory index |
 | `record_ethics_review` | `record_ethics_review.py` | Normalise + audit the post-execution ethics review (#143) |
 | `record_ethics_rejection` | `record_ethics_rejection.py` | Record which ethics gate rejected the goal and why (#143) |
@@ -333,6 +338,7 @@ These workflows are internal to the agent and excluded from LLM selection:
 | `Agent Main Loop` | `agent_main_loop.yaml` | Main orchestration workflow |
 | `Dream Cycle` | `dream_cycle.yaml` | Self-improvement: analyze, evaluate, optimize workflows |
 | `Create Goal` | `create_goal.yaml` | Human input → queue goal as CREATED process |
+| `Postmortem` | `postmortem.yaml` | `write_postmortem` for timed-out / crashed goals and runs rated 1–2, started by `zebra_agent/postmortem.py` (#175) |
 | `Bug Report` | `bug_report.yaml` | Web UI "Report a bug": one human review task over the stored report (#186) |
 | `Define Workflow` | `define_workflow.yaml` | `llm_agent`'s `define_workflow` tool: ethics gate → `workflow_creator` (#146) |
 
