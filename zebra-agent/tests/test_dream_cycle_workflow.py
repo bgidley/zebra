@@ -51,15 +51,50 @@ def test_summary_reports_curation():
     assert "{{curation.deferred}}" in prompt
 
 
-def test_knowledge_review_runs_before_summary():
-    """The knowledge review (#153) runs after optimisation and feeds the summary."""
+def test_knowledge_review_runs_after_optimisation():
+    """The knowledge review (#153) runs after optimisation, before the summary."""
     definition = load_definition(_DREAM_CYCLE)
     routes = {(r.source_task_id, r.dest_task_id) for r in definition.routings}
 
     assert definition.tasks["review_knowledge"].action == "review_knowledge"
     assert ("optimize_workflows", "review_knowledge") in routes
-    assert ("review_knowledge", "generate_summary") in routes
     assert ("optimize_workflows", "generate_summary") not in routes
+
+
+def test_improvement_requests_run_before_summary():
+    """Zebra improvement requests (#189) see every finding and feed the summary."""
+    definition = load_definition(_DREAM_CYCLE)
+    routes = {(r.source_task_id, r.dest_task_id) for r in definition.routings}
+
+    task = definition.tasks["propose_improvements"]
+    assert task.action == "propose_zebra_improvements"
+    assert task.properties["output_key"] == "improvement_requests"
+    assert ("review_knowledge", "propose_improvements") in routes
+    assert ("propose_improvements", "generate_summary") in routes
+    assert ("review_knowledge", "generate_summary") not in routes
+
+
+def test_summary_reports_improvement_requests():
+    data = yaml.safe_load(_DREAM_CYCLE.read_text())
+    prompt = data["tasks"]["generate_summary"]["properties"]["prompt"]
+
+    assert "### Improvements requested" in prompt
+    assert "{{improvement_requests.requests}}" in prompt
+
+
+def test_improvement_request_workflow_is_a_valid_system_workflow():
+    path = _DREAM_CYCLE.parent / "zebra_improvement_request.yaml"
+    definition = load_definition(path)
+
+    assert validate_definition(definition) == []
+    assert definition.name == "Zebra Improvement Request"
+    data = yaml.safe_load(path.read_text())
+    assert "system" in data["tags"]
+    review = definition.tasks["review"]
+    assert review.auto is False
+    schema = review.properties["schema"]
+    assert schema["required"] == ["verdict"]
+    assert schema["properties"]["verdict"]["enum"] == ["accepted", "rejected", "duplicate", "later"]
 
 
 def test_summary_reports_knowledge():

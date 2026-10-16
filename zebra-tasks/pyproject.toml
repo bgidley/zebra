@@ -119,6 +119,8 @@ extract_knowledge = "zebra_tasks.knowledge.extract:ExtractKnowledgeAction"
 store_learned_knowledge = "zebra_tasks.knowledge.store_learned:StoreLearnedKnowledgeAction"
 # Dream-cycle knowledge review (F153)
 review_knowledge = "zebra_tasks.knowledge.review:ReviewKnowledgeAction"
+# Dream-cycle requests for Zebra improvements (#189)
+propose_zebra_improvements = "zebra_tasks.agent.improvements:ProposeZebraImprovementsAction"
 
 [build-system]
 requires = ["hatchling"]

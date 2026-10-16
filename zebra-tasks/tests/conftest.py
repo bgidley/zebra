@@ -42,6 +42,7 @@ class MockEngine:
     store: MockStore
     created_processes: list[ProcessInstance] = field(default_factory=list)
     started_processes: list[str] = field(default_factory=list)
+    start_timeouts: dict[str, float] = field(default_factory=dict)
 
     async def create_process(
         self,
@@ -62,6 +63,10 @@ class MockEngine:
         self.started_processes.append(process_id)
         if process_id in self.store.processes:
             self.store.processes[process_id].state = ProcessState.RUNNING
+
+    async def start_process_with_timeout(self, process_id: str, timeout: float) -> None:
+        self.start_timeouts[process_id] = timeout
+        await self.start_process(process_id)
 
     async def get_process_status(self, process_id: str) -> dict:
         process = self.store.processes.get(process_id)

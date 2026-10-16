@@ -2707,6 +2707,7 @@ async def dream_cycles(request):
 
     cycles = await sync_to_async(dream_history.recent_dream_cycles)(_DREAM_CYCLE_LIMIT)
     schedule = await sync_to_async(dream_history.next_scheduled_run)()
+    requests = await sync_to_async(dream_history.recent_improvement_requests)(_DREAM_CYCLE_LIMIT)
     completed = [c for c in cycles if c["state"] == "complete"]
     return render(
         request,
@@ -2721,6 +2722,8 @@ async def dream_cycles(request):
             "failed_count": sum(1 for c in cycles if c["state"] == "failed"),
             "total_changes": sum(len(c["changes_made"]) for c in completed),
             "total_retired": sum(c["retired_applied"] for c in completed),
+            "improvement_requests": requests,
+            "open_requests": sum(1 for r in requests if r["state"] == "running"),
             "limit": _DREAM_CYCLE_LIMIT,
             **_identity_context(),
         },

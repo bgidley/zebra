@@ -25,7 +25,8 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/llm/providers/anthropic.py` | Anthropic (Claude) provider: no `temperature` for Claude 4.6+/5 models; `output_config.effort: xhigh` for Sonnet/Haiku 5.5, which otherwise reason aloud in the reply on short prompts, plus `THINKING_HEADROOM_TOKENS` (4096) added to `max_tokens` so thinking does not eat the answer budget (#168) |
 | `zebra_tasks/llm/providers/openai.py` | OpenAI provider |
 | `zebra_tasks/subtasks/` | Sub-workflow actions |
-| `zebra_tasks/subtasks/subworkflow.py` | SubworkflowAction, ParallelSubworkflowsAction |
+| `zebra_tasks/subtasks/spawn.py` / `wait.py` / `parallel.py` | SubworkflowAction, WaitForSubworkflowAction, ParallelSubworkflowsAction — suspend on their children (#181) |
+| `zebra_tasks/subtasks/common.py` | `start_child()` (bounded by `timeout`), `child_result()` (result dict from a `subflow_results` entry) |
 | `zebra_tasks/compute/` | Computational utilities |
 | `zebra_tasks/agent/` | Agent-specific actions |
 | `zebra_tasks/agent/selector.py` | WorkflowSelectorAction - LLM workflow selection |
@@ -40,6 +41,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization (tags created workflows `llm-defined`) |
 | `zebra_tasks/agent/curator.py` | WorkflowCuratorAction - dream-cycle retirement of broken/superseded/failing/unused/duplicate workflows; `ZEBRA_CURATOR_*` settings (#148) |
 | `zebra_tasks/knowledge/review.py` | ReviewKnowledgeAction - dream-cycle review of personal knowledge against recent runs; `revert_knowledge_changes()` (#153) |
+| `zebra_tasks/agent/improvements.py` | ProposeZebraImprovementsAction (`propose_zebra_improvements`) - dream-cycle requests for changes to Zebra's own code, each a *Zebra Improvement Request* process with a human review task; `max_requests` (2), title dedupe, never fails the cycle (#189) |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/agent/user_context.py` | `copy_user_properties()` - carry `__user_id__` + identity keys onto processes the loop creates (#151) |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
@@ -216,21 +218,29 @@ Spawn and optionally wait for a sub-workflow.
 | `workflow_file` | string | - | Path to workflow YAML file |
 | `properties` | dict | {} | Properties to pass to sub-workflow |
 | `wait` | bool | true | Whether to wait for completion |
-| `timeout` | int | null | Timeout in seconds |
+| `timeout` | int | null | Seconds the child's inline auto-task run may take (`start_process_with_timeout`); time parked on a human task is not counted |
 | `output_key` | string | "subworkflow_result" | Where to store result |
+
+**Suspends on the child (#181):** with `wait: true` the action starts the child and returns `TaskResult.suspend([child])`; the engine re-runs it with `subflow_results` once the child is terminal, and the result is `{success, process_id, properties, output}` (`output` = the child's `__output__`) or `{success: false, process_id, error}` (the task fails). A child waiting on a human holds nothing in the parent.
+
+### WaitForSubworkflowAction (`wait_subworkflow`)
+
+Suspends on `process_id` (template-resolved), which must be a child of this process (e.g. from `subworkflow` with `wait: false`); any other process fails the task. Same result as `subworkflow`. `timeout` is ignored with a warning — set it where the child is started (#181).
 
 ### ParallelSubworkflowsAction
 
-Spawn multiple sub-workflows in parallel.
+Spawn multiple sub-workflows and suspend until all are terminal (#181).
 
 **Properties:**
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `workflows` | list | - | List of workflow configs with `workflow`/`workflow_file`, `properties`, `key` |
-| `timeout` | int | null | Timeout for all workflows |
-| `fail_fast` | bool | false | Stop all on first failure |
+| `timeout` | int | null | Seconds each child's inline auto-task run may take |
+| `fail_fast` | bool | false | Fail on a config with no definition; start no more children once one has failed |
 | `output_key` | string | "parallel_results" | Where to store results dict |
+
+Results are keyed by `key` (kept on the task as `__subflow_keys__` while suspended); any failed child routes `partial_failure` (the task still succeeds).
 
 ## Agent Actions Reference
 
