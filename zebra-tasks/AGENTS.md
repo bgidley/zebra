@@ -202,6 +202,7 @@ An LLM task whose tools are workflows. A tool call creates a child process of th
 | `max_tag_tools` | int | 8 | Cap on tag-selected tools |
 | `allow_define_workflow` | bool | false | Offer `define_workflow` (runs *Define Workflow*: ethics gate → `workflow_creator`) |
 | `max_tool_turns` | int | 8 | Tool-calling turns before the task fails |
+| `answer_on_budget` | bool | false | When the turns run out, drop that turn's tool calls and ask once with no tools for an answer instead of failing (#191) |
 | `max_parallel_tools` | int | 4 | Tool calls run per turn; extras get an error result |
 | `max_depth` | int | 3 | Run without tools at this `__agent_depth__` |
 | `output_key` | string | `agent_response` | Where to store the final answer |

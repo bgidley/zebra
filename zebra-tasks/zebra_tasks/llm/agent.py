@@ -143,6 +143,8 @@ class LLMAgentAction(LLMCallAction):
             *Define Workflow* system workflow (ethics gate, then
             ``workflow_creator``); the new workflow is a tool from the next turn
         max_tool_turns: Model turns that may call tools before failing (default: 8)
+        answer_on_budget: Instead of failing when the tool turns run out, ask once
+            with no tools for an answer from what was gathered (default: false)
         max_parallel_tools: Tool calls run per turn; extra calls get an error
             result asking the model to make them next turn (default: 4)
         max_depth: Run without tools at this tool-call depth (default: 3)
@@ -217,6 +219,13 @@ class LLMAgentAction(LLMCallAction):
             description="Model turns that may call tools before the task fails",
             required=False,
             default=8,
+        ),
+        ParameterDef(
+            name="answer_on_budget",
+            type="bool",
+            description="When the tool turns run out, answer once without tools instead of failing",
+            required=False,
+            default=False,
         ),
         ParameterDef(
             name="max_parallel_tools",
@@ -316,6 +325,10 @@ class LLMAgentAction(LLMCallAction):
 
             state["turns"] += 1
             if state["turns"] > max_turns:
+                if task.properties.get("answer_on_budget"):
+                    return await self._answer_without_tools(
+                        task, context, state, provider, temperature, max_tokens
+                    )
                 return TaskResult.fail(
                     f"Stopped after {max_turns} tool turns without a final answer"
                 )
@@ -587,6 +600,40 @@ class LLMAgentAction(LLMCallAction):
             )
         except Exception as e:
             logger.warning("llm_agent: could not record tool run %s: %s", call["run_id"], e)
+
+    async def _answer_without_tools(
+        self,
+        task: TaskInstance,
+        context: ExecutionContext,
+        state: dict[str, Any],
+        provider: Any,
+        temperature: float,
+        max_tokens: int,
+    ) -> TaskResult:
+        """Tool budget spent: ask once, with no tools, for the answer from what is known.
+
+        The tool calls of the over-budget turn are dropped (never run or answered).
+        """
+        state["messages"].append(
+            _message_to_dict(
+                Message.user(
+                    "You have used your tool budget. Answer now from what you have "
+                    "gathered so far, in the format you were asked for. Do not call tools."
+                )
+            )
+        )
+        try:
+            response = await provider.complete(
+                messages=[_message_from_dict(m) for m in state["messages"]],
+                tools=None,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        except Exception as e:
+            return TaskResult.fail(f"LLM call failed: {e}")
+        self._track_tokens(context, response.usage, model=response.model)
+        logger.info("llm_agent: tool budget spent; answered without tools")
+        return self._finish(task, context, state, response.content or "")
 
     def _finish(
         self, task: TaskInstance, context: ExecutionContext, state: dict[str, Any], text: str

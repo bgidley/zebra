@@ -1,7 +1,8 @@
 # outcome-review Specification
 
 ## Purpose
-TBD - created by archiving change outcome-review. Update Purpose after archive.
+Review every non-trivial change against outcomes agreed at its start: after deploy, Zebra (reading
+its own source) and Claude review blind, compare, and escalate lasting disagreement to a human.
 
 ## Requirements
 
@@ -43,6 +44,10 @@ same verdict from both reviewers. Agreed partial or missed outcomes SHALL be lis
 #### Scenario: Malformed review
 - **WHEN** either review is not parseable or omits an outcome
 - **THEN** that outcome counts as disputed
+
+#### Scenario: Outcome neither reviewer judged
+- **WHEN** an outcome id in the outcomes table is missing from both reviews
+- **THEN** it is listed as disputed, never agreed
 
 ### Requirement: Disagreement escalates to a human
 When the reviews disagree, Zebra SHALL reconsider the disputed outcomes once with Claude's evidence.

@@ -62,12 +62,28 @@ def _sort_key(outcome_id: str) -> tuple[int, str]:
     return (int(digits) if digits else 10**6, outcome_id)
 
 
+def outcome_ids(outcomes: Any) -> set[str]:
+    """Outcome ids from the first cell of a markdown outcomes table (header and rules skipped)."""
+    ids = set()
+    for line in str(outcomes or "").splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if line.strip().startswith("|") and re.fullmatch(r"[A-Za-z]+\d+", cells[0] or ""):
+            ids.add(cells[0].upper())
+    return ids
+
+
 def compare_reviews(
-    zebra: dict[str, dict[str, str]], claude: dict[str, dict[str, str]]
+    zebra: dict[str, dict[str, str]],
+    claude: dict[str, dict[str, str]],
+    expected: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Line up two parsed reviews per outcome."""
+    """Line up two parsed reviews per outcome.
+
+    ``expected`` ids (from the outcomes table) are always compared, so an outcome
+    that neither reviewer judged is disputed rather than silently skipped.
+    """
     rows = []
-    for oid in sorted(set(zebra) | set(claude), key=_sort_key):
+    for oid in sorted(set(zebra) | set(claude) | (expected or set()), key=_sort_key):
         z = zebra.get(oid, {"verdict": "", "evidence": ""})
         c = claude.get(oid, {"verdict": "", "evidence": ""})
         rows.append(
@@ -163,6 +179,13 @@ class CompareOutcomeReviewsAction(TaskAction):
             default="claude_review",
         ),
         ParameterDef(
+            name="outcomes_key",
+            type="string",
+            description="Process property holding the outcomes table; every id in it is compared",
+            required=False,
+            default="outcomes",
+        ),
+        ParameterDef(
             name="reconsidered_key",
             type="string",
             description="Process property holding Zebra's reconsidered verdicts",
@@ -209,7 +232,8 @@ class CompareOutcomeReviewsAction(TaskAction):
             context.get_process_property(props.get("claude_key", "claude_review"))
         )
 
-        result = compare_reviews(zebra, claude)
+        expected = outcome_ids(context.get_process_property(props.get("outcomes_key", "outcomes")))
+        result = compare_reviews(zebra, claude, expected)
         output_key = props.get("output_key", "review_result")
 
         ruling_key = props.get("ruling_key")

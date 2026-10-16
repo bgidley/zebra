@@ -2,7 +2,7 @@ name: "Outcome Review"
 description: "Review a shipped Zebra change against its agreed outcomes, compare with Claude's independent review, and ask a human to rule where the two still disagree."
 tags: ["review", "outcomes", "process", "code", "system"]
 use_when: "Run by the delivery process after a deploy, with the outcomes, the diff and Claude's verdicts."
-version: 1
+version: 2
 first_task: zebra_review
 result_key: review_result
 # Requires inputs, so it is never selected for a goal; run it with
@@ -51,6 +51,9 @@ tasks:
         Use the tools to check what the diff alone does not show: callers, tests,
         configuration. Be strict; "probably" is partial. Cite file:line or a test name
         as evidence. Another reviewer is judging the same outcomes independently.
+        You have about 10 tool turns: search first, read only what you need, and
+        ask for several reads in one turn. When the budget runs out you must answer
+        from what you have.
 
         Reply with JSON only:
         {"verdicts": [{"id": "O1", "verdict": "met|partial|missed",
@@ -67,7 +70,8 @@ tasks:
         ## Diff
         {{diff}}
       tools: ["Read Zebra Source", "Search Zebra Source"]
-      max_tool_turns: 8
+      max_tool_turns: 12
+      answer_on_budget: true
       max_tokens: 4000
       response_format: json
       output_key: zebra_review
@@ -111,6 +115,7 @@ tasks:
         {{diff}}
       tools: ["Read Zebra Source", "Search Zebra Source"]
       max_tool_turns: 6
+      answer_on_budget: true
       max_tokens: 3000
       response_format: json
       output_key: zebra_reconsidered
