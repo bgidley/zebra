@@ -337,7 +337,10 @@ class PostmortemModel(models.Model):
     id = models.CharField(max_length=255, primary_key=True)
     user_id = models.IntegerField(null=True, blank=True, db_index=True)
     timestamp = models.DateTimeField(db_index=True)
-    run_id = models.CharField(max_length=255, blank=True, default="", db_index=True)
+    # One postmortem per run, even if two triggers race (#175). No run is NULL, not "":
+    # Oracle reads "" as NULL and has no conditional unique constraints (W036), and
+    # every backend allows many NULLs under a plain unique constraint.
+    run_id = models.CharField(max_length=255, null=True, blank=True, unique=True)
     goal = models.TextField()
     workflow_name = models.CharField(max_length=255, blank=True, default="")
     trigger = models.CharField(max_length=20, help_text="failure | timeout | low_rating")
@@ -353,14 +356,6 @@ class PostmortemModel(models.Model):
         verbose_name_plural = "Postmortems"
         indexes = [
             models.Index(fields=["-timestamp"]),
-        ]
-        # One postmortem per run, even if two triggers race (#175).
-        constraints = [
-            models.UniqueConstraint(
-                fields=["run_id"],
-                condition=~models.Q(run_id=""),
-                name="zebra_postmortem_one_per_run",
-            )
         ]
 
     def __str__(self):
