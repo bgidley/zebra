@@ -24,6 +24,7 @@ from zebra.core.models import ProcessState, TaskState
 
 from zebra_agent.human_tasks import find_pending_human_task
 from zebra_agent.library import WorkflowLibrary, list_goal_workflows
+from zebra_agent.postmortem import LOW_RATING_MAX, postmortem_failed_goal, start_postmortem
 from zebra_agent.storage.interfaces import (
     MemoryStore,
     MetricsStore,
@@ -113,6 +114,8 @@ class AgentLoop:
         self.provider_name = provider
         self.model = model
         self.goal_timeout = goal_timeout
+        # Fire-and-forget work (low-rating postmortems, #175), kept referenced until done.
+        self._background_tasks: set[asyncio.Task] = set()
 
         # Inject stores into engine extras for task actions to use
         # These are non-serializable objects that can't go in process properties
@@ -260,6 +263,8 @@ class AgentLoop:
                 error = process.properties.get("__error__") or (
                     await self._failed_task_errors(process.id)
                 )
+                # A timeout or crash skips the loop's own postmortem step (#175).
+                await postmortem_failed_goal(self.engine, self.library, process)
                 return {
                     "workflow_name": process.properties.get("workflow_name", "unknown"),
                     "output": None,
@@ -341,8 +346,42 @@ class AgentLoop:
         return "; ".join(errors) or "Workflow failed"
 
     async def record_rating(self, run_id: str, rating: int) -> None:
-        """Record a user rating for a run."""
+        """Record a user rating for a run.
+
+        A rating of 1 or 2 flags a bad outcome: a postmortem is written in the
+        background so the rating returns at once (#175).
+        """
         await self.metrics.update_rating(run_id, rating)
+        if rating <= LOW_RATING_MAX and self.memory is not None:
+            task = asyncio.create_task(self._low_rating_postmortem(run_id, rating))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+    async def _low_rating_postmortem(self, run_id: str, rating: int) -> None:
+        """Write a ``low_rating`` postmortem for a run, with the user's feedback."""
+        try:
+            run = await self.metrics.get_run(run_id)
+            if run is None or await self.memory.get_postmortem_by_run_id(run_id) is not None:
+                return
+            memory_entry = await self.memory.get_workflow_memory_by_run_id(run_id)
+        except Exception as e:  # noqa: BLE001 - advisory
+            logger.warning("Low-rating postmortem for %s skipped: %s", run_id, e)
+            return
+        await start_postmortem(
+            self.engine,
+            self.library,
+            trigger="low_rating",
+            goal=run.goal,
+            run_id=run_id,
+            workflow_name=run.workflow_name,
+            error=run.error or "",
+            rating=rating,
+            user_feedback=memory_entry.user_feedback if memory_entry else "",
+            source_properties={
+                "__user_id__": run.user_id,
+                "__llm_provider_name__": self.provider_name,
+            },
+        )
 
     async def record_feedback(self, run_id: str, feedback: str) -> bool:
         """Record user feedback on the workflow memory entry for a run.

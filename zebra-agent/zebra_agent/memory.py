@@ -4,6 +4,9 @@ Two-tier memory system:
 - WorkflowMemoryEntry: Detailed per-run record of workflow behaviour, I/O, effectiveness
 - ConceptualMemoryEntry: Compact index mapping goal patterns to recommended workflows
 
+Plus the postmortem journal (#175):
+- PostmortemEntry: What went wrong on a failed / timed-out / badly rated run, and the lesson
+
 For custom storage backends, implement the MemoryStore interface from
 zebra_agent.storage.interfaces.
 """
@@ -173,6 +176,60 @@ class ConceptualMemoryEntry:
         )
 
 
+# Why a postmortem was written (#175).
+POSTMORTEM_TRIGGERS: tuple[str, ...] = ("failure", "timeout", "low_rating")
+
+
+@dataclass
+class PostmortemEntry:
+    """A lesson learned from an incident: a failed, timed-out or badly rated run (#175)."""
+
+    id: str
+    timestamp: datetime
+    run_id: str
+    goal: str
+    workflow_name: str
+    trigger: str  # failure | timeout | low_rating
+    what_happened: str
+    root_cause: str
+    lesson: str
+    voice: str | None = None  # Zebra's first-person line for the journal (#161)
+    confidence: float | None = None
+    user_id: int | None = None  # The goal's submitter (runs may have no request user)
+
+    @classmethod
+    def create(
+        cls,
+        run_id: str,
+        goal: str,
+        workflow_name: str,
+        trigger: str,
+        what_happened: str,
+        root_cause: str,
+        lesson: str,
+        voice: str | None = None,
+        confidence: float | None = None,
+        user_id: int | None = None,
+    ) -> PostmortemEntry:
+        """Create a new entry with auto-generated ID and timestamp."""
+        if trigger not in POSTMORTEM_TRIGGERS:
+            raise ValueError(f"Invalid postmortem trigger {trigger!r}")
+        return cls(
+            id=str(uuid.uuid4()),
+            timestamp=datetime.now(UTC),
+            run_id=run_id,
+            goal=goal,
+            workflow_name=workflow_name,
+            trigger=trigger,
+            what_happened=what_happened,
+            root_cause=root_cause,
+            lesson=lesson,
+            voice=voice,
+            confidence=confidence,
+            user_id=user_id,
+        )
+
+
 def estimate_tokens(text: str) -> int:
     """Rough estimate of tokens in text (chars / 4).
 
@@ -197,6 +254,8 @@ def __getattr__(name: str):
 __all__ = [
     "WorkflowMemoryEntry",
     "ConceptualMemoryEntry",
+    "PostmortemEntry",
+    "POSTMORTEM_TRIGGERS",
     "AgentMemory",  # noqa: F822 - resolved via __getattr__ (backward-compat alias for InMemoryMemoryStore)
     "estimate_tokens",
 ]

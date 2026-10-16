@@ -73,6 +73,12 @@ EMBEDDED_TABLES: tuple[EmbeddedTable, ...] = (
             'TO_CHAR(DBMS_LOB.SUBSTR(:new."VALUE", 800, 1))'
         ),
     ),
+    # #175: lessons are recalled by the goal of the run they were learned from.
+    EmbeddedTable(
+        table="zebra_postmortems",
+        trigger="zebra_pm_embed_trg",
+        text_sql='TO_CHAR(DBMS_LOB.SUBSTR(:new."GOAL", 1000, 1))',
+    ),
 )
 
 _TABLES_BY_NAME = {t.table: t for t in EMBEDDED_TABLES}
@@ -109,14 +115,24 @@ def _has_column(cursor, table: str, column: str) -> bool:  # type: ignore[no-unt
     return cursor.fetchone()[0] > 0
 
 
+def _has_table(cursor, table: str) -> bool:  # type: ignore[no-untyped-def]
+    cursor.execute(
+        "SELECT COUNT(*) FROM user_tables WHERE table_name = %(t)s", {"t": table.upper()}
+    )
+    return cursor.fetchone()[0] > 0
+
+
 def ensure_vector_columns(cursor) -> list[str]:  # type: ignore[no-untyped-def]
-    """Add the ``embedding`` column to each embedded table if missing.
+    """Add the ``embedding`` column to each existing embedded table if missing.
+
+    Tables a later migration creates are skipped; that migration calls this
+    again (#175: 0026 runs before 0028 creates ``zebra_postmortems``).
 
     Returns the tables that were altered.
     """
     added = []
     for t in EMBEDDED_TABLES:
-        if not _has_column(cursor, t.table, "embedding"):
+        if _has_table(cursor, t.table) and not _has_column(cursor, t.table, "embedding"):
             cursor.execute(f"ALTER TABLE {t.table} ADD (embedding VECTOR({DIMENSIONS}, FLOAT32))")
             added.append(t.table)
     return added

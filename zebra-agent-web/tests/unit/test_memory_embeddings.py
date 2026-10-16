@@ -24,18 +24,24 @@ class RecordingCursor:
     """Captures executed SQL; answers COUNT queries with a fixed value and
     trigger-status queries with ``status``."""
 
-    def __init__(self, count: int = 0, status: str = "VALID") -> None:
+    def __init__(
+        self, count: int = 0, status: str = "VALID", missing_tables: tuple[str, ...] = ()
+    ) -> None:
         self.statements: list[tuple[str, object]] = []
         self._count = count
         self._status = status
+        self._missing_tables = {t.upper() for t in missing_tables}
         self.rowcount = 3
 
     def execute(self, sql: str, params: object = None) -> None:
         self.statements.append((sql, params))
 
     def fetchone(self) -> tuple:
-        if self.statements[-1][0].startswith("SELECT status"):
+        sql, params = self.statements[-1]
+        if sql.startswith("SELECT status"):
             return (self._status,)
+        if "FROM user_tables" in sql:  # table exists unless listed as missing
+            return (0 if params["t"] in self._missing_tables else 1,)
         return (self._count,)
 
     def sql_starting(self, prefix: str) -> list[str]:
@@ -92,6 +98,15 @@ def test_ensure_vector_columns_adds_only_missing():
     present = RecordingCursor(count=1)
     assert embeddings.ensure_vector_columns(present) == []
     assert not any(s.startswith("ALTER") for s, _ in present.statements)
+
+
+def test_ensure_vector_columns_skips_tables_not_yet_created():
+    """0026 runs before 0028 creates zebra_postmortems on a fresh database (#175)."""
+    cursor = RecordingCursor(count=0, missing_tables=("zebra_postmortems",))
+    added = embeddings.ensure_vector_columns(cursor)
+    assert "zebra_postmortems" not in added
+    assert "zebra_workflow_memories" in added
+    assert not any("zebra_postmortems" in s for s in cursor.sql_starting("ALTER TABLE"))
 
 
 def test_load_model_binds_credential_and_uri():

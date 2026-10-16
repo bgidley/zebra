@@ -15,12 +15,13 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
+from django.db import IntegrityError, transaction
 from zebra_agent.storage.interfaces import CompactionBatch, MemoryStore, format_conceptual_context
 
 from zebra_agent_web.middleware import get_current_user_id
 
 if TYPE_CHECKING:
-    from zebra_agent.memory import ConceptualMemoryEntry, WorkflowMemoryEntry
+    from zebra_agent.memory import ConceptualMemoryEntry, PostmortemEntry, WorkflowMemoryEntry
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,25 @@ def _to_conceptual_entry(m) -> ConceptualMemoryEntry:  # type: ignore[no-untyped
         last_updated=m.last_updated,
         tokens=m.tokens,
         tier=m.tier,
+    )
+
+
+def _to_postmortem(m) -> PostmortemEntry:  # type: ignore[no-untyped-def]
+    from zebra_agent.memory import PostmortemEntry as Entry
+
+    return Entry(
+        id=m.id,
+        timestamp=m.timestamp,
+        run_id=m.run_id,
+        goal=m.goal,
+        workflow_name=m.workflow_name,
+        trigger=m.trigger,
+        what_happened=m.what_happened,
+        root_cause=m.root_cause,
+        lesson=m.lesson,
+        voice=m.voice,
+        confidence=m.confidence,
+        user_id=m.user_id,
     )
 
 
@@ -315,6 +335,104 @@ class DjangoMemoryStore(MemoryStore):
         found = await _search()
         if found is None:
             return await super().search_workflow_memories(goal, limit)
+        return found
+
+    # =========================================================================
+    # Postmortem journal (#175)
+    # =========================================================================
+
+    async def add_postmortem(self, entry: PostmortemEntry) -> None:
+        """Store a postmortem, owned by its user_id, else the request user, else the run's."""
+        await self._ensure_initialized()
+
+        @sync_to_async(thread_sensitive=False)
+        def _add():
+            from zebra_agent_web.api.models import PostmortemModel, WorkflowRunModel
+
+            user_id = entry.user_id if entry.user_id is not None else get_current_user_id()
+            if user_id is None and entry.run_id:
+                run = WorkflowRunModel.objects.filter(id=entry.run_id).first()
+                user_id = run.user_id if run is not None else None
+
+            if entry.run_id and PostmortemModel.objects.filter(run_id=entry.run_id).exists():
+                logger.info("Run %s already has a postmortem; keeping it", entry.run_id)
+                return
+            try:
+                with transaction.atomic():
+                    _save(PostmortemModel, user_id)
+            except IntegrityError:
+                # Another trigger stored this run's postmortem first (#175).
+                logger.info("Run %s already has a postmortem; keeping it", entry.run_id)
+
+        def _save(PostmortemModel, user_id):  # noqa: N803
+            PostmortemModel.objects.update_or_create(
+                id=entry.id,
+                defaults={
+                    "user_id": user_id,
+                    "timestamp": entry.timestamp,
+                    "run_id": entry.run_id,
+                    "goal": entry.goal,
+                    "workflow_name": entry.workflow_name,
+                    "trigger": entry.trigger,
+                    "what_happened": entry.what_happened,
+                    "root_cause": entry.root_cause,
+                    "lesson": entry.lesson,
+                    "voice": entry.voice,
+                    "confidence": entry.confidence,
+                },
+            )
+
+        await _add()
+
+    async def get_recent_postmortems(self, limit: int = 50) -> list[PostmortemEntry]:
+        """Return the current user's most recent postmortems, newest first."""
+        await self._ensure_initialized()
+
+        @sync_to_async(thread_sensitive=False)
+        def _get():
+            from zebra_agent_web.api.models import PostmortemModel
+
+            qs = PostmortemModel.objects.all()
+            uid = get_current_user_id()
+            if uid is not None:
+                qs = qs.filter(user_id=uid)
+            return [_to_postmortem(m) for m in qs.order_by("-timestamp")[:limit]]
+
+        return await _get()
+
+    async def get_postmortem_by_run_id(self, run_id: str) -> PostmortemEntry | None:
+        """Return the postmortem written for a run, or None."""
+        await self._ensure_initialized()
+
+        @sync_to_async(thread_sensitive=False)
+        def _get():
+            from zebra_agent_web.api.models import PostmortemModel
+
+            m = PostmortemModel.objects.filter(run_id=run_id).first()
+            return _to_postmortem(m) if m is not None else None
+
+        return await _get()
+
+    async def search_postmortems(self, goal: str, limit: int = 3) -> list[PostmortemEntry]:
+        """Postmortems whose goals are nearest to this goal by embedding (Oracle).
+
+        Falls back to keyword matching when vector search is unavailable or fails.
+        """
+        await self._ensure_initialized()
+
+        @sync_to_async(thread_sensitive=False)
+        def _search():
+            from zebra_agent_web.api.models import PostmortemModel
+
+            ids = _nearest_ids("zebra_postmortems", goal, limit)
+            if ids is None:
+                return None
+            rows = {m.id: m for m in PostmortemModel.objects.filter(id__in=ids)}
+            return [_to_postmortem(rows[i]) for i in ids if i in rows]
+
+        found = await _search()
+        if found is None:
+            return await super().search_postmortems(goal, limit)
         return found
 
     # =========================================================================

@@ -2731,6 +2731,60 @@ async def dream_cycles(request):
 
 
 # =============================================================================
+# Postmortem journal (#175)
+# =============================================================================
+
+_JOURNAL_LIMIT = 100
+
+_POSTMORTEM_TRIGGER_LABELS = {
+    "failure": "After a failed run",
+    "timeout": "After a timed-out run",
+    "low_rating": "After you rated it badly",
+}
+
+
+def journal_entries(postmortems: list) -> list[dict[str, Any]]:
+    """Shape postmortems for the journal page: Zebra's voice line first (#161)."""
+    from zebra_agent_web.api.thoughts import Thought
+
+    entries = []
+    for pm in postmortems:
+        label = _POSTMORTEM_TRIGGER_LABELS.get(pm.trigger, pm.trigger)
+        entries.append(
+            {
+                "entry": pm,
+                "label": label,
+                # The voice line when Zebra wrote one, else the lesson itself.
+                "thought": Thought(
+                    kind="postmortem",
+                    label=label,
+                    task_id="write_postmortem",
+                    text=pm.voice or pm.lesson,
+                    is_voice=bool(pm.voice),
+                    confidence=pm.confidence,
+                ),
+            }
+        )
+    return entries
+
+
+async def postmortem_journal(request):
+    """Zebra's postmortem journal: lessons learned from incidents, newest first."""
+    await agent_engine.ensure_initialized()
+    postmortems = await agent_engine.get_memory().get_recent_postmortems(limit=_JOURNAL_LIMIT)
+    entries = journal_entries(postmortems)
+    counts = {
+        trigger: sum(1 for pm in postmortems if pm.trigger == trigger)
+        for trigger in _POSTMORTEM_TRIGGER_LABELS
+    }
+    return render(
+        request,
+        "pages/postmortem_journal.html",
+        {"entries": entries, "counts": counts, "limit": _JOURNAL_LIMIT},
+    )
+
+
+# =============================================================================
 # Run Trace (#184)
 # =============================================================================
 
