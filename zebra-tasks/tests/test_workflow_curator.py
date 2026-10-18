@@ -331,6 +331,52 @@ async def test_duplicate_check_failure_does_not_fail_curation(library, metrics, 
     assert _rules(result) == {"Bad": "failing"}
 
 
+def _reply(content: str, finish_reason: str = "end_turn") -> LLMResponse:
+    return LLMResponse(
+        content=content,
+        tool_calls=None,
+        finish_reason=finish_reason,
+        usage=TokenUsage(input_tokens=100, output_tokens=20),
+        model="claude-sonnet-4-20250514",
+    )
+
+
+async def test_truncated_duplicate_reply_is_retried(library, metrics, context):
+    library.add_workflow(_yaml("Search A", ["llm-defined"]))
+    library.add_workflow(_yaml("Search B", ["llm-defined"]))
+    metrics.get_all_stats.return_value = [_stats("Search A", 4, 3), _stats("Search B", 4, 1)]
+    pairs = {"duplicates": [{"a": "Search A", "b": "Search B", "reason": "same"}]}
+    provider = MagicMock()
+    provider.model = "claude-sonnet-4-20250514"
+    provider.complete = AsyncMock(
+        side_effect=[
+            _reply('{"duplicates": [{"a": "Sea', finish_reason="max_tokens"),
+            _reply(json.dumps(pairs)),
+        ]
+    )
+
+    result = await _run_dupes(context, provider)
+
+    [decision] = result.output["retired"]
+    assert decision["workflow"] == "Search B"
+    budgets = [c.kwargs["max_tokens"] for c in provider.complete.await_args_list]
+    assert budgets == [1500, 3000]
+
+
+async def test_unusable_duplicate_reply_logs_cause(library, metrics, context, caplog):
+    library.add_workflow(_yaml("A", ["llm-defined"]))
+    library.add_workflow(_yaml("B", ["llm-defined"]))
+    provider = MagicMock()
+    provider.model = "claude-sonnet-4-20250514"
+    provider.complete = AsyncMock(side_effect=[_reply("no idea"), _reply("still no idea")])
+
+    result = await _run_dupes(context, provider)
+
+    assert result.success
+    assert result.output["retired"] == []
+    assert "duplicate check failed: invalid JSON" in caplog.text
+
+
 async def test_no_llm_call_without_llm_defined_workflows(library, context):
     library.add_workflow(_yaml("Mine"))
     library.add_workflow(_yaml("Yours"))

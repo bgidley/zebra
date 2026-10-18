@@ -7,10 +7,15 @@ from typing import Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.base import LLMResponse, Message
+from zebra_tasks.llm.pricing import usage_cost
+from zebra_tasks.llm.structured import LLMJSONError, complete_json, describe_failure
 
 # Matches a pure template reference like "{{some_key}}"
 _PURE_TEMPLATE_RE = re.compile(r"^\{\{(\w+)\}\}$")
+
+# The evaluation is long; 4000 truncated it in prod (#195)
+DEFAULT_MAX_TOKENS = 8000
 
 
 class WorkflowEvaluatorAction(TaskAction):
@@ -24,6 +29,11 @@ class WorkflowEvaluatorAction(TaskAction):
         metrics_analysis: Output from MetricsAnalyzerAction
         workflow_definitions: Dict of workflow name -> YAML content
         output_key: Where to store evaluation (default: "workflow_evaluation")
+        max_tokens: Reply token budget (default 8000)
+
+    An unparseable reply is retried once (``complete_json``). If that fails too,
+    the evaluation is a fallback whose key issue names the cause and whose
+    ``parse_failure`` holds the error, finish_reason and raw reply (#195).
 
     Output includes:
         - overall_assessment: Summary of system health
@@ -80,6 +90,13 @@ class WorkflowEvaluatorAction(TaskAction):
             type="string",
             description="LLM model name",
             required=False,
+        ),
+        ParameterDef(
+            name="max_tokens",
+            type="int",
+            description="Token budget for the reply; doubled on a retry after truncation",
+            required=False,
+            default=DEFAULT_MAX_TOKENS,
         ),
     ]
 
@@ -193,29 +210,34 @@ Respond with JSON only:
             # Build evaluation prompt
             prompt = self._build_prompt(metrics_analysis, workflow_definitions)
 
-            # Call LLM
-            response = await provider.complete(
-                messages=[
-                    Message.system(self.SYSTEM_PROMPT),
-                    Message.user(prompt),
-                ],
-                temperature=0.3,
-                max_tokens=4000,
-            )
-
-            # Parse response
-            content = response.content or ""
-            evaluation = self._parse_response(content)
+            # Call LLM; an unusable reply is retried once (#195)
+            max_tokens = int(task.properties.get("max_tokens", DEFAULT_MAX_TOKENS))
+            try:
+                evaluation = await complete_json(
+                    provider,
+                    [Message.system(self.SYSTEM_PROMPT), Message.user(prompt)],
+                    temperature=0.3,
+                    max_tokens=max_tokens,
+                    on_response=lambda response: _track_usage(context, response),
+                )
+            except LLMJSONError as e:
+                evaluation = self._fallback_evaluation(e.failure)
+            if not isinstance(evaluation, dict):
+                evaluation = self._fallback_evaluation(
+                    {
+                        "error": f"expected a JSON object, got {type(evaluation).__name__}",
+                        "finish_reason": None,
+                        "truncated": False,
+                        "attempts": 1,
+                        "raw_response": json.dumps(evaluation)[:4000],
+                    }
+                )
             self._merge_continuation_proposals(
                 evaluation, metrics_analysis, workflow_definitions or {}
             )
 
             # Store result
             context.set_process_property(output_key, evaluation)
-
-            # Track tokens
-            current = context.get_process_property("__total_tokens__", 0)
-            context.set_process_property("__total_tokens__", current + response.usage.total_tokens)
 
             return TaskResult.ok(output=evaluation)
 
@@ -416,33 +438,27 @@ Respond with JSON only:
         evaluation["improvement_priorities"] = combined
         evaluation["continuation_proposals"] = merged
 
-    def _parse_response(self, content: str) -> dict[str, Any]:
-        """Parse the LLM response."""
-        import re
+    @staticmethod
+    def _fallback_evaluation(failure: dict[str, Any]) -> dict[str, Any]:
+        """Evaluation recorded when no usable reply was obtained, naming the cause (#195)."""
+        return {
+            "overall_assessment": {
+                "health_score": 50,
+                "summary": "Unable to parse structured response",
+                "key_issues": [f"Evaluator reply unusable: {describe_failure(failure)}"],
+            },
+            "parse_failure": failure,
+            "raw_response": failure.get("raw_response", ""),
+            "workflow_evaluations": [],
+            "improvement_priorities": [],
+            "new_workflow_suggestions": [],
+        }
 
-        # Try to extract JSON from code blocks
-        patterns = [
-            r"```json\s*(.*?)\s*```",
-            r"```\s*(.*?)\s*```",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                content = match.group(1).strip()
-                break
 
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            # Return structured response with raw content
-            return {
-                "overall_assessment": {
-                    "health_score": 50,
-                    "summary": "Unable to parse structured response",
-                    "key_issues": ["Response parsing failed"],
-                },
-                "raw_response": content,
-                "workflow_evaluations": [],
-                "improvement_priorities": [],
-                "new_workflow_suggestions": [],
-            }
+def _track_usage(context: ExecutionContext, response: LLMResponse) -> None:
+    """Add one call's tokens and cost to the process totals."""
+    usage = response.usage
+    tokens = context.get_process_property("__total_tokens__", 0)
+    context.set_process_property("__total_tokens__", tokens + usage.total_tokens)
+    cost = context.get_process_property("__total_cost__", 0.0)
+    context.set_process_property("__total_cost__", cost + usage_cost(response.model, usage))

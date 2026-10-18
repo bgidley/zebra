@@ -20,6 +20,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/llm/` | LLM provider integrations |
 | `zebra_tasks/llm/base.py` | LLMProvider base class, Message model; `llm_request_timeout()` (`ZEBRA_LLM_TIMEOUT_SECONDS`, default 180s) + `LLM_MAX_RETRIES` (2), passed to every provider's SDK client (#183) |
 | `zebra_tasks/llm/action.py` | LLMCallAction task action |
+| `zebra_tasks/llm/structured.py` | `parse_llm_json()` (unclosed fence, JSON in prose), `complete_json()` (one retry: 2× `max_tokens` after truncation, else a JSON-only note; `on_response` per call for cost), `LLMJSONError.failure` (`error`, `finish_reason`, `truncated`, `attempts`, capped `raw_response`), `describe_failure()`. Used by the dream-cycle JSON steps (#195) |
 | `zebra_tasks/llm/agent.py` | LLMAgentAction (`llm_agent`): workflows as tools, each call a child process the task suspends on; `define_workflow`; cost roll-up; zero-cost tool `WorkflowRun`s (#146) |
 | `zebra_tasks/llm/providers/` | Provider implementations |
 | `zebra_tasks/llm/providers/anthropic.py` | Anthropic (Claude) provider: no `temperature` for Claude 4.6+/5 models; `output_config.effort: xhigh` for Sonnet/Haiku 5.5, which otherwise reason aloud in the reply on short prompts, plus `THINKING_HEADROOM_TOKENS` (4096) added to `max_tokens` so thinking does not eat the answer budget (#168) |
@@ -37,7 +38,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/followup.py` | `with_previous_run()` / `build_previous_run_context()` / `load_previous_run_context()` - follow-up and continuation context with task progress + chain summary (F116, F134) |
 | `zebra_tasks/agent/update_memory.py` | UpdateMemoryAction - add memory entry |
 | `zebra_tasks/agent/analyzer.py` | MetricsAnalyzerAction - analyze workflow metrics |
-| `zebra_tasks/agent/evaluator.py` | WorkflowEvaluatorAction - LLM workflow evaluation |
+| `zebra_tasks/agent/evaluator.py` | WorkflowEvaluatorAction - LLM workflow evaluation via `complete_json` (`max_tokens` 8000); an unusable reply leaves a fallback with `parse_failure` and the cause as key issue; adds its cost to `__total_cost__` (#195) |
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization (tags created workflows `llm-defined`) |
 | `zebra_tasks/agent/curator.py` | WorkflowCuratorAction - dream-cycle retirement of broken/superseded/failing/unused/duplicate workflows; `ZEBRA_CURATOR_*` settings (#148) |
 | `zebra_tasks/knowledge/review.py` | ReviewKnowledgeAction - dream-cycle review of personal knowledge against recent runs; `revert_knowledge_changes()` (#153) |

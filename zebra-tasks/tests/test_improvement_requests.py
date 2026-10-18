@@ -251,12 +251,28 @@ async def test_invalid_proposals_are_skipped_and_fields_cleaned(engine, library)
 
 async def test_unparseable_response_never_fails(engine, library):
     context = await _context(engine, FINDINGS)
-    with patch(PATCH_PROVIDER, return_value=_provider("I think everything is fine.")):
+    provider = _provider("I think everything is fine.", "Still fine.")
+    with patch(PATCH_PROVIDER, return_value=provider):
         result = await ProposeZebraImprovementsAction().run(_task(), context)
 
     assert result.success
     assert result.output["requests"] == []
-    assert result.output["errors"] == ["unparseable LLM response"]
+    assert provider.complete.await_count == 2  # retried once (#195)
+    (error,) = result.output["errors"]
+    assert error.startswith("unparseable LLM response: invalid JSON")
+    assert "(attempts: 2)" in error
+
+
+async def test_unparseable_response_recovered_on_retry(engine, library):
+    context = await _context(engine, FINDINGS)
+    provider = _provider("Let me think about this.", {"requests": [HTTP_FETCH]})
+    with patch(PATCH_PROVIDER, return_value=provider):
+        result = await ProposeZebraImprovementsAction().run(_task(), context)
+
+    assert result.output["errors"] == []
+    assert len(result.output["requests"]) == 1
+    retry_prompt = provider.complete.await_args_list[1].kwargs["messages"][-1].content
+    assert "only the JSON object" in retry_prompt
 
 
 async def test_llm_error_never_fails(engine, library):

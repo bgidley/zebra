@@ -6,10 +6,8 @@ evaluator and optimizer only see the active library. Retiring is soft: the
 name for run history and continuations, and can be restored from the web UI.
 """
 
-import json
 import logging
 import os
-import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -19,6 +17,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.load_definitions import SYSTEM_WORKFLOW_NAMES
 from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.structured import complete_json
 
 logger = logging.getLogger(__name__)
 
@@ -324,16 +323,19 @@ class WorkflowCuratorAction(TaskAction):
             return []
 
         try:
-            response = await provider.complete(
-                messages=[
+            data = await complete_json(
+                provider,
+                [
                     Message.system(DUPLICATE_SYSTEM_PROMPT),
                     Message.user(_duplicate_prompt(current.values())),
                 ],
                 temperature=0.0,
                 max_tokens=1500,
+                on_response=lambda response: _track_cost(
+                    context, response, getattr(provider, "model", None)
+                ),
             )
-            _track_cost(context, response, getattr(provider, "model", None))
-            pairs = _parse_pairs(response.content or "")
+            pairs = _duplicate_pairs(data)
         except Exception as e:
             logger.warning("workflow_curator: duplicate check failed: %s", e)
             return []
@@ -425,11 +427,7 @@ def _yaml_field(content: str, key: str) -> str:
     return str(data.get(key) or "")
 
 
-def _parse_pairs(content: str) -> list[dict[str, Any]]:
-    match = re.search(r"```(?:json)?\s*(.*?)\s*```", content, re.DOTALL)
-    if match:
-        content = match.group(1)
-    data = json.loads(content)
+def _duplicate_pairs(data: Any) -> list[dict[str, Any]]:
     pairs = data.get("duplicates") if isinstance(data, dict) else None
     return [p for p in pairs or [] if isinstance(p, dict)]
 
