@@ -84,7 +84,8 @@
                         {% if r.impact %}<span>Impact: <span class="text-ink">{{ r.impact }}</span></span>{% endif %}
                         {% if r.verdict %}
                         <span>Verdict: <span class="text-ink">{{ r.verdict_label }}</span></span>
-                        {% if r.issue_url %}<a href="{{ r.issue_url }}" class="underline hover:text-ink" rel="noopener noreferrer">Issue</a>{% endif %}
+                        {% if r.issue_url %}<a href="{{ r.issue_url }}" class="underline hover:text-ink" rel="noopener noreferrer">{% if r.issue_filed_by_zebra %}Issue I filed{% else %}Issue{% endif %}</a>{% endif %}
+                        {% if r.filing_error %}<span class="text-fail" data-testid="filing-error">Couldn't file an issue: {{ r.filing_error|truncatechars:160 }}</span>{% endif %}
                         {% elif r.state == "running" %}
                         <span class="text-needs">Awaiting review</span>
                         {% else %}

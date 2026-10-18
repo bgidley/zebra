@@ -629,7 +629,7 @@ POST /api/tasks/<task_id>/complete/
 | `/runs/<id>/trace/` | `run_trace_redirect` | Redirect to the trace of the run's root process |
 | `/processes/<id>/trace/<event_id>/properties/` | `process_trace_properties` | HTMX: process properties after one journalled step |
 | `/journal/` | `postmortem_journal` | Postmortem journal: lessons from failed / timed-out / badly rated runs, newest first, voice line + run link (#175) |
-| `/dreams/` | `dream_cycles` | Recent Dream Cycle runs: health, changes, retirements, summary; Zebra improvement requests with Review links (#189) (`api/dream_history.py`) |
+| `/dreams/` | `dream_cycles` | Recent Dream Cycle runs: health, changes, retirements, summary; Zebra improvement requests with Review links (#189) and filed GitLab issue or filing error (#194) (`api/dream_history.py`) |
 | `/bugs/` | `bug_reports_page` | Recent bug reports: severity, review state / verdict, Review link, expandable report (#186) |
 | `/bugs/report/` | `bug_report_submit` | Record a report from the dialog: starts a *Bug Report* process (POST, HTMX, #186) |
 | `/trust/` | `trust_page` | Trust management page (levels, suggestions, history) |

@@ -218,6 +218,77 @@ def test_unsafe_issue_link_is_dropped():
     assert request["issue_url"] is None
 
 
+def _filed_request(pid: str, review: dict, filed: dict) -> None:
+    _request(pid, "complete", T0, review)
+    model = ProcessInstanceModel.objects.get(id=pid)
+    props = json.loads(model.properties)
+    props["filed_issue"] = filed
+    model.properties = json.dumps(props)
+    model.save()
+
+
+@pytest.mark.django_db
+def test_issue_filed_by_zebra_is_linked():
+    _definition(dream_history.IMPROVEMENT_WORKFLOW, "improve-v1")
+    url = "https://gitlab.com/gidley/zebra/-/issues/42"
+    _filed_request("r", {"verdict": "accepted"}, {"url": url, "iid": 42})
+
+    (request,) = dream_history.recent_improvement_requests()
+
+    assert request["issue_url"] == url
+    assert request["issue_filed_by_zebra"] is True
+    assert request["filing_error"] is None
+
+
+@pytest.mark.django_db
+def test_reviewer_link_wins_over_filed_issue():
+    _definition(dream_history.IMPROVEMENT_WORKFLOW, "improve-v1")
+    mine = "https://gitlab.com/gidley/zebra/-/issues/7"
+    _filed_request(
+        "r", {"verdict": "accepted", "issue_url": mine}, {"skipped": "reviewer linked an issue"}
+    )
+
+    (request,) = dream_history.recent_improvement_requests()
+
+    assert request["issue_url"] == mine
+    assert request["issue_filed_by_zebra"] is False
+
+
+@pytest.mark.django_db
+def test_page_shows_filed_issue_and_filing_error(authenticated_client, completed_setup):
+    _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v7")
+    _definition(dream_history.IMPROVEMENT_WORKFLOW, "improve-v2")
+    _process("p1", "dream-v7", "complete", FULL_PROPS, T0)
+    _process(
+        "ok",
+        "improve-v2",
+        "complete",
+        {
+            "improvement": IMPROVEMENT,
+            "__task_output_review": {"verdict": "accepted"},
+            "filed_issue": {"url": "https://gitlab.com/gidley/zebra/-/issues/42", "iid": 42},
+        },
+        T0,
+    )
+    _process(
+        "bad",
+        "improve-v2",
+        "complete",
+        {
+            "improvement": {**IMPROVEMENT, "title": "Second request"},
+            "__task_output_review": {"verdict": "accepted"},
+            "filed_issue": {"error": "ZEBRA_GITLAB_TOKEN is not set"},
+        },
+        T0 + timedelta(minutes=1),
+    )
+
+    html = authenticated_client.get("/dreams/").content.decode()
+
+    assert 'href="https://gitlab.com/gidley/zebra/-/issues/42"' in html
+    assert "Issue I filed" in html
+    assert "Couldn't file an issue: ZEBRA_GITLAB_TOKEN is not set" in html
+
+
 @pytest.mark.django_db
 def test_page_lists_improvement_requests(authenticated_client, completed_setup):
     _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v7")

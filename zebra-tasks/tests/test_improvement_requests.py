@@ -15,6 +15,7 @@ from zebra_agent.library import WorkflowLibrary
 
 from zebra_tasks.agent.improvements import (
     REQUEST_WORKFLOW,
+    FileImprovementIssueAction,
     ProposeZebraImprovementsAction,
     gather_findings,
     normalize_title,
@@ -79,6 +80,7 @@ def library(tmp_path):
 def engine(library):
     registry = ActionRegistry()
     registry.register_action("propose_zebra_improvements", ProposeZebraImprovementsAction)
+    registry.register_action("file_improvement_issue", FileImprovementIssueAction)
     return WorkflowEngine(InMemoryStore(), registry, extras={"__workflow_library__": library})
 
 
@@ -215,6 +217,24 @@ async def test_earlier_request_is_not_repeated(engine, library):
     assert result.output["skipped"] == [{"title": reworded["title"], "reason": "duplicate"}]
     assert len(await _requests(engine, library)) == 1
     # The earlier title was shown to the LLM
+    prompt = provider.complete.call_args.kwargs["messages"][1].content
+    assert HTTP_FETCH["title"] in prompt
+
+
+async def test_request_from_an_older_workflow_version_still_blocks_its_title(engine, library):
+    """Definition ids hash name + version; earlier versions must still count (#194)."""
+    current = library.get_workflow(REQUEST_WORKFLOW)
+    v1 = current.model_copy(update={"id": "zebra-improvement-request-v1", "version": 1})
+    await engine.create_process(v1, properties={"improvement_title": HTTP_FETCH["title"]})
+    assert v1.id != current.id
+
+    context = await _context(engine, FINDINGS)
+    provider = _provider({"requests": [HTTP_FETCH]})
+    with patch(PATCH_PROVIDER, return_value=provider):
+        result = await ProposeZebraImprovementsAction().run(_task(), context)
+
+    assert result.output["requests"] == []
+    assert result.output["skipped"] == [{"title": HTTP_FETCH["title"], "reason": "duplicate"}]
     prompt = provider.complete.call_args.kwargs["messages"][1].content
     assert HTTP_FETCH["title"] in prompt
 

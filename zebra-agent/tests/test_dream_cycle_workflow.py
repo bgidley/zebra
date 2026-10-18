@@ -97,6 +97,18 @@ def test_improvement_request_workflow_is_a_valid_system_workflow():
     assert schema["properties"]["verdict"]["enum"] == ["accepted", "rejected", "duplicate", "later"]
 
 
+def test_improvement_request_files_an_issue_after_review():
+    """Accepted requests become GitLab issues (#194)."""
+    definition = load_definition(_DREAM_CYCLE.parent / "zebra_improvement_request.yaml")
+    routes = {(r.source_task_id, r.dest_task_id) for r in definition.routings}
+
+    assert definition.version >= 2
+    file_issue = definition.tasks["file_issue"]
+    assert file_issue.action == "file_improvement_issue"
+    assert file_issue.auto is True
+    assert routes == {("review", "file_issue")}
+
+
 def test_summary_reports_knowledge():
     data = yaml.safe_load(_DREAM_CYCLE.read_text())
     prompt = data["tasks"]["generate_summary"]["properties"]["prompt"]

@@ -43,7 +43,7 @@ Invariants:
 
 | Item | Location |
 |---|---|
-| Secrets (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`, `KIMI_*`, `OPENROUTER_*`, `ZEBRA_SMTP_*`, `ZEBRA_NOTIFY_WEBHOOK_URL`) | GitLab CI variables → `~/.config/zebra/prod.env` (0600, regenerated per deploy) |
+| Secrets (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`, `KIMI_*`, `OPENROUTER_*`, `ZEBRA_SMTP_*`, `ZEBRA_NOTIFY_WEBHOOK_URL`, `ZEBRA_GITLAB_TOKEN`) | GitLab CI variables → `~/.config/zebra/prod.env` (0600, regenerated per deploy) |
 | `SMOKE_PASSWORD` | GitLab CI variable, not written to `prod.env` — the deploy uses it to (re)create the `smoke` user; the `smoke` job logs in with it |
 | `DJANGO_SECRET_KEY` | generated once → `~/.config/zebra/django_secret_key` |
 | WebAuthn origin, CSRF, budget, model | `~/.config/zebra/site.env` (from `deploy/podman/site.env.example`) |
