@@ -16,6 +16,12 @@
         {% endif %}
     </div>
 
+    {% if trace.root.replay_of %}
+    <div class="panel p-4 text-sm text-ink">
+        <p>Replay of <a href="{% url 'process_trace' trace.root.replay_of %}" class="underline font-mono">{{ trace.root.replay_of|truncatechars:9 }}</a>. Each step is served from what the original recorded; nothing is re-run{% if trace.root.replay_live %} except the live steps: <span class="font-mono">{{ trace.root.replay_live|join:", " }}</span>{% endif %}.</p>
+    </div>
+    {% endif %}
+
     {% include "partials/run_trace_tree.html" %}
 </div>
 {% endblock %}

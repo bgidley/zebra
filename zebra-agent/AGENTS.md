@@ -35,6 +35,7 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/postmortem.py` | `start_postmortem` / `postmortem_failed_goal` / `needs_failure_postmortem` — run the *Postmortem* workflow for timeouts, crashes and low ratings (#175) |
 | `zebra_agent/human_tasks.py` | `find_pending_human_task` — READY `auto: false` task in a process tree |
 | `zebra_agent/direct_run.py` | `run_named_workflow()` (start a named workflow from inputs, required `inputs` checked, no selection) and `workflow_status()` (`complete` + `result_key` output / `awaiting_input` + task id / `failed` / `running`) — used by `manage.py run_workflow` (#190) |
+| `zebra_agent/replay.py` | `replay_process()` / `replay_status()`: create and run a replay of a finished process (#170), status plus `replay_of`, `live`, `cost`. Used by `manage.py replay_process` |
 | `zebra_agent/ioc/` | IoC (Inversion of Control) module |
 | `zebra_agent/ioc/container.py` | `ZebraContainer` - dependency injection container |
 | `zebra_agent/ioc/registry.py` | `IoCActionRegistry` - action registry with constructor injection |

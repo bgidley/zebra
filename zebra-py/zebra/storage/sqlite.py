@@ -133,7 +133,8 @@ class SQLiteStore(StateStore):
                 timestamp TEXT NOT NULL,
                 changed JSON NOT NULL DEFAULT '{}',
                 removed JSON NOT NULL DEFAULT '[]',
-                error TEXT
+                error TEXT,
+                next_route TEXT
             );
 
             -- Indexes for common queries
@@ -146,6 +147,10 @@ class SQLiteStore(StateStore):
             CREATE INDEX IF NOT EXISTS idx_events_process ON process_events(process_id, timestamp);
             """
         )
+        # Journals created before #170 lack the route column.
+        cursor = await self._conn.execute("PRAGMA table_info(process_events)")
+        if "next_route" not in {row["name"] for row in await cursor.fetchall()}:
+            await self._conn.execute("ALTER TABLE process_events ADD COLUMN next_route TEXT")
         await self._conn.commit()
 
     async def close(self) -> None:
@@ -500,8 +505,8 @@ class SQLiteStore(StateStore):
             """
             INSERT INTO process_events
                 (id, process_id, kind, task_instance_id, task_definition_id, attempt,
-                 timestamp, changed, removed, error)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 timestamp, changed, removed, error, next_route)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.id,
@@ -514,6 +519,7 @@ class SQLiteStore(StateStore):
                 _serialize_json(event.changed, f"event '{event.id}' changed"),
                 json.dumps(event.removed),
                 event.error,
+                event.next_route,
             ),
         )
         await conn.commit()
@@ -541,6 +547,7 @@ class SQLiteStore(StateStore):
                 changed=json.loads(row["changed"]),
                 removed=json.loads(row["removed"]),
                 error=row["error"],
+                next_route=row["next_route"],
             )
             for row in rows
         ]

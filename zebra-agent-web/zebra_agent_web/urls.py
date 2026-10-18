@@ -108,6 +108,8 @@ urlpatterns = [
         web_views.process_trace_properties,
         name="process_trace_properties",
     ),
+    # Replay a finished process from its recording (#170)
+    path("processes/<str:process_id>/replay/", web_views.process_replay, name="process_replay"),
     # Dream Cycle history
     path("dreams/", web_views.dream_cycles, name="dream_cycles"),
     # Postmortem journal (#175)

@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("api", "0029_postmortem_unique_run"),
+        ("api", "0030_process_event_next_route"),
     ]
 
     operations = [

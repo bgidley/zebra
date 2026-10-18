@@ -29,6 +29,33 @@ spawned (recursive). Parameters: node (TraceProcess), focus_id.
     </details>
     {% endif %}
 
+    {% if node.can_replay %}
+    <details id="replay-{{ node.id }}" class="mt-2">
+        <summary class="cursor-pointer text-sm text-muted hover:text-ink">Replay this process</summary>
+        <form method="post" action="{% url 'process_replay' node.id %}" class="mt-2 space-y-3 text-sm">
+            {% csrf_token %}
+            <p class="text-faint">Re-runs it from its recording: same steps, same answers, no LLM cost. Tick a step to run it for real instead.</p>
+            {% if node.step_choices %}
+            <fieldset class="space-y-1">
+                <legend class="text-muted mb-1">Run live</legend>
+                {% for step_id, step_name in node.step_choices %}
+                <label class="flex items-center gap-2 text-ink">
+                    <input type="checkbox" name="live" value="{{ step_id }}">
+                    <span>{{ step_name }}</span>{% if step_name != step_id %}<span class="text-xs font-mono text-faint">{{ step_id }}</span>{% endif %}
+                </label>
+                {% endfor %}
+            </fieldset>
+            {% endif %}
+            <label class="flex items-center gap-2 text-ink">
+                <input type="checkbox" name="continue_live">
+                <span>Run steps the original never reached live</span>
+            </label>
+            <p class="text-xs text-needs">Live steps run for real, with their LLM cost and side effects.</p>
+            <button type="submit" class="btn btn-sm">Replay</button>
+        </form>
+    </details>
+    {% endif %}
+
     {% if not node.has_journal and not node.steps %}
     <p class="mt-3 text-sm text-faint">No step history for this process. It ran before step tracing was added, or has not started.</p>
     {% endif %}

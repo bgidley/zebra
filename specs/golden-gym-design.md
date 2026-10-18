@@ -28,7 +28,7 @@ prompts outside workflows (#98 should call the same gate when it lands).
   `gate`/`on_demand`, and `decision` for gate runs), `created_at`.
 - `MetricsStore.record_gym_scores(scores)` / `get_gym_scores(golden_id, workflow_name, variant,
   limit)` (newest first) in both backends. Django: `GymScoreModel`, table `zebra_gym_scores`,
-  migration `0030_gym_scores`. System-level (no user scope), like Dream Cycles.
+  migration `0031_gym_scores`. System-level (no user scope), like Dream Cycles.
 - Optimizer results gain `pending_gym` (staged modifications: `name`, `original_yaml`,
   `modified_yaml`, `llm_defined`, `reason`, `change`); `continuation_changes` may hold
   `status: pending_gym` until the gym decides.

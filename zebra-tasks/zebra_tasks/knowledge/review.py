@@ -38,6 +38,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.knowledge.store_learned import CONTRADICTION_MARKER
 from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.structured import complete_json
 
 logger = logging.getLogger(__name__)
 
@@ -127,18 +128,6 @@ def _empty_output(cutoff: datetime | None = None) -> dict[str, Any]:
         "changes": [],
         "errors": [],
     }
-
-
-def _parse_json(content: str) -> dict[str, Any]:
-    match = re.search(r"```(?:json)?\s*(.*?)\s*```", content, re.DOTALL)
-    if match:
-        content = match.group(1)
-    else:
-        start, end = content.find("{"), content.rfind("}")
-        if start != -1 and end > start:
-            content = content[start : end + 1]
-    data = json.loads(content)
-    return data if isinstance(data, dict) else {}
 
 
 def _get_provider(task: TaskInstance, context: ExecutionContext) -> Any:
@@ -431,7 +420,12 @@ class ReviewKnowledgeAction(TaskAction):
         run_items = [await self._run_context(context, r) for r in runs]
         out["runs_reviewed"] += len(run_items)
 
-        proposals = await self._propose(task, context, entries, run_items)
+        try:
+            proposals = await self._propose(task, context, entries, run_items)
+        except Exception as e:
+            logger.warning("Knowledge review: LLM call or parse failed: %s", e)
+            out["errors"].append(f"user {user_id}: LLM reply unusable: {e}")
+            return
         if proposals is None:
             out["errors"].append(f"user {user_id}: LLM reply unusable")
             return
@@ -471,17 +465,14 @@ class ReviewKnowledgeAction(TaskAction):
             f"## Stored knowledge entries\n{json.dumps(entry_items, indent=1)}\n\n"
             f"## Recent runs (newest first)\n{json.dumps(run_items, indent=1)}"
         )
-        try:
-            response = await provider.complete(
-                messages=[Message.system(SYSTEM_PROMPT), Message.user(prompt)],
-                temperature=0.2,
-                max_tokens=2000,
-            )
-            _track_cost(context, response)
-            return _parse_json(response.content or "")
-        except Exception as e:
-            logger.warning("Knowledge review: LLM call or parse failed: %s", e)
-            return None
+        data = await complete_json(
+            provider,
+            [Message.system(SYSTEM_PROMPT), Message.user(prompt)],
+            temperature=0.2,
+            max_tokens=2000,
+            on_response=lambda response: _track_cost(context, response),
+        )
+        return data if isinstance(data, dict) else {}
 
 
 class _Applier:

@@ -20,8 +20,9 @@ from typing import Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.knowledge.review import _get_provider, _parse_json, _track_cost
+from zebra_tasks.knowledge.review import _get_provider, _track_cost
 from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.structured import LLMJSONError, complete_json
 
 logger = logging.getLogger(__name__)
 
@@ -280,23 +281,22 @@ class ProposeZebraImprovementsAction(TaskAction):
             + (json.dumps(earlier[-50:], indent=2) if earlier else "none")
         )
         try:
-            response = await provider.complete(
-                messages=[Message.system(SYSTEM_PROMPT), Message.user(prompt)],
+            data = await complete_json(
+                provider,
+                [Message.system(SYSTEM_PROMPT), Message.user(prompt)],
                 temperature=0.2,
                 max_tokens=1500,
+                on_response=lambda response: _track_cost(context, response),
             )
+        except LLMJSONError as e:
+            logger.warning("Improvement requests: unparseable LLM response: %s", e)
+            out["errors"].append(f"unparseable LLM response: {e}")
+            return []
         except Exception as e:
             logger.warning("Improvement requests: LLM call failed: %s", e)
             out["errors"].append(f"LLM call failed: {e}")
             return []
-        _track_cost(context, response)
-        try:
-            data = _parse_json(response.content or "")
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.warning("Improvement requests: unparseable LLM response: %s", e)
-            out["errors"].append("unparseable LLM response")
-            return []
-        return _list(data.get("requests"))
+        return _list(data.get("requests")) if isinstance(data, dict) else []
 
     async def _start(
         self,

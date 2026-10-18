@@ -320,3 +320,55 @@ async def test_parent_link_set_after_create_is_persisted(engine, store):
     (loaded,) = await store.list_child_processes(parent.id)
     assert loaded.id == child.id
     assert loaded.parent_task_id == "task-1"
+
+
+# =============================================================================
+# Recording for replay (#170)
+# =============================================================================
+
+
+async def test_event_route_and_large_values_round_trip(store):
+    whole = "x" * (journal.MAX_JOURNAL_VALUE_CHARS - 2)  # JSON adds two quotes: at the cap
+    over = "y" * (journal.MAX_JOURNAL_VALUE_CHARS - 1)  # one over
+    changed, _ = journal.property_diff({}, {"whole": whole, "over": over})
+    await store.save_process_event(
+        ProcessEvent(
+            id="e1",
+            process_id="p",
+            kind=K.TASK_COMPLETED,
+            task_instance_id="t",
+            task_definition_id="decide",
+            changed=changed,
+            next_route="approved",
+        )
+    )
+
+    (loaded,) = await store.load_process_events(["p"])
+    assert loaded.next_route == "approved"
+    assert loaded.changed["whole"] == whole
+    assert loaded.changed["over"][journal.TRUNCATED_KEY] is True
+
+
+async def test_sqlite_journal_from_before_routes_gains_the_column(tmp_path):
+    import aiosqlite
+
+    path = tmp_path / "old.db"
+    async with aiosqlite.connect(path) as conn:
+        await conn.execute(
+            "CREATE TABLE process_events (id TEXT PRIMARY KEY, process_id TEXT NOT NULL, "
+            "kind TEXT NOT NULL, task_instance_id TEXT, task_definition_id TEXT, "
+            "attempt INTEGER NOT NULL DEFAULT 0, timestamp TEXT NOT NULL, "
+            "changed JSON NOT NULL DEFAULT '{}', removed JSON NOT NULL DEFAULT '[]', error TEXT)"
+        )
+        await conn.commit()
+
+    sqlite = SQLiteStore(path)
+    await sqlite.initialize()
+    try:
+        await sqlite.save_process_event(
+            ProcessEvent(id="e", process_id="p", kind=K.TASK_COMPLETED, next_route="r")
+        )
+        (loaded,) = await sqlite.load_process_events(["p"])
+        assert loaded.next_route == "r"
+    finally:
+        await sqlite.close()
