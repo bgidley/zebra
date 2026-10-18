@@ -322,6 +322,96 @@ class TestWorkflowEvaluatorAction:
         assert result.success is True
         assert result.output["overall_assessment"]["health_score"] == 50
         assert "raw_response" in result.output
+        assert result.output["parse_failure"]["truncated"] is False
+        assert provider.complete.await_count == 2  # retried once
+        (issue,) = result.output["overall_assessment"]["key_issues"]
+        assert issue.startswith("Evaluator reply unusable: invalid JSON")
+
+    async def test_json_in_prose_parsed_without_retry(self, mock_task, mock_context):
+        from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
+
+        reply = f"Here is my evaluation:\n{json.dumps(_GOOD_EVALUATION)}\nLet me know!"
+        provider = _mock_provider(reply)
+        mock_context.process.properties["__llm_provider__"] = provider
+        mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
+
+        result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
+
+        assert result.output["overall_assessment"]["health_score"] == 80
+        assert provider.complete.await_count == 1
+
+    async def test_truncated_reply_retried_with_more_tokens(self, mock_task, mock_context):
+        """The prod failure (#195): a reply cut off at max_tokens is retried, not lost."""
+        from zebra_tasks.agent.evaluator import DEFAULT_MAX_TOKENS, WorkflowEvaluatorAction
+
+        cut_off = f"```json\n{json.dumps(_GOOD_EVALUATION, indent=4)[:300]}"
+        provider = MagicMock()
+        provider.complete = AsyncMock(
+            side_effect=[
+                _llm_response(cut_off, finish_reason="max_tokens"),
+                _llm_response(json.dumps(_GOOD_EVALUATION)),
+            ]
+        )
+        mock_context.process.properties["__llm_provider__"] = provider
+        mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
+
+        result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
+
+        assert result.success is True
+        assert result.output["overall_assessment"]["health_score"] == 80
+        assert "parse_failure" not in result.output
+        budgets = [c.kwargs["max_tokens"] for c in provider.complete.await_args_list]
+        assert budgets == [DEFAULT_MAX_TOKENS, 2 * DEFAULT_MAX_TOKENS]
+
+    async def test_truncated_twice_records_cause(self, mock_task, mock_context):
+        from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
+
+        provider = _mock_provider(
+            '```json\n{"overall_assessment": {"su', finish_reason="max_tokens"
+        )
+        mock_context.process.properties["__llm_provider__"] = provider
+        mock_task.properties = {"metrics_analysis": {"workflow_stats": []}, "max_tokens": 1000}
+
+        result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
+
+        assert result.success is True
+        failure = result.output["parse_failure"]
+        assert failure["truncated"] is True
+        assert failure["finish_reason"] == "max_tokens"
+        assert failure["attempts"] == 2
+        assert failure["raw_response"].startswith("```json")
+        (issue,) = result.output["overall_assessment"]["key_issues"]
+        assert "truncated at the token limit" in issue
+        stored = mock_context.process.properties["workflow_evaluation"]
+        assert stored["parse_failure"] == failure
+        budgets = [c.kwargs["max_tokens"] for c in provider.complete.await_args_list]
+        assert budgets == [1000, 2000]
+
+    async def test_cost_tracked_for_every_call(self, mock_task, mock_context):
+        from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
+        from zebra_tasks.llm.pricing import usage_cost
+
+        mock_context.process.properties["__total_cost__"] = 1.0
+        response = LLMResponse(
+            content="not json",
+            tool_calls=None,
+            finish_reason="end_turn",
+            usage=TokenUsage(input_tokens=1000, output_tokens=500),
+            model="claude-sonnet-5-5",
+        )
+        provider = MagicMock()
+        provider.complete = AsyncMock(return_value=response)
+        mock_context.process.properties["__llm_provider__"] = provider
+        mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
+
+        await WorkflowEvaluatorAction().run(mock_task, mock_context)
+
+        per_call = usage_cost("claude-sonnet-5-5", response.usage)
+        assert per_call > 0
+        assert mock_context.process.properties["__total_cost__"] == pytest.approx(
+            1.0 + 2 * per_call
+        )
+        assert mock_context.process.properties["__total_tokens__"] == 3000
 
     async def test_custom_output_key(self, mock_task, mock_context):
         from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction

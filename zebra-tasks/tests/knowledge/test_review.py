@@ -373,13 +373,27 @@ async def test_missing_stores_degrade(engine):
 async def test_unparseable_reply_changes_nothing(engine, knowledge, metrics):
     await knowledge.add_entry(_entry("e1", "team", "Platform", "agent", confidence=0.7))
     await _seed_run(metrics, "r1", "goal")
-    provider = _provider("I am not JSON")
+    provider = _provider("I am not JSON", "still not JSON")
     context = await _context(engine)
     with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
         result = await ReviewKnowledgeAction().run(_task(), context)
     assert result.success
     assert result.output["changes"] == []
-    assert result.output["errors"] == [f"user {USER}: LLM reply unusable"]
+    assert provider.complete.await_count == 2  # retried once (#195)
+    (error,) = result.output["errors"]
+    assert error.startswith(f"user {USER}: LLM reply unusable: invalid JSON")
+
+
+async def test_unparseable_reply_recovered_on_retry(engine, knowledge, metrics):
+    await knowledge.add_entry(_entry("e1", "team", "Platform", "agent", confidence=0.7))
+    await _seed_run(metrics, "r1", "goal")
+    provider = _provider("Sure! Here you go.", {})
+    context = await _context(engine)
+    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+        result = await ReviewKnowledgeAction().run(_task(), context)
+    assert result.success
+    assert result.output["errors"] == []
+    assert provider.complete.await_count == 2
 
 
 async def test_invalid_proposals_are_ignored(engine, knowledge, metrics):
