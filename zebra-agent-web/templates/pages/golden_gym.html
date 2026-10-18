@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Gym - Zebra Agent{% endblock %}
+{% block page_title %}Gym{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div>
+        <h1 class="text-2xl font-bold text-ink">Gym</h1>
+        <p class="text-gray-400 mt-1">Golden tasks I practise on. Before I save a change to one of these workflows, I run the old and new versions on them and keep the change only if it scores no worse.</p>
+    </div>
+
+    <section class="space-y-3">
+        <h2 class="text-sm font-medium text-gray-300">Golden tasks</h2>
+        {% if rows %}
+        <div class="bg-gray-800 rounded-xl border border-gray-700 divide-y divide-gray-700">
+            {% for row in rows %}
+            <div class="px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-2" id="golden-{{ row.task.id }}">
+                <div class="flex-1 min-w-0">
+                    <p class="text-ink truncate" title="{{ row.task.goal }}">{{ row.task.goal }}</p>
+                    <p class="text-xs text-faint"><span class="font-mono text-gray-400">{{ row.task.workflow }}</span> · {{ row.task.criteria|length }} criteria · <span class="font-mono">{{ row.task.id }}</span></p>
+                </div>
+                <div class="flex items-center gap-3 shrink-0">
+                    {% if row.history %}
+                    <div class="flex gap-1" aria-label="Recent scores, oldest first">
+                        {% for s in row.history %}
+                        <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-gray-700 text-gray-300" title="{{ s.created_at|date:'Y-m-d H:i' }} UTC{% if s.error %}: {{ s.error }}{% endif %}">{% if s.score is None %}–{% else %}{{ s.score|floatformat:2 }}{% endif %}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <div class="text-right w-20">
+                        {% if row.latest %}
+                        {% if row.latest.score is None %}
+                        <p class="text-sm text-gray-400" title="{{ row.latest.error }}">unscored</p>
+                        {% else %}
+                        <p class="text-lg font-mono text-ink" data-latest-score>{{ row.latest.score|floatformat:2 }}</p>
+                        {% endif %}
+                        <p class="text-xs text-faint">{{ row.latest.created_at|date:"M j" }}</p>
+                        {% else %}
+                        <p class="text-sm text-gray-400">not run yet</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="bg-gray-800 rounded-xl border border-gray-700 p-8 text-center">
+            <p class="text-ink">No golden tasks yet.</p>
+            <p class="text-sm text-gray-400 mt-1">Golden tasks are YAML files in <span class="font-mono">zebra-agent/golden/</span>.</p>
+        </div>
+        {% endif %}
+        <p class="text-xs text-faint">Run them now with <span class="font-mono">manage.py run_workflow "Golden Gym"</span>. Scores are 0 to 1, judged against each task's criteria.</p>
+    </section>
+
+    <section class="space-y-3">
+        <h2 class="text-sm font-medium text-gray-300">Changes I tested</h2>
+        {% if decisions %}
+        <div class="bg-gray-800 rounded-xl border border-gray-700 divide-y divide-gray-700">
+            {% for d in decisions %}
+            <div class="px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-2" data-decision="{{ d.decision }}">
+                <div class="flex-1 min-w-0">
+                    <p class="text-ink"><span class="font-mono">{{ d.workflow_name }}</span></p>
+                    <p class="text-xs text-faint">{{ d.at|date:"Y-m-d H:i" }} UTC · {{ d.golden_ids|length }} golden task{{ d.golden_ids|length|pluralize }}</p>
+                </div>
+                <div class="flex items-center gap-3 shrink-0 text-sm">
+                    <span class="font-mono text-gray-300">{% if d.current_mean is None %}–{% else %}{{ d.current_mean|floatformat:2 }}{% endif %} → {% if d.candidate_mean is None %}–{% else %}{{ d.candidate_mean|floatformat:2 }}{% endif %}</span>
+                    {% if d.decision == "promoted" %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-ok/15 text-ok border border-ok/40">kept</span>
+                    {% elif d.decision == "rejected" %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-fail/15 text-fail border border-fail/40">rejected</span>
+                    {% else %}
+                    <span class="px-2 py-0.5 rounded text-xs bg-gray-700 text-gray-300">{{ d.decision|default:"checked" }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400">No changes tested yet. The Dream Cycle tests each change it makes to a workflow with golden tasks.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

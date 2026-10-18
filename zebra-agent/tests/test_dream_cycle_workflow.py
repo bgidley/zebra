@@ -57,8 +57,28 @@ def test_knowledge_review_runs_after_optimisation():
     routes = {(r.source_task_id, r.dest_task_id) for r in definition.routings}
 
     assert definition.tasks["review_knowledge"].action == "review_knowledge"
-    assert ("optimize_workflows", "review_knowledge") in routes
+    assert ("golden_gym", "review_knowledge") in routes
     assert ("optimize_workflows", "generate_summary") not in routes
+
+
+def test_golden_gym_gates_optimizer_modifications():
+    """Modifications wait for the golden gym, which runs straight after the optimizer (#171)."""
+    definition = load_definition(_DREAM_CYCLE)
+    routes = {(r.source_task_id, r.dest_task_id) for r in definition.routings}
+
+    assert definition.tasks["optimize_workflows"].properties["gym_gate"] is True
+    gym = definition.tasks["golden_gym"]
+    assert gym.action == "run_golden_gym"
+    assert gym.properties["candidates"] == "{{optimization_results.pending_gym}}"
+    assert ("optimize_workflows", "golden_gym") in routes
+    assert ("optimize_workflows", "review_knowledge") not in routes
+
+
+def test_summary_reports_gym_decisions():
+    data = yaml.safe_load(_DREAM_CYCLE.read_text())
+    prompt = data["tasks"]["generate_summary"]["properties"]["prompt"]
+
+    assert "{{golden_gym.decisions}}" in prompt
 
 
 def test_improvement_requests_run_before_summary():

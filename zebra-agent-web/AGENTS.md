@@ -41,6 +41,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/daemon.py` | Shared daemon loop (`run_daemon_loop()`); `queue_routine_goal()` / `resolve_routine_user()` queue scheduled routine goals as `run_as` or the owner (first active superuser, else earliest-created active user) (F155) |
 | `fixtures/routines/*.yaml` | Built-in routines: `goal_queue_tick`, `dream_cycle`, `compact_memory`, `daily_news_reading` (F155) |
 | `zebra_agent_web/api/identity.py` | Single-user identity; `goal_identity()` (async views) / `goal_identity_sync()` give the identity every goal entry point stamps with `__user_id__` (#151) |
+| `zebra_agent_web/api/gym.py` | `/gym/` read model (#171): `golden_task_rows()` (latest + last 10 current-version scores per golden task), `gate_decisions()` (per gym run + workflow: decision and both means). Template `pages/golden_gym.html` |
 | `zebra_agent_web/api/dream_history.py` | Load + flatten recent Dream Cycle processes and *Zebra Improvement Request* processes (#189) for the `/dreams/` page |
 | `zebra_agent_web/api/run_trace.py` | Step trace (#184): build the parent/subflow tree from the engine step journal + live tasks, "where it is now", property snapshots (`properties_at`). Templates `pages/run_trace.html`, `partials/run_trace_tree.html` (live refresh), `partials/trace_process.html` (recursive), `partials/trace_properties.html` |
 | `zebra_agent_web/api/bug_reports.py` | Bug reports (#186): validate the dialog's fields, parse the browser's `client_context`, add server context + linked process/task/run state, render the reviewer markdown, list reports for `/bugs/`. UI: `partials/bug_report_dialog.html` (in `base.html`), `static/js/bug-report.js` (buffers JS/HTMX errors from `<head>`). See `specs/bug-report-design.md` |
@@ -50,7 +51,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
 | `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory); `search_*` use Oracle vector search (#169); postmortems (`PostmortemModel`, #175) |
 | `zebra_agent_web/embeddings.py` | In-database embeddings (#169): `embedding VECTOR` columns, ONNX model load from Object Storage (resource principal), triggers, backfill, `vector_search_ready()`, `nearest_ids()`. Run `manage.py load_embedding_model [--strict]` (entrypoint runs it after `migrate`). See `specs/memory-vector-embeddings-design.md` |
-| `zebra_agent_web/metrics_store.py` | DjangoMetricsStore (MetricsStore for metrics) |
+| `zebra_agent_web/metrics_store.py` | DjangoMetricsStore (MetricsStore for metrics); gym scores (`GymScoreModel`, table `zebra_gym_scores`, #171) |
 | `zebra_agent_web/api/models.py` | Django models for workflow data |
 | `zebra_agent_web/diagram.py` | Workflow SVG diagram generator |
 | `templates/` | Django templates |
@@ -629,6 +630,7 @@ POST /api/tasks/<task_id>/complete/
 | `/runs/<id>/trace/` | `run_trace_redirect` | Redirect to the trace of the run's root process |
 | `/processes/<id>/trace/<event_id>/properties/` | `process_trace_properties` | HTMX: process properties after one journalled step |
 | `/journal/` | `postmortem_journal` | Postmortem journal: lessons from failed / timed-out / badly rated runs, newest first, voice line + run link (#175) |
+| `/gym/` | `golden_gym` | Golden gym: golden tasks with latest / recent scores, recent gate decisions on Dream Cycle modifications (#171) (`api/gym.py`) |
 | `/dreams/` | `dream_cycles` | Recent Dream Cycle runs: health, changes, retirements, summary; Zebra improvement requests with Review links (#189) (`api/dream_history.py`) |
 | `/bugs/` | `bug_reports_page` | Recent bug reports: severity, review state / verdict, Review link, expandable report (#186) |
 | `/bugs/report/` | `bug_report_submit` | Record a report from the dialog: starts a *Bug Report* process (POST, HTMX, #186) |

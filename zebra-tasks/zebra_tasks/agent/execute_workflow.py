@@ -31,6 +31,35 @@ RESUMED_FROM_KEY = "__resumed_from__"
 _DONE_TASK_STATES = {TaskState.COMPLETE}
 
 
+#: Process properties a goal workflow's output is usually stored under.
+OUTPUT_KEYS = [
+    "answer",
+    "summary",
+    "ideas",
+    "refined_ideas",
+    "solutions",
+    "result",
+    "output",
+    "complete_guide",
+    "techniques",
+    "response",
+]
+
+
+def extract_workflow_output(properties: dict[str, Any], result_key: str | None = None) -> Any:
+    """Return a finished workflow's output from its process properties.
+
+    Uses the definition's ``result_key`` when set and present, then the standard
+    output keys, then every non-internal property.
+    """
+    if result_key and result_key in properties:
+        return properties[result_key]
+    for key in OUTPUT_KEYS:
+        if key in properties:
+            return properties[key]
+    return {k: v for k, v in properties.items() if not k.startswith("__")}
+
+
 class ExecuteGoalWorkflowAction(TaskAction):
     """
     Execute a goal workflow by name and capture its output.
@@ -134,18 +163,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
     ]
 
     # Standard output keys to look for in workflow results
-    OUTPUT_KEYS = [
-        "answer",
-        "summary",
-        "ideas",
-        "refined_ideas",
-        "solutions",
-        "result",
-        "output",
-        "complete_guide",
-        "techniques",
-        "response",
-    ]
+    OUTPUT_KEYS = OUTPUT_KEYS
 
     def __init__(self, workflow_library: "WorkflowLibrary | None" = None):
         """
@@ -562,16 +580,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
         Uses `result_key` from definition.properties if set, otherwise falls
         back to scanning standard output keys, then all non-internal properties.
         """
-        # Use result_key declared in the workflow definition
+        result_key = None
         if definition is not None:
-            result_key = getattr(definition, "properties", {}).get("result_key")
-            if result_key and result_key in properties:
-                return properties[result_key]
-
-        # Try standard output keys
-        for key in self.OUTPUT_KEYS:
-            if key in properties:
-                return properties[key]
-
-        # Fall back to all non-internal properties
-        return {k: v for k, v in properties.items() if not k.startswith("__")}
+            result_key = (getattr(definition, "properties", None) or {}).get("result_key")
+        return extract_workflow_output(properties, result_key)

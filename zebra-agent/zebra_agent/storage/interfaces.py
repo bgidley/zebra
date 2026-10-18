@@ -17,7 +17,7 @@ from zebra_agent.memory import ConceptualMemoryEntry, PostmortemEntry, WorkflowM
 
 if TYPE_CHECKING:
     from zebra_agent.knowledge import KnowledgeEntry
-    from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
+    from zebra_agent.metrics import GymScore, TaskExecution, WorkflowRun, WorkflowStats
     from zebra_agent.profile import ValuesProfileVersion
     from zebra_agent.storage.trust import (
         FreeingStatus,
@@ -576,6 +576,26 @@ class MetricsStore(ABC):
     @abstractmethod
     async def get_task_executions(self, run_id: str) -> list[TaskExecution]:
         """Get all task executions for a workflow run, ordered by execution_order."""
+        ...
+
+    # =========================================================================
+    # Golden gym scores (#171)
+    # =========================================================================
+
+    @abstractmethod
+    async def record_gym_scores(self, scores: list[GymScore]) -> None:
+        """Record golden-task scores from one gym run."""
+        ...
+
+    @abstractmethod
+    async def get_gym_scores(
+        self,
+        golden_id: str | None = None,
+        workflow_name: str | None = None,
+        variant: str | None = None,
+        limit: int = 200,
+    ) -> list[GymScore]:
+        """Return gym scores, newest first, optionally filtered."""
         ...
 
 

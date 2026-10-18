@@ -362,6 +362,34 @@ class PostmortemModel(models.Model):
         return f"Postmortem ({self.trigger}): {self.goal[:60]}"
 
 
+class GymScoreModel(models.Model):
+    """One golden task scored against one version of a workflow (#171).
+
+    System-level, like Dream Cycles: not scoped to a user.
+    """
+
+    id = models.CharField(max_length=255, primary_key=True)
+    gym_run_id = models.CharField(max_length=255, db_index=True)
+    golden_id = models.CharField(max_length=255, db_index=True)
+    workflow_name = models.CharField(max_length=255, db_index=True)
+    variant = models.CharField(max_length=20, help_text="current | candidate")
+    score = models.FloatField(null=True, blank=True)
+    error = models.TextField(blank=True, null=True)
+    details = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        db_table = "zebra_gym_scores"
+        verbose_name = "Gym score"
+        verbose_name_plural = "Gym scores"
+        indexes = [
+            models.Index(fields=["-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Gym {self.golden_id} [{self.variant}]: {self.score}"
+
+
 # =============================================================================
 # System State (Kill Switch)
 # =============================================================================

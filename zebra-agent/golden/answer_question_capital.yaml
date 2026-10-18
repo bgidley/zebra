@@ -1,0 +1,12 @@
+# Golden task (#171): the gym scores every candidate change to the workflow against it.
+id: answer_question_capital
+workflow: "Answer Question"
+goal: "What is the capital of Australia, and why isn't it Sydney?"
+expected: >-
+  Canberra. It was purpose-built as a compromise because Sydney and Melbourne were rivals
+  for the role when the colonies federated in 1901.
+criteria:
+  - "Names Canberra as the capital"
+  - "Explains that Canberra was chosen as a compromise between Sydney and Melbourne"
+  - "States nothing factually wrong"
+  - "Is concise: a direct answer, not an essay"

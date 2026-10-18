@@ -132,6 +132,51 @@ class WorkflowStats:
         return self.continued_runs / self.total_runs
 
 
+@dataclass
+class GymScore:
+    """One golden task scored against one version of a workflow (#171).
+
+    ``variant`` is ``current`` (the library version) or ``candidate`` (a staged
+    self-modification). ``score`` is 0 to 1, or None when the judge could not
+    score the output. ``details`` holds per-criterion verdicts, the judge's
+    reasoning, an output excerpt and, for candidates, the gate decision.
+    """
+
+    id: str
+    gym_run_id: str  # Process id of the gym task's process (Dream Cycle or Golden Gym)
+    golden_id: str
+    workflow_name: str
+    variant: str  # "current" | "candidate"
+    score: float | None
+    created_at: datetime
+    error: str | None = None
+    details: dict[str, Any] | None = None
+
+    @classmethod
+    def create(
+        cls,
+        gym_run_id: str,
+        golden_id: str,
+        workflow_name: str,
+        variant: str,
+        score: float | None,
+        error: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> "GymScore":
+        """Create a score record with a new id and the current time."""
+        return cls(
+            id=str(uuid.uuid4()),
+            gym_run_id=gym_run_id,
+            golden_id=golden_id,
+            workflow_name=workflow_name,
+            variant=variant,
+            score=score,
+            created_at=datetime.now(UTC),
+            error=error,
+            details=details,
+        )
+
+
 def __getattr__(name: str):
     """Lazy import for MetricsStore to avoid circular import."""
     if name == "MetricsStore":
@@ -145,5 +190,6 @@ __all__ = [
     "WorkflowRun",
     "TaskExecution",
     "WorkflowStats",
+    "GymScore",
     "MetricsStore",  # noqa: F822 - resolved via __getattr__ (backward-compat alias for InMemoryMetricsStore)
 ]

@@ -1,0 +1,16 @@
+# Golden task (#171): structured analysis with a recommendation.
+id: analyze_problem_churn
+workflow: "Analyze Problem"
+goal: >-
+  Our small SaaS product lost 30% of its monthly subscribers in the three months after we
+  raised the price from $10 to $15. New sign-ups stayed flat. What should we do?
+expected: >-
+  Breaks the problem down (price sensitivity, perceived value, which segments churned,
+  competitors), proposes two or three options (e.g. a cheaper tier, grandfathering or
+  win-back offers, adding value at $15) with trade-offs, recommends one, and suggests
+  measuring churn by segment first.
+criteria:
+  - "Identifies the price rise as the likely cause and asks which customers left and why"
+  - "Proposes at least two distinct options with their trade-offs"
+  - "Recommends one approach and says why"
+  - "Suggests concrete next steps or data to gather (e.g. exit surveys, churn by segment)"

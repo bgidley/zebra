@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
 from django.db.models import Avg, Count, Max, Q, Sum
-from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
+from zebra_agent.metrics import GymScore, TaskExecution, WorkflowRun, WorkflowStats
 from zebra_agent.storage.interfaces import (
     SEARCH_RUNS_DEFAULT_LIMIT,
     SEARCH_RUNS_MAX_LIMIT,
@@ -23,7 +23,12 @@ from zebra_agent.storage.interfaces import (
 
 from zebra_agent_web.middleware import get_current_user_id
 
-from .api.models import ProcessInstanceModel, TaskExecutionModel, WorkflowRunModel
+from .api.models import (
+    GymScoreModel,
+    ProcessInstanceModel,
+    TaskExecutionModel,
+    WorkflowRunModel,
+)
 
 if TYPE_CHECKING:
     pass
@@ -448,3 +453,67 @@ class DjangoMetricsStore(MetricsStore):
             output=output,
             error=model.error,
         )
+
+    # =========================================================================
+    # Golden gym scores (#171)
+    # =========================================================================
+
+    async def record_gym_scores(self, scores: list[GymScore]) -> None:
+        """Record golden-task scores from one gym run."""
+
+        @sync_to_async(thread_sensitive=False)
+        def _record():
+            GymScoreModel.objects.bulk_create(
+                [
+                    GymScoreModel(
+                        id=score.id,
+                        gym_run_id=score.gym_run_id,
+                        golden_id=score.golden_id,
+                        workflow_name=score.workflow_name,
+                        variant=score.variant,
+                        score=score.score,
+                        error=score.error,
+                        details=score.details,
+                        created_at=score.created_at,
+                    )
+                    for score in scores
+                ]
+            )
+
+        if scores:
+            await _record()
+
+    async def get_gym_scores(
+        self,
+        golden_id: str | None = None,
+        workflow_name: str | None = None,
+        variant: str | None = None,
+        limit: int = 200,
+    ) -> list[GymScore]:
+        """Return gym scores, newest first, optionally filtered."""
+
+        @sync_to_async(thread_sensitive=False)
+        def _get():
+            qs = GymScoreModel.objects.all()
+            if golden_id is not None:
+                qs = qs.filter(golden_id=golden_id)
+            if workflow_name is not None:
+                qs = qs.filter(workflow_name=workflow_name)
+            if variant is not None:
+                qs = qs.filter(variant=variant)
+            return [
+                GymScore(
+                    id=m.id,
+                    gym_run_id=m.gym_run_id,
+                    golden_id=m.golden_id,
+                    workflow_name=m.workflow_name,
+                    variant=m.variant,
+                    score=m.score,
+                    created_at=m.created_at,
+                    error=m.error,
+                    details=m.details,
+                )
+                for m in qs.order_by("-created_at")[:limit]
+            ]
+
+        return await _get()

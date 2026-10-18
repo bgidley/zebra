@@ -27,6 +27,7 @@ This directory contains requirements and design specifications for Zebra.
 | [web-ui-design.md](web-ui-design.md) | #159–#163: web UI frame and voice rules: tokens, light/dark theme with enforced WCAG AA, components, voice layer, copy | Implemented |
 | [bug-report-design.md](bug-report-design.md) | #186: "Report a bug" dialog capturing user + technical view, stored as a system *Bug Report* workflow with a human review task; `/bugs/` list | Implemented |
 | [postmortem-journal-design.md](postmortem-journal-design.md) | #175: postmortems for failed / timed-out / badly rated goals stored in `MemoryStore`, recalled by `consult_memory` into the selector and child goal; `/journal/` page | Implemented |
+| [golden-gym-design.md](golden-gym-design.md) | #171: golden tasks (`zebra-agent/golden/`), LLM-judged `run_golden_gym`, Dream Cycle promotion gate for self-modified workflows (fails closed), *Golden Gym* on-demand runs, `gym_scores`, `/gym/` page | Implemented |
 | [outcome-review-design.md](outcome-review-design.md) | #190: outcomes agreed at a feature's start; after deploy Zebra (reading its own source) and Claude review blind, compare, and escalate disagreement as a human task that blocks sign-off | Implemented |
 | [podman-single-host-design.md](podman-single-host-design.md) | F117: Single-host rootless Podman deployment (Quadlet web + daemon, GitLab shell runner) — replaces the lost OKE cluster (F108–F111) | Implemented |
 

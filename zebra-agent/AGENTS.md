@@ -30,6 +30,8 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/scheduler.py` | GoalScheduler — priority + deadline + age scoring |
 | `zebra_agent/scheduler/` | Polling scheduler: `Routine` (cron/interval; `workflow`, or `goal` + `goal_priority` + `run_as` to queue a goal — F155), `RoutineRegistry`, `SchedulerLoop` (`queue_goal_fn` dispatches goal routines; skips while one is `CREATED`/`RUNNING`) |
 | `zebra_agent/scheduler/goal_tracker.py` | GoalTracker — daemon's in-flight goals: background start, human-task hand-off, reconciliation (#141) |
+| `zebra_agent/gym.py` | `GoldenTask`, `load_golden_tasks()`, `golden_dir()` (`ZEBRA_GOLDEN_TASKS_DIR`, default `golden/`); `WorkflowLibrary.list_golden_tasks()` (#171) |
+| `golden/` | Golden task YAML files (`id`, `workflow`, `goal`, `expected`, `criteria`) the gym scores workflows on (#171) |
 | `zebra_agent/postmortem.py` | `start_postmortem` / `postmortem_failed_goal` / `needs_failure_postmortem` — run the *Postmortem* workflow for timeouts, crashes and low ratings (#175) |
 | `zebra_agent/human_tasks.py` | `find_pending_human_task` — READY `auto: false` task in a process tree |
 | `zebra_agent/direct_run.py` | `run_named_workflow()` (start a named workflow from inputs, required `inputs` checked, no selection) and `workflow_status()` (`complete` + `result_key` output / `awaiting_input` + task id / `failed` / `running`) — used by `manage.py run_workflow` (#190) |
@@ -182,7 +184,8 @@ These actions power the Dream Cycle self-improvement workflow:
 | `workflow_curator` | `curator.py` | Retire broken / superseded / failing / unused / duplicate workflows (`WorkflowLibrary.retire`; #148) |
 | `load_workflow_definitions` | `load_definitions.py` | Load workflow YAML via WorkflowLibrary |
 | `workflow_evaluator` | `evaluator.py` | LLM-based evaluation of workflow effectiveness |
-| `workflow_optimizer` | `optimizer.py` | Create/optimize workflows based on evaluation |
+| `workflow_optimizer` | `optimizer.py` | Create/optimize workflows based on evaluation; with `gym_gate` modifications wait for the gym (#171) |
+| `run_golden_gym` | `gym.py` | Run the current and modified versions of each staged workflow on its golden tasks; save the modification only if it scores no worse (fails closed; #171) |
 | `review_knowledge` | `knowledge/review.py` | Review each active user's personal knowledge against runs since the last dream cycle; human entries only via contradiction/verification workflows (#153) |
 | `propose_zebra_improvements` | `improvements.py` | Turn findings a workflow edit cannot fix into *Zebra Improvement Request* processes for human review; capped, deduped by title (#189) |
 
@@ -344,6 +347,7 @@ These workflows are internal to the agent and excluded from LLM selection:
 | `Bug Report` | `bug_report.yaml` | Web UI "Report a bug": one human review task over the stored report (#186) |
 | `Zebra Improvement Request` | `zebra_improvement_request.yaml` | Dream cycle request for a change to Zebra's code: one human review task (accept / reject / duplicate / later, issue link) (#189) |
 | `Outcome Review` | `outcome_review.yaml` | Delivery review of a deployed change: Zebra reviews blind with *Read/Search Zebra Source* tools, compares with Claude's verdicts, reconsiders once, then a human ruling task (#190). Run with `manage.py run_workflow` |
+| `Golden Gym` | `golden_gym.yaml` | `run_golden_gym` on demand: score the current workflows on their golden tasks, or check `candidates` without saving. Run with `manage.py run_workflow "Golden Gym"` (#171) |
 | `Define Workflow` | `define_workflow.yaml` | `llm_agent`'s `define_workflow` tool: ethics gate → `workflow_creator` (#146) |
 
 System workflows are identified by the `system` tag in their YAML (`tags: [..., "system"]`) —

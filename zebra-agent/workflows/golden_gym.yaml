@@ -1,0 +1,37 @@
+name: "Golden Gym"
+description: "Score the current workflows on their golden tasks, or check candidate workflow changes against them without saving"
+tags: ["agent", "internal", "system", "optimization"]
+use_when: "INTERNAL USE ONLY - run on demand with `manage.py run_workflow \"Golden Gym\"` (#171)"
+version: 1
+first_task: run_gym
+result_key: golden_gym
+# Optional run inputs (process properties):
+#   workflows:  only score these workflows (default: every workflow with golden tasks)
+#   candidates: [{name, modified_yaml, original_yaml?}] to check against the current
+#               version; never saved here (the Dream Cycle's golden_gym step saves).
+inputs:
+  type: object
+  properties:
+    workflows:
+      type: array
+      items: {type: string}
+      description: "Workflows to score (default: all with golden tasks)"
+    candidates:
+      type: array
+      items: {type: object}
+      description: "Candidate workflow changes to check: name, modified_yaml"
+
+tasks:
+  run_gym:
+    name: "Run Golden Tasks"
+    action: run_golden_gym
+    auto: true
+    idempotent: true
+    properties:
+      promote: false
+      tolerance: 0.1
+      timeout: 150
+      max_runs: 12
+      output_key: golden_gym
+
+routings: []
