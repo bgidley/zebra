@@ -24,6 +24,7 @@ from zebra.core.models import (
     TaskInstance,
     TaskState,
 )
+from zebra.core.replay import REPLAY_KEY
 from zebra.storage.base import StateStore
 
 #: Most processes one trace loads; deeper or wider trees are cut off and flagged.
@@ -96,10 +97,25 @@ class TraceProcess:
     unlinked_children: list[TraceProcess] = field(default_factory=list)
     has_journal: bool = False
     start_event_id: str | None = None
+    replay_of: str | None = None  # the process this one replays (#170)
+    replay_live: list[str] = field(default_factory=list)
 
     @property
     def is_active(self) -> bool:
         return self.state in (ProcessState.RUNNING.value, ProcessState.CREATED.value)
+
+    @property
+    def can_replay(self) -> bool:
+        """Finished with a step journal, so it can be replayed (#170)."""
+        return self.has_journal and not self.is_active
+
+    @property
+    def step_choices(self) -> list[tuple[str, str]]:
+        """Distinct ``(step id, name)`` of the steps it ran, in order: the live choices."""
+        seen: dict[str, str] = {}
+        for step in self.steps:
+            seen.setdefault(step.task_definition_id, step.name)
+        return list(seen.items())
 
     @property
     def duration_seconds(self) -> float | None:
@@ -274,6 +290,10 @@ def _process_node(
         depth=depth,
         has_journal=bool(events),
     )
+    marker = (process.properties or {}).get(REPLAY_KEY)
+    if isinstance(marker, dict):
+        node.replay_of = marker.get("of")
+        node.replay_live = list(marker.get("live") or [])
 
     steps: dict[str, TraceStep] = {}
     for event in events:

@@ -102,8 +102,11 @@ CREATE TABLE IF NOT EXISTS process_events (
     timestamp TIMESTAMPTZ NOT NULL,
     changed JSONB NOT NULL DEFAULT '{}',
     removed JSONB NOT NULL DEFAULT '[]',
-    error TEXT
+    error TEXT,
+    next_route TEXT
 );
+-- Journals created before #170 lack the route column.
+ALTER TABLE process_events ADD COLUMN IF NOT EXISTS next_route TEXT;
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_processes_definition ON process_instances(definition_id);
@@ -530,8 +533,8 @@ class PostgreSQLStore(StateStore):
             """
             INSERT INTO process_events
                 (id, process_id, kind, task_instance_id, task_definition_id, attempt,
-                 timestamp, changed, removed, error)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                 timestamp, changed, removed, error, next_route)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             """,
             event.id,
             event.process_id,
@@ -543,6 +546,7 @@ class PostgreSQLStore(StateStore):
             _serialize_json(event.changed, f"event '{event.id}' changed"),
             json.dumps(event.removed),
             event.error,
+            event.next_route,
         )
 
     async def load_process_events(self, process_ids: list[str]) -> list[ProcessEvent]:
@@ -570,6 +574,7 @@ class PostgreSQLStore(StateStore):
                 if isinstance(row["removed"], str)
                 else row["removed"],
                 error=row["error"],
+                next_route=row["next_route"],
             )
             for row in rows
         ]

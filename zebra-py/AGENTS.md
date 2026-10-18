@@ -44,6 +44,12 @@ Stores implement `save_process_event` / `load_process_events` / `list_child_proc
 base-class defaults are a no-op journal and a scan, so a custom store works without history.
 Journal writes never fail a workflow. See `specs/run-trace-design.md`.
 
+**Replay (#170)**: `engine.create_replay(process_id, live=[...], definition=None, continue_live=False)`
+creates a process marked `__replay__` whose steps are served from the original's journal
+(`zebra/core/replay.py`) instead of running actions. Gate "does this task run without a person"
+on `await self._runs_itself(task_def, process)`, never on `task_def.auto` alone, or replayed human
+steps will wait. See `specs/replay-debugger-design.md`.
+
 ## File Locations
 
 | Directory | Purpose |

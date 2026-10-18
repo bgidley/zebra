@@ -415,3 +415,31 @@ class TestPostgreSQLTransactions:
         # Should be visible after transaction
         loaded = await postgres_store.load_definition(sample_definition.id)
         assert loaded is not None
+
+
+class TestPostgreSQLJournal:
+    """Step-journal fields replay depends on (#170)."""
+
+    async def test_event_route_and_large_value_round_trip(
+        self, postgres_store, sample_definition, sample_process
+    ):
+        from zebra.core import journal
+        from zebra.core.models import ProcessEvent, ProcessEventKind
+
+        await postgres_store.save_definition(sample_definition)
+        await postgres_store.save_process(sample_process)
+        whole = "x" * (journal.MAX_JOURNAL_VALUE_CHARS - 2)
+        changed, _ = journal.property_diff({}, {"whole": whole})
+        await postgres_store.save_process_event(
+            ProcessEvent(
+                id="evt-170",
+                process_id=sample_process.id,
+                kind=ProcessEventKind.TASK_COMPLETED,
+                changed=changed,
+                next_route="approved",
+            )
+        )
+
+        (loaded,) = await postgres_store.load_process_events([sample_process.id])
+        assert loaded.next_route == "approved"
+        assert loaded.changed["whole"] == whole

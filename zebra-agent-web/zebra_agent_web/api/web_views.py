@@ -2819,6 +2819,38 @@ async def process_trace(request, process_id):
     )
 
 
+@require_POST
+async def process_replay(request, process_id):
+    """Replay a finished process from its recording and open the replay's trace (#170).
+
+    Form fields: ``live`` (repeatable step ids to run for real) and
+    ``continue_live`` (run steps the original never reached live). The replay
+    is created here and runs in the background on the agent engine, so live
+    steps have their LLM providers.
+    """
+    from zebra.core.exceptions import ProcessNotFoundError
+    from zebra.core.replay import ReplayError
+
+    await agent_engine.ensure_initialized()
+    loop = agent_engine.get_agent_loop()
+    wf_engine = loop.engine
+    try:
+        replayed = await wf_engine.create_replay(
+            process_id,
+            live=[s for s in request.POST.getlist("live") if s],
+            continue_live=request.POST.get("continue_live") == "on",
+        )
+    except ProcessNotFoundError:
+        return HttpResponse("Process not found", status=404)
+    except ReplayError as e:
+        return HttpResponse(escape(str(e)), status=400)
+
+    task = asyncio.create_task(wf_engine.start_process_with_timeout(replayed.id, loop.goal_timeout))
+    _active_tasks[f"replay-{replayed.id}"] = task
+    task.add_done_callback(lambda t: _active_tasks.pop(f"replay-{replayed.id}", None))
+    return redirect("process_trace", process_id=replayed.id)
+
+
 async def run_trace_redirect(request, run_id):
     """Open the trace for a run, found by its ``run_id``."""
     from zebra_agent_web.api import run_trace
