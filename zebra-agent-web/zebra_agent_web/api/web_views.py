@@ -2828,6 +2828,7 @@ async def process_replay(request, process_id):
     is created here and runs in the background on the agent engine, so live
     steps have their LLM providers.
     """
+    from zebra.core.exceptions import ProcessNotFoundError
     from zebra.core.replay import ReplayError
 
     await agent_engine.ensure_initialized()
@@ -2839,11 +2840,10 @@ async def process_replay(request, process_id):
             live=[s for s in request.POST.getlist("live") if s],
             continue_live=request.POST.get("continue_live") == "on",
         )
+    except ProcessNotFoundError:
+        return HttpResponse("Process not found", status=404)
     except ReplayError as e:
         return HttpResponse(escape(str(e)), status=400)
-    except Exception:
-        logger.exception("Could not create a replay of %s", process_id)
-        return HttpResponse("Process not found", status=404)
 
     task = asyncio.create_task(wf_engine.start_process_with_timeout(replayed.id, loop.goal_timeout))
     _active_tasks[f"replay-{replayed.id}"] = task

@@ -220,3 +220,8 @@ async def test_replay_form_rejects_a_running_process(engine, identity, authentic
 
     assert response.status_code == 400
     assert "only finished processes" in response.content.decode()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_replay_form_unknown_process_is_404(engine, identity, authenticated_client):
+    assert authenticated_client.post("/processes/nope/replay/").status_code == 404

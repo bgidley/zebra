@@ -77,4 +77,6 @@ None. The web replay uses the agent loop's `goal_timeout` (`GOAL_TIMEOUT_SECONDS
   sandboxes them.
 - A replay is not a run: it has no `run_id`, so it never appears in activity or metrics, and
   starts no postmortem.
+  The goal queue (`GoalScheduler.get_pending_goals`) skips `__replay__` processes, so the
+  daemon never starts one that is briefly CREATED.
 - Journal growth from the higher cap. Still no pruning.

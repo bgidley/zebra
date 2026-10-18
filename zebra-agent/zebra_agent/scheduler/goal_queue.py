@@ -12,6 +12,8 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from zebra.core.replay import REPLAY_KEY
+
 if TYPE_CHECKING:
     from zebra.core.models import ProcessInstance
     from zebra.storage.base import StateStore
@@ -37,6 +39,8 @@ class GoalScheduler:
         processes = await self._store.get_processes_by_state(
             ProcessState.CREATED, exclude_children=True
         )
+        # A replay (#170) is started by whoever created it, never queued as a goal.
+        processes = [p for p in processes if REPLAY_KEY not in (p.properties or {})]
         scored = [(self.score_process(p), p) for p in processes]
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [p for _, p in scored]

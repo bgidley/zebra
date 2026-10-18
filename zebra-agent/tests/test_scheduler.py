@@ -140,6 +140,16 @@ class TestGetPendingGoals:
         result = await scheduler.get_pending_goals()
         assert [p.id for p in result] == ["p-2", "p-3", "p-1"]
 
+    async def test_replays_are_never_queued(self, scheduler, mock_store):
+        """A replay (#170) is started by its creator, not picked up as a goal."""
+        goal = _make_process("goal")
+        replayed = _make_process("replay")
+        replayed.properties["__replay__"] = {"of": "goal", "live": [], "served": {}}
+        mock_store.get_processes_by_state.return_value = [goal, replayed]
+
+        result = await scheduler.get_pending_goals()
+        assert [p.id for p in result] == ["goal"]
+
 
 class TestPickNext:
     """Tests for pick_next()."""
