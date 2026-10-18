@@ -124,6 +124,7 @@ store_learned_knowledge = "zebra_tasks.knowledge.store_learned:StoreLearnedKnowl
 review_knowledge = "zebra_tasks.knowledge.review:ReviewKnowledgeAction"
 # Dream-cycle requests for Zebra improvements (#189)
 propose_zebra_improvements = "zebra_tasks.agent.improvements:ProposeZebraImprovementsAction"
+file_improvement_issue = "zebra_tasks.agent.improvements:FileImprovementIssueAction"
 
 [build-system]
 requires = ["hatchling"]

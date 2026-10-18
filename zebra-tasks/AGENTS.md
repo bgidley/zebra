@@ -42,7 +42,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization (tags created workflows `llm-defined`) |
 | `zebra_tasks/agent/curator.py` | WorkflowCuratorAction - dream-cycle retirement of broken/superseded/failing/unused/duplicate workflows; `ZEBRA_CURATOR_*` settings (#148) |
 | `zebra_tasks/knowledge/review.py` | ReviewKnowledgeAction - dream-cycle review of personal knowledge against recent runs; `revert_knowledge_changes()` (#153) |
-| `zebra_tasks/agent/improvements.py` | ProposeZebraImprovementsAction (`propose_zebra_improvements`) - dream-cycle requests for changes to Zebra's own code, each a *Zebra Improvement Request* process with a human review task; `max_requests` (2), title dedupe, never fails the cycle (#189) |
+| `zebra_tasks/agent/improvements.py` | ProposeZebraImprovementsAction (`propose_zebra_improvements`) - dream-cycle requests for changes to Zebra's own code, each a *Zebra Improvement Request* process with a human review task; `max_requests` (2), title dedupe across workflow versions, never fails the cycle (#189); FileImprovementIssueAction (`file_improvement_issue`) files an accepted request as a GitLab issue (`ZEBRA_GITLAB_TOKEN`/`_URL`/`_PROJECT`), adopts an existing issue by marker, neutralises quick actions and mentions, never fails (#194) |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/agent/user_context.py` | `copy_user_properties()` - carry `__user_id__` + identity keys onto processes the loop creates (#151) |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |

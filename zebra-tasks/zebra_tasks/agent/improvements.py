@@ -10,13 +10,19 @@ Each proposal starts a *Zebra Improvement Request* process whose single human
 task holds it for review (accept / reject / duplicate / later, optional issue
 link). Requests are capped per cycle and never repeat an earlier request's
 title. The step never fails the cycle.
+
+``FileImprovementIssueAction`` runs after that review and files an accepted
+request as a GitLab issue (#194).
 """
 
 import json
 import logging
+import os
 import re
 from typing import Any
+from urllib.parse import quote
 
+import httpx
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
@@ -217,7 +223,7 @@ class ProposeZebraImprovementsAction(TaskAction):
             out["errors"].append("no LLM provider")
             return out
 
-        earlier = await self._earlier_titles(context, definition.id)
+        earlier = await self._earlier_titles(context)
         proposals = await self._ask(provider, context, findings, earlier, out)
 
         max_requests = int(task.properties.get("max_requests", DEFAULT_MAX_REQUESTS))
@@ -251,12 +257,21 @@ class ProposeZebraImprovementsAction(TaskAction):
             )
         return out
 
-    async def _earlier_titles(self, context: ExecutionContext, definition_id: str) -> list[str]:
-        """Titles of every earlier request, in any state."""
+    async def _earlier_titles(self, context: ExecutionContext) -> list[str]:
+        """Titles of every earlier request, in any state and any workflow version.
+
+        A definition's id is derived from its name and version, so each stored
+        version of the request workflow is looked up (#194).
+        """
         try:
-            processes = await context.store.list_processes(
-                definition_id=definition_id, include_completed=True
-            )
+            definition_ids = [
+                d.id for d in await context.store.list_definitions() if d.name == REQUEST_WORKFLOW
+            ]
+            processes = []
+            for definition_id in definition_ids:
+                processes += await context.store.list_processes(
+                    definition_id=definition_id, include_completed=True
+                )
         except Exception as e:
             logger.warning("Improvement requests: could not list earlier requests: %s", e)
             return []
@@ -320,3 +335,154 @@ class ProposeZebraImprovementsAction(TaskAction):
         await context.engine.start_process(process.id)
         logger.info("Improvement requests: '%s' → process %s", request["title"], process.id)
         return process.id
+
+
+# ---------------------------------------------------------------------------
+# Filing accepted requests as GitLab issues (#194)
+# ---------------------------------------------------------------------------
+
+REVIEW_OUTPUT = "__task_output_review"
+ISSUE_LABEL = "dream-request"
+ISSUE_MARKER_PREFIX = "zebra-request:"
+DEFAULT_GITLAB_URL = "https://gitlab.com"
+DEFAULT_GITLAB_PROJECT = "gidley/zebra"
+GITLAB_TIMEOUT = 15.0
+ZERO_WIDTH_SPACE = "​"
+
+
+def neutralize(text: str) -> str:
+    """Stop text from running GitLab quick actions or mentioning anyone.
+
+    GitLab runs a quick action for a line whose first character is ``/``
+    (leading spaces allowed), so such lines get a backslash, which Markdown
+    renders away. ``@`` gets a zero-width space so it is never a mention.
+    """
+    lines = []
+    for line in str(text).replace("@", "@" + ZERO_WIDTH_SPACE).split("\n"):
+        if line.lstrip().startswith("/"):
+            indent = line[: len(line) - len(line.lstrip())]
+            line = indent + "\\" + line.lstrip()
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def issue_marker(process_id: str) -> str:
+    """Marker written into the issue body so a re-run can find the issue it made."""
+    return f"{ISSUE_MARKER_PREFIX}{process_id}"
+
+
+def build_issue(properties: dict[str, Any], process_id: str) -> tuple[str, str]:
+    """Title and body of the GitLab issue for an accepted request."""
+    improvement = _dict(properties.get("improvement"))
+    review = _dict(properties.get(REVIEW_OUTPUT))
+    title = improvement.get("title") or properties.get("improvement_title") or "Zebra improvement"
+    body = str(properties.get("improvement_markdown") or improvement.get("problem") or "")
+    if review.get("notes"):
+        body += f"\n\n#### Reviewer notes\n{review['notes']}"
+    source = properties.get("source_process_id")
+    body += (
+        "\n\n---\nRaised by Zebra's dream cycle"
+        + (f" (process `{source}`)" if source else "")
+        + " and accepted on /dreams/. Refs #189."
+    )
+    return neutralize(str(title))[:255], neutralize(body) + f"\n\n`{issue_marker(process_id)}`"
+
+
+class FileImprovementIssueAction(TaskAction):
+    """File an accepted *Zebra Improvement Request* as a GitLab issue (#194).
+
+    Runs after the request's ``review`` human task. Files one issue only when
+    the verdict is ``accepted`` and the reviewer gave no issue link; skips when
+    an issue was already filed. Before creating, it searches the project for an
+    issue carrying this request's marker, so a re-run after a crash adopts that
+    issue instead of filing a second one.
+
+    Env:
+        ZEBRA_GITLAB_TOKEN: token with ``api`` scope (required to file)
+        ZEBRA_GITLAB_URL: GitLab base URL (default ``https://gitlab.com``)
+        ZEBRA_GITLAB_PROJECT: project path (default ``gidley/zebra``)
+
+    Writes ``filed_issue`` = ``{url, iid}``, ``{skipped}`` or ``{error}``.
+    Never fails the request; the token never appears in outputs or logs.
+    """
+
+    description = "File an accepted Zebra improvement request as a GitLab issue"
+    reversibility_hint = "always_irreversible"
+
+    inputs = [
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property for the result",
+            required=False,
+            default="filed_issue",
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(name="url", type="string", description="Issue URL", required=False),
+        ParameterDef(name="iid", type="int", description="Issue number", required=False),
+        ParameterDef(name="skipped", type="string", description="Why nothing was filed"),
+        ParameterDef(name="error", type="string", description="Why filing failed"),
+    ]
+
+    async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+        output_key = task.properties.get("output_key", "filed_issue")
+        result = await self._file(context, output_key)
+        context.set_process_property(output_key, result)
+        return TaskResult.ok(output=result)
+
+    async def _file(self, context: ExecutionContext, output_key: str) -> dict[str, Any]:
+        properties = context.process.properties or {}
+        review = _dict(properties.get(REVIEW_OUTPUT))
+        previous = _dict(properties.get(output_key))
+        if previous.get("url"):
+            return {**previous, "skipped": "already filed"}
+        if review.get("verdict") != "accepted":
+            return {"skipped": "not accepted"}
+        if str(review.get("issue_url") or "").strip():
+            return {"skipped": "reviewer linked an issue"}
+
+        token = os.environ.get("ZEBRA_GITLAB_TOKEN", "").strip()
+        if not token:
+            logger.warning("Improvement issue: ZEBRA_GITLAB_TOKEN is not set — not filing")
+            return {"error": "ZEBRA_GITLAB_TOKEN is not set"}
+        base = os.environ.get("ZEBRA_GITLAB_URL", DEFAULT_GITLAB_URL).rstrip("/")
+        project = os.environ.get("ZEBRA_GITLAB_PROJECT", DEFAULT_GITLAB_PROJECT)
+        issues_url = f"{base}/api/v4/projects/{quote(project, safe='')}/issues"
+        marker = issue_marker(context.process.id)
+        title, body = build_issue(properties, context.process.id)
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=GITLAB_TIMEOUT, headers={"PRIVATE-TOKEN": token}
+            ) as client:
+                found = await client.get(
+                    issues_url,
+                    params={"search": marker, "in": "description", "state": "all", "per_page": 20},
+                )
+                if found.status_code != 200:
+                    # Without the search we can't rule out an issue filed by a crashed run.
+                    logger.warning("Improvement issue: search returned %d", found.status_code)
+                    return {"error": f"GitLab search returned {found.status_code}; not filing"}
+                for issue in found.json() or []:
+                    if f"`{marker}`" in str(issue.get("description") or ""):
+                        logger.info("Improvement issue: adopting existing issue for %s", marker)
+                        return {"url": issue.get("web_url"), "iid": issue.get("iid")}
+                response = await client.post(
+                    issues_url, json={"title": title, "description": body, "labels": ISSUE_LABEL}
+                )
+        except httpx.TimeoutException:
+            logger.warning("Improvement issue: GitLab timed out")
+            return {"error": f"GitLab did not answer within {GITLAB_TIMEOUT:.0f}s"}
+        except httpx.RequestError as e:
+            logger.warning("Improvement issue: network error: %s", type(e).__name__)
+            return {"error": f"network error calling GitLab: {type(e).__name__}"}
+
+        if response.status_code != 201:
+            detail = response.text[:200].replace(token, "***")
+            logger.warning("Improvement issue: GitLab returned %d", response.status_code)
+            return {"error": f"GitLab returned {response.status_code}: {detail}"}
+        issue = response.json()
+        logger.info("Improvement issue: filed %s", issue.get("web_url"))
+        return {"url": issue.get("web_url"), "iid": issue.get("iid")}

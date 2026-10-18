@@ -53,7 +53,7 @@ memory-capped so a runaway app cannot OOM the host the agent and runner live on.
 
 1. Writes `~/.config/zebra/prod.env` (0600) from the job's CI variables
    (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`, `KIMI_*`, `OPENROUTER_*`, `ZEBRA_SMTP_*`,
-   `ZEBRA_NOTIFY_WEBHOOK_URL`), a persistent generated
+   `ZEBRA_NOTIFY_WEBHOOK_URL`, `ZEBRA_GITLAB_TOKEN`), a persistent generated
    `DJANGO_SECRET_KEY`, and the non-secret `~/.config/zebra/site.env`.
 2. `podman build -t localhost/zebra-web:$SHA .`
 3. Installs `deploy/podman/quadlet/*.container` and reloads systemd.
@@ -88,6 +88,7 @@ source of truth; the host copy is regenerated on every deploy.
 | `OPENROUTER_API_KEY` (+ optional `OPENROUTER_MODEL`) | prod containers — `--model openrouter` or `ZEBRA_LLM_PROVIDER=openrouter`; tiers map to `anthropic/claude-*-5.5`, default `OPENROUTER_MODEL` or `anthropic/claude-sonnet-5.5`; cost is OpenRouter's reported `usage.cost` (#182) |
 | `ZEBRA_SMTP_USERNAME` / `ZEBRA_SMTP_PASSWORD` | prod containers — `notify_email` via OCI Email Delivery (an OCI user SMTP credential; host/sender live in `site.env`) |
 | `ZEBRA_NOTIFY_WEBHOOK_URL` (optional) | prod containers — default target for `notify_webhook` |
+| `ZEBRA_GITLAB_TOKEN` (masked, protected) | prod containers — `file_improvement_issue` files accepted dream-cycle improvement requests on gidley/zebra (#194). A fine-grained personal access token limited to work items (issue search + create) on this project; project access tokens need a paid plan. It cannot read the project or user, so only the issues endpoints work; optional `ZEBRA_GITLAB_URL` / `ZEBRA_GITLAB_PROJECT` in `site.env` |
 | `SMOKE_PASSWORD` | deploy (creates `smoke` user), `smoke` |
 | `E2E_PROVISIONER_DSN` / `_USERNAME` / `_PASSWORD` | `e2e` ephemeral Oracle schema (SQLite fallback when unset) |
 

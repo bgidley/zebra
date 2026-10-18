@@ -64,7 +64,9 @@ def summarize_request(model: ProcessInstanceModel) -> dict[str, Any]:
     props = json.loads(model.properties) if model.properties else {}
     improvement = _dict(props.get("improvement"))
     review = _dict(props.get(f"__task_output_{IMPROVEMENT_REVIEW_TASK}"))
-    issue_url = str(review.get("issue_url") or "")
+    filed = _dict(props.get("filed_issue"))
+    # The reviewer's link wins; otherwise the issue Zebra filed on accept (#194).
+    issue_url = str(review.get("issue_url") or filed.get("url") or "")
 
     review_task_id = None
     if model.state == "running":
@@ -89,6 +91,8 @@ def summarize_request(model: ProcessInstanceModel) -> dict[str, Any]:
         "verdict": review.get("verdict"),
         "verdict_label": VERDICTS.get(review.get("verdict"), review.get("verdict")),
         "issue_url": issue_url if issue_url.startswith(("https://", "http://")) else None,
+        "issue_filed_by_zebra": bool(filed.get("url")) and not review.get("issue_url"),
+        "filing_error": filed.get("error"),
         "notes": review.get("notes"),
         "review_task_id": review_task_id,
     }

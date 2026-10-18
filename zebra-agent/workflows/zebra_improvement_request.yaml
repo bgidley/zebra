@@ -9,13 +9,15 @@
 #   improvement_markdown   the request rendered for the reviewer
 #   source_process_id      the Dream Cycle process that raised it
 #
-# The single human task holds the request for review; its output
-# (__task_output_review) is the verdict shown on /dreams/.
+# The human task holds the request for review; its output
+# (__task_output_review) is the verdict shown on /dreams/. file_issue then
+# files an accepted request as a GitLab issue unless the reviewer linked one
+# (#194); its result is filed_issue = {url, iid} | {skipped} | {error}.
 #
 # This workflow is a system workflow — the goal selector never picks it.
 
 name: "Zebra Improvement Request"
-version: 1
+version: 2
 description: "Hold a dream-cycle request for an improvement to Zebra itself for human review."
 tags: ["system", "improvement-request"]
 use_when: "INTERNAL USE ONLY — started by the dream cycle"
@@ -45,9 +47,22 @@ tasks:
           issue_url:
             type: string
             title: "Issue link"
-            description: "GitLab issue tracking the work, if any."
+            description: "Leave empty to have Zebra file a GitLab issue when you accept."
             format: url
           notes:
             type: string
             title: "Notes"
+            description: "Added to the GitLab issue when Zebra files one."
             format: multiline
+
+  file_issue:
+    name: "File GitLab Issue"
+    action: file_improvement_issue
+    auto: true
+    idempotent: true
+    properties:
+      output_key: filed_issue
+
+routings:
+  - from: review
+    to: file_issue
