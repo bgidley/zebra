@@ -29,7 +29,7 @@ None. All state lives in process properties: inputs (`issue`, `title`, `outcomes
 | *Outcome Review* workflow | System, tool-only (required `inputs`), `result_key: review_result` |
 | `zebra_agent.direct_run` | `run_named_workflow()` creates and starts a named workflow from inputs (required inputs checked); `workflow_status()` → `complete` / `awaiting_input` / `failed` / `running` |
 | `manage.py run_workflow` | `<name> --input-file - [--model sonnet]` or `--status <process_id>`; prints the status JSON, exits 1 on failure |
-| `scripts/zebra-outcome-review.sh` | `run <N> <title> outcomes.md claude.json <base> [head]` builds the inputs on the host (diff capped at 60000 chars; deployed hash from `/app/version.json`) and runs the workflow in `zebra-web`; `status <process_id>` polls. Exit 0 complete, 2 waiting on a human, 1 failed |
+| `scripts/zebra-outcome-review.sh` | `run <N> <title> outcomes.md claude.json <base> [head]` builds the inputs on the host (diff capped at 60000 chars; deployed hash from `/app/version.json`) and runs the workflow in `zebra-web`; `status <process_id>` polls. Exit 0 complete, 2 waiting on a human, 1 failed. Tested with a fake `podman` in `zebra-agent/tests/test_outcome_review_script.py` (#192) |
 
 ## Control flow
 
