@@ -125,6 +125,7 @@ class ProcessEventModel(models.Model):
     changed = models.TextField(blank=True, default="{}", help_text="JSON properties changed")
     removed = models.TextField(blank=True, default="[]", help_text="JSON property keys removed")
     error = models.TextField(blank=True, null=True)
+    next_route = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         db_table = "zebra_process_events"

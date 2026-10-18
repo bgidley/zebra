@@ -328,6 +328,9 @@ class ProcessEvent(BaseModel):
         default_factory=list, description="Process properties removed by this step"
     )
     error: str | None = Field(default=None)
+    next_route: str | None = Field(
+        default=None, description="Route the task chose, on task_completed/failed (#170)"
+    )
 
     model_config = {"from_attributes": True}
 

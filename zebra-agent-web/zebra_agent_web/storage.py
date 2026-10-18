@@ -502,6 +502,7 @@ class DjangoStore(StateStore):
                 changed=_serialize_json(event.changed, f"event '{event.id}' changed"),
                 removed=json.dumps(event.removed),
                 error=event.error,
+                next_route=event.next_route,
             )
 
         await _save()
@@ -526,6 +527,7 @@ class DjangoStore(StateStore):
                     changed=json.loads(m.changed) if m.changed else {},
                     removed=json.loads(m.removed) if m.removed else [],
                     error=m.error,
+                    next_route=m.next_route,
                 )
                 for m in qs.order_by("occurred_at")
             ]

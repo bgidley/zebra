@@ -11,7 +11,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
-from zebra.core import journal
+from zebra.core import journal, replay
 from zebra.core.exceptions import (
     ActionNotFoundError,
     DefinitionNotFoundError,
@@ -128,6 +128,8 @@ class WorkflowEngine:
         # last event time (kept strictly increasing so events replay in order).
         self._journal_props: dict[str, dict] = {}
         self._journal_last: datetime | None = None
+        # Replay (#170): recorded steps per original process id.
+        self._recordings: dict[str, dict[str, list[replay.RecordedStep]]] = {}
 
     # =========================================================================
     # Process Lifecycle
@@ -170,6 +172,75 @@ class WorkflowEngine:
 
         await self.store.save_process(process)
         logger.info(f"Created process {process.id} from definition {definition.id}")
+        return process
+
+    async def create_replay(
+        self,
+        process_id: str,
+        live: list[str] | None = None,
+        definition: ProcessDefinition | None = None,
+        continue_live: bool = False,
+    ) -> ProcessInstance:
+        """Create a replay of a finished process from its step journal (#170).
+
+        The replay is a new root process with the original's starting properties
+        (without ``run_id``). Once started, each step it reaches is served from
+        what the original recorded instead of running its action, so it costs
+        nothing and reproduces the original; steps in *live* run for real.
+
+        Args:
+            process_id: The COMPLETE or FAILED process to replay.
+            live: Step (task definition) ids to run live instead of replaying.
+            definition: A replacement definition (e.g. a changed prompt). Steps that
+                differ from the original's, or are new, run live. It is saved
+                under a new id, so the original definition is untouched.
+            continue_live: Run steps the recording has no run of live (e.g. the
+                steps after a failure a live step fixed). By default such a step
+                fails, naming itself, so a replay never spends without asking.
+
+        Returns:
+            The replay process, in CREATED state; start it with ``start_process``.
+
+        Raises:
+            ProcessNotFoundError: If the process does not exist.
+            ReplayError: If it has not finished, has no step history, or *live*
+                names a step the definition does not have.
+        """
+        original = await self._load_process(process_id)
+        if original.state not in _TERMINAL_PROCESS_STATES:
+            raise replay.ReplayError(
+                f"Process {process_id} is {original.state.value}; only finished "
+                "processes can be replayed"
+            )
+        start = replay.starting_properties(await self.store.load_process_events([process_id]))
+        if start is None:
+            raise replay.ReplayError(
+                f"Process {process_id} has no step history (it ran before step tracing)"
+            )
+
+        original_def = await self._load_definition(original.definition_id)
+        live_ids = set(live or [])
+        target = original_def
+        if definition is not None:
+            live_ids |= replay.changed_steps(original_def, definition)
+            target = definition.model_copy(
+                update={"id": f"{definition.id}-replay-{uuid.uuid4().hex[:8]}"}
+            )
+        unknown = sorted(live_ids - set(target.tasks))
+        if unknown:
+            raise replay.ReplayError(f"No such step(s) to run live: {', '.join(unknown)}")
+
+        properties = {
+            k: v for k, v in start.items() if k != "run_id" and k not in replay.UNREPLAYED_KEYS
+        }
+        properties[replay.REPLAY_KEY] = {
+            "of": process_id,
+            "live": sorted(live_ids),
+            "continue_live": continue_live,
+            "served": {},
+        }
+        process = await self.create_process(target, properties=properties)
+        logger.info("Created replay %s of process %s (live: %s)", process.id, process_id, live_ids)
         return process
 
     async def start_process(
@@ -224,7 +295,7 @@ class WorkflowEngine:
 
         # Transition the auto-executable first task(s)
         for task_def, task in started:
-            if task_def.auto:
+            if await self._runs_itself(task_def, process):
                 await self.transition_task(task.id)
 
         return await self._load_process(process_id)
@@ -520,7 +591,7 @@ class WorkflowEngine:
                     stack_task_ids = {t.id for t in task_stack}
                     for new_task in created_tasks:
                         task_def = definition.get_task(new_task.task_definition_id)
-                        if task_def.auto or task_def.synchronized:
+                        if await self._runs_itself(task_def, process) or task_def.synchronized:
                             if new_task.id not in stack_task_ids:
                                 task_stack.append(new_task)
                                 stack_task_ids.add(new_task.id)
@@ -684,7 +755,7 @@ class WorkflowEngine:
 
         # Run task if in READY state and auto-executable
         if task.state == TaskState.READY:
-            if not task_def.auto:
+            if not await self._runs_itself(task_def, process):
                 # Manual task - leave in READY for external completion via complete_task()
                 return []
             await self._run_task(task, task_def, process, definition)
@@ -751,7 +822,13 @@ class WorkflowEngine:
 
         result: TaskResult
 
-        if task_def.action:
+        marker = process.properties.get(replay.REPLAY_KEY)
+        served = None
+        if marker and task_def.id not in marker.get("live", []):
+            served = await self._serve_recorded(process, task_def, marker)
+        if served is not None:
+            result = served
+        elif task_def.action:
             try:
                 action = self.actions.get_action(task_def.action)
 
@@ -942,7 +1019,7 @@ class WorkflowEngine:
 
         await self.store.save_task(task)
         logger.info(f"Created task {task.id} ({task_def.name}) in state {initial_state}")
-        if not task_def.auto:
+        if not await self._runs_itself(task_def, process):
             await self._journal(process, ProcessEventKind.TASK_WAITING, task)
         return task
 
@@ -1075,15 +1152,94 @@ class WorkflowEngine:
             # Don't raise - process completion should still happen
 
     # =========================================================================
+    # Replay (#170)
+    # =========================================================================
+
+    async def _runs_itself(self, task_def: TaskDefinition, process: ProcessInstance) -> bool:
+        """Whether the engine runs *task_def* without waiting for anyone.
+
+        Auto tasks do. So does a replay step that is served from the recording
+        (human steps included), or fails because the recording cannot serve it.
+        A human step the replay runs live, or reaches past the recording with
+        ``continue_live``, waits for a person as usual.
+        """
+        if task_def.auto:
+            return True
+        marker = process.properties.get(replay.REPLAY_KEY)
+        if not marker or task_def.id in marker.get("live", []):
+            return False
+        if not marker.get("continue_live"):
+            return True
+        recorded = (await self._recording(marker["of"])).get(task_def.id, [])
+        return marker.get("served", {}).get(task_def.id, 0) < len(recorded)
+
+    async def _recording(self, original_id: str) -> dict[str, list[replay.RecordedStep]]:
+        """The recorded steps of *original_id*, loaded once per engine."""
+        if original_id not in self._recordings:
+            original = await self._load_process(original_id)
+            self._recordings[original_id] = replay.recorded_steps(
+                await self.store.load_process_events([original_id]),
+                await self._load_definition(original.definition_id),
+            )
+        return self._recordings[original_id]
+
+    async def _serve_recorded(
+        self, process: ProcessInstance, task_def: TaskDefinition, marker: dict
+    ) -> TaskResult | None:
+        """Apply the original's recorded effect for this step and return its result.
+
+        Returns None when the step should run live instead: the recording has no
+        run of it and the replay was asked to ``continue_live``.
+        """
+        recorded = (await self._recording(marker["of"])).get(task_def.id, [])
+        served = marker.setdefault("served", {})
+        occurrence = served.get(task_def.id, 0)
+        served[task_def.id] = occurrence + 1
+
+        step = recorded[occurrence] if occurrence < len(recorded) else None
+        if step is None and marker.get("continue_live"):
+            logger.info("Replay %s runs step %s live (not recorded)", process.id, task_def.id)
+            return None
+        if step is None:
+            reason = (
+                "the original never ran it"
+                if not recorded
+                else f"the original ran it only {len(recorded)} time(s)"
+            )
+            result = TaskResult.fail(replay.cannot_serve(task_def.id, occurrence, reason))
+        elif truncated := step.truncated_keys():
+            result = TaskResult.fail(
+                replay.cannot_serve(
+                    task_def.id,
+                    occurrence,
+                    f"its recorded {', '.join(truncated)} was too large to keep",
+                )
+            )
+        else:
+            step.apply(process.properties)
+            result = TaskResult(
+                success=step.success,
+                output=step.output,
+                next_route=step.next_route,
+                error=step.error,
+            )
+        await self.store.save_process(process.model_copy(update={"updated_at": datetime.now(UTC)}))
+        logger.info("Replay %s served step %s #%d", process.id, task_def.id, occurrence + 1)
+        return result
+
+    # =========================================================================
     # Step Journal (#184)
     # =========================================================================
 
     async def _journal_task_end(self, process: ProcessInstance, task: TaskInstance) -> None:
         """Journal *task* reaching COMPLETE or FAILED."""
+        route = task.result.get("next_route") if isinstance(task.result, dict) else None
         if task.state == TaskState.COMPLETE:
-            await self._journal(process, ProcessEventKind.TASK_COMPLETED, task)
+            await self._journal(process, ProcessEventKind.TASK_COMPLETED, task, next_route=route)
         else:
-            await self._journal(process, ProcessEventKind.TASK_FAILED, task, error=task.error)
+            await self._journal(
+                process, ProcessEventKind.TASK_FAILED, task, error=task.error, next_route=route
+            )
 
     async def _journal(
         self,
@@ -1091,6 +1247,7 @@ class WorkflowEngine:
         kind: ProcessEventKind,
         task: TaskInstance | None = None,
         error: str | None = None,
+        next_route: str | None = None,
     ) -> None:
         """Append a step-journal event for *process* with the properties changed since the last.
 
@@ -1121,6 +1278,7 @@ class WorkflowEngine:
                     changed=changed,
                     removed=removed,
                     error=error,
+                    next_route=next_route,
                 )
             )
             if kind in (ProcessEventKind.PROCESS_COMPLETED, ProcessEventKind.PROCESS_FAILED):
@@ -1326,7 +1484,7 @@ class WorkflowEngine:
         for task in tasks:
             if task.state == TaskState.READY:
                 task_def = definition.get_task(task.task_definition_id)
-                if task_def.auto:
+                if await self._runs_itself(task_def, process):
                     await self.transition_task(task.id)
 
     # =========================================================================

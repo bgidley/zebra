@@ -12,8 +12,10 @@ from typing import Any
 from zebra.core.models import ProcessEvent
 
 #: Property values whose JSON form exceeds this many characters are journalled
-#: as a truncated preview, so a large blob is not copied into every step.
-MAX_JOURNAL_VALUE_CHARS = 16_000
+#: as a truncated preview. A diff holds only changed values, so a large value is
+#: stored once per change; the cap is high enough that replay (#170) gets
+#: real outputs whole.
+MAX_JOURNAL_VALUE_CHARS = 256_000
 
 #: Characters of a truncated value kept as its preview.
 TRUNCATED_PREVIEW_CHARS = 2_000
