@@ -21,7 +21,7 @@ Accepting a *Zebra Improvement Request* (#189) only records the verdict; someone
 | O3 | Filing problems never break or lose the request | Tests: missing token, timeout, network error, non-2xx each complete the process with `filed_issue.error` (never containing the token), shown on `/dreams/` |
 | O4 | LLM-written text cannot run quick actions or notify people | Table-driven test over `/close`, ` /assign @x`, `/label ~y`, `/spend 1h` lines and `@user` / `@group/sub` mentions in title and body; `#123` / `!45` links are out of scope |
 | O5 | Dedupe survives this change's request-workflow bump to v2 | Test: a v1 request's title still blocks the same title once the library holds v2 |
-| O6 | Live in prod with the token wired | Deploy copies `ZEBRA_GITLAB_TOKEN` into prod.env; from `zebra-web`, an authenticated `GET /projects/gidley%2Fzebra` returns 200 (token never printed); one real issue filed through `file_improvement_issue` in prod, then closed |
+| O6 | Live in prod with the token wired | Deploy copies `ZEBRA_GITLAB_TOKEN` into prod.env; from `zebra-web`, an authenticated issue search (`GET /projects/gidley%2Fzebra/issues?search=…`) returns 200 (token never printed; the fine-grained work-items token cannot read the project itself); one real issue filed through `file_improvement_issue` in prod, then closed |
 
 ## Capabilities
 

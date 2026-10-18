@@ -6,7 +6,7 @@
 - [x] 1.2 `zebra_improvement_request.yaml` v2: `review → file_issue`; entry point
 - [x] 1.3 Dedupe across all versions of the request workflow (#193 version part)
 - [x] 1.4 `/dreams/` shows filed issue link or filing error
-- [ ] 1.5 Deploy copies `ZEBRA_GITLAB_TOKEN` into prod.env; CI variable set
+- [x] 1.5 Deploy copies `ZEBRA_GITLAB_TOKEN` into prod.env; CI variable set
 
 ## 2. Tests & docs
 

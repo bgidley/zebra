@@ -1,6 +1,6 @@
 ## Context
 
-#189 added *Zebra Improvement Request* processes with one human review task. The reviewer can paste an issue link but nothing files one. GitLab.com project/group access tokens need a paid plan (the `gidley` group is Free), so the token is a personal access token (preferably of a bot user with Reporter on the project) stored as the masked, protected CI variable `ZEBRA_GITLAB_TOKEN`.
+#189 added *Zebra Improvement Request* processes with one human review task. The reviewer can paste an issue link but nothing files one. GitLab.com project/group access tokens need a paid plan (the `gidley` group is Free), so the token is a fine-grained personal access token limited to work items (issue search and create) stored as the masked, protected CI variable `ZEBRA_GITLAB_TOKEN`.
 
 ## Decisions
 
@@ -16,5 +16,5 @@
 
 ## Risks
 
-- A personal token on the owner's account reaches all their projects; a bot user limits that. The action only ever POSTs one issue to the configured project.
+- The fine-grained token can only touch work items; the action only searches and creates issues on the configured project.
 - Prompt-injected findings could shape issue text; quick actions and mentions are neutralised, and nothing is filed without a human accepting it.
