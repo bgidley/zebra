@@ -23,7 +23,7 @@ The system SHALL provide `assess_reversibility(...)` returning a
 `ReversibilityAssessment` (reversible, reasoning, confidence, chain_notes, source). Hints
 `always_reversible` / `always_irreversible` SHALL short-circuit without an LLM call
 (`source="hint"`, confidence 1.0). For `context_dependent` actions the assessment SHALL
-be an LLM judgment (default model haiku) over the action's concrete parameters that
+be an LLM judgment (default tier low) over the action's concrete parameters that
 evaluates the complete chain of consequences — an action that creates conditions for
 later irreversible harm, or whose safety depends on a subsequent corrective step (the
 "dropped weight" test), SHALL be classified irreversible — and SHALL judge intent and

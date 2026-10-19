@@ -29,11 +29,11 @@ unless `--allow-sqlite` is explicitly passed.
 
 ### Requirement: CLI supports model selection
 The `zebra goal` command SHALL accept a `--model` flag accepting the same aliases as the
-web (`haiku`, `sonnet`, `opus`, `kimi`), defaulting to `haiku`.
+web (`low`, `medium`, `high`, `max`), defaulting to `low`.
 
 #### Scenario: Non-default model used
-- **WHEN** `zebra goal "..." --model kimi` is run
-- **THEN** the Kimi LLM provider is used for the goal
+- **WHEN** `zebra goal "..." --model high` is run
+- **THEN** the goal runs at the high tier
 
 ### Requirement: CLI queue mode shares the web's queueing code path
 The `zebra goal --queue` command SHALL create a CREATED process for daemon execution via

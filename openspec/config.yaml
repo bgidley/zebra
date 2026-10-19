@@ -11,7 +11,7 @@ context: |
 
   Tech stack: Python 3.11+, Django, DRF, Pydantic, pytest, Ruff, UV.
   Database: Oracle (production), SQLite (tests). Async throughout (asyncio).
-  LLM: Anthropic Claude via `anthropic` SDK. MCP integration for tool access.
+  LLM: OpenRouter only (tiers low/medium/high/max via openrouter/auto). MCP integration for tool access.
 
   Conventions:
   - Feature branches: fN/short-description; commits reference GitLab issue (#N)

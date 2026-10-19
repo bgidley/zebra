@@ -53,7 +53,7 @@ LLM calls are the primary source of non-determinism and cost. Options, in order 
 
 1. **Recorded-cassette mode** (preferred for CI) — use a recording proxy (VCR-style) that captures real provider responses once per goal, then replays them. New scenarios require a one-time record run with a real key; the recording is checked in.
 2. **Stub provider** (for scenarios where we only care about shape, not content) — a deterministic stub that returns canned responses keyed by a rough prompt shape. Never assert on prompt contents.
-3. **Real provider** (nightly / release only) — small number of scenarios run end-to-end against the real Anthropic API to catch drift.
+3. **Real provider** (nightly / release only) — small number of scenarios run end-to-end against the real OpenRouter API to catch drift.
 
 Cost assertions use coarse bounds (`cost > 0`, `cost < daily_budget`), never exact figures.
 

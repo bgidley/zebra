@@ -364,7 +364,7 @@ This ensures Oracle credentials and API keys are available for integration tests
 
 **Required Environment Variables for Integration Tests:**
 - `ORACLE_DSN`, `ORACLE_USERNAME`, `ORACLE_PASSWORD` - Oracle database credentials
-- `ANTHROPIC_API_KEY` - For LLM integration tests
+- `OPENROUTER_API_KEY` - For LLM integration tests
 
 ### MCP
 
@@ -735,22 +735,24 @@ See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking fl
 | `GOAL_TIMEOUT_SECONDS` | `ZEBRA_GOAL_TIMEOUT_SECONDS` | 900 | Max seconds a goal's auto tasks may run before it is failed (#142) |
 | `DAEMON_AUTO_START` | `ZEBRA_DAEMON_AUTO_START` | true | Auto-start daemon in ASGI server |
 | — | `ZEBRA_LLM_TIMEOUT_SECONDS` | 180 | Per-attempt LLM API timeout in every provider (2 retries), so a stalled call fails inside the goal budget (#183) |
-| `LLM_PROVIDER` | `ZEBRA_LLM_PROVIDER` | anthropic | Provider for every LLM call that names none (`default_provider_name()`, #204); prod runs `openrouter` |
+| `LLM_MODEL` | `ZEBRA_LLM_MODEL` | medium | Server default model tier (`low` / `medium` / `high` / `max`, #205) |
 | `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | `ZEBRA_RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | 3 | Recovery fails a process once a task has been interrupted this many times (#130) |
 
-### Configurable LLM Model Selection
+### LLM Model Tiers (OpenRouter only)
 
-Users can choose between Claude Haiku, Sonnet, and Opus at multiple levels:
+Every LLM call goes through OpenRouter (#205). Zebra asks for a cost **tier**, never a vendor
+model: `low`, `medium` (default), `high`, `max`. A tier is sent to `openrouter/auto` with that
+auto-router `cost_tier`, so OpenRouter picks a model per prompt within the price band. An
+explicit `vendor/model` slug (e.g. `moonshotai/kimi-k3`) still names an exact model.
 
-- **Per-request**: `model` parameter in goal form or API call
-- **Per-workflow-task**: `model` property on any `llm_call` task in YAML
-- **Server-wide default**: `LLM_MODEL` in `ZEBRA_AGENT_SETTINGS`
+- **Per-request**: `model` in the goal form, API call or `--model` on the CLI
+- **Per-workflow-task**: `model` property on any `llm_call` / `llm_agent` task in YAML
+- **Server-wide default**: `LLM_MODEL` in `ZEBRA_AGENT_SETTINGS` (`ZEBRA_LLM_MODEL`)
 
-Model resolution: task property > process property (`__llm_model__`) > server default > provider default.
-
-Provider resolution works the same way: task `provider` > process `__llm_provider_name__` > `ZEBRA_LLM_PROVIDER` (`zebra_tasks.llm.providers.registry.default_provider_name()`) > `anthropic`. Never hard-code `"anthropic"` as a fallback (#204). Under `openrouter` the tier names map to `anthropic/claude-*-5.5`, or with `OPENROUTER_ROUTING=auto` (prod) to `openrouter/auto` at an auto-router cost tier: `haiku` low, `sonnet` medium, `opus` high (anything else medium); explicit `vendor/model` slugs still go to that model.
-
-Valid model aliases: `haiku`, `sonnet`, `opus` (resolved to full model IDs like `claude-sonnet-5-5`).
+Resolution: task `model` > process `__llm_model__` > server default > `medium`
+(`zebra_tasks.llm.client.model_for`). Call LLMs only via `get_llm(model, context)`, which
+also records cost. Names stored before #205 (`haiku`, `sonnet`, `opus`, `claude-*`) are read
+as their tier by `normalize_model()`; never write them.
 
 ### Orphaned Process Visibility
 

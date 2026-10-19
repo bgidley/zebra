@@ -63,7 +63,7 @@ Every LLM provider SHALL bound each API attempt by `ZEBRA_LLM_TIMEOUT_SECONDS` (
 
 #### Scenario: Override
 - **WHEN** `ZEBRA_LLM_TIMEOUT_SECONDS=90`
-- **THEN** the Anthropic, OpenAI, OpenRouter and Kimi clients use a 90s timeout
+- **THEN** the OpenRouter client uses a 90s timeout
 
 ### Requirement: Late results on failed processes are discarded
 When a process is failed while one of its actions is running, the engine SHALL discard that action's result when it returns: no output stored, no routing, and the process stays FAILED.

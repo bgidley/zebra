@@ -131,7 +131,7 @@ python zebra-agent-web/manage.py migrate
 | `DJANGO_DEBUG` | Enable debug mode | `1` (enabled) |
 | `DJANGO_ALLOWED_HOSTS` | Allowed hosts | `localhost,127.0.0.1` |
 | `ZEBRA_LIBRARY_PATH` | Workflow library path | `~/.zebra/workflows` |
-| `ZEBRA_LLM_PROVIDER` | LLM provider | `anthropic` |
+| `ZEBRA_LLM_MODEL` | Default model tier (`low` / `medium` / `high` / `max`) | `medium` |
 | `ZEBRA_LLM_MODEL` | LLM model | (provider default) |
 
 ## Web Pages

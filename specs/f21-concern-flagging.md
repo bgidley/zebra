@@ -36,7 +36,7 @@ No new tables or store interfaces. The concern set lives in process properties:
 
 - New task action `flag_concerns` (`zebra_tasks.agent.flag_concerns:FlagConcernsAction`),
   registered as a `zebra.tasks` entry point. Inputs: `goal`, `plan_context`,
-  `reasoning`, `provider`, `model` (default `haiku`), `output_key`
+  `reasoning`, `model` (default `low`), `output_key`
   (default `planning_concerns`). Always returns `TaskResult.ok` with **no**
   `next_route`. Reversibility hint: `always_reversible`.
 
@@ -67,7 +67,7 @@ concerns show while a goal is still running.
 
 ## Configuration
 
-None. The advisory scan defaults to the `haiku` model (cheap); overridable via
+None. The advisory scan defaults to the `low` tier (cheap); overridable via
 the task `model` property or the process `__llm_model__`.
 
 ## Open questions / risks

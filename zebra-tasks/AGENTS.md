@@ -7,7 +7,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 ## Package Overview
 
 `zebra-tasks` provides reusable task actions that extend the core workflow engine:
-- **LLM Actions**: Call LLM providers (Anthropic, OpenAI) from workflows
+- **LLM Actions**: Call LLMs (all through OpenRouter) from workflows
 - **Subtask Actions**: Spawn and manage sub-workflows
 - **Compute Actions**: Computational task utilities
 - **Agent Actions**: Agent-specific task actions
@@ -17,14 +17,11 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | Directory | Purpose |
 |-----------|---------|
 | `zebra_tasks/` | Package root |
-| `zebra_tasks/llm/` | LLM provider integrations |
-| `zebra_tasks/llm/base.py` | LLMProvider base class, Message model; `llm_request_timeout()` (`ZEBRA_LLM_TIMEOUT_SECONDS`, default 180s) + `LLM_MAX_RETRIES` (2), passed to every provider's SDK client (#183) |
+| `zebra_tasks/llm/` | LLM calls (OpenRouter only, #205) |
+| `zebra_tasks/llm/base.py` | LLMProvider base class, Message model; `llm_request_timeout()` (`ZEBRA_LLM_TIMEOUT_SECONDS`, default 180s) + `LLM_MAX_RETRIES` (2), passed to the OpenRouter client (#183) |
 | `zebra_tasks/llm/action.py` | LLMCallAction task action |
-| `zebra_tasks/llm/structured.py` | `parse_llm_json()` (unclosed fence, JSON in prose), `complete_json()` (one retry: 2× `max_tokens` after truncation, else a JSON-only note; `on_response` per call for cost), `LLMJSONError.failure` (`error`, `finish_reason`, `truncated`, `attempts`, capped `raw_response`), `describe_failure()`. Used by the dream-cycle JSON steps (#195) |
+| `zebra_tasks/llm/structured.py` | `parse_llm_json()` (unclosed fence, JSON in prose), `complete_json()` (one retry: 2× `max_tokens` after truncation, else a JSON-only note), `LLMJSONError.failure` (`error`, `finish_reason`, `truncated`, `attempts`, capped `raw_response`), `describe_failure()`. Used by the dream-cycle JSON steps (#195) |
 | `zebra_tasks/llm/agent.py` | LLMAgentAction (`llm_agent`): workflows as tools, each call a child process the task suspends on; `define_workflow`; cost roll-up; zero-cost tool `WorkflowRun`s (#146) |
-| `zebra_tasks/llm/providers/` | Provider implementations |
-| `zebra_tasks/llm/providers/anthropic.py` | Anthropic (Claude) provider: no `temperature` for Claude 4.6+/5 models; `output_config.effort: xhigh` for Sonnet/Haiku 5.5, which otherwise reason aloud in the reply on short prompts, plus `THINKING_HEADROOM_TOKENS` (4096) added to `max_tokens` so thinking does not eat the answer budget (#168) |
-| `zebra_tasks/llm/providers/openai.py` | OpenAI provider |
 | `zebra_tasks/subtasks/` | Sub-workflow actions |
 | `zebra_tasks/subtasks/spawn.py` / `wait.py` / `parallel.py` | SubworkflowAction, WaitForSubworkflowAction, ParallelSubworkflowsAction — suspend on their children (#181) |
 | `zebra_tasks/subtasks/common.py` | `start_child()` (bounded by `timeout`), `child_result()` (result dict from a `subflow_results` entry) |
@@ -40,7 +37,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/analyzer.py` | MetricsAnalyzerAction - analyze workflow metrics |
 | `zebra_tasks/agent/evaluator.py` | WorkflowEvaluatorAction - LLM workflow evaluation via `complete_json` (`max_tokens` 8000); an unusable reply leaves a fallback with `parse_failure` and the cause as key issue; adds its cost to `__total_cost__` (#195) |
 | `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization (tags created workflows `llm-defined`); `gym_gate: true` stages *modify* changes in `pending_gym` for the golden gym instead of saving; `save_workflow_file()` (#171) |
-| `zebra_tasks/agent/gym.py` | RunGoldenGymAction (`run_golden_gym`): golden tasks as concurrent child processes + suspend, sonnet judge (criteria 0/0.5/1), `GymScore`s to the `MetricsStore`. Gate mode (`candidates`): promote a staged modification only if its mean is ≥ current − `tolerance` (0.1), else `failed_changes`; no golden tasks → ungated; unsafe (manual task, unregistered / irreversible action), unscored, no judge, over `max_runs` (12) → rejected; never fails. On demand (no `candidates`): score current workflows. `unsafe_reason()` (#171) |
+| `zebra_tasks/agent/gym.py` | RunGoldenGymAction (`run_golden_gym`): golden tasks as concurrent child processes + suspend, medium-tier judge (criteria 0/0.5/1), `GymScore`s to the `MetricsStore`. Gate mode (`candidates`): promote a staged modification only if its mean is ≥ current − `tolerance` (0.1), else `failed_changes`; no golden tasks → ungated; unsafe (manual task, unregistered / irreversible action), unscored, no judge, over `max_runs` (12) → rejected; never fails. On demand (no `candidates`): score current workflows. `unsafe_reason()` (#171) |
 | `zebra_tasks/agent/curator.py` | WorkflowCuratorAction - dream-cycle retirement of broken/superseded/failing/unused/duplicate workflows; `ZEBRA_CURATOR_*` settings (#148) |
 | `zebra_tasks/knowledge/review.py` | ReviewKnowledgeAction - dream-cycle review of personal knowledge against recent runs; `revert_knowledge_changes()` (#153) |
 | `zebra_tasks/agent/improvements.py` | ProposeZebraImprovementsAction (`propose_zebra_improvements`) - dream-cycle requests for changes to Zebra's own code, each a *Zebra Improvement Request* process with a human review task; `max_requests` (2), title dedupe across workflow versions, never fails the cycle (#189); FileImprovementIssueAction (`file_improvement_issue`) files an accepted request as a GitLab issue (`ZEBRA_GITLAB_TOKEN`/`_URL`/`_PROJECT`), adopts an existing issue by marker, neutralises quick actions and mentions, never fails (#194) |
@@ -51,8 +48,8 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/flag_concerns.py` | FlagConcernsAction - proactive, advisory concern flagging during planning (F21) |
 | `zebra_tasks/agent/voice.py` | `VOICE_SCHEMA_FIELDS`, `extract_voice()`, `voice_fields()` - Zebra's first-person `voice` + `confidence` recorded alongside reasoning outputs (ethics gate, selector, flag concerns, continuation, post-review); stored only when supplied (#161) |
 | `zebra_tasks/agent/record_dilemma_resolution.py` | RecordDilemmaResolutionAction - record a human ethics-dilemma resolution and route (F22) |
-| `zebra_tasks/agent/stuck.py` | AssessStuckAction (`assess_stuck`: route `proceed`/`ask_human`, `max_help_requests` budget in `__help_requests__`, haiku help request with plain fallback), ApplyHelpResponseAction (`apply_help_response`: route `retry`/`redirect`/`abandon`, `__help_history__`), `with_help_guidance()` appended to the child goal by `execute_goal_workflow` (#176) |
-| `zebra_tasks/agent/postmortem.py` | WritePostmortemAction (`write_postmortem`: haiku postmortem — what happened / root cause / lesson + voice — stored via `MemoryStore.add_postmortem`, one per run, skips successful `failure` runs and without an LLM; never fails), `with_lessons()` appends recalled lessons to the child goal (#175) |
+| `zebra_tasks/agent/stuck.py` | AssessStuckAction (`assess_stuck`: route `proceed`/`ask_human`, `max_help_requests` budget in `__help_requests__`, low-tier help request with plain fallback), ApplyHelpResponseAction (`apply_help_response`: route `retry`/`redirect`/`abandon`, `__help_history__`), `with_help_guidance()` appended to the child goal by `execute_goal_workflow` (#176) |
+| `zebra_tasks/agent/postmortem.py` | WritePostmortemAction (`write_postmortem`: low-tier postmortem — what happened / root cause / lesson + voice — stored via `MemoryStore.add_postmortem`, one per run, skips successful `failure` runs and without an LLM; never fails), `with_lessons()` appends recalled lessons to the child goal (#175) |
 | `zebra_tasks/agent/zebra_source.py` | ZebraSourceAction (`zebra_source`): read-only `read` (line range, `max_chars`) / `search` (regex, glob, `max_results`) of Zebra's own source. Root `ZEBRA_SOURCE_ROOT` or the checkout above `zebra_tasks` (`/app` in prod); allowlisted top-level entries only; refuses dot-entries, databases, keys, `tmp/`, symlinks, anything outside the root (#190) |
 | `zebra_tasks/agent/outcome_review.py` | CompareOutcomeReviewsAction (`compare_outcome_reviews`): `parse_review()`, `compare_reviews()`; per-outcome Zebra vs Claude verdicts, route `agreed`/`disputed` (unreadable or missing = disputed), `reconsidered_key` overlay, `ruling_key` → `ruled`, `final` (no route); writes `review_result` (#190) |
 | `zebra_tasks/agent/record_ethics_review.py` | RecordEthicsReviewAction - normalise + audit the post-execution ethics review (#143) |
@@ -67,10 +64,10 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/knowledge/extract.py` | ExtractKnowledgeAction - LLM personal-fact candidates from a run; `normalize_knowledge_key()`, `validate_candidates()` privacy/cap guardrails (F152) |
 | `zebra_tasks/knowledge/store_learned.py` | StoreLearnedKnowledgeAction - store candidates as `source=agent` (confidence ≤ `max_confidence`), start *Resolve Knowledge Contradiction* for conflicts (F152); `update_agent_entries: true` updates a conflicting agent entry in place (F155) |
 | `zebra_tasks/web/kagi_news.py` | KagiNewsFetchAction (`kagi_news_fetch`: news.kagi.com `kite.json` feed, no key) and KagiNewsReadAction (`kagi_news_read`: batch Kagi Extract of picked stories, falls back to Kagi News summaries; never fails on extraction) (F155) |
-| `zebra_tasks/llm/pricing.py` | Anthropic + Kimi pricing tables (`PRICING`; Kimi uses cache-miss list prices from platform.kimi.ai), `LONG_PROMPT_PRICING` (Haiku 5.5's >100K-prompt rate, applied per call by `calculate_cost()`), `calculate_cost()`, `estimate_goal_cost()` (base rates) |
-| `zebra_tasks/llm/models.py` | ANTHROPIC_MODELS, KIMI_MODELS (`kimi` → `kimi-k2.6`, `kimi-k3`, `kimi-code`; #164), KIMI_TIER_MODELS (`haiku`/`sonnet` → `kimi-k2.6`, `opus` → `kimi-k3`, so tier names in workflows work under the kimi provider), `resolve_model_name()` model aliases |
-| `zebra_tasks/llm/providers/kimi.py` | KimiProvider (OpenAI-compatible): never sends `temperature` (Kimi models accept one fixed value) and sends `thinking: disabled` except for thinking-only `kimi-k2.7-code*` models, via the `OpenAIProvider._sampling_kwargs()` hook (#164) |
-| `zebra_tasks/llm/providers/openrouter.py` | OpenRouterProvider (OpenAI-compatible, `OPENROUTER_API_KEY`): `haiku`/`sonnet`/`opus` → `anthropic/claude-*-5.5` (`OPENROUTER_TIER_MODELS`), `vendor/model` slugs pass through, else `OPENROUTER_MODEL`; sets `TokenUsage.cost_usd` from OpenRouter's `usage.cost`, which `pricing.usage_cost()` prefers over the tables (#182). `OPENROUTER_ROUTING=auto`: tiers → `openrouter/auto` + `plugins: [{id: auto-router, cost_tier}]` (`OPENROUTER_AUTO_COST_TIERS`: haiku low / sonnet medium / opus high, else medium); explicit slugs pass through (#204) |
+| `zebra_tasks/llm/models.py` | `TIERS` (`low`, `medium`, `high`, `max`), `DEFAULT_TIER` (`medium`), `normalize_model()`: a tier, or a `vendor/model` slug as given; names stored before #205 (`haiku`, `sonnet`, `opus`, `claude-*`, `kimi*`) read as their tier |
+| `zebra_tasks/llm/client.py` | `get_llm(model, context)`: the one entry point; with a context every call records its usage on the process. `model_for(task, context, default)`: task `model` > process `__llm_model__` > default > `medium`. `set_llm_factory()`: test seam (the root `conftest.py` resets it) |
+| `zebra_tasks/llm/openrouter.py` | `OpenRouterLLM` (`OPENROUTER_API_KEY`, OpenAI SDK): a tier goes to `openrouter/auto` with `plugins: [{id: auto-router, cost_tier}]`; a slug goes to that model. Adds `REASONING_HEADROOM_TOKENS` (4096) to `max_tokens` so reasoning models still answer (#204); `TokenUsage.cost_usd` from OpenRouter's `usage.cost` |
+| `zebra_tasks/llm/usage.py` | `record_usage(context, response)`: tokens, cost and history onto the process, soft budget warning |
 | `tests/` | Test suite |
 
 ## Module-Specific Commands
@@ -126,49 +123,23 @@ class MyNewAction(TaskAction):
         ...
 ```
 
-### Add a New LLM Provider
+### LLM calls in a task action
 
-1. Create provider class in `zebra_tasks/llm/providers/`
-2. Inherit from `LLMProvider` base class
-3. Implement required methods: `complete()`, `stream()` (if supported)
-4. Register provider in `zebra_tasks/llm/__init__.py`
-
-**Example:**
+Every LLM call goes through OpenRouter (#205). Ask for a tier, never a vendor model:
 
 ```python
-from zebra_tasks.llm.base import LLMProvider, Message, LLMResponse
+from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.client import get_llm, model_for
 
-class MyProvider(LLMProvider):
-    """My custom LLM provider."""
-
-    def __init__(self, model: str = "default-model", api_key: str | None = None):
-        super().__init__(model)
-        self.api_key = api_key or os.environ.get("MY_PROVIDER_API_KEY")
-        self.client = MyClient(api_key=self.api_key)
-
-    async def complete(
-        self,
-        messages: list[Message],
-        temperature: float = 0.7,
-        max_tokens: int = 2000,
-        **kwargs,
-    ) -> LLMResponse:
-        # Call provider API
-        response = await self.client.chat(
-            model=self.model,
-            messages=[{"role": m.role, "content": m.content} for m in messages],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        return LLMResponse(
-            content=response.text,
-            model=self.model,
-            usage={"input_tokens": response.input_tokens, "output_tokens": response.output_tokens},
-        )
-
-# Register in __init__.py
-register_provider("my_provider", lambda model: MyProvider(model))
+llm = get_llm(model_for(task, context, default="low"), context)
+response = await llm.complete([Message.user(prompt)], max_tokens=500)
 ```
+
+- `model_for` picks the task's `model`, else the run's `__llm_model__`, else the default.
+- Passing `context` records tokens and cost on the process; do not track cost by hand.
+- `get_llm` raises `ValueError` without `OPENROUTER_API_KEY`; actions that must never fail
+  (dream-cycle steps) catch it and degrade.
+- In tests, `set_llm_factory(lambda model: fake)` (or patch the module's `get_llm`).
 
 ## Task Action Reference
 
@@ -188,9 +159,9 @@ Call an LLM provider from a workflow task.
 | `response_format` | string | "text" | "text" or "json" |
 | `output_key` | string | "llm_response" | Where to store response |
 | `provider` | string | null | Provider name override |
-| `model` | string | null | Model name override (supports aliases: `haiku`, `sonnet`, `opus`) |
+| `model` | string | null | Tier `low` / `medium` / `high` / `max`, or an OpenRouter `vendor/model` slug; default the process's `__llm_model__`, else `medium` |
 
-**Cost Tracking:** `LLMCallAction._track_tokens()` calculates cost via `pricing.calculate_cost()`, accumulates `__total_cost__` and `__token_history__` on process properties, and soft-warns via `__budget_manager__` from `context.extras` if the per-goal cost exceeds a threshold.
+**Cost Tracking:** `get_llm(model, context)` records every call's tokens and OpenRouter-reported cost (`zebra_tasks/llm/usage.py: record_usage`) into `__total_cost__`, `__total_tokens__` and `__token_history__`, and soft-warns via `__budget_manager__` from `context.extras` if the per-goal cost exceeds a threshold.
 
 ### LLMAgentAction (`llm_agent`, #146)
 
@@ -444,7 +415,6 @@ Evaluate a goal or plan against Kantian ethics, optionally combined with the use
 | `check_type` | string | - | `"input_gate"` or `"plan_review"` |
 | `plan_context` | string | `""` | Workflow name or plan details (for `plan_review`) |
 | `user_id` | number | null | Authenticated user id — when provided, values profile is consulted |
-| `provider` | string | `"anthropic"` | LLM provider name |
 | `model` | string | null | Model name override (supports aliases) |
 | `output_key` | string | `"ethics_assessment"` | Process property key for the stored assessment |
 
@@ -482,8 +452,7 @@ formal `ethics_plan_review` gate in `agent_main_loop.yaml`.
 | `goal` | string | - | The goal being pursued (supports `{{var}}` templates) |
 | `plan_context` | string | `""` | Workflow name or plan details being reviewed |
 | `reasoning` | string | `""` | Why this plan/workflow was selected (extra context) |
-| `provider` | string | `"anthropic"` | LLM provider name |
-| `model` | string | `haiku` | Model override — defaults to the cheap haiku scan |
+| `model` | string | `low` | Model tier — defaults to the cheap low tier |
 | `output_key` | string | `"planning_concerns"` | Process property key for the result |
 
 **Output / stored result:** `{"concerns": [{"description", "severity": "low|medium|high", "step"}], "summary"}`. A routine, low-risk plan returns an empty `concerns` list.
@@ -499,12 +468,12 @@ formal `ethics_plan_review` gate in `agent_main_loop.yaml`.
 Let a workflow decide it needs past workflow runs, fetch them, and use them downstream. Both
 live in `zebra_tasks/agent/history.py` and are `always_reversible` (read-only).
 
-**`assess_history_need`** — properties `goal`, `provider`, `model` (default `haiku`), `output_key`
+**`assess_history_need`** — properties `goal`, `model` (default `low`), `output_key`
 (default `history_need`). Goals without history cues (regex: "last week", "did I", "before",
 "continue", "what next", "pick up", weekday/month names, …; checked against the goal and the
 `continuation_comment`) route `no_history` with **no LLM call**. Continuations (a
 `previous_run_context` is present) always reach the LLM, with the comment and previous goal in the
-prompt (#150). Otherwise haiku returns
+prompt (#150). Otherwise a low-tier call returns
 `{needs_history, since, until, text, reasoning}`. Invalid extracted times are dropped. LLM errors or
 unparseable JSON degrade to `no_history`. **Routes:** `needs_history`, `no_history`.
 
@@ -571,7 +540,7 @@ Enforce the per-domain trust level (F12/F13) at a workflow gate point. Routes `p
 | `action_description` | string | `""` | Human-readable description of the gated action |
 | `user_id` | number | null | User id; falls back to `__user_id__` process property |
 | `reversibility` | string | null | Workflow-declared reversibility — untrusted context for the assessment; never grants proceed by itself |
-| `model` | string | null | LLM model for the reversibility assessment (default `haiku`) |
+| `model` | string | null | Model tier for the reversibility assessment (default `low`) |
 | `output_key` | string | `"trust_gate_decision"` | Process property key for the decision record |
 
 **Output:** the decision record (`domain`, `user_id`, `level`, `reversibility`, `assessment`, `route`, `reason`, `decided_at`). Also appended to `__trust_gate_decisions__`; assessments additionally to `__trust_assessments__`.
