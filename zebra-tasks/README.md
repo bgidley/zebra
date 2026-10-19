@@ -7,8 +7,7 @@ Reusable task actions for the [Zebra](../zebra-py) workflow engine.
 ```bash
 pip install zebra-tasks
 
-# With Anthropic support
-pip install zebra-tasks[anthropic]
+pip install zebra-tasks  # LLM calls go through OpenRouter (OPENROUTER_API_KEY)
 
 # With OpenAI support
 pip install zebra-tasks[openai]
@@ -78,7 +77,7 @@ tasks:
 ```
 
 Supported providers:
-- Anthropic (Claude)
+- OpenRouter (tiers through the auto router, or any `vendor/model`)
 - OpenAI (GPT-4, etc.)
 
 ### Agent Actions
@@ -94,7 +93,7 @@ These actions handle workflow selection, execution, metrics recording, and memor
 | `execute_goal_workflow` | `ExecuteGoalWorkflowAction` | Execute a workflow by name and capture output |
 | `record_metrics` | `RecordMetricsAction` | Record run metrics to metrics store |
 | `update_memory` | `UpdateMemoryAction` | Add entry to agent memory store |
-| `assess_history_need` | `AssessHistoryNeedAction` | Decide if a goal needs past workflow runs (keyword pre-check, then haiku); extract date/text filters; routes `needs_history` / `no_history` |
+| `assess_history_need` | `AssessHistoryNeedAction` | Decide if a goal needs past workflow runs (keyword pre-check, then a low-tier call); extract date/text filters; routes `needs_history` / `no_history` |
 | `get_workflow_history` | `GetWorkflowHistoryAction` | Fetch past runs filtered by `since`/`until` (ISO or `-7d`/`24h`), goal text, workflow, success; outputs bounded `history_context` |
 
 Agent actions access non-serializable stores (memory, metrics, workflow library) through
@@ -152,10 +151,10 @@ registry.register_action("llm_call", LLMCallAction)
 ### Using LLM Provider
 
 ```python
-from zebra_tasks.llm import get_provider
+from zebra_tasks.llm import get_llm
 
 # Get provider (requires API key in environment)
-provider = get_provider("anthropic", model="claude-sonnet-5-5")
+provider = get_llm("medium")
 
 # Use in workflow via process properties
 process_properties = {

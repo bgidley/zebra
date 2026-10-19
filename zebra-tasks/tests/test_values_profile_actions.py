@@ -108,7 +108,7 @@ async def test_load_fails_without_user_id(mock_task, mock_context):
 def _llm_response(payload: dict) -> MagicMock:
     return MagicMock(
         content=json.dumps(payload),
-        model="claude-haiku",
+        model="test/model",
         usage=MagicMock(input_tokens=100, output_tokens=50, total_tokens=150),
     )
 
@@ -139,7 +139,7 @@ async def test_extract_returns_empty_when_llm_fails(mock_task, mock_context):
     failing = MagicMock()
     failing.complete = AsyncMock(side_effect=RuntimeError("network down"))
 
-    with patch("zebra_tasks.agent.extract_values_tags.get_provider", return_value=failing):
+    with patch("zebra_tasks.agent.extract_values_tags.get_llm", return_value=failing):
         result = await ExtractValuesTagsAction().run(mock_task, mock_context)
 
     assert result.success
@@ -174,7 +174,7 @@ async def test_extract_parses_approved_and_candidate_tags(mock_task, mock_contex
     }
 
     with patch(
-        "zebra_tasks.agent.extract_values_tags.get_provider",
+        "zebra_tasks.agent.extract_values_tags.get_llm",
         return_value=_llm_provider(_llm_response(payload)),
     ):
         result = await ExtractValuesTagsAction().run(mock_task, mock_context)
@@ -206,7 +206,7 @@ async def test_extract_drops_unknown_approved_tags(mock_task, mock_context):
     }
 
     with patch(
-        "zebra_tasks.agent.extract_values_tags.get_provider",
+        "zebra_tasks.agent.extract_values_tags.get_llm",
         return_value=_llm_provider(_llm_response(payload)),
     ):
         await ExtractValuesTagsAction().run(mock_task, mock_context)
@@ -231,7 +231,7 @@ async def test_extract_caps_candidates_to_five(mock_task, mock_context):
     }
 
     with patch(
-        "zebra_tasks.agent.extract_values_tags.get_provider",
+        "zebra_tasks.agent.extract_values_tags.get_llm",
         return_value=_llm_provider(_llm_response(payload)),
     ):
         await ExtractValuesTagsAction().run(mock_task, mock_context)
@@ -250,7 +250,7 @@ async def test_save_persists_version_and_tags(mock_task, mock_context):
     mock_context.extras["__profile_store__"] = store
     mock_task.properties = {
         "user_id": 1,
-        "extraction_model": "claude-haiku",
+        "extraction_model": "test/model",
         "confirmed": {
             "core_values": {
                 "text": "honesty and growth",
@@ -279,7 +279,7 @@ async def test_save_persists_version_and_tags(mock_task, mock_context):
     assert current.core_values_text == "honesty and growth"
     assert current.core_values_tags == ["honesty", "growth"]
     assert current.priorities_tags == ["family"]
-    assert current.tags_extraction_model == "claude-haiku"
+    assert current.tags_extraction_model == "test/model"
 
     # Tag rows accumulated as candidates with usage_count = 1.
     core_tags = await store.get_approved_tags("core_values")

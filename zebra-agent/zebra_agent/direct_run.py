@@ -32,7 +32,6 @@ async def run_named_workflow(
     name: str,
     inputs: dict[str, Any],
     *,
-    provider: str | None = None,
     model: str | None = None,
     timeout: float = 900.0,
 ) -> dict[str, Any]:
@@ -43,8 +42,7 @@ async def run_named_workflow(
         library: Workflow library to load ``name`` from.
         name: Workflow name.
         inputs: Initial properties; must cover the workflow's required ``inputs``.
-        provider: LLM provider name for the run.
-        model: LLM model alias for the run.
+        model: Model tier for the run (low / medium / high / max).
         timeout: Seconds the inline auto-task chain may run (#142).
 
     Returns:
@@ -70,7 +68,6 @@ async def run_named_workflow(
         **inputs,
         "run_id": run_id,
         "workflow_name": name,
-        "__llm_provider_name__": provider,
         "__llm_model__": model,
     }
     process = await engine.create_process(definition, properties=properties)

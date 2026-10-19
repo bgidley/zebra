@@ -33,7 +33,6 @@ def engine(tmp_path, monkeypatch) -> WorkflowEngine:
     monkeypatch.setattr(agent_engine, "ensure_initialized", _noop)
     monkeypatch.setattr(agent_engine, "get_agent_loop", lambda: SimpleNamespace(engine=engine))
     monkeypatch.setattr(agent_engine, "get_library", lambda: library)
-    monkeypatch.setattr(agent_engine, "get_llm_provider_name", lambda: "anthropic")
     return engine
 
 

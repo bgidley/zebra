@@ -10,8 +10,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, extract_voice, voice_fields
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 
 @dataclass
@@ -71,7 +70,6 @@ class WorkflowSelectorAction(TaskAction):
         available_workflows: List of WorkflowInfo dicts
         memory_context: Conceptual memory context string (optional)
         shortlist: List of workflow names from memory (optional)
-        provider: LLM provider name (default: anthropic)
         model: LLM model name (optional)
         output_key: Where to store selection result (default: "selection")
 
@@ -169,13 +167,6 @@ class WorkflowSelectorAction(TaskAction):
             description="Past workflow runs from get_workflow_history (F138)",
             required=False,
             default="",
-        ),
-        ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
-            default=None,
         ),
         ParameterDef(
             name="model",
@@ -372,7 +363,6 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
             history_context = context.resolve_template(history_context)
 
         # Get LLM provider
-        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
 
         callback = context.extras.get("__progress_callback__")
@@ -384,7 +374,7 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
         logger.info(f"Available workflows: {len(workflows)}, shortlist: {len(shortlist)}")
 
         try:
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
         except Exception as e:
             return TaskResult.fail(f"Failed to get LLM provider: {e}")
 

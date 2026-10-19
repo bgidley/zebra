@@ -9,7 +9,7 @@ and adds convenience methods for service registration and lookup.
 Example:
     container = ZebraContainer()
     container.config.from_dict({
-        "llm": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
+        "library": {"path": "~/.zebra/workflows"},
     })
 
     # Provide a store

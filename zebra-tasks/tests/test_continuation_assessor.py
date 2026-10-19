@@ -63,10 +63,10 @@ def _provider(content=None, error=None):
 
 async def _run(task, context, provider):
     with patch(
-        "zebra_tasks.agent.continuation_assessor.get_provider", return_value=provider
-    ) as get_provider:
+        "zebra_tasks.agent.continuation_assessor.get_llm", return_value=provider
+    ) as get_llm_mock:
         result = await ContinuationAssessorAction().run(task, context)
-    return result, get_provider
+    return result, get_llm_mock
 
 
 def _continuation_props(**extra):
@@ -75,11 +75,11 @@ def _continuation_props(**extra):
 
 async def test_non_continuation_passes_through_without_llm(task):
     context = _context({"goal": "Fresh goal"})
-    result, get_provider = await _run(task, context, _provider("{}"))
+    result, get_llm_mock = await _run(task, context, _provider("{}"))
 
     assert result.success
     assert result.next_route == "not_continuation"
-    get_provider.assert_not_called()
+    get_llm_mock.assert_not_called()
     context.set_process_property.assert_not_called()
 
 
@@ -183,7 +183,7 @@ async def test_missing_provider_falls_back(task):
     props = _continuation_props()
     context = _context(props, _Library(["Brainstorm Ideas"]))
     with patch(
-        "zebra_tasks.agent.continuation_assessor.get_provider",
+        "zebra_tasks.agent.continuation_assessor.get_llm",
         side_effect=ValueError("Unknown LLM provider"),
     ):
         result = await ContinuationAssessorAction().run(task, context)
@@ -192,10 +192,10 @@ async def test_missing_provider_falls_back(task):
 
 
 async def test_model_resolved_from_process_property(task):
-    props = _continuation_props(__llm_model__="haiku")
+    props = _continuation_props(__llm_model__="low")
     context = _context(props, _Library(["Brainstorm Ideas"]))
     content = json.dumps({"decision": "existing_workflow", "rationale": "x"})
 
-    _, get_provider = await _run(task, context, _provider(content))
+    _, get_llm_mock = await _run(task, context, _provider(content))
 
-    get_provider.assert_called_once_with("anthropic", "haiku")
+    assert get_llm_mock.call_args.args[0] == "low"

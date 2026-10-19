@@ -33,12 +33,12 @@ LOW_RATING_MAX = 2
 _DELIBERATE_STOPS = ("Kill switch activated",)
 
 # Process properties carried onto the Postmortem process: who the goal was for
-# (journal ownership, #151) and which provider to use.
+# (journal ownership, #151) and the model tier to use.
 _CARRIED_KEYS = (
     "__user_id__",
     "__user_display_name__",
     "__user_identity_id__",
-    "__llm_provider_name__",
+    "__llm_model__",
 )
 
 

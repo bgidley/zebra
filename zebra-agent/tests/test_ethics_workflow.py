@@ -199,7 +199,7 @@ WORKFLOW_YAML_PATH = Path(__file__).parent.parent / "workflows" / "agent_main_lo
 @pytest.fixture(autouse=True)
 def _no_help_request_llm():
     """#176: the help request falls back to plain text instead of calling an LLM."""
-    with patch("zebra_tasks.agent.stuck.get_provider", side_effect=RuntimeError("no LLM")):
+    with patch("zebra_tasks.agent.stuck.get_llm", side_effect=RuntimeError("no LLM")):
         yield
 
 
@@ -585,19 +585,19 @@ class TestContinuationRouting:
         engine = WorkflowEngine(store, registry, extras={"__workflow_library__": _Library(library)})
         process = await engine.create_process(definition, properties=properties)
         with patch(
-            "zebra_tasks.agent.continuation_assessor.get_provider",
+            "zebra_tasks.agent.continuation_assessor.get_llm",
             return_value=provider or _llm_returning({}),
-        ) as get_provider:
+        ) as get_llm_mock:
             await engine.start_process(process.id)
         process = await store.load_process(process.id)
         assert process.state == ProcessState.COMPLETE
-        return process.properties, get_provider
+        return process.properties, get_llm_mock
 
     async def test_non_continuation_goal_bypasses_assessment(self, definition):
-        props, get_provider = await self._run(
+        props, get_llm_mock = await self._run(
             definition, {"goal": "Write a poem", "available_workflows": []}
         )
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
         assert "continuation_decision" not in props
         assert "__task_output_select_workflow" in props
         assert props["workflow_name"] == "Test Workflow"
@@ -708,13 +708,13 @@ class TestHistoryRouting:
             definition, properties={"goal": goal, "available_workflows": []}
         )
         with patch(
-            "zebra_tasks.agent.history.get_provider",
+            "zebra_tasks.agent.history.get_llm",
             return_value=provider or _llm_returning({}),
-        ) as get_provider:
+        ) as get_llm_mock:
             await engine.start_process(process.id)
         process = await store.load_process(process.id)
         assert process.state == ProcessState.COMPLETE
-        return process.properties, get_provider
+        return process.properties, get_llm_mock
 
     async def test_needs_history_reaches_child_goal(self, definition):
         provider = _llm_returning({"needs_history": True, "since": "-7d", "text": "pension"})
@@ -729,8 +729,8 @@ class TestHistoryRouting:
         assert "Vanguard has the lowest fees" in child_goal
 
     async def test_no_history_leaves_goal_untouched(self, definition):
-        props, get_provider = await self._run(definition, "Write a poem")
-        get_provider.assert_not_called()
+        props, get_llm_mock = await self._run(definition, "Write a poem")
+        get_llm_mock.assert_not_called()
         assert "__task_output_get_workflow_history" not in props
         assert "workflow_history" not in props
         assert props["execution_result"]["output"] == "Write a poem"
@@ -752,7 +752,7 @@ def _extraction_provider(*candidates):
     provider.complete = AsyncMock(
         return_value=LLMResponse(
             content=json.dumps({"candidates": list(candidates)}),
-            model="haiku",
+            model="low",
             usage={},
             tool_calls=[],
             finish_reason="end_turn",
@@ -777,7 +777,7 @@ class TestKnowledgeLearning:
             props["__user_id__"] = user_id
         process = await engine.create_process(definition, properties=props)
         with patch(
-            "zebra_tasks.knowledge.extract.get_provider",
+            "zebra_tasks.knowledge.extract.get_llm",
             return_value=provider or _extraction_provider(),
         ) as gp:
             await engine.start_process(process.id)

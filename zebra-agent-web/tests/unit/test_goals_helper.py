@@ -78,9 +78,8 @@ async def test_queue_goal_builds_pre_refactor_properties(mock_machinery):
     assert props["priority"] == 2
     assert props["run_id"]
     assert props["deadline"] == "2026-07-01T12:00:00Z"
-    assert props["__llm_provider_name__"] == "anthropic"
-    # haiku alias resolved to a full model id
-    assert props["__llm_model__"] and props["__llm_model__"] != "haiku"
+    # a legacy model name is stored as its tier
+    assert props["__llm_model__"] == "low"
     assert props["__user_id__"] == 42
     assert props["__user_display_name__"] == "Ben"
     assert props["__user_identity_id__"] == "id-1"
@@ -103,18 +102,6 @@ async def test_queue_goal_defaults(mock_machinery):
     assert props["__user_id__"] is None
     assert props["__user_display_name__"] == ""
     assert "deadline" not in props
-
-
-async def test_queue_goal_uses_configured_provider(mock_machinery, settings):
-    """#144: the provider comes from LLM_PROVIDER, not a hard-coded "anthropic"."""
-    from zebra_agent_web.api.goals import queue_goal
-
-    settings.ZEBRA_AGENT_SETTINGS = {**settings.ZEBRA_AGENT_SETTINGS, "LLM_PROVIDER": "openai"}
-
-    await queue_goal("Do something")
-
-    props = mock_machinery["wf_engine"].create_process.call_args.kwargs["properties"]
-    assert props["__llm_provider_name__"] == "openai"
 
 
 async def test_queue_goal_success_rate_is_float(mock_machinery):

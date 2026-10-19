@@ -4,7 +4,7 @@ These tests run against the real Oracle database and make real LLM API calls.
 
 Prerequisites:
 - Oracle database configured in .env (ORACLE_DSN, ORACLE_USERNAME, ORACLE_PASSWORD)
-- ANTHROPIC_API_KEY configured in .env
+- OPENROUTER_API_KEY configured in .env
 - Database migrations applied (python manage.py migrate)
 
 Note: Environment variables are loaded automatically by pytest-dotenv plugin
@@ -126,7 +126,7 @@ def workflow_engine(django_stores):
 def agent_loop(workflow_library, workflow_engine, django_stores):
     """Create an AgentLoop configured with Django stores and real LLM.
 
-    Uses Anthropic as the LLM provider (requires ANTHROPIC_API_KEY in env).
+    Calls OpenRouter (requires OPENROUTER_API_KEY in env).
     """
     from zebra_agent.loop import AgentLoop
 
@@ -135,7 +135,6 @@ def agent_loop(workflow_library, workflow_engine, django_stores):
         engine=workflow_engine,
         metrics=django_stores.metrics,
         memory=django_stores.memory,
-        provider="anthropic",
         model=None,  # Use default model
     )
 

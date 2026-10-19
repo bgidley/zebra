@@ -28,7 +28,7 @@ None. All state lives in process properties: inputs (`issue`, `title`, `outcomes
 | `compare_outcome_reviews` action | Parses both reviews (dict, list or fenced JSON), lines them up per outcome id, routes `agreed` / `disputed`. Missing, unknown or garbled verdicts are disputed, and every id in the outcomes table (`outcomes_key`) is compared, so an outcome neither reviewer judged is disputed too (#191). `reconsidered_key` overlays Zebra's second verdicts; `ruling_key` records the human ruling (`ruled`); `final` records without routing |
 | *Outcome Review* workflow | System, tool-only (required `inputs`), `result_key: review_result` |
 | `zebra_agent.direct_run` | `run_named_workflow()` creates and starts a named workflow from inputs (required inputs checked); `workflow_status()` → `complete` / `awaiting_input` / `failed` / `running` |
-| `manage.py run_workflow` | `<name> --input-file - [--model sonnet]` or `--status <process_id>`; prints the status JSON, exits 1 on failure |
+| `manage.py run_workflow` | `<name> --input-file - [--model medium]` or `--status <process_id>`; prints the status JSON, exits 1 on failure |
 | `scripts/zebra-outcome-review.sh` | `run <N> <title> outcomes.md claude.json <base> [head]` builds the inputs on the host (diff capped at 60000 chars; deployed hash from `/app/version.json`) and runs the workflow in `zebra-web`; `status <process_id>` polls. Exit 0 complete, 2 waiting on a human, 1 failed. Tested with a fake `podman` in `zebra-agent/tests/test_outcome_review_script.py` (#192) |
 
 ## Control flow
@@ -52,7 +52,7 @@ merge → deploy green → fresh Claude subagent writes `claude.json` → `zebra
 
 ## Configuration
 
-`ZEBRA_SOURCE_ROOT` (optional); script env `ZEBRA_REVIEW_MODEL` (default `sonnet`),
+`ZEBRA_SOURCE_ROOT` (optional); script env `ZEBRA_REVIEW_MODEL` (default `medium`),
 `ZEBRA_FEEDBACK_CONTAINER` (`zebra-web`), `ZEBRA_URL` (task links).
 
 ## Open questions / risks
@@ -60,7 +60,7 @@ merge → deploy green → fresh Claude subagent writes `claude.json` → `zebra
 - The model may return malformed JSON. It counts as disputed, so the failure mode is a human
   task, not a false pass.
 - Claude's side has no rebuttal round inside the workflow; the human sees both positions.
-- Cost: up to two Sonnet `llm_agent` passes per feature. Both set `answer_on_budget`, so a review
+- Cost: up to two medium-tier `llm_agent` passes per feature. Both set `answer_on_budget`, so a review
   that spends its tool turns (12, then 6) still answers instead of failing (#191; the first real
   run, of #190, failed after 8 turns).
 - In prod `/app` holds only the packages, `pyproject.toml` and `version.json`, so Zebra judges

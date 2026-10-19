@@ -33,9 +33,9 @@ class Command(BaseCommand):
         parser.add_argument("--status", default=None, help="Report on this process id instead")
         parser.add_argument(
             "--model",
-            default="sonnet",
-            choices=["haiku", "sonnet", "opus", "kimi", "openrouter"],
-            help="LLM model for the run (default: sonnet)",
+            default="medium",
+            choices=["low", "medium", "high", "max"],
+            help="Model tier for the run (default: medium)",
         )
         parser.add_argument(
             "--timeout", type=float, default=900.0, help="Seconds the auto tasks may run"
@@ -77,18 +77,13 @@ class Command(BaseCommand):
             if not isinstance(inputs, dict):
                 return {"status": "failed", "error": "Inputs must be a JSON object"}
 
-        model = options["model"]
-        provider = {"kimi": "kimi", "openrouter": "openrouter"}.get(
-            model, agent_engine.get_llm_provider_name()
-        )
         try:
             return await run_named_workflow(
                 engine,
                 agent_engine.get_library(),
                 options["workflow"],
                 inputs,
-                provider=provider,
-                model=model,
+                model=options["model"],
                 timeout=options["timeout"],
             )
         except DirectRunError as e:

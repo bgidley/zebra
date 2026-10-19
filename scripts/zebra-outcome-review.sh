@@ -17,12 +17,12 @@
 # (sign-off is blocked: poll with `status`), 1 the review failed or could not run.
 #
 # Env:
-#   ZEBRA_REVIEW_MODEL       model alias (default: sonnet)
+#   ZEBRA_REVIEW_MODEL       model tier (default: medium)
 #   ZEBRA_FEEDBACK_CONTAINER container to run in (default: zebra-web)
 #   ZEBRA_URL                base URL for task links (default: https://zebra.gidley.co.uk)
 set -uo pipefail
 
-MODEL="${ZEBRA_REVIEW_MODEL:-sonnet}"
+MODEL="${ZEBRA_REVIEW_MODEL:-medium}"
 CONTAINER="${ZEBRA_FEEDBACK_CONTAINER:-zebra-web}"
 ZEBRA_URL="${ZEBRA_URL:-https://zebra.gidley.co.uk}"
 MAX_DIFF_CHARS=60000

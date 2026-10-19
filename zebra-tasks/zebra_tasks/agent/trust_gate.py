@@ -84,7 +84,7 @@ class TrustGateAction(TaskAction):
         ParameterDef(
             name="model",
             type="string",
-            description="LLM model for the reversibility assessment (default: haiku)",
+            description="LLM model for the reversibility assessment (default: low)",
             required=False,
         ),
         ParameterDef(

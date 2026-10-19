@@ -22,8 +22,7 @@ from zebra_tasks.agent.followup import (
 )
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm, model_for
 
 logger = logging.getLogger(__name__)
 
@@ -127,12 +126,6 @@ class ContinuationAssessorAction(TaskAction):
             "when no WorkflowLibrary is available",
             required=False,
             default=[],
-        ),
-        ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
         ),
         ParameterDef(
             name="model",
@@ -257,12 +250,7 @@ class ContinuationAssessorAction(TaskAction):
         Returns ``(decision, rationale, suggested_name, voice)`` where ``voice`` holds
         the normalised ``voice`` / ``confidence`` fields (#161).
         """
-        provider_name = (
-            task.properties.get("provider")
-            or context.process.properties.get("__llm_provider_name__")
-            or default_provider_name()
-        )
-        model = task.properties.get("model") or context.process.properties.get("__llm_model__")
+        model = model_for(task, context)
 
         outcome = "succeeded" if ctx.get("success", True) else "failed"
         prompt = (
@@ -278,7 +266,7 @@ class ContinuationAssessorAction(TaskAction):
         )
 
         try:
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
             response = await provider.complete(
                 messages=[Message.system(SYSTEM_PROMPT), Message.user(prompt)],
                 temperature=0.2,

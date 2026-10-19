@@ -17,8 +17,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import CONTINUATION_COMMENT_KEY, PREVIOUS_RUN_CONTEXT_KEY
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -318,7 +317,7 @@ class AssessHistoryNeedAction(TaskAction):
     """Decide whether a goal needs past workflow history and extract filters.
 
     Goals with no history cues route ``no_history`` without an LLM call.
-    Otherwise a cheap (haiku) call decides and extracts ``since``/``until``/
+    Otherwise a cheap (low tier) call decides and extracts ``since``/``until``/
     ``text``. LLM errors degrade to ``no_history`` rather than failing.
 
     Routes:
@@ -332,16 +331,9 @@ class AssessHistoryNeedAction(TaskAction):
     inputs = [
         ParameterDef(name="goal", type="string", description="The user's goal", required=True),
         ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
-            default=None,
-        ),
-        ParameterDef(
             name="model",
             type="string",
-            description="LLM model (defaults to haiku — this is a cheap classifier)",
+            description="LLM model (default low — a cheap classifier)",
             required=False,
         ),
         ParameterDef(
@@ -382,14 +374,9 @@ class AssessHistoryNeedAction(TaskAction):
         if not is_continuation and not _HISTORY_CUES.search(f"{goal}\n{comment}"):
             return self._finish(context, output_key, False, "No history cues in goal")
 
-        provider_name = (
-            task.properties.get("provider")
-            or context.process.properties.get("__llm_provider_name__")
-            or default_provider_name()
-        )
-        model = task.properties.get("model") or "haiku"
+        model = task.properties.get("model") or "low"
         try:
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
             response = await provider.complete(
                 messages=[
                     Message.system(SYSTEM_PROMPT.format(today=datetime.now(UTC).date())),

@@ -67,7 +67,7 @@ class SchedulerLoop:
         self._routines_dir = routines_dir
         self._goal_queue_tick_fn = goal_queue_tick_fn
         self._queue_goal_fn = queue_goal_fn
-        # Seeded into every routine-dispatched process (e.g. __llm_provider_name__)
+        # Seeded into every routine-dispatched process (e.g. __llm_model__)
         # so routine runs get the same context as manually started ones.
         self._default_properties = dict(default_properties or {})
 

@@ -14,14 +14,14 @@
 #   bash scripts/zebra-feedback.sh <issue_number> "<feature title>" "$(cat outcomes.md)"
 #
 # Env:
-#   ZEBRA_FEEDBACK_MODEL     model alias for the review (default: sonnet)
+#   ZEBRA_FEEDBACK_MODEL     model tier for the review (default: medium)
 #   ZEBRA_FEEDBACK_CONTAINER container to run in (default: zebra-web)
 set -uo pipefail
 
 ISSUE="${1:-?}"
 TITLE="${2:-feature}"
 OUTCOMES="${3:-(no outcomes provided)}"
-MODEL="${ZEBRA_FEEDBACK_MODEL:-sonnet}"
+MODEL="${ZEBRA_FEEDBACK_MODEL:-medium}"
 CONTAINER="${ZEBRA_FEEDBACK_CONTAINER:-zebra-web}"
 
 GOAL="You are reviewing the agreed outcomes for a new change to the Zebra codebase,

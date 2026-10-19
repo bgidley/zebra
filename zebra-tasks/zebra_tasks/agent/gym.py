@@ -31,10 +31,9 @@ from zebra_agent.metrics import GymScore
 
 from zebra_tasks.agent.execute_workflow import extract_workflow_output
 from zebra_tasks.agent.optimizer import save_workflow_file
-from zebra_tasks.agent.stuck import _parse_json, _track_cost
+from zebra_tasks.agent.stuck import _parse_json
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 from zebra_tasks.subtasks.common import start_child
 
 logger = logging.getLogger(__name__)
@@ -150,7 +149,7 @@ class RunGoldenGymAction(TaskAction):
             type="string",
             description="Judge model",
             required=False,
-            default="sonnet",
+            default="medium",
         ),
         ParameterDef(
             name="results_key",
@@ -358,9 +357,8 @@ class RunGoldenGymAction(TaskAction):
                 "__parent_task_id__": task.id,
                 GYM_CHILD_KEY: True,
             }
-            for key in ("__llm_provider_name__", "__llm_model__"):
-                if parent.get(key):
-                    properties[key] = parent[key]
+            if parent.get("__llm_model__"):
+                properties["__llm_model__"] = parent["__llm_model__"]
             child = await context.engine.create_process(
                 run["definition"],
                 properties=properties,
@@ -441,7 +439,6 @@ class RunGoldenGymAction(TaskAction):
                 temperature=0.0,
                 max_tokens=800,
             )
-            _track_cost(context, response, getattr(provider, "model", None))
             verdict = _parse_json(response.content or "")
             scores = [float(c["score"]) for c in verdict["criteria"]]
             if len(scores) != len(criteria):
@@ -564,11 +561,8 @@ class RunGoldenGymAction(TaskAction):
         context.set_process_property(key, results)
 
     def _judge_provider(self, task: TaskInstance, context: ExecutionContext) -> Any:
-        provider_name = (
-            context.process.properties.get("__llm_provider_name__") or default_provider_name()
-        )
         try:
-            return get_provider(provider_name, task.properties.get("model") or "sonnet")
+            return get_llm(task.properties.get("model") or "medium", context)
         except Exception as e:  # noqa: BLE001
             logger.warning("Golden gym: no judge provider: %s", e)
             return None

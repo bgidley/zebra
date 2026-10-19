@@ -37,7 +37,7 @@ from zebra_tasks.llm.base import (
     ToolCall,
     ToolDefinition,
 )
-from zebra_tasks.llm.providers.registry import register_provider
+from zebra_tasks.llm.client import set_llm_factory
 
 # ---------------------------------------------------------------------------
 # Scripted provider
@@ -58,8 +58,8 @@ def say(text: str) -> Step:
         content=text,
         tool_calls=None,
         finish_reason="end_turn",
-        usage=TokenUsage(100, 50),
-        model="claude-haiku-5-5",
+        usage=TokenUsage(100, 50, cost_usd=0.001),
+        model="test/model",
     )
 
 
@@ -71,8 +71,8 @@ def use(*calls: tuple[str, dict]) -> Step:
             for i, (name, args) in enumerate(calls)
         ],
         finish_reason="tool_use",
-        usage=TokenUsage(100, 20),
-        model="claude-haiku-5-5",
+        usage=TokenUsage(100, 20, cost_usd=0.001),
+        model="test/model",
     )
 
 
@@ -99,7 +99,7 @@ class ScriptedProvider(LLMProvider):
 
     @property
     def model(self) -> str:
-        return "claude-haiku-5-5"
+        return "test/model"
 
     @property
     def max_context_tokens(self) -> int:
@@ -109,7 +109,7 @@ class ScriptedProvider(LLMProvider):
 @pytest.fixture
 def provider():
     p = ScriptedProvider()
-    register_provider("scripted", lambda model: p)
+    set_llm_factory(lambda model: p)
     return p
 
 
@@ -287,7 +287,7 @@ def agent_definition(**props) -> ProcessDefinition:
 
 
 async def run_agent(engine: WorkflowEngine, definition: ProcessDefinition, **process_props):
-    props = {"goal": "What is new?", "__llm_provider_name__": "scripted", **process_props}
+    props = {"goal": "What is new?", "__llm_model__": "low", **process_props}
     process = await engine.create_process(definition, properties=props)
     return await engine.start_process(process.id)
 
@@ -335,7 +335,7 @@ async def test_calls_a_workflow_tool_as_a_subflow(engine, store, provider, metri
     assert child.parent_task_id is not None
     assert child.properties["goal"] == "zebra news"
     assert child.properties[DEPTH_KEY] == 1
-    assert child.properties["__llm_provider_name__"] == "scripted"
+    assert child.properties["__llm_model__"] == "low"
 
     # The child's result went back to the model
     (result_msg,) = tool_messages(provider.calls[1])

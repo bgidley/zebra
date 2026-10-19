@@ -7,12 +7,13 @@ from typing import Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.llm.base import LLMProvider, Message, MessageRole, TokenUsage
+from zebra_tasks.llm.base import Message, MessageRole
+from zebra_tasks.llm.client import get_llm, model_for
 
 
 class LLMCallAction(TaskAction):
     """
-    TaskAction that calls an LLM provider.
+    TaskAction that calls an LLM.
 
     This action supports:
     - Simple prompt-based calls
@@ -30,12 +31,12 @@ class LLMCallAction(TaskAction):
         response_format: Expected format - "text", "json" (default: "text")
         json_schema: JSON schema for structured output (optional)
         output_key: Where to store response (default: "llm_response")
-        provider: Provider name override (default: use __llm_provider__)
-        model: Model name override (optional)
+        model: Tier (low / medium / high / max) or OpenRouter vendor/model slug;
+            default the process's __llm_model__, else medium
 
     Special process properties used:
-        __llm_provider__: LLMProvider instance to use
-        __total_tokens__: Running total of tokens used (updated)
+        __llm_model__: The run's model tier
+        __total_tokens__ / __total_cost__ / __token_history__: Usage (updated)
 
     Example workflow usage:
         ```yaml
@@ -62,7 +63,7 @@ class LLMCallAction(TaskAction):
         ```
     """
 
-    description = "Call an LLM provider to generate text or structured responses."
+    description = "Call an LLM to generate text or structured responses."
     reversibility_hint = "always_reversible"
 
     inputs = [
@@ -119,15 +120,9 @@ class LLMCallAction(TaskAction):
             default="llm_response",
         ),
         ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name (e.g., 'anthropic', 'openai')",
-            required=False,
-        ),
-        ParameterDef(
             name="model",
             type="string",
-            description="Model name override (e.g., 'claude-3-opus-20240229')",
+            description="Tier (low / medium / high / max) or OpenRouter vendor/model slug",
             required=False,
         ),
     ]
@@ -155,11 +150,6 @@ class LLMCallAction(TaskAction):
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Execute the LLM call."""
-        # Get LLM provider
-        provider = self._get_provider(task, context)
-        if provider is None:
-            return TaskResult.fail("No LLM provider available")
-
         # Build messages
         messages = self._build_messages(task, context)
         if not messages:
@@ -170,15 +160,11 @@ class LLMCallAction(TaskAction):
         max_tokens = task.properties.get("max_tokens", 4096)
 
         try:
-            # Call LLM
-            response = await provider.complete(
+            response = await get_llm(model_for(task, context), context).complete(
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-
-            # Track token usage and cost
-            self._track_tokens(context, response.usage, model=response.model)
 
             # Process response
             content = response.content or ""
@@ -209,27 +195,6 @@ class LLMCallAction(TaskAction):
 
         except Exception as e:
             return TaskResult.fail(f"LLM call failed: {str(e)}")
-
-    def _get_provider(self, task: TaskInstance, context: ExecutionContext) -> LLMProvider | None:
-        """Get the LLM provider to use."""
-        from zebra_tasks.llm.providers.registry import get_provider
-
-        # Check for provider in task properties first
-        provider_name = task.properties.get("provider")
-        model = task.properties.get("model")
-
-        # Fall back to process properties
-        if not provider_name:
-            provider_name = context.process.properties.get("__llm_provider_name__")
-        if not model:
-            model = context.process.properties.get("__llm_model__")
-
-        # If we have a provider name, create the provider
-        if provider_name:
-            return get_provider(provider_name, model)
-
-        # Legacy: check for provider object (not recommended)
-        return context.process.properties.get("__llm_provider__")
 
     def _build_messages(self, task: TaskInstance, context: ExecutionContext) -> list[Message]:
         """Build message list from task properties."""
@@ -287,43 +252,3 @@ class LLMCallAction(TaskAction):
             if match:
                 return match.group(1).strip()
         return content
-
-    def _track_tokens(
-        self, context: ExecutionContext, usage: TokenUsage, model: str | None = None
-    ) -> None:
-        """Track token usage and dollar cost in process properties."""
-        from zebra_tasks.llm.pricing import usage_cost
-
-        current = context.get_process_property("__total_tokens__", 0)
-        context.set_process_property("__total_tokens__", current + usage.total_tokens)
-
-        # Calculate cost for this call
-        call_cost = usage_cost(model, usage)
-        current_cost = context.get_process_property("__total_cost__", 0.0)
-        new_total_cost = current_cost + call_cost
-        context.set_process_property("__total_cost__", new_total_cost)
-
-        # Also track per-task breakdown
-        token_history = context.get_process_property("__token_history__", [])
-        token_history.append(
-            {
-                "input": usage.input_tokens,
-                "output": usage.output_tokens,
-                "total": usage.total_tokens,
-                "cost": call_cost,
-                "model": model,
-            }
-        )
-        context.set_process_property("__token_history__", token_history)
-
-        # Soft budget warning (if BudgetManager is available via IoC)
-        budget_manager = context.extras.get("__budget_manager__")
-        if budget_manager is not None:
-            try:
-                import asyncio
-
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(budget_manager.check_and_warn(new_total_cost))
-            except Exception:
-                pass  # Non-critical — don't fail the LLM call

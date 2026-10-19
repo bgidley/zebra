@@ -35,7 +35,7 @@ on purpose).
 
 - Action `write_postmortem` (`zebra_tasks/agent/postmortem.py`): properties `trigger`, `run_id`
   (default process `run_id`), `goal`, `workflow_name`, `success` (failure trigger skips on
-  success), `error`, `rating`, `user_feedback`, `model` (haiku), `output_key` (`postmortem`).
+  success), `error`, `rating`, `user_feedback`, `model` (low), `output_key` (`postmortem`).
   Reads `__task_executions__` for the steps. Output `{written, lesson, root_cause, ...}` or
   `{written: false, reason}`. Never fails; no LLM or no lesson → nothing stored.
 - `with_lessons(goal, props)`: appends `<lessons>` (from `memory_shortlist.lessons_context`) to the
@@ -50,7 +50,7 @@ on purpose).
 ## 4. Control flow
 
 ```
-failed goal run: … → assess_and_record → write_postmortem (haiku) → update_conceptual_memory → …
+failed goal run: … → assess_and_record → write_postmortem (low tier) → update_conceptual_memory → …
 timeout/crash:   daemon reconcile / AgentLoop FAILED → needs_failure_postmortem?
                    (Agent Main Loop, FAILED, no __task_output_write_postmortem, not kill switch)
                  → Postmortem process (inline) → write_postmortem(trigger=timeout)

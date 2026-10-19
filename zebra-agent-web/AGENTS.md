@@ -47,7 +47,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/bug_reports.py` | Bug reports (#186): validate the dialog's fields, parse the browser's `client_context`, add server context + linked process/task/run state, render the reviewer markdown, list reports for `/bugs/`. UI: `partials/bug_report_dialog.html` (in `base.html`), `static/js/bug-report.js` (buffers JS/HTMX errors from `<head>`). See `specs/bug-report-design.md` |
 | `zebra_agent_web/api/thoughts.py` | Voice layer read model (#161): `thoughts_for_process(props)` (ordered recorded reasoning, voice line preferred) and `recent_thoughts()` (per-user feed for the dashboard). Rendered by `components/thought.html`, `partials/thought_trail.html`, `partials/on_my_mind.html` |
 | `zebra_agent_web/api/manual_review.py` | Find / retry / fail tasks flagged `__requires_manual_review__` by recovery (#130) |
-| `zebra_agent_web/api/management/commands/run_workflow.py` | `manage.py run_workflow <name> --input-file -` runs a named workflow directly (default model sonnet); `--status <process_id>` reports on it; JSON out, exit 1 on failure. Used by `scripts/zebra-outcome-review.sh` (#190) |
+| `zebra_agent_web/api/management/commands/run_workflow.py` | `manage.py run_workflow <name> --input-file -` runs a named workflow directly (default tier medium); `--status <process_id>` reports on it; JSON out, exit 1 on failure. Used by `scripts/zebra-outcome-review.sh` (#190) |
 | `zebra_agent_web/api/management/commands/replay_process.py` | `manage.py replay_process <process_id> [--live STEP]... [--definition FILE] [--continue-live]` replays a finished process from its recording (#170); JSON out, exit 1 if it cannot start |
 | `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
 | `zebra_agent_web/memory_store.py` | DjangoMemoryStore (MemoryStore for agent memory); `search_*` use Oracle vector search (#169); postmortems (`PostmortemModel`, #175) |
@@ -392,7 +392,7 @@ env_files = [".env"]
 - `ORACLE_DSN` - Oracle connection string (using TLS/TCPS protocol)
 - `ORACLE_USERNAME` - Database username
 - `ORACLE_PASSWORD` - Database password
-- `ANTHROPIC_API_KEY` - For LLM integration tests
+- `OPENROUTER_API_KEY` - For LLM integration tests
 
 ### Test Structure
 
@@ -462,7 +462,7 @@ The `test_agent_loop_integration.py` tests run the complete agent workflow again
 - Verify end-to-end workflow from goal to completion
 - Test real metrics persistence in Oracle
 - Test real memory storage in Oracle
-- Make actual Anthropic API calls
+- Make actual OpenRouter API calls
 
 **Note:** These tests do NOT clean up after themselves - records persist in Oracle for inspection.
 

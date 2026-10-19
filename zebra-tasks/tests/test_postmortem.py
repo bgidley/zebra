@@ -78,14 +78,14 @@ def _failed_props(**extra) -> dict:
 
 def _provider(content: str) -> MagicMock:
     provider = MagicMock()
-    provider.model = "claude-haiku-5-5"
+    provider.model = "test/model"
     provider.complete = AsyncMock(
         return_value=LLMResponse(
             content=content,
             tool_calls=None,
             finish_reason="end_turn",
-            model="claude-haiku-5-5",
-            usage=TokenUsage(input_tokens=100, output_tokens=50),
+            model="test/model",
+            usage=TokenUsage(input_tokens=100, output_tokens=50, cost_usd=0.001),
         )
     )
     return provider
@@ -109,7 +109,7 @@ class TestWritePostmortem:
         context = _context(_failed_props(), memory)
         provider = _provider(json.dumps(_POSTMORTEM_JSON))
 
-        with patch("zebra_tasks.agent.postmortem.get_provider", return_value=provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: provider):
             result = await WritePostmortemAction().run(_loop_task(), context)
 
         assert result.success
@@ -136,38 +136,38 @@ class TestWritePostmortem:
     async def test_successful_run_is_skipped_without_llm(self):
         memory = InMemoryMemoryStore()
         props = _failed_props(execution_result={"success": True, "error": None})
-        with patch("zebra_tasks.agent.postmortem.get_provider") as get_provider:
+        with patch("zebra_tasks.agent.postmortem.get_llm") as get_llm_mock:
             result = await WritePostmortemAction().run(_loop_task(), _context(props, memory))
 
         assert result.success
         assert result.output == {"written": False, "reason": "run succeeded"}
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
         assert await memory.get_recent_postmortems() == []
 
     async def test_no_memory_store_is_skipped(self):
-        with patch("zebra_tasks.agent.postmortem.get_provider") as get_provider:
+        with patch("zebra_tasks.agent.postmortem.get_llm") as get_llm_mock:
             result = await WritePostmortemAction().run(_loop_task(), _context(_failed_props()))
 
         assert result.success
         assert result.output["written"] is False
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
 
     async def test_one_postmortem_per_run(self):
         memory = InMemoryMemoryStore()
         await memory.add_postmortem(_entry("earlier", "earlier lesson", run_id="run-1"))
 
-        with patch("zebra_tasks.agent.postmortem.get_provider") as get_provider:
+        with patch("zebra_tasks.agent.postmortem.get_llm") as get_llm_mock:
             result = await WritePostmortemAction().run(
                 _loop_task(), _context(_failed_props(), memory)
             )
 
         assert result.output == {"written": False, "reason": "run already has a postmortem"}
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
         assert len(await memory.get_recent_postmortems()) == 1
 
     async def test_llm_unavailable_stores_nothing_and_succeeds(self):
         memory = InMemoryMemoryStore()
-        with patch("zebra_tasks.agent.postmortem.get_provider", side_effect=RuntimeError("no key")):
+        with patch("zebra_tasks.agent.postmortem.get_llm", side_effect=RuntimeError("no key")):
             result = await WritePostmortemAction().run(
                 _loop_task(), _context(_failed_props(), memory)
             )
@@ -179,7 +179,7 @@ class TestWritePostmortem:
     async def test_response_without_lesson_stores_nothing(self):
         memory = InMemoryMemoryStore()
         provider = _provider(json.dumps({**_POSTMORTEM_JSON, "lesson": ""}))
-        with patch("zebra_tasks.agent.postmortem.get_provider", return_value=provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: provider):
             result = await WritePostmortemAction().run(
                 _loop_task(), _context(_failed_props(), memory)
             )
@@ -209,7 +209,7 @@ class TestWritePostmortem:
             user_feedback="{{user_feedback}}",
         )
         provider = _provider(json.dumps(_POSTMORTEM_JSON))
-        with patch("zebra_tasks.agent.postmortem.get_provider", return_value=provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: provider):
             result = await WritePostmortemAction().run(task, _context(props, memory))
 
         assert result.output["written"] is True

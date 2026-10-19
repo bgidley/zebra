@@ -650,10 +650,10 @@ async def run_goal_execute(request):
         return HttpResponse("Goal is required", status=400)
 
     # Resolve optional model selection
-    from zebra_tasks.llm.models import resolve_model_name
+    from zebra_tasks.llm.models import normalize_model
 
     model_name = request.POST.get("model", "").strip() or None
-    resolved_model = resolve_model_name(model_name) if model_name else None
+    resolved_model = normalize_model(model_name) if model_name else None
 
     # Generate run ID upfront so client can connect to WebSocket
     run_id = str(uuid.uuid4())
@@ -740,14 +740,14 @@ async def run_continue(request, run_id):
             return HttpResponse(f"Failed to queue continuation: {e}", status=500)
         return HttpResponse(_queued_html(process.id, priority, None))
 
-    from zebra_tasks.llm.models import resolve_model_name
+    from zebra_tasks.llm.models import normalize_model
 
     new_run_id = str(uuid.uuid4())
     task = asyncio.create_task(
         _execute_goal_background(
             new_run_id,
             goal,
-            model=resolve_model_name(model_name) if model_name else None,
+            model=normalize_model(model_name) if model_name else None,
             user_id=user_id,
             identity=identity,
             previous_run_context=previous_run_context,
@@ -1434,8 +1434,6 @@ async def run_detail(request, run_id):
             }
         )
 
-    from zebra_tasks.llm.models import friendly_model_name
-
     context = {
         "run": {
             "id": run.id,
@@ -1451,7 +1449,7 @@ async def run_detail(request, run_id):
             "user_rating": run.user_rating,
             "started_at": run.started_at,
             "completed_at": run.completed_at,
-            "model": friendly_model_name(run.model),
+            "model": run.model,
             "extends_run_id": run.extends_run_id,
             "continuation_comment": run.continuation_comment,
             "continuation_decision": run.continuation_decision,
@@ -2850,7 +2848,7 @@ async def process_replay(request, process_id):
     Form fields: ``live`` (repeatable step ids to run for real) and
     ``continue_live`` (run steps the original never reached live). The replay
     is created here and runs in the background on the agent engine, so live
-    steps have their LLM providers.
+    steps have their stores and library.
     """
     from zebra.core.exceptions import ProcessNotFoundError
     from zebra.core.replay import ReplayError

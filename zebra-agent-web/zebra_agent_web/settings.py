@@ -222,7 +222,6 @@ ZEBRA_DISABLE_FREEING = os.environ.get("ZEBRA_DISABLE_FREEING", "0") == "1"
 # Storage is handled by Django ORM (see DATABASES config above)
 ZEBRA_AGENT_SETTINGS = {
     "LIBRARY_PATH": os.environ.get("ZEBRA_LIBRARY_PATH", "~/.zebra/workflows"),
-    "LLM_PROVIDER": os.environ.get("ZEBRA_LLM_PROVIDER", "anthropic"),
     "LLM_MODEL": os.environ.get("ZEBRA_LLM_MODEL", None),
     # Budget & daemon settings
     "DAILY_BUDGET_USD": float(os.environ.get("ZEBRA_DAILY_BUDGET_USD", "50.00")),

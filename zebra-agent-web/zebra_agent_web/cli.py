@@ -81,9 +81,6 @@ def dev_public():
 # zebra terminal client (F34 / REQ-UI-003)
 # ---------------------------------------------------------------------------
 
-# Model aliases that require a non-default LLM provider.
-_MODEL_PROVIDERS = {"kimi": "kimi", "openrouter": "openrouter"}
-
 
 def _init_django() -> None:
     """Load .env and initialise Django for standalone (non-server) use."""
@@ -160,12 +157,6 @@ async def _goal_async(
     await agent_engine.ensure_initialized()
     agent_loop = agent_engine.get_agent_loop()
 
-    # Route non-Anthropic model aliases to their provider (mirrors run_goal).
-    original_provider = agent_loop.provider_name
-    provider = _MODEL_PROVIDERS.get(model)
-    if provider:
-        agent_loop.provider_name = provider
-
     async def progress(event: str, data: dict) -> None:
         label = data.get("task_name") or data.get("workflow_name") or ""
         print(f"  [{event}] {label}".rstrip())
@@ -174,12 +165,9 @@ async def _goal_async(
 
     run_id = str(uuid.uuid4())
 
-    try:
-        result = await agent_loop.process_goal(
-            goal=text, model=model, run_id=run_id, progress_callback=progress, **owner
-        )
-    finally:
-        agent_loop.provider_name = original_provider
+    result = await agent_loop.process_goal(
+        goal=text, model=model, run_id=run_id, progress_callback=progress, **owner
+    )
 
     print()
     print(f"Run ID:   {result.run_id}")
@@ -231,9 +219,9 @@ def main() -> None:
     goal_p.add_argument("text", help="The goal text")
     goal_p.add_argument(
         "--model",
-        default="haiku",
-        choices=["haiku", "sonnet", "opus", "kimi", "openrouter"],
-        help="LLM model to use (default: haiku)",
+        default="low",
+        choices=["low", "medium", "high", "max"],
+        help="Model tier (default: low)",
     )
     goal_p.add_argument(
         "--queue",

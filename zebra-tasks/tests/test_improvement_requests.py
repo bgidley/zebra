@@ -23,7 +23,7 @@ from zebra_tasks.agent.improvements import (
 from zebra_tasks.llm.base import LLMResponse, TokenUsage
 
 BUILTIN = Path(__file__).parents[2] / "zebra-agent" / "workflows"
-PATCH_PROVIDER = "zebra_tasks.agent.improvements._get_provider"
+PATCH_PROVIDER = "zebra_tasks.agent.improvements.get_llm"
 
 FINDINGS = {
     "evaluation": {
@@ -58,7 +58,7 @@ def _response(payload) -> LLMResponse:
         content=content,
         tool_calls=None,
         finish_reason="end_turn",
-        usage=TokenUsage(input_tokens=100, output_tokens=50),
+        usage=TokenUsage(input_tokens=100, output_tokens=50, cost_usd=0.001),
         model="test-model",
     )
 
@@ -121,7 +121,7 @@ async def test_code_level_gap_becomes_a_request(engine, library):
     context = await _context(engine, {**FINDINGS, "__user_id__": 7})
     provider = _provider({"requests": [HTTP_FETCH]})
 
-    with patch(PATCH_PROVIDER, return_value=provider):
+    with patch("zebra_tasks.llm.client._factory", lambda m: provider):
         result = await ProposeZebraImprovementsAction().run(_task(), context)
 
     assert result.success
@@ -171,7 +171,7 @@ async def test_nothing_to_analyse_makes_no_llm_call(engine, library):
     context = await _context(engine, {"evaluation": {"overall_assessment": {"key_issues": []}}})
     provider = _provider()
 
-    with patch(PATCH_PROVIDER, return_value=provider):
+    with patch("zebra_tasks.llm.client._factory", lambda m: provider):
         result = await ProposeZebraImprovementsAction().run(_task(), context)
 
     assert result.success
@@ -210,7 +210,7 @@ async def test_earlier_request_is_not_repeated(engine, library):
     second = await _context(engine, FINDINGS)
     reworded = {**HTTP_FETCH, "title": "add an HTTP-fetch task action!"}
     provider = _provider({"requests": [reworded]})
-    with patch(PATCH_PROVIDER, return_value=provider):
+    with patch("zebra_tasks.llm.client._factory", lambda m: provider):
         result = await ProposeZebraImprovementsAction().run(_task(), second)
 
     assert result.output["requests"] == []
@@ -230,7 +230,7 @@ async def test_request_from_an_older_workflow_version_still_blocks_its_title(eng
 
     context = await _context(engine, FINDINGS)
     provider = _provider({"requests": [HTTP_FETCH]})
-    with patch(PATCH_PROVIDER, return_value=provider):
+    with patch("zebra_tasks.llm.client._factory", lambda m: provider):
         result = await ProposeZebraImprovementsAction().run(_task(), context)
 
     assert result.output["requests"] == []
@@ -272,7 +272,7 @@ async def test_invalid_proposals_are_skipped_and_fields_cleaned(engine, library)
 async def test_unparseable_response_never_fails(engine, library):
     context = await _context(engine, FINDINGS)
     provider = _provider("I think everything is fine.", "Still fine.")
-    with patch(PATCH_PROVIDER, return_value=provider):
+    with patch("zebra_tasks.llm.client._factory", lambda m: provider):
         result = await ProposeZebraImprovementsAction().run(_task(), context)
 
     assert result.success
@@ -286,7 +286,7 @@ async def test_unparseable_response_never_fails(engine, library):
 async def test_unparseable_response_recovered_on_retry(engine, library):
     context = await _context(engine, FINDINGS)
     provider = _provider("Let me think about this.", {"requests": [HTTP_FETCH]})
-    with patch(PATCH_PROVIDER, return_value=provider):
+    with patch("zebra_tasks.llm.client._factory", lambda m: provider):
         result = await ProposeZebraImprovementsAction().run(_task(), context)
 
     assert result.output["errors"] == []
@@ -299,7 +299,7 @@ async def test_llm_error_never_fails(engine, library):
     context = await _context(engine, FINDINGS)
     provider = MagicMock()
     provider.complete = AsyncMock(side_effect=RuntimeError("overloaded"))
-    with patch(PATCH_PROVIDER, return_value=provider):
+    with patch("zebra_tasks.llm.client._factory", lambda m: provider):
         result = await ProposeZebraImprovementsAction().run(_task(), context)
 
     assert result.success
@@ -308,7 +308,7 @@ async def test_llm_error_never_fails(engine, library):
 
 async def test_missing_provider_never_fails(engine, library):
     context = await _context(engine, FINDINGS)
-    with patch(PATCH_PROVIDER, return_value=None):
+    with patch(PATCH_PROVIDER, side_effect=ValueError("OpenRouter API key required")):
         result = await ProposeZebraImprovementsAction().run(_task(), context)
 
     assert result.success
@@ -341,7 +341,7 @@ async def test_missing_library_never_fails(engine):
     context = await _context(engine, FINDINGS)
     context.extras = {}
     provider = _provider()
-    with patch(PATCH_PROVIDER, return_value=provider):
+    with patch("zebra_tasks.llm.client._factory", lambda m: provider):
         result = await ProposeZebraImprovementsAction().run(_task(), context)
 
     assert result.success

@@ -45,17 +45,17 @@ _POSTMORTEM_JSON = {
 def llm():
     """The postmortem's cheap model returns a fixed postmortem."""
     provider = MagicMock()
-    provider.model = "claude-haiku-5-5"
+    provider.model = "test/model"
     provider.complete = AsyncMock(
         return_value=LLMResponse(
             content=json.dumps(_POSTMORTEM_JSON),
             tool_calls=None,
             finish_reason="end_turn",
-            model="claude-haiku-5-5",
+            model="test/model",
             usage=TokenUsage(input_tokens=80, output_tokens=40),
         )
     )
-    with patch("zebra_tasks.agent.postmortem.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.postmortem.get_llm", return_value=provider):
         yield provider
 
 

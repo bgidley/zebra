@@ -18,8 +18,7 @@ from dataclasses import asdict, dataclass
 from zebra.tasks.base import ExecutionContext
 
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ HINT_ALWAYS_REVERSIBLE = "always_reversible"
 HINT_ALWAYS_IRREVERSIBLE = "always_irreversible"
 HINT_CONTEXT_DEPENDENT = "context_dependent"
 
-_DEFAULT_MODEL = "haiku"
+_DEFAULT_MODEL = "low"
 _MAX_PARAMS_LEN = 1500
 
 REVERSIBILITY_SYSTEM_PROMPT = """\
@@ -128,7 +127,7 @@ async def assess_reversibility(
         context: Execution context (used for provider/model resolution).
         declared: Workflow-declared reversibility, passed to the LLM as untrusted
             context only.
-        model: Model override; defaults to haiku.
+        model: Model override; defaults to the low tier.
 
     Returns:
         A ReversibilityAssessment. Fails closed to irreversible on any error.
@@ -150,12 +149,9 @@ async def assess_reversibility(
             source="hint",
         )
 
-    provider_name = (
-        context.process.properties.get("__llm_provider_name__") or default_provider_name()
-    )
     resolved_model = model or context.process.properties.get("__llm_model__") or _DEFAULT_MODEL
     try:
-        provider = get_provider(provider_name, resolved_model)
+        provider = get_llm(resolved_model, context)
     except Exception as exc:
         return fail_closed(f"could not get LLM provider: {exc}")
 

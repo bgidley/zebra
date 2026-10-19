@@ -113,9 +113,8 @@ class TestSchedulerLoopTick:
     async def test_default_properties_seeded_into_dispatched_process(self, store, clock):
         """default_properties reach the process; routine extra_properties win.
 
-        Regression: the 03:00 Dream Cycle routine ran without
-        __llm_provider_name__ and evaluate_workflows failed with
-        "No LLM provider available".
+        Regression: the 03:00 Dream Cycle routine ran without the agent loop's
+        LLM context and evaluate_workflows failed.
         """
         registry = RoutineRegistry()
         routine = Routine(
@@ -137,8 +136,8 @@ class TestSchedulerLoopTick:
             engine=engine,
             clock=clock,
             default_properties={
-                "__llm_provider_name__": "anthropic",
                 "__llm_model__": "default-model",
+                "__workflow_library_path__": "/lib",
                 "__routine__": "ignored",
             },
         )
@@ -149,7 +148,7 @@ class TestSchedulerLoopTick:
         await loop._tick()
 
         props = engine.create_process.call_args.kwargs["properties"]
-        assert props["__llm_provider_name__"] == "anthropic"
+        assert props["__workflow_library_path__"] == "/lib"
         assert props["__llm_model__"] == "routine-model"
         assert props["__routine__"] == "test_r"
 

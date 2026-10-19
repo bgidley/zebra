@@ -58,7 +58,7 @@ def test_smoke_count_to_100():
     if not SMOKE_PASSWORD:
         pytest.skip("SMOKE_PASSWORD not set")
 
-    resp = _post("/api/goals/", {"goal": "Count from 1 to 100", "model": "haiku"})
+    resp = _post("/api/goals/", {"goal": "Count from 1 to 100", "model": "low"})
     assert resp["status"] == "processing", f"Unexpected status: {resp}"
     status_url = resp["status_url"]
 

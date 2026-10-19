@@ -6,8 +6,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.agent.creator import generate_workflow
 from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 
 class WorkflowVariantCreatorAction(TaskAction):
@@ -23,7 +22,6 @@ class WorkflowVariantCreatorAction(TaskAction):
         source_workflow_name: Name of the workflow to copy and modify
         suggested_name: Suggested name for the variant (optional)
         reasoning: Why the source workflow was chosen (provides context to LLM)
-        provider: LLM provider name (default: anthropic)
         model: LLM model name (optional)
         output_key: Where to store the result (default: "created_workflow")
 
@@ -75,13 +73,6 @@ class WorkflowVariantCreatorAction(TaskAction):
             required=False,
             default="",
         ),
-        ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider",
-            required=False,
-            default=None,
-        ),
         ParameterDef(name="model", type="string", description="LLM model", required=False),
         ParameterDef(
             name="output_key",
@@ -126,8 +117,8 @@ class WorkflowVariantCreatorAction(TaskAction):
         "   human-readable result. If the source has a result_key, update it as needed.\n"
         "   The result_key value is what the UI shows as the workflow output.\n"
         "8. You may add a `model` property to individual llm_call tasks to override the\n"
-        "   default model. Available values: 'haiku' (fastest/cheapest), 'sonnet'\n"
-        "   (balanced, default), 'opus' (most capable). Only set model when a task has\n"
+        "   default model tier. Available values: 'low' (cheapest), 'medium' (balanced,\n"
+        "   default), 'high' (more capable), 'max' (best). Only set model when a task has\n"
         "   clearly different needs — most tasks should omit it.\n"
         "9. Do not copy the previous run's content into the YAML — tasks receive it at\n"
         "   runtime via {{goal}}. Keep prompts concise.\n"
@@ -141,7 +132,6 @@ class WorkflowVariantCreatorAction(TaskAction):
         source_name = self._resolve(task, context, "source_workflow_name", "")
         suggested_name = self._resolve(task, context, "suggested_name", "")
         reasoning = self._resolve(task, context, "reasoning", "")
-        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
         output_key = task.properties.get("output_key", "created_workflow")
 
@@ -161,7 +151,7 @@ class WorkflowVariantCreatorAction(TaskAction):
             return TaskResult.fail(f"Could not load source workflow '{source_name}': {e}")
 
         try:
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
         except Exception as e:
             return TaskResult.fail(f"Failed to get LLM provider: {e}")
 

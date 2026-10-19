@@ -20,8 +20,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +185,7 @@ class AssessStuckAction(TaskAction):
         ParameterDef(
             name="model",
             type="string",
-            description="LLM model for the help request (default haiku)",
+            description="LLM model for the help request (default low)",
             required=False,
         ),
         ParameterDef(
@@ -256,13 +255,10 @@ class AssessStuckAction(TaskAction):
             "need": "Tell me how to fix this and I'll retry, give me a different goal, "
             "or tell me to stop.",
         }
-        provider_name = (
-            context.get_process_property("__llm_provider_name__") or default_provider_name()
-        )
         # A cheap model: this is a short note to the user, not the goal's work.
-        model = task.properties.get("model") or "haiku"
+        model = task.properties.get("model") or "low"
         try:
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
             response = await provider.complete(
                 messages=[
                     Message.system(SYSTEM_PROMPT),
@@ -278,7 +274,6 @@ class AssessStuckAction(TaskAction):
                 temperature=0.3,
                 max_tokens=500,
             )
-            _track_cost(context, response, getattr(provider, "model", None))
             parsed = _parse_json(response.content or "")
         except Exception as e:
             logger.warning("Help request: LLM unavailable, using a plain request: %s", e)
@@ -371,15 +366,3 @@ def _parse_json(content: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValueError("help request is not a JSON object")
     return parsed
-
-
-def _track_cost(context: ExecutionContext, response: Any, model: str | None) -> None:
-    """Add the help request's tokens and cost to the process totals."""
-    from zebra_tasks.llm.pricing import usage_cost
-
-    usage = response.usage
-    tokens = context.get_process_property("__total_tokens__", 0)
-    context.set_process_property("__total_tokens__", tokens + usage.total_tokens)
-    cost = usage_cost(model or response.model, usage)
-    total = context.get_process_property("__total_cost__", 0.0)
-    context.set_process_property("__total_cost__", total + cost)

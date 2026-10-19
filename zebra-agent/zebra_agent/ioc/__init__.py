@@ -17,7 +17,7 @@ Example:
     # Create container with config
     container = ZebraContainer()
     container.config.from_dict({
-        "llm": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
+        "library": {"path": "~/.zebra/workflows"},
     })
 
     # Create IoC registry - auto-discovers all actions from entry points

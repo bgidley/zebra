@@ -261,22 +261,21 @@ async def test_retired_workflow_never_reaches_load_definitions(library, metrics,
 
 def _llm(pairs: list[dict]) -> MagicMock:
     provider = MagicMock()
-    provider.model = "claude-sonnet-4-20250514"
+    provider.model = "test/model"
     provider.complete = AsyncMock(
         return_value=LLMResponse(
             content=json.dumps({"duplicates": pairs}),
             tool_calls=None,
             finish_reason="end_turn",
-            usage=TokenUsage(input_tokens=100, output_tokens=20),
-            model="claude-sonnet-4-20250514",
+            usage=TokenUsage(input_tokens=100, output_tokens=20, cost_usd=0.001),
+            model="test/model",
         )
     )
     return provider
 
 
 async def _run_dupes(context, provider):
-    context.process.properties["__llm_provider_name__"] = "anthropic"
-    with patch("zebra_tasks.llm.providers.registry.get_provider", return_value=provider):
+    with patch("zebra_tasks.llm.client._factory", lambda m: provider):
         return await _run(context, detect_duplicates=True)
 
 
@@ -336,8 +335,8 @@ def _reply(content: str, finish_reason: str = "end_turn") -> LLMResponse:
         content=content,
         tool_calls=None,
         finish_reason=finish_reason,
-        usage=TokenUsage(input_tokens=100, output_tokens=20),
-        model="claude-sonnet-4-20250514",
+        usage=TokenUsage(input_tokens=100, output_tokens=20, cost_usd=0.001),
+        model="test/model",
     )
 
 
@@ -347,7 +346,7 @@ async def test_truncated_duplicate_reply_is_retried(library, metrics, context):
     metrics.get_all_stats.return_value = [_stats("Search A", 4, 3), _stats("Search B", 4, 1)]
     pairs = {"duplicates": [{"a": "Search A", "b": "Search B", "reason": "same"}]}
     provider = MagicMock()
-    provider.model = "claude-sonnet-4-20250514"
+    provider.model = "test/model"
     provider.complete = AsyncMock(
         side_effect=[
             _reply('{"duplicates": [{"a": "Sea', finish_reason="max_tokens"),
@@ -367,7 +366,7 @@ async def test_unusable_duplicate_reply_logs_cause(library, metrics, context, ca
     library.add_workflow(_yaml("A", ["llm-defined"]))
     library.add_workflow(_yaml("B", ["llm-defined"]))
     provider = MagicMock()
-    provider.model = "claude-sonnet-4-20250514"
+    provider.model = "test/model"
     provider.complete = AsyncMock(side_effect=[_reply("no idea"), _reply("still no idea")])
 
     result = await _run_dupes(context, provider)

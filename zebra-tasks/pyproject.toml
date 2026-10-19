@@ -29,9 +29,6 @@ dependencies = [
 zebra-workflow = { workspace = true }
 
 [project.optional-dependencies]
-anthropic = ["anthropic>=0.18"]
-openai = ["openai>=1.0"]
-all = ["anthropic>=0.18", "openai>=1.0"]
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.21",

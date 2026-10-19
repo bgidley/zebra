@@ -105,7 +105,6 @@ async def run_daemon_loop(
     # evaluator/optimizer fail with "No LLM provider available".
     agent_loop = agent_engine.get_agent_loop()
     routine_properties = {
-        "__llm_provider_name__": agent_loop.provider_name,
         "__llm_model__": agent_loop.model,
         "__workflow_library_path__": str(agent_loop.library.library_path),
     }

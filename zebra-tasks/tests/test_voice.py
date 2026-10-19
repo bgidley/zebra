@@ -152,7 +152,7 @@ async def test_ethics_gate_stores_voice():
     context = _context()
     task = _task(goal="Write a poem", check_type="input_gate", output_key="ethics_input_assessment")
 
-    with patch.object(ethics_gate, "get_provider", return_value=_provider({**_ETHICS_OK, **VOICE})):
+    with patch.object(ethics_gate, "get_llm", return_value=_provider({**_ETHICS_OK, **VOICE})):
         result = await EthicsGateAction().run(task, context)
 
     stored = context.process.properties["ethics_input_assessment"]
@@ -166,7 +166,7 @@ async def test_ethics_gate_drops_invalid_raw_voice():
     task = _task(goal="Write a poem", check_type="input_gate", output_key="ethics_input_assessment")
     raw = {**_ETHICS_OK, "voice": 7, "confidence": "very"}
 
-    with patch.object(ethics_gate, "get_provider", return_value=_provider(raw)):
+    with patch.object(ethics_gate, "get_llm", return_value=_provider(raw)):
         await EthicsGateAction().run(task, context)
 
     stored = context.process.properties["ethics_input_assessment"]
@@ -178,7 +178,7 @@ async def test_flag_concerns_stores_voice():
     task = _task(goal="Publish the digest", plan_context="Weekly Digest")
     payload = {"concerns": [], "summary": "Low risk.", **VOICE}
 
-    with patch.object(flag_concerns, "get_provider", return_value=_provider(payload)):
+    with patch.object(flag_concerns, "get_llm", return_value=_provider(payload)):
         result = await FlagConcernsAction().run(task, context)
 
     assert result.output == {"concerns": [], "summary": "Low risk.", **VOICE}
@@ -200,13 +200,13 @@ async def test_selector_stores_voice_only_when_given():
     }
 
     context = _context()
-    with patch.object(selector, "get_provider", return_value=_provider({**pick, **VOICE})):
+    with patch.object(selector, "get_llm", return_value=_provider({**pick, **VOICE})):
         await WorkflowSelectorAction().run(task, context)
     assert context.process.properties["selection"]["voice"] == VOICE["voice"]
     assert context.process.properties["selection"]["confidence"] == 0.62
 
     context = _context()
-    with patch.object(selector, "get_provider", return_value=_provider(pick)):
+    with patch.object(selector, "get_llm", return_value=_provider(pick)):
         await WorkflowSelectorAction().run(task, context)
     assert "voice" not in context.process.properties["selection"]
 
@@ -224,7 +224,7 @@ async def test_continuation_stores_voice():
     task = _task(goal="Finish it", output_key="continuation_assessment")
     payload = {"decision": "existing_workflow", "rationale": "Different job now.", **VOICE}
 
-    with patch.object(continuation_assessor, "get_provider", return_value=_provider(payload)):
+    with patch.object(continuation_assessor, "get_llm", return_value=_provider(payload)):
         result = await ContinuationAssessorAction().run(task, context)
 
     assert result.output["voice"] == VOICE["voice"]

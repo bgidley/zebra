@@ -52,7 +52,7 @@ memory-capped so a runaway app cannot OOM the host the agent and runner live on.
 ## Deploy (`scripts/deploy-podman.sh`)
 
 1. Writes `~/.config/zebra/prod.env` (0600) from the job's CI variables
-   (`ORACLE_*`, `ANTHROPIC_API_KEY`, `KAGI_API_KEY`, `KIMI_*`, `OPENROUTER_*`, `ZEBRA_SMTP_*`,
+   (`ORACLE_*`, `KAGI_API_KEY`, `OPENROUTER_API_KEY`, `ZEBRA_SMTP_*`,
    `ZEBRA_NOTIFY_WEBHOOK_URL`, `ZEBRA_GITLAB_TOKEN`), a persistent generated
    `DJANGO_SECRET_KEY`, and the non-secret `~/.config/zebra/site.env`.
 2. `podman build -t localhost/zebra-web:$SHA .`
@@ -83,9 +83,8 @@ source of truth; the host copy is regenerated on every deploy.
 | Variable | Used by |
 |---|---|
 | `ORACLE_DSN` / `ORACLE_USERNAME` / `ORACLE_PASSWORD` | prod containers, `e2e-live` |
-| `ANTHROPIC_API_KEY`, `KAGI_API_KEY` | prod containers, e2e cassette recording |
-| `KIMI_API_KEY` (+ optional `KIMI_BASE_URL`) | prod containers — `--model kimi` → `kimi-k2.6` (also `kimi-k3`, `kimi-code` → `kimi-k2.7-code-highspeed`; old `moonshot-v1` aliases map to `kimi-k2.6`, #164); `scripts/zebra-feedback.sh` defaults to `sonnet` |
-| `OPENROUTER_API_KEY` (+ optional `OPENROUTER_MODEL`) | prod containers — `--model openrouter` or `ZEBRA_LLM_PROVIDER=openrouter`; tiers map to `anthropic/claude-*-5.5`, default `OPENROUTER_MODEL` or `anthropic/claude-sonnet-5.5`; cost is OpenRouter's reported `usage.cost` (#182). Prod `site.env` sets `ZEBRA_LLM_PROVIDER=openrouter` and `OPENROUTER_ROUTING=auto` (tiers → `openrouter/auto` cost tiers, #204) |
+| `KAGI_API_KEY` | prod containers |
+| `OPENROUTER_API_KEY` | prod containers, e2e and smoke: every LLM call (#205). Tiers go to `openrouter/auto` at a cost tier; cost is OpenRouter's reported `usage.cost`. Prod `site.env` sets the default tier (`ZEBRA_LLM_MODEL=medium`) |
 | `ZEBRA_SMTP_USERNAME` / `ZEBRA_SMTP_PASSWORD` | prod containers — `notify_email` via OCI Email Delivery (an OCI user SMTP credential; host/sender live in `site.env`) |
 | `ZEBRA_NOTIFY_WEBHOOK_URL` (optional) | prod containers — default target for `notify_webhook` |
 | `ZEBRA_GITLAB_TOKEN` (masked, protected) | prod containers — `file_improvement_issue` files accepted dream-cycle improvement requests on gidley/zebra (#194). A fine-grained personal access token limited to work items (issue search + create) on this project; project access tokens need a paid plan. It cannot read the project or user, so only the issues endpoints work; optional `ZEBRA_GITLAB_URL` / `ZEBRA_GITLAB_PROJECT` in `site.env` |

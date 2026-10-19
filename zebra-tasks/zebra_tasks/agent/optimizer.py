@@ -17,13 +17,14 @@ from zebra_tasks.agent.creator import (
     check_generated_workflow,
 )
 from zebra_tasks.llm.base import LLMResponse, Message
+from zebra_tasks.llm.client import get_llm, model_for
 
 logger = logging.getLogger(__name__)
 
 # Extra attempts (at TRUNCATION_RETRY_MAX_TOKENS) when the LLM output is truncated.
 TRUNCATION_RETRIES = 1
 # Retry budget for a truncated workflow. Not doubled from GENERATED_WORKFLOW_MAX_TOKENS:
-# Opus at ~85 tokens/s must finish inside the 180s per-attempt LLM timeout (#188).
+# A slow model at ~85 tokens/s must finish inside the 180s per-attempt LLM timeout (#188).
 TRUNCATION_RETRY_MAX_TOKENS = 14000
 
 # Priority ``source`` marking continuation-driven proposals (F136).
@@ -139,12 +140,6 @@ class WorkflowOptimizerAction(TaskAction):
             description="Process property key to store the results",
             required=False,
             default="optimization_results",
-        ),
-        ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
         ),
         ParameterDef(
             name="model",
@@ -269,9 +264,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
 
         try:
             # Get LLM provider
-            provider = self._get_provider(task, context)
-            if provider is None:
-                return TaskResult.fail("No LLM provider available")
+            provider = get_llm(model_for(task, context), context)
 
             # Build system prompt dynamically so newly-registered actions are visible.
             actions_section = context.engine.actions.format_for_prompt(user_facing_only=True)
@@ -405,23 +398,6 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
             except (json.JSONDecodeError, ValueError):
                 pass
         return resolved or default
-
-    def _get_provider(self, task: TaskInstance, context: ExecutionContext):
-        """Get the LLM provider to use."""
-        from zebra_tasks.llm.providers.registry import get_provider
-
-        provider_name = task.properties.get("provider")
-        model = task.properties.get("model")
-
-        if not provider_name:
-            provider_name = context.process.properties.get("__llm_provider_name__")
-        if not model:
-            model = context.process.properties.get("__llm_model__")
-
-        if provider_name:
-            return get_provider(provider_name, model)
-
-        return context.process.properties.get("__llm_provider__")
 
     async def _create_new_workflow(
         self,

@@ -21,6 +21,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef
 from zebra_tasks.agent.user_context import copy_user_properties
 from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.llm.base import Message, MessageRole, ToolCall, ToolDefinition
+from zebra_tasks.llm.client import get_llm, model_for
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ class LLMAgentAction(LLMCallAction):
         max_parallel_tools: Tool calls run per turn; extra calls get an error
             result asking the model to make them next turn (default: 4)
         max_depth: Run without tools at this tool-call depth (default: 3)
-        temperature, max_tokens, response_format, provider, model: As for ``llm_call``
+        temperature, max_tokens, response_format, model: As for ``llm_call``
         output_key: Where to store the final answer (default: "agent_response")
 
     Declare the task ``idempotent: true`` so crash recovery re-runs an
@@ -251,7 +252,7 @@ class LLMAgentAction(LLMCallAction):
         ParameterDef(
             name="model",
             type="string",
-            description="Model name override (supports aliases: haiku, sonnet, opus)",
+            description="Tier (low / medium / high / max) or OpenRouter vendor/model slug",
             required=False,
         ),
     ]
@@ -295,9 +296,10 @@ class LLMAgentAction(LLMCallAction):
         elif context.subflow_results is not None and state["pending"]:
             await self._absorb_results(state, context)
 
-        provider = self._get_provider(task, context)
-        if provider is None:
-            return TaskResult.fail("No LLM provider available")
+        try:
+            provider = get_llm(model_for(task, context), context)
+        except ValueError as e:
+            return TaskResult.fail(f"No LLM available: {e}")
 
         max_turns = int(task.properties.get("max_tool_turns", 8))
         max_parallel = int(task.properties.get("max_parallel_tools", 4))
@@ -318,7 +320,6 @@ class LLMAgentAction(LLMCallAction):
                 )
             except Exception as e:
                 return TaskResult.fail(f"LLM call failed: {e}")
-            self._track_tokens(context, response.usage, model=response.model)
 
             if not response.tool_calls:
                 return self._finish(task, context, state, response.content or "")
@@ -473,9 +474,8 @@ class LLMAgentAction(LLMCallAction):
         # The model never sets internal (``__``) properties on a child.
         props = {k: v for k, v in arguments.items() if not str(k).startswith("__")}
         props.setdefault("goal", _goal_from(arguments))
-        for key in ("__llm_provider_name__", "__llm_model__"):
-            if key in parent:
-                props[key] = parent[key]
+        if "__llm_model__" in parent:
+            props["__llm_model__"] = parent["__llm_model__"]
         copy_user_properties(parent, props)
         props[DEPTH_KEY] = int(parent.get(DEPTH_KEY) or 0) + 1
         props["__parent_process_id__"] = context.process.id
@@ -631,7 +631,6 @@ class LLMAgentAction(LLMCallAction):
             )
         except Exception as e:
             return TaskResult.fail(f"LLM call failed: {e}")
-        self._track_tokens(context, response.usage, model=response.model)
         logger.info("llm_agent: tool budget spent; answered without tools")
         return self._finish(task, context, state, response.content or "")
 

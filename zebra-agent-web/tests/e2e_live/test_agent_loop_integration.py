@@ -14,7 +14,7 @@ The agent_main_loop.yaml workflow orchestrates:
 
 Prerequisites:
 - Oracle database configured in .env (ORACLE_DSN, ORACLE_USERNAME, ORACLE_PASSWORD)
-- ANTHROPIC_API_KEY configured in .env
+- OPENROUTER_API_KEY configured in .env
 - Database migrations applied (python manage.py migrate)
 
 Note: Tests do NOT clean up after themselves - records persist in Oracle for inspection.

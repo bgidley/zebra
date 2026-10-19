@@ -2,7 +2,7 @@
 
 Usage:
     python manage.py run_goal "Your goal text here"
-    python manage.py run_goal "Your goal text" --model haiku
+    python manage.py run_goal "Your goal text" --model low
 
 Used by scripts/zebra-feedback.sh, which runs it inside the prod ``zebra-web``
 container (``podman exec``) to consult production Zebra without web authentication.
@@ -25,9 +25,9 @@ class Command(BaseCommand):
         parser.add_argument("goal", type=str, help="The goal text to process")
         parser.add_argument(
             "--model",
-            default="haiku",
-            choices=["haiku", "sonnet", "opus", "kimi", "openrouter"],
-            help="LLM model to use (default: haiku)",
+            default="low",
+            choices=["low", "medium", "high", "max"],
+            help="Model tier (default: low)",
         )
         parser.add_argument(
             "--user",
@@ -72,15 +72,4 @@ class Command(BaseCommand):
 
         run_id = str(uuid.uuid4())
 
-        # Derive provider from model alias so non-Anthropic models route correctly
-        _MODEL_PROVIDERS = {"kimi": "kimi", "openrouter": "openrouter"}
-        provider = _MODEL_PROVIDERS.get(model)
-
-        original_provider = agent_loop.provider_name
-        if provider:
-            agent_loop.provider_name = provider
-
-        try:
-            return await agent_loop.process_goal(goal=goal, model=model, run_id=run_id, **owner)
-        finally:
-            agent_loop.provider_name = original_provider
+        return await agent_loop.process_goal(goal=goal, model=model, run_id=run_id, **owner)

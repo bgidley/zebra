@@ -169,12 +169,10 @@ class TestAgentLoopInitialization:
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            provider="anthropic",
         )
         assert loop.library is library
         assert loop.engine is mock_engine
         assert loop.metrics is metrics
-        assert loop.provider_name == "anthropic"
 
     def test_initialization_with_memory(self, library, mock_engine, metrics, memory):
         """Test initialization with memory."""
@@ -183,7 +181,6 @@ class TestAgentLoopInitialization:
             engine=mock_engine,
             metrics=metrics,
             memory=memory,
-            provider="anthropic",
         )
         assert loop.memory is memory
 
@@ -193,10 +190,9 @@ class TestAgentLoopInitialization:
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            provider="anthropic",
-            model="claude-3-opus",
+            model="test/model",
         )
-        assert loop.model == "claude-3-opus"
+        assert loop.model == "test/model"
 
 
 class TestRecordRating:
@@ -208,7 +204,6 @@ class TestRecordRating:
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            provider="anthropic",
         )
 
         run = WorkflowRun.create("TestWorkflow", "Test goal")
@@ -225,7 +220,7 @@ class TestRecordFeedback:
 
     async def test_record_feedback_no_memory(self, library, mock_engine, metrics):
         """Returns False immediately when memory store is absent."""
-        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics, provider="anthropic")
+        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics)
         result = await loop.record_feedback("any-run-id", "some feedback")
         assert result is False
 
@@ -236,7 +231,6 @@ class TestRecordFeedback:
             engine=mock_engine,
             metrics=metrics,
             memory=memory,
-            provider="anthropic",
         )
         result = await loop.record_feedback("unknown-run-id", "some feedback")
         assert result is False
@@ -270,7 +264,6 @@ class TestRecordFeedback:
             engine=mock_engine,
             metrics=metrics,
             memory=memory,
-            provider="anthropic",
         )
 
         # Patch _refresh_conceptual_memory so we don't make real LLM calls
@@ -303,7 +296,6 @@ class TestProcessGoalWorkflowNotFound:
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            provider="anthropic",
         )
 
         with pytest.raises(ValueError, match="Workflow not found"):
@@ -344,7 +336,6 @@ class TestProcessGoalSuccess:
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            provider="anthropic",
         )
 
         result = await loop.process_goal("Test goal")
@@ -384,7 +375,6 @@ class TestProcessGoalFailure:
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            provider="anthropic",
         )
 
         result = await loop.process_goal("Test goal")
@@ -414,7 +404,6 @@ class TestProcessGoalFailure:
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            provider="anthropic",
         )
 
         import asyncio
@@ -453,7 +442,6 @@ class TestProcessGoalWithProgressCallback:
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            provider="anthropic",
         )
 
         events = []
@@ -495,7 +483,6 @@ class TestProcessGoalWithRunId:
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            provider="anthropic",
         )
 
         result = await loop.process_goal("Test goal", run_id="custom-run-id")
@@ -542,7 +529,6 @@ class TestProcessGoalPassesStores:
             engine=mock_engine,
             metrics=metrics,
             memory=memory,
-            provider="anthropic",
         )
 
         await loop.process_goal("Test goal")
@@ -559,7 +545,7 @@ class TestProcessGoalPassesStores:
 
         # Verify regular properties are still passed
         assert captured_properties.get("goal") == "Test goal"
-        assert "__llm_provider_name__" in captured_properties
+        assert "__llm_model__" in captured_properties
 
 
 class TestProcessGoalFiltersSystemWorkflows:
@@ -626,7 +612,6 @@ routings: []
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            provider="anthropic",
         )
 
         await loop.process_goal("Test goal")
@@ -749,17 +734,18 @@ class TestProcessGoalSurfacesTaskErrors:
                 ok_task,
                 self._failed_task(
                     "ethics_input_gate",
-                    "Failed to get LLM provider for ethics gate: Kimi API key required.",
+                    "Failed to get LLM provider for ethics gate: OpenRouter API key required.",
                 ),
             ]
         )
 
-        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics, provider="kimi")
+        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics)
         result = await loop.process_goal("Test goal")
 
         assert result.success is False
         assert result.error == (
-            "ethics_input_gate: Failed to get LLM provider for ethics gate: Kimi API key required."
+            "ethics_input_gate: Failed to get LLM provider for ethics gate: "
+            "OpenRouter API key required."
         )
 
     async def test_complete_process_with_unsuccessful_execution_reports_its_error(
@@ -833,7 +819,7 @@ class TestProcessGoalSurfacesTaskErrors:
             return_value=[self._failed_task("select_workflow", None)]
         )
 
-        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics, provider="anthropic")
+        loop = AgentLoop(library=library, engine=mock_engine, metrics=metrics)
         result = await loop.process_goal("Test goal")
 
         assert result.success is False

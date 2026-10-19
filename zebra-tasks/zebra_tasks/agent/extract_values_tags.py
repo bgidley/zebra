@@ -21,8 +21,7 @@ import re
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.llm import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -93,18 +92,11 @@ class ExtractValuesTagsAction(TaskAction):
             default="",
         ),
         ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
-            default=None,
-        ),
-        ParameterDef(
             name="model",
             type="string",
             description="LLM model alias or full id",
             required=False,
-            default="haiku",
+            default="low",
         ),
         ParameterDef(
             name="output_key",
@@ -132,8 +124,7 @@ class ExtractValuesTagsAction(TaskAction):
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         texts = {field: _resolve(task, context, f"{field}_text") for field in _FIELDS}
-        provider_name = task.properties.get("provider") or default_provider_name()
-        model = task.properties.get("model", "haiku")
+        model = task.properties.get("model", "low")
         output_key = task.properties.get("output_key", "extracted_tags")
 
         empty_result = _empty_extraction()
@@ -153,7 +144,7 @@ class ExtractValuesTagsAction(TaskAction):
         prompt = _build_prompt(texts, approved_by_field)
 
         try:
-            provider = get_provider(provider_name, model=model)
+            provider = get_llm(model, context)
         except Exception as exc:
             logger.warning("Failed to construct LLM provider: %s — returning empty", exc)
             return self._finish(context, output_key, empty_result, model_used="")

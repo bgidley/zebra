@@ -233,7 +233,7 @@ def test_run_sends_outcomes_claude_review_and_diff(fake, repo, tmp_path):
     assert "a.txt" not in sent["diff"]
     args = (fake / "args.txt").read_text().split("\n")
     assert "Outcome Review" in args
-    assert args[args.index("--model") + 1] == "sonnet"
+    assert args[args.index("--model") + 1] == "medium"
 
 
 def test_run_caps_the_diff(fake, repo, tmp_path):

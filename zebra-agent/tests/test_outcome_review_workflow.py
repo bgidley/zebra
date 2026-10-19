@@ -19,7 +19,7 @@ from zebra_tasks.agent.zebra_source import ZebraSourceAction
 from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.llm.agent import LLMAgentAction
 from zebra_tasks.llm.base import LLMProvider, LLMResponse, TokenUsage, ToolCall
-from zebra_tasks.llm.providers.registry import register_provider
+from zebra_tasks.llm.client import set_llm_factory
 
 from zebra_agent.direct_run import DirectRunError, run_named_workflow, workflow_status
 from zebra_agent.library import WorkflowLibrary, list_goal_workflows
@@ -40,7 +40,7 @@ def _response(content: str = "", tool_calls: list[ToolCall] | None = None) -> LL
         tool_calls=tool_calls,
         finish_reason="tool_use" if tool_calls else "end_turn",
         usage=TokenUsage(300, 100),
-        model="claude-sonnet-5-5",
+        model="test/model",
     )
 
 
@@ -86,7 +86,7 @@ class ReviewModel(LLMProvider):
 
     @property
     def model(self) -> str:
-        return "claude-sonnet-5-5"
+        return "test/model"
 
     @property
     def max_context_tokens(self) -> int:
@@ -129,10 +129,8 @@ def _inputs() -> dict:
 
 
 async def _run(engine, library, model: ReviewModel) -> dict:
-    register_provider("review-model", lambda m: model)
-    return await run_named_workflow(
-        engine, library, "Outcome Review", _inputs(), provider="review-model", model="sonnet"
-    )
+    set_llm_factory(lambda m: model)
+    return await run_named_workflow(engine, library, "Outcome Review", _inputs(), model="medium")
 
 
 @pytest.mark.parametrize(

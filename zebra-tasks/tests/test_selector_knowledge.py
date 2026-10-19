@@ -79,7 +79,7 @@ class TestWorkflowSelectorKnowledge:
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(side_effect=mock_complete)
 
-        with patch("zebra_tasks.agent.selector.get_provider", return_value=mock_provider):
+        with patch("zebra_tasks.agent.selector.get_llm", return_value=mock_provider):
             action = WorkflowSelectorAction()
             result = await action.run(mock_task, mock_context)
 
@@ -105,7 +105,7 @@ class TestWorkflowSelectorKnowledge:
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(side_effect=mock_complete)
 
-        with patch("zebra_tasks.agent.selector.get_provider", return_value=mock_provider):
+        with patch("zebra_tasks.agent.selector.get_llm", return_value=mock_provider):
             action = WorkflowSelectorAction()
             result = await action.run(mock_task, mock_context)
 
@@ -131,7 +131,7 @@ class TestWorkflowSelectorKnowledge:
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(side_effect=mock_complete)
 
-        with patch("zebra_tasks.agent.selector.get_provider", return_value=mock_provider):
+        with patch("zebra_tasks.agent.selector.get_llm", return_value=mock_provider):
             action = WorkflowSelectorAction()
             result = await action.run(mock_task, mock_context)
 
@@ -155,7 +155,7 @@ class TestWorkflowSelectorHistory:
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(side_effect=mock_complete)
 
-        with patch("zebra_tasks.agent.selector.get_provider", return_value=mock_provider):
+        with patch("zebra_tasks.agent.selector.get_llm", return_value=mock_provider):
             result = await WorkflowSelectorAction().run(mock_task, mock_context)
 
         assert result.success

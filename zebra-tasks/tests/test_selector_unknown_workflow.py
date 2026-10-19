@@ -46,7 +46,7 @@ async def _select(mock_task, mock_context, llm_choice: dict):
     response.usage = {"input_tokens": 10, "output_tokens": 5}
     provider = MagicMock()
     provider.complete = AsyncMock(return_value=response)
-    with patch("zebra_tasks.agent.selector.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.selector.get_llm", return_value=provider):
         return await WorkflowSelectorAction().run(mock_task, mock_context)
 
 

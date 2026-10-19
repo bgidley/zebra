@@ -27,7 +27,6 @@ Not in scope: per-tool-call timeouts (the goal's `GOAL_TIMEOUT_SECONDS` bounds t
 - **Tool names** are slugs of workflow names (`Web Research` → `web_research`). The definition is the workflow's `description` + `use_when` and its `inputs` schema.
 - **`list_goal_workflows`** excludes *tool-only* workflows (`inputs.required` names anything other than `goal`).
 - **Workflows:** `web_search.yaml` v2 gains `inputs`. New: `read_web_page.yaml` (tool-only, `kagi_extract`), `define_workflow.yaml` (system: `ethics_gate` → `workflow_creator`; reject/escalate → `propagate_failure`), `web_research_agent.yaml`.
-- **Anthropic provider:** consecutive tool results are sent as one user turn (parallel tool calls).
 
 ## 4. Control flow
 

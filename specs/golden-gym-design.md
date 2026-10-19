@@ -41,7 +41,7 @@ prompts outside workflows (#98 should call the same gate when it lands).
   (pure template, e.g. `{{optimization_results.pending_gym}}`; absent = on demand; when absent a
   `candidates` list in the run's process properties is used), `workflows` (on-demand filter; task
   property or run input), `promote` (true; false = check only), `tolerance` (0.1), `timeout` per run
-  (150s), `max_tasks_per_workflow` (3), `max_runs` (12), `model` (judge, `sonnet`), `results_key`
+  (150s), `max_tasks_per_workflow` (3), `max_runs` (12), `model` (judge, `medium`), `results_key`
   (`optimization_results`), `output_key` (`golden_gym`). Output `{mode, promote, decisions:
   [{workflow, decision, reason, current_mean, candidate_mean, per_task}], scores, skipped, errors}`.
   Never fails its process. Declare `idempotent: true`.
@@ -90,7 +90,7 @@ Any exception → every still-pending candidate rejected (`gym error: …`), rep
 | Setting | Default | Where |
 |---|---|---|
 | `ZEBRA_GOLDEN_TASKS_DIR` | `zebra-agent/golden` | env |
-| `tolerance` / `timeout` / `max_runs` / `max_tasks_per_workflow` / `model` | 0.1 / 150s / 12 / 3 / sonnet | task properties (Dream Cycle, Golden Gym) |
+| `tolerance` / `timeout` / `max_runs` / `max_tasks_per_workflow` / `model` | 0.1 / 150s / 12 / 3 / medium | task properties (Dream Cycle, Golden Gym) |
 
 Budget: prod Dream Cycles take 60–210s of their 600s bound; gym runs and judge calls run
 concurrently, so a gated change adds about one workflow run plus one judge call of wall time. Cost per
