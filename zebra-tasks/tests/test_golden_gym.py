@@ -114,7 +114,7 @@ criteria:
 @pytest.fixture
 def judge(monkeypatch) -> _FakeJudge:
     fake = _FakeJudge()
-    monkeypatch.setattr(gym_module, "get_llm", lambda *a, **k: fake)
+    monkeypatch.setattr("zebra_tasks.llm.client._factory", lambda m: fake)
     return fake
 
 

@@ -252,15 +252,16 @@ That's the result."""
         assert messages[3].content == "How are you?"
 
     @pytest.mark.asyncio
-    async def test_no_provider_fails(self, mock_context, mock_task):
+    async def test_no_provider_fails(self, mock_context, mock_task, monkeypatch):
         """Test that missing provider fails gracefully."""
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         mock_task.properties = {"prompt": "Test"}
 
         action = LLMCallAction()
         result = await action.run(mock_task, mock_context)
 
         assert result.success is False
-        assert "No LLM provider" in result.error
+        assert "OPENROUTER_API_KEY" in result.error
 
     @pytest.mark.asyncio
     async def test_no_prompt_fails(self, llm_context, mock_task):

@@ -217,7 +217,12 @@ class ProposeZebraImprovementsAction(TaskAction):
             out["errors"].append(f"{REQUEST_WORKFLOW} workflow not found")
             return out
 
-        provider = get_llm(model_for(task, context), context)
+        try:
+            provider = get_llm(model_for(task, context), context)
+        except ValueError as e:
+            logger.warning("Improvement requests: no LLM (%s) — skipping", e)
+            out["errors"].append("no LLM provider")
+            return out
 
         earlier = await self._earlier_titles(context)
         proposals = await self._ask(provider, context, findings, earlier, out)

@@ -198,4 +198,4 @@ async def test_model_resolved_from_process_property(task):
 
     _, get_provider = await _run(task, context, _provider(content))
 
-    get_provider.assert_called_once_with("anthropic", "haiku")
+    assert get_provider.call_args.args[0] == "low"

@@ -296,7 +296,10 @@ class LLMAgentAction(LLMCallAction):
         elif context.subflow_results is not None and state["pending"]:
             await self._absorb_results(state, context)
 
-        provider = get_llm(model_for(task, context), context)
+        try:
+            provider = get_llm(model_for(task, context), context)
+        except ValueError as e:
+            return TaskResult.fail(f"No LLM available: {e}")
 
         max_turns = int(task.properties.get("max_tool_turns", 8))
         max_parallel = int(task.properties.get("max_parallel_tools", 4))

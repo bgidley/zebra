@@ -80,7 +80,7 @@ def _provider(content: str) -> MagicMock:
             tool_calls=None,
             finish_reason="end_turn",
             model="claude-haiku-5-5",
-            usage=TokenUsage(input_tokens=100, output_tokens=50),
+            usage=TokenUsage(input_tokens=100, output_tokens=50, cost_usd=0.001),
         )
     )
     return provider
@@ -105,7 +105,7 @@ class TestAssessStuck:
             "confidence": 0.7,
         }
         provider = _provider(json.dumps(reply))
-        with patch("zebra_tasks.agent.stuck.get_llm", return_value=provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: provider):
             result = await AssessStuckAction().run(_assess_task(), context)
 
         assert result.next_route == "ask_human"
@@ -133,7 +133,7 @@ class TestAssessStuck:
     async def test_no_recorded_steps(self):
         context = _context(_failed_props(__task_executions__=[]))
         provider = _provider("{}")
-        with patch("zebra_tasks.agent.stuck.get_llm", return_value=provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: provider):
             result = await AssessStuckAction().run(_assess_task(), context)
         assert result.next_route == "ask_human"
         prompt = provider.complete.call_args.kwargs["messages"][1].content

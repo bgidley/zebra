@@ -102,43 +102,6 @@ class TestGoalHandler:
         assert "Hello!" in out
         assert "Test WF" in out
 
-    @pytest.mark.parametrize("model", ["kimi", "openrouter"])
-    async def test_run_mode_switches_provider(self, model):
-        from zebra_agent_web.cli import _goal_async
-
-        result = MagicMock()
-        result.success = True
-        result.run_id = "r"
-        result.workflow_name = "w"
-        result.tokens_used = 0
-        result.error = None
-        result.output = None
-
-        seen_providers = []
-
-        agent_loop = MagicMock()
-        agent_loop.provider_name = "anthropic"
-
-        async def capture_process_goal(**kwargs):
-            seen_providers.append(agent_loop.provider_name)
-            return result
-
-        agent_loop.process_goal = AsyncMock(side_effect=capture_process_goal)
-
-        engine = MagicMock()
-        engine.store.get_processes_by_state = AsyncMock(return_value=[])
-
-        with (
-            patch("zebra_agent_web.api.agent_engine.ensure_initialized", new=AsyncMock()),
-            patch("zebra_agent_web.api.agent_engine.get_agent_loop", return_value=agent_loop),
-            patch("zebra_agent_web.api.engine.get_engine", return_value=engine),
-        ):
-            await _goal_async("Say hi", model=model, queue=False, priority=3)
-
-        assert seen_providers == [model]
-        # restored afterwards
-        assert agent_loop.provider_name == "anthropic"
-
     async def test_run_mode_failure_returns_nonzero(self):
         from zebra_agent_web.cli import _goal_async
 

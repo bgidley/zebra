@@ -318,7 +318,11 @@ class WorkflowCuratorAction(TaskAction):
         if not any(LLM_DEFINED_TAG in wf.tags for wf in current.values()) or len(current) < 2:
             return []
 
-        provider = get_llm(model_for(task, context), context)
+        try:
+            provider = get_llm(model_for(task, context), context)
+        except ValueError as e:
+            logger.warning("workflow_curator: no LLM (%s); duplicate check skipped", e)
+            return []
 
         try:
             data = await complete_json(

@@ -120,25 +120,23 @@ class TestLLMPath:
         assert "reversible" in user_prompt  # the untrusted declaration
         assert "file_delete" in user_prompt
 
-    async def test_default_model_is_haiku(self, mock_context):
+    async def test_default_model_is_low(self, mock_context):
         provider = _make_provider(_verdict(True))
         with patch(
             "zebra_tasks.agent.reversibility.get_llm", return_value=provider
         ) as get_provider:
             await assess_reversibility("x", "context_dependent", {}, "", mock_context)
 
-        get_provider.assert_called_once_with("anthropic", "haiku")
+        assert get_provider.call_args.args[0] == "low"
 
     async def test_model_override(self, mock_context):
         provider = _make_provider(_verdict(True))
         with patch(
             "zebra_tasks.agent.reversibility.get_llm", return_value=provider
         ) as get_provider:
-            await assess_reversibility(
-                "x", "context_dependent", {}, "", mock_context, model="sonnet"
-            )
+            await assess_reversibility("x", "context_dependent", {}, "", mock_context, model="high")
 
-        get_provider.assert_called_once_with("anthropic", "sonnet")
+        assert get_provider.call_args.args[0] == "high"
 
 
 class TestFailClosed:

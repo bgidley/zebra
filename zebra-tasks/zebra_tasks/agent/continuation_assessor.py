@@ -22,7 +22,7 @@ from zebra_tasks.agent.followup import (
 )
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.client import get_llm
+from zebra_tasks.llm.client import get_llm, model_for
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +250,7 @@ class ContinuationAssessorAction(TaskAction):
         Returns ``(decision, rationale, suggested_name, voice)`` where ``voice`` holds
         the normalised ``voice`` / ``confidence`` fields (#161).
         """
-        model = task.properties.get("model") or context.process.properties.get("__llm_model__")
+        model = model_for(task, context)
 
         outcome = "succeeded" if ctx.get("success", True) else "failed"
         prompt = (

@@ -97,7 +97,7 @@ class TestFlagConcernsAction:
             await action.run(mock_task, mock_context)
 
         # get_provider(provider_name, model) — second positional arg is the model
-        assert get_provider.call_args.args[1] == "haiku"
+        assert get_provider.call_args.args[0] == "low"
 
     async def test_unparseable_response_degrades_gracefully(self, mock_task, mock_context):
         """A non-JSON response yields empty concerns and still succeeds."""

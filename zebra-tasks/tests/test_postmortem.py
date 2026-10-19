@@ -85,7 +85,7 @@ def _provider(content: str) -> MagicMock:
             tool_calls=None,
             finish_reason="end_turn",
             model="claude-haiku-5-5",
-            usage=TokenUsage(input_tokens=100, output_tokens=50),
+            usage=TokenUsage(input_tokens=100, output_tokens=50, cost_usd=0.001),
         )
     )
     return provider
@@ -109,7 +109,7 @@ class TestWritePostmortem:
         context = _context(_failed_props(), memory)
         provider = _provider(json.dumps(_POSTMORTEM_JSON))
 
-        with patch("zebra_tasks.agent.postmortem.get_llm", return_value=provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: provider):
             result = await WritePostmortemAction().run(_loop_task(), context)
 
         assert result.success
@@ -179,7 +179,7 @@ class TestWritePostmortem:
     async def test_response_without_lesson_stores_nothing(self):
         memory = InMemoryMemoryStore()
         provider = _provider(json.dumps({**_POSTMORTEM_JSON, "lesson": ""}))
-        with patch("zebra_tasks.agent.postmortem.get_llm", return_value=provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: provider):
             result = await WritePostmortemAction().run(
                 _loop_task(), _context(_failed_props(), memory)
             )
@@ -209,7 +209,7 @@ class TestWritePostmortem:
             user_feedback="{{user_feedback}}",
         )
         provider = _provider(json.dumps(_POSTMORTEM_JSON))
-        with patch("zebra_tasks.agent.postmortem.get_llm", return_value=provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: provider):
             result = await WritePostmortemAction().run(task, _context(props, memory))
 
         assert result.output["written"] is True

@@ -181,7 +181,7 @@ class TestAssessHistoryNeed:
         assert result.next_route == "needs_history"
         assert result.output["text"] == "pensions"
         assert result.output["since"][:13] == since[:13]
-        assert gp.call_args.args[1] == "haiku"
+        assert gp.call_args.args[0] == "low"
         assert context.process.properties["history_need"]["needs_history"] is True
 
     async def test_ordinary_goal_skips_llm(self, context):

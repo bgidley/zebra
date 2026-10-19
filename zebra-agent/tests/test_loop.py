@@ -173,7 +173,6 @@ class TestAgentLoopInitialization:
         assert loop.library is library
         assert loop.engine is mock_engine
         assert loop.metrics is metrics
-        assert loop.provider_name == "anthropic"
 
     def test_initialization_with_memory(self, library, mock_engine, metrics, memory):
         """Test initialization with memory."""

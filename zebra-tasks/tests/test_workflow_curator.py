@@ -267,7 +267,7 @@ def _llm(pairs: list[dict]) -> MagicMock:
             content=json.dumps({"duplicates": pairs}),
             tool_calls=None,
             finish_reason="end_turn",
-            usage=TokenUsage(input_tokens=100, output_tokens=20),
+            usage=TokenUsage(input_tokens=100, output_tokens=20, cost_usd=0.001),
             model="claude-sonnet-4-20250514",
         )
     )
@@ -335,7 +335,7 @@ def _reply(content: str, finish_reason: str = "end_turn") -> LLMResponse:
         content=content,
         tool_calls=None,
         finish_reason=finish_reason,
-        usage=TokenUsage(input_tokens=100, output_tokens=20),
+        usage=TokenUsage(input_tokens=100, output_tokens=20, cost_usd=0.001),
         model="claude-sonnet-4-20250514",
     )
 

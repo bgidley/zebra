@@ -257,7 +257,8 @@ class TestWorkflowEvaluatorAction:
         assert result.success is False
         assert "No metrics_analysis" in result.error
 
-    async def test_no_provider_fails(self, mock_task, mock_context):
+    async def test_no_provider_fails(self, mock_task, mock_context, monkeypatch):
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
 
         mock_task.properties = {
@@ -267,7 +268,7 @@ class TestWorkflowEvaluatorAction:
         result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
 
         assert result.success is False
-        assert "No LLM provider" in result.error
+        assert "OPENROUTER_API_KEY" in result.error
 
     async def test_successful_evaluation(self, mock_task, mock_context):
         from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
@@ -518,7 +519,8 @@ class TestWorkflowOptimizerAction:
         assert result.success is False
         assert "No evaluation provided" in result.error
 
-    async def test_no_provider_fails(self, mock_task, mock_context):
+    async def test_no_provider_fails(self, mock_task, mock_context, monkeypatch):
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 
         mock_task.properties = {
@@ -527,7 +529,7 @@ class TestWorkflowOptimizerAction:
         result = await WorkflowOptimizerAction().run(mock_task, mock_context)
 
         assert result.success is False
-        assert "No LLM provider" in result.error
+        assert "OPENROUTER_API_KEY" in result.error
 
     async def test_dry_run_returns_new_workflows(self, mock_task, mock_context):
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction

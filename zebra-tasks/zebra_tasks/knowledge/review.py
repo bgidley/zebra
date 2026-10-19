@@ -419,7 +419,11 @@ class ReviewKnowledgeAction(TaskAction):
     ) -> dict[str, Any] | None:
         from zebra_agent.knowledge import KNOWLEDGE_CATEGORIES
 
-        provider = get_llm(model_for(task, context), context)
+        try:
+            provider = get_llm(model_for(task, context), context)
+        except ValueError as e:
+            logger.warning("Knowledge review: no LLM (%s)", e)
+            return None
         entry_items = [
             {
                 "id": e.id,

@@ -58,7 +58,7 @@ def say(text: str) -> Step:
         content=text,
         tool_calls=None,
         finish_reason="end_turn",
-        usage=TokenUsage(100, 50),
+        usage=TokenUsage(100, 50, cost_usd=0.001),
         model="claude-haiku-5-5",
     )
 
@@ -71,7 +71,7 @@ def use(*calls: tuple[str, dict]) -> Step:
             for i, (name, args) in enumerate(calls)
         ],
         finish_reason="tool_use",
-        usage=TokenUsage(100, 20),
+        usage=TokenUsage(100, 20, cost_usd=0.001),
         model="claude-haiku-5-5",
     )
 
