@@ -60,6 +60,10 @@ steps run inline (no `task_waiting`). A live human step, or an unrecorded one un
 `Replay cannot serve step '<id>' (run #n): <reason>. Run it live to continue.` If the replay has
 `continue_live`, an unrecorded step runs live instead (used after fixing a failing step live).
 
+**Lifecycle actions**: a replay runs no process `construct_action` / `destruct_action` (#207);
+the construct's effects are already in the recorded starting properties. Recovery's lifecycle
+check skips replays.
+
 **Replacement definition**: saved under `<id>-replay-<hex>`, so the original is untouched.
 Steps that are new or differ (`TaskDefinition` inequality) join `live`.
 

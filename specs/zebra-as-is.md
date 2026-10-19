@@ -133,7 +133,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 
 ### LLM integration
 
-- **OpenRouter only (#205)**: `get_llm(model, context)` (`zebra_tasks/llm/client.py`) is the one entry point. Models are cost tiers `low` / `medium` (default) / `high` / `max`, sent to `openrouter/auto` with the auto-router `cost_tier`; a `vendor/model` slug names an exact model. Legacy names (`low-tier`, `medium-tier`, `opus`, `claude-*`) are read as tiers. Cost is OpenRouter's reported `usage.cost`, recorded on the process by `record_usage` for every call made with a context (no price tables). 4096 tokens of reasoning headroom are added to every request (#204). Anthropic, Kimi and OpenAI providers, provider names and the anthropic SDK are gone. See [openrouter-llm-design.md](openrouter-llm-design.md).
+- **OpenRouter only (#205)**: `get_llm(model, context)` (`zebra_tasks/llm/client.py`) is the one entry point. Models are cost tiers `low` / `medium` (default) / `high` / `max`, sent to `openrouter/auto` with the auto-router `cost_tier`; a `vendor/model` slug names an exact model. Legacy names (`haiku`, `sonnet`, `opus`, `claude-*`) are read as tiers. Cost is OpenRouter's reported `usage.cost`, recorded on the process by `record_usage` for every call made with a context (no price tables). 4096 tokens of reasoning headroom are added to every request (#204). Anthropic, Kimi and OpenAI providers, provider names and the anthropic SDK are gone. See [openrouter-llm-design.md](openrouter-llm-design.md).
 - Every call updates process properties: `__total_cost__`, `__total_tokens__`, `__token_history__`.
 - Soft budget warnings via an injected `__budget_manager__` (non-blocking).
 

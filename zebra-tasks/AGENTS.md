@@ -547,7 +547,7 @@ Enforce the per-domain trust level (F12/F13) at a workflow gate point. Routes `p
 
 **Routes:** `"proceed"` (SUPERVISED never; SEMI_AUTONOMOUS when the contextual reversibility assessment returns reversible; AUTONOMOUS always) or `"approve"` (everything else). No assessment runs at SUPERVISED or AUTONOMOUS.
 
-**Reversibility assessment (F14 / REQ-TRUST-002):** `assess_reversibility()` in `zebra_tasks/agent/reversibility.py`. Action-class `reversibility_hint` values `always_reversible` / `always_irreversible` short-circuit without an LLM call; `context_dependent` (the default) triggers an LLM judgment (haiku) over the gated action's concrete parameters, framed on the chain of consequences, the Asimov dropped-weight test, and anti-gaming. The assessor fails closed to irreversible on provider errors or unparseable responses.
+**Reversibility assessment (F14 / REQ-TRUST-002):** `assess_reversibility()` in `zebra_tasks/agent/reversibility.py`. Action-class `reversibility_hint` values `always_reversible` / `always_irreversible` short-circuit without an LLM call; `context_dependent` (the default) triggers an LLM judgment (low tier) over the gated action's concrete parameters, framed on the chain of consequences, the Asimov dropped-weight test, and anti-gaming. The assessor fails closed to irreversible on provider errors or unparseable responses.
 
 **Fail-closed:** missing `__trust_store__`, unresolvable user id, store errors, or unrecognised levels are treated as SUPERVISED — the gate routes to `approve` and logs a warning. It never fails open.
 
