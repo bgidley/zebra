@@ -10,10 +10,9 @@ instead of a bare "parsing failed".
 import json
 import logging
 import re
-from collections.abc import Callable
 from typing import Any
 
-from zebra_tasks.llm.base import LLMProvider, LLMResponse, Message, MessageRole
+from zebra_tasks.llm.base import LLMProvider, Message, MessageRole
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +99,6 @@ async def complete_json(
     *,
     temperature: float,
     max_tokens: int,
-    on_response: Callable[[LLMResponse], None] | None = None,
 ) -> Any:
     """Ask for a JSON reply, retrying once if it cannot be parsed.
 
@@ -114,8 +112,6 @@ async def complete_json(
         messages: Conversation, normally system + user.
         temperature: Sampling temperature.
         max_tokens: Token budget for the first attempt.
-        on_response: Called with every response (e.g. to count cost), including
-            the retry's.
 
     Returns:
         The parsed JSON value.
@@ -130,8 +126,6 @@ async def complete_json(
         response = await provider.complete(
             messages=attempt_messages, temperature=temperature, max_tokens=attempt_tokens
         )
-        if on_response is not None:
-            on_response(response)
         try:
             return parse_llm_json(response.content)
         except ValueError as e:

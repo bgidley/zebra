@@ -8,8 +8,7 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,6 @@ class UpdateConceptualMemoryAction(TaskAction):
         goal: User's original goal
         success: Whether the run succeeded
         effectiveness_notes: LLM assessment from assess_and_record step
-        provider: LLM provider name (default: anthropic)
         model: LLM model name (optional)
         output_key: Where to store result (default: "conceptual_memory_update")
 
@@ -72,13 +70,6 @@ class UpdateConceptualMemoryAction(TaskAction):
             description="LLM effectiveness assessment",
             required=False,
             default="",
-        ),
-        ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
-            default=None,
         ),
         ParameterDef(name="model", type="string", description="LLM model name", required=False),
         ParameterDef(
@@ -143,7 +134,6 @@ class UpdateConceptualMemoryAction(TaskAction):
         success = task.properties.get("success", False)
         if isinstance(success, str):
             success = success.lower() in ("true", "1", "yes")
-        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
         output_key = task.properties.get("output_key", "conceptual_memory_update")
 
@@ -194,7 +184,7 @@ class UpdateConceptualMemoryAction(TaskAction):
             else:
                 prompt += "\nNo existing conceptual memory yet — create the first entry."
 
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
             response = await provider.complete(
                 messages=[
                     Message.system(self.SYSTEM_PROMPT),

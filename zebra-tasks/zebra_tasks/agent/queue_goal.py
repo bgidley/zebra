@@ -110,11 +110,7 @@ class QueueGoalAction(TaskAction):
         if deadline:
             properties["deadline"] = deadline
 
-        # Copy LLM settings from the parent process
-        if "__llm_provider_name__" in context.process.properties:
-            properties["__llm_provider_name__"] = context.process.properties[
-                "__llm_provider_name__"
-            ]
+        # Copy the model tier from the parent process
         if "__llm_model__" in context.process.properties:
             properties["__llm_model__"] = context.process.properties["__llm_model__"]
 

@@ -432,11 +432,7 @@ class ExecuteGoalWorkflowAction(TaskAction):
             "__parent_task_id__": task.id,
         }
 
-        # Copy LLM provider settings from parent
-        if "__llm_provider_name__" in context.process.properties:
-            sub_properties["__llm_provider_name__"] = context.process.properties[
-                "__llm_provider_name__"
-            ]
+        # The goal workflow runs at the parent's model tier
         if "__llm_model__" in context.process.properties:
             sub_properties["__llm_model__"] = context.process.properties["__llm_model__"]
 

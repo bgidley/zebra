@@ -6,8 +6,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.agent.creator import generate_workflow
 from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 
 class WorkflowVariantCreatorAction(TaskAction):
@@ -23,7 +22,6 @@ class WorkflowVariantCreatorAction(TaskAction):
         source_workflow_name: Name of the workflow to copy and modify
         suggested_name: Suggested name for the variant (optional)
         reasoning: Why the source workflow was chosen (provides context to LLM)
-        provider: LLM provider name (default: anthropic)
         model: LLM model name (optional)
         output_key: Where to store the result (default: "created_workflow")
 
@@ -74,13 +72,6 @@ class WorkflowVariantCreatorAction(TaskAction):
             description="Why the source workflow was close but not quite right",
             required=False,
             default="",
-        ),
-        ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider",
-            required=False,
-            default=None,
         ),
         ParameterDef(name="model", type="string", description="LLM model", required=False),
         ParameterDef(
@@ -141,7 +132,6 @@ class WorkflowVariantCreatorAction(TaskAction):
         source_name = self._resolve(task, context, "source_workflow_name", "")
         suggested_name = self._resolve(task, context, "suggested_name", "")
         reasoning = self._resolve(task, context, "reasoning", "")
-        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
         output_key = task.properties.get("output_key", "created_workflow")
 
@@ -161,7 +151,7 @@ class WorkflowVariantCreatorAction(TaskAction):
             return TaskResult.fail(f"Could not load source workflow '{source_name}': {e}")
 
         try:
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
         except Exception as e:
             return TaskResult.fail(f"Failed to get LLM provider: {e}")
 

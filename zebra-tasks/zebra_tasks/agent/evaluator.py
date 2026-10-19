@@ -7,8 +7,8 @@ from typing import Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.llm.base import LLMResponse, Message
-from zebra_tasks.llm.pricing import usage_cost
+from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.client import get_llm, model_for
 from zebra_tasks.llm.structured import LLMJSONError, complete_json, describe_failure
 
 # Matches a pure template reference like "{{some_key}}"
@@ -78,12 +78,6 @@ class WorkflowEvaluatorAction(TaskAction):
             description="Process property key to store the evaluation",
             required=False,
             default="workflow_evaluation",
-        ),
-        ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
         ),
         ParameterDef(
             name="model",
@@ -203,9 +197,7 @@ Respond with JSON only:
 
         try:
             # Get LLM provider
-            provider = self._get_provider(task, context)
-            if provider is None:
-                return TaskResult.fail("No LLM provider available")
+            provider = get_llm(model_for(task, context), context)
 
             # Build evaluation prompt
             prompt = self._build_prompt(metrics_analysis, workflow_definitions)
@@ -218,7 +210,6 @@ Respond with JSON only:
                     [Message.system(self.SYSTEM_PROMPT), Message.user(prompt)],
                     temperature=0.3,
                     max_tokens=max_tokens,
-                    on_response=lambda response: _track_usage(context, response),
                 )
             except LLMJSONError as e:
                 evaluation = self._fallback_evaluation(e.failure)
@@ -276,23 +267,6 @@ Respond with JSON only:
             except (json.JSONDecodeError, ValueError):
                 pass
         return resolved or default
-
-    def _get_provider(self, task: TaskInstance, context: ExecutionContext):
-        """Get the LLM provider to use."""
-        from zebra_tasks.llm.providers.registry import get_provider
-
-        provider_name = task.properties.get("provider")
-        model = task.properties.get("model")
-
-        if not provider_name:
-            provider_name = context.process.properties.get("__llm_provider_name__")
-        if not model:
-            model = context.process.properties.get("__llm_model__")
-
-        if provider_name:
-            return get_provider(provider_name, model)
-
-        return context.process.properties.get("__llm_provider__")
 
     def _build_prompt(
         self, metrics_analysis: dict[str, Any], workflow_definitions: dict[str, str]
@@ -454,11 +428,3 @@ Respond with JSON only:
             "new_workflow_suggestions": [],
         }
 
-
-def _track_usage(context: ExecutionContext, response: LLMResponse) -> None:
-    """Add one call's tokens and cost to the process totals."""
-    usage = response.usage
-    tokens = context.get_process_property("__total_tokens__", 0)
-    context.set_process_property("__total_tokens__", tokens + usage.total_tokens)
-    cost = context.get_process_property("__total_cost__", 0.0)
-    context.set_process_property("__total_cost__", cost + usage_cost(response.model, usage))

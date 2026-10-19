@@ -26,8 +26,8 @@ import httpx
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.knowledge.review import _get_provider, _track_cost
 from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.client import get_llm, model_for
 from zebra_tasks.llm.structured import LLMJSONError, complete_json
 
 logger = logging.getLogger(__name__)
@@ -217,11 +217,7 @@ class ProposeZebraImprovementsAction(TaskAction):
             out["errors"].append(f"{REQUEST_WORKFLOW} workflow not found")
             return out
 
-        provider = _get_provider(task, context)
-        if provider is None:
-            logger.warning("Improvement requests: no LLM provider — skipping")
-            out["errors"].append("no LLM provider")
-            return out
+        provider = get_llm(model_for(task, context), context)
 
         earlier = await self._earlier_titles(context)
         proposals = await self._ask(provider, context, findings, earlier, out)
@@ -301,7 +297,6 @@ class ProposeZebraImprovementsAction(TaskAction):
                 [Message.system(SYSTEM_PROMPT), Message.user(prompt)],
                 temperature=0.2,
                 max_tokens=1500,
-                on_response=lambda response: _track_cost(context, response),
             )
         except LLMJSONError as e:
             logger.warning("Improvement requests: unparseable LLM response: %s", e)

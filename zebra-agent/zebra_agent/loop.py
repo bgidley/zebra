@@ -21,7 +21,6 @@ from typing import Any
 
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState, TaskState
-from zebra_tasks.llm.providers.registry import default_provider_name
 
 from zebra_agent.human_tasks import find_pending_human_task
 from zebra_agent.library import WorkflowLibrary, list_goal_workflows
@@ -87,7 +86,6 @@ class AgentLoop:
         memory: MemoryStore | None = None,
         profile: ProfileStore | None = None,
         knowledge: PersonalKnowledgeStore | None = None,
-        provider: str | None = None,
         model: str | None = None,
         goal_timeout: float = DEFAULT_GOAL_TIMEOUT,
     ):
@@ -100,8 +98,7 @@ class AgentLoop:
             metrics: Metrics store for recording run history
             memory: Agent memory store for context (optional)
             profile: Values-profile store (optional, F18)
-            provider: LLM provider name
-            model: LLM model name (optional)
+            model: Default model tier (low / medium / high / max); None means medium
             goal_timeout: Max seconds a goal's auto-task chain may run before the
                 process is failed (#142). Time waiting on a human task is not
                 counted against it.
@@ -112,7 +109,6 @@ class AgentLoop:
         self.memory = memory
         self.profile = profile
         self.knowledge = knowledge
-        self.provider_name = provider or default_provider_name()
         self.model = model
         self.goal_timeout = goal_timeout
         # Fire-and-forget work (low-rating postmortems, #175), kept referenced until done.
@@ -194,7 +190,6 @@ class AgentLoop:
             "goal": goal,
             "run_id": run_id,
             "available_workflows": available_workflows,
-            "__llm_provider_name__": self.provider_name,
             "__llm_model__": model or self.model,
             "__started_at__": datetime.now(UTC).isoformat(),
             "__user_id__": user_id,
@@ -380,8 +375,7 @@ class AgentLoop:
             user_feedback=memory_entry.user_feedback if memory_entry else "",
             source_properties={
                 "__user_id__": run.user_id,
-                "__llm_provider_name__": self.provider_name,
-            },
+                },
         )
 
     async def record_feedback(self, run_id: str, feedback: str) -> bool:
@@ -411,7 +405,7 @@ class AgentLoop:
             return
         try:
             from zebra_tasks.llm.base import Message
-            from zebra_tasks.llm.providers import get_provider
+            from zebra_tasks.llm.client import get_llm
 
             wf_memories = await self.memory.get_workflow_memories(entry.workflow_name, limit=5)
             ratings = [m.rating for m in wf_memories if m.rating is not None]
@@ -461,7 +455,7 @@ class AgentLoop:
                 '"anti_patterns": "what does not work here"}'
             )
 
-            provider = get_provider(self.provider_name, self.model)
+            provider = get_llm(self.model)
             response = await provider.complete(
                 messages=[Message.system(system_prompt), Message.user(prompt)],
                 temperature=0.3,
@@ -566,7 +560,6 @@ class AgentLoop:
         definition = self.library.get_workflow("Dream Cycle")
 
         properties = {
-            "__llm_provider_name__": self.provider_name,
             "__llm_model__": self.model,
             "__started_at__": datetime.now(UTC).isoformat(),
             # The optimizer needs the library path for saving modified workflows

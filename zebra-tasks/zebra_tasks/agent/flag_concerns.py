@@ -17,8 +17,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +99,6 @@ class FlagConcernsAction(TaskAction):
             default="",
         ),
         ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
-            default=None,
-        ),
-        ParameterDef(
             name="model",
             type="string",
             description="LLM model name (defaults to haiku — this is a cheap pre-gate scan)",
@@ -157,18 +149,13 @@ class FlagConcernsAction(TaskAction):
             context.set_process_property(output_key, result)
             return TaskResult.ok(output=result)
 
-        provider_name = (
-            task.properties.get("provider")
-            or context.process.properties.get("__llm_provider_name__")
-            or default_provider_name()
-        )
         # Default to haiku: this is a cheap, advisory pre-gate scan.
         model = task.properties.get("model") or context.process.properties.get("__llm_model__")
         if not model:
-            model = "haiku"
+            model = "low"
 
         try:
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
         except Exception as e:
             logger.warning("Concern flagging: failed to get LLM provider: %s", e)
             result = {

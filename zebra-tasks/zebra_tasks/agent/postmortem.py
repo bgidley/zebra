@@ -16,11 +16,10 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_agent.memory import POSTMORTEM_TRIGGERS, PostmortemEntry
 
-from zebra_tasks.agent.stuck import _as_bool, _parse_json, _task_lines, _track_cost
+from zebra_tasks.agent.stuck import _as_bool, _parse_json, _task_lines
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -276,13 +275,10 @@ class WritePostmortemAction(TaskAction):
             if feedback and feedback != "None"
             else ""
         )
-        provider_name = (
-            context.get_process_property("__llm_provider_name__") or default_provider_name()
-        )
         # A cheap model: a short reflection, not the goal's work.
-        model = props.get("model") or "haiku"
+        model = props.get("model") or "low"
         try:
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
             response = await provider.complete(
                 messages=[
                     Message.system(SYSTEM_PROMPT),
@@ -302,7 +298,6 @@ class WritePostmortemAction(TaskAction):
                 temperature=0.3,
                 max_tokens=600,
             )
-            _track_cost(context, response, getattr(provider, "model", None))
             parsed = _parse_json(response.content or "")
         except Exception as e:  # noqa: BLE001
             logger.warning("Postmortem: LLM unavailable, not writing one: %s", e)

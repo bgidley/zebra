@@ -8,8 +8,7 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -46,13 +45,6 @@ class CompactMemoryAction(TaskAction):
     description = "Enforce hot/warm/cold tiered retention on agent memory entries."
 
     inputs = [
-        ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
-            default=None,
-        ),
         ParameterDef(name="model", type="string", description="LLM model name", required=False),
         ParameterDef(
             name="output_key",
@@ -74,7 +66,6 @@ class CompactMemoryAction(TaskAction):
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Run one compaction pass."""
-        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
         output_key = task.properties.get("output_key", "compaction_result")
 
@@ -104,7 +95,7 @@ class CompactMemoryAction(TaskAction):
             context.set_process_property(output_key, result)
             return TaskResult.ok(output=result)
 
-        provider = get_provider(provider_name, model)
+        provider = get_llm(model, context)
 
         # ── Warm workflow entries: LLM compress ─────────────────────────────
         for entry in batch.warm_workflow:

@@ -10,8 +10,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import LLMResponse, Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +125,6 @@ class WorkflowCreatorAction(TaskAction):
         goal: The user's goal that the workflow should achieve
         suggested_name: Suggested name for the workflow (optional)
         existing_workflows: List of existing workflow summaries for reference (optional)
-        provider: LLM provider name (default: anthropic)
         model: LLM model name (optional)
 
     Output:
@@ -153,13 +151,6 @@ class WorkflowCreatorAction(TaskAction):
             type="list",
             description="List of existing workflow summaries for reference",
             required=False,
-        ),
-        ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
-            default=None,
         ),
         ParameterDef(
             name="model",
@@ -275,9 +266,9 @@ routings:
     _PROMPT_FOOTER = """
 ## Model aliases for llm_call
 The optional `model` property on any `llm_call` task accepts these aliases:
-- "haiku" — fastest and cheapest, good for simple extraction or classification
-- "sonnet" — balanced quality and speed (default if omitted)
-- "opus" — highest quality, use for complex reasoning or creative writing
+- "low" — fastest and cheapest, good for simple extraction or classification
+- "medium" — balanced quality and speed (default if omitted)
+- "high" — highest quality, use for complex reasoning or creative writing
 Only set `model` when a task has clearly different requirements from the default.
 
 ## Human input task (auto: false) — Pause for user input via a web form
@@ -423,11 +414,10 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
                     existing_workflows = []
 
         # Get LLM provider
-        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
 
         try:
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
         except Exception as e:
             return TaskResult.fail(f"Failed to get LLM provider: {e}")
 

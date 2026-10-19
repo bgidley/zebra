@@ -38,6 +38,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.knowledge.store_learned import CONTRADICTION_MARKER
 from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.client import get_llm, model_for
 from zebra_tasks.llm.structured import complete_json
 
 logger = logging.getLogger(__name__)
@@ -130,28 +131,6 @@ def _empty_output(cutoff: datetime | None = None) -> dict[str, Any]:
     }
 
 
-def _get_provider(task: TaskInstance, context: ExecutionContext) -> Any:
-    """Resolve the LLM provider the same way the other dream-cycle actions do."""
-    from zebra_tasks.llm.providers.registry import get_provider
-
-    provider_name = task.properties.get("provider") or context.process.properties.get(
-        "__llm_provider_name__"
-    )
-    model = task.properties.get("model") or context.process.properties.get("__llm_model__")
-    if provider_name:
-        return get_provider(provider_name, model)
-    return context.process.properties.get("__llm_provider__")
-
-
-def _track_cost(context: ExecutionContext, response: Any) -> None:
-    from zebra_tasks.llm.pricing import usage_cost
-
-    usage = response.usage
-    tokens = context.get_process_property("__total_tokens__", 0)
-    context.set_process_property("__total_tokens__", tokens + usage.total_tokens)
-    cost = usage_cost(response.model, usage)
-    total = context.get_process_property("__total_cost__", 0.0)
-    context.set_process_property("__total_cost__", total + cost)
 
 
 async def last_dream_cycle_at(context: ExecutionContext) -> datetime | None:
@@ -442,10 +421,7 @@ class ReviewKnowledgeAction(TaskAction):
     ) -> dict[str, Any] | None:
         from zebra_agent.knowledge import KNOWLEDGE_CATEGORIES
 
-        provider = _get_provider(task, context)
-        if provider is None:
-            logger.warning("Knowledge review: no LLM provider")
-            return None
+        provider = get_llm(model_for(task, context), context)
         entry_items = [
             {
                 "id": e.id,
@@ -470,7 +446,6 @@ class ReviewKnowledgeAction(TaskAction):
             [Message.system(SYSTEM_PROMPT), Message.user(prompt)],
             temperature=0.2,
             max_tokens=2000,
-            on_response=lambda response: _track_cost(context, response),
         )
         return data if isinstance(data, dict) else {}
 

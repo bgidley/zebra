@@ -3,7 +3,6 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -97,8 +96,8 @@ class TokenUsage:
 
     input_tokens: int
     output_tokens: int
-    # USD cost reported by the provider (e.g. OpenRouter); None means price it from tables.
-    cost_usd: float | None = None
+    # USD cost OpenRouter reported for the call.
+    cost_usd: float = 0.0
 
     @property
     def total_tokens(self) -> int:
@@ -122,15 +121,7 @@ class LLMResponse:
 
 
 class LLMProvider(ABC):
-    """
-    Abstract interface for LLM providers.
-
-    Implementations handle:
-    - Message formatting for the specific provider
-    - Tool/function calling translation
-    - Streaming support
-    - Error handling and retries
-    """
+    """An LLM that can complete a conversation, optionally calling tools."""
 
     @abstractmethod
     async def complete(
@@ -142,33 +133,8 @@ class LLMProvider(ABC):
         stop_sequences: list[str] | None = None,
     ) -> LLMResponse:
         """Generate a completion."""
-        pass
-
-    @abstractmethod
-    async def stream(
-        self,
-        messages: list[Message],
-        tools: list[ToolDefinition] | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-    ) -> AsyncIterator[str]:
-        """Stream a completion."""
-        pass
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Provider name (e.g., 'anthropic', 'openai')."""
-        pass
 
     @property
     @abstractmethod
     def model(self) -> str:
-        """Model name being used."""
-        pass
-
-    @property
-    @abstractmethod
-    def max_context_tokens(self) -> int:
-        """Maximum context window size."""
-        pass
+        """The tier or model this LLM asks for."""

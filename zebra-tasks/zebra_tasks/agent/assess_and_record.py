@@ -8,8 +8,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import continuation_fields, previous_run_id
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,6 @@ class AssessAndRecordAction(TaskAction):
         tokens_used: Tokens used during execution
         error: Error message if failed (optional)
         started_at: ISO timestamp when run started (optional)
-        provider: LLM provider name (default: anthropic)
         model: LLM model name (optional)
         output_key: Where to store the result (default: "assess_result")
 
@@ -129,13 +127,6 @@ class AssessAndRecordAction(TaskAction):
             description="ISO timestamp when run started",
             required=False,
         ),
-        ParameterDef(
-            name="provider",
-            type="string",
-            description="LLM provider name",
-            required=False,
-            default=None,
-        ),
         ParameterDef(name="model", type="string", description="LLM model name", required=False),
         ParameterDef(
             name="output_key",
@@ -182,7 +173,6 @@ Respond with JSON only:
         cost = self._resolve(task, context, "cost", "0")
         error = self._resolve(task, context, "error", "")
         started_at = self._resolve(task, context, "started_at", "")
-        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
         output_key = task.properties.get("output_key", "assess_result")
 
@@ -288,7 +278,7 @@ Respond with JSON only:
         # ── 2. LLM effectiveness assessment ────────────────────────────────────
         effectiveness_notes = ""
         try:
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
             output_str = str(output)[:800] if output else "(no output)"
             status = "SUCCEEDED" if success else f"FAILED: {error or 'unknown error'}"
 

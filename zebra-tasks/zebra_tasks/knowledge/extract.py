@@ -20,8 +20,7 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.providers import get_provider
-from zebra_tasks.llm.providers.registry import default_provider_name
+from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -285,7 +284,6 @@ class ExtractKnowledgeAction(TaskAction):
             required=False,
             default=False,
         ),
-        ParameterDef(name="provider", type="string", description="LLM provider", required=False),
         ParameterDef(
             name="model", type="string", description="LLM model (default haiku)", required=False
         ),
@@ -347,16 +345,11 @@ class ExtractKnowledgeAction(TaskAction):
 
         existing_keys, existing_text = await self._existing(context, user_id)
 
-        provider_name = (
-            props.get("provider")
-            or context.process.properties.get("__llm_provider_name__")
-            or default_provider_name()
-        )
-        model = props.get("model") or "haiku"
+        model = props.get("model") or "low"
         try:
             from zebra_agent.knowledge import KNOWLEDGE_CATEGORIES
 
-            provider = get_provider(provider_name, model)
+            provider = get_llm(model, context)
             response = await provider.complete(
                 messages=[
                     Message.system(
