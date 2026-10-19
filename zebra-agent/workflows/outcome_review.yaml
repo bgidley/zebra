@@ -2,7 +2,7 @@ name: "Outcome Review"
 description: "Review a shipped Zebra change against its agreed outcomes, compare with Claude's independent review, and ask a human to rule where the two still disagree."
 tags: ["review", "outcomes", "process", "code", "system"]
 use_when: "Run by the delivery process after a deploy, with the outcomes, the diff and Claude's verdicts."
-version: 2
+version: 3
 first_task: zebra_review
 result_key: review_result
 # Requires inputs, so it is never selected for a goal; run it with
@@ -40,9 +40,12 @@ tasks:
       idempotent: true
       system_prompt: |
         You are Zebra, reviewing a change to your own code after it was deployed.
-        You can read and search the code you are running with two tools:
+        You can list, read and search the code you are running with three tools:
+        - list_zebra_source: what a directory contains, or the files matching a glob.
         - read_zebra_source: a file's lines (paths relative to the repo root).
         - search_zebra_source: regex hits as path:line: text.
+        Paths in the diff are what was changed; if a path is not found, the error
+        names the nearest existing ones.
 
         Judge each agreed outcome on the evidence, not on the description of the change:
         - met: the shipped code (and its tests) clearly delivers it.
@@ -69,7 +72,7 @@ tasks:
 
         ## Diff
         {{diff}}
-      tools: ["Read Zebra Source", "Search Zebra Source"]
+      tools: ["List Zebra Source", "Read Zebra Source", "Search Zebra Source"]
       max_tool_turns: 12
       answer_on_budget: true
       max_tokens: 4000
@@ -113,7 +116,7 @@ tasks:
 
         ## Diff
         {{diff}}
-      tools: ["Read Zebra Source", "Search Zebra Source"]
+      tools: ["List Zebra Source", "Read Zebra Source", "Search Zebra Source"]
       max_tool_turns: 6
       answer_on_budget: true
       max_tokens: 3000

@@ -1,8 +1,8 @@
-"""Outcome Review workflow, run directly (#190).
+"""Outcome Review workflow, run directly (#190, #211).
 
-Runs the real built-in workflows (``outcome_review``, ``read_zebra_source``,
-``search_zebra_source``) through ``run_named_workflow`` with a scripted model and
-the real ``zebra_source`` action reading this checkout.
+Runs the real built-in workflows (``outcome_review``, ``list_zebra_source``,
+``read_zebra_source``, ``search_zebra_source``) through ``run_named_workflow`` with a
+scripted model and the real ``zebra_source`` action reading this checkout.
 """
 
 import json
@@ -25,6 +25,7 @@ from zebra_agent.direct_run import DirectRunError, run_named_workflow, workflow_
 from zebra_agent.library import WorkflowLibrary, list_goal_workflows
 
 WORKFLOWS = Path(__file__).parent.parent / "workflows"
+AGENT_DIR = "zebra-tasks/zebra_tasks/agent"
 CLAUDE_SECRET = "claude-evidence-zebra-must-not-see-first"
 
 
@@ -47,9 +48,10 @@ def _response(content: str = "", tool_calls: list[ToolCall] | None = None) -> LL
 class ReviewModel(LLMProvider):
     """Reads one source file, then answers; reconsiders when asked to."""
 
-    def __init__(self, review: str, reconsidered: str = ""):
+    def __init__(self, review: str, reconsidered: str = "", calls: list[ToolCall] | None = None):
         self.review = review
         self.reconsidered = reconsidered
+        self.calls = calls
         self.review_prompts: list[str] = []
         self.reconsider_prompts: list[str] = []
         self.tool_results: list[str] = []
@@ -61,7 +63,8 @@ class ReviewModel(LLMProvider):
         tool_results = [m.content for m in messages if m.role.value == "tool"]
         if not tool_results:
             return _response(
-                tool_calls=[
+                tool_calls=self.calls
+                or [
                     ToolCall(
                         "r1",
                         "read_zebra_source",
@@ -134,7 +137,13 @@ async def _run(engine, library, model: ReviewModel) -> dict:
 
 
 @pytest.mark.parametrize(
-    "filename", ["outcome_review.yaml", "read_zebra_source.yaml", "search_zebra_source.yaml"]
+    "filename",
+    [
+        "outcome_review.yaml",
+        "list_zebra_source.yaml",
+        "read_zebra_source.yaml",
+        "search_zebra_source.yaml",
+    ],
 )
 def test_workflow_is_valid(filename):
     assert validate_definition(load_definition(WORKFLOWS / filename)) == []
@@ -143,7 +152,30 @@ def test_workflow_is_valid(filename):
 async def test_review_workflows_are_never_selected_for_goals(library):
     names = {w["name"] for w in await list_goal_workflows(library)}
 
-    assert not names & {"Outcome Review", "Read Zebra Source", "Search Zebra Source"}
+    assert not names & {
+        "Outcome Review",
+        "List Zebra Source",
+        "Read Zebra Source",
+        "Search Zebra Source",
+    }
+
+
+async def test_review_can_list_source_and_recover_from_a_bad_path(engine, library):
+    model = ReviewModel(
+        _verdicts(("O1", "met"), ("O2", "partial")),
+        calls=[
+            ToolCall("l1", "list_zebra_source", {"path": AGENT_DIR}),
+            ToolCall("r1", "read_zebra_source", {"path": f"{AGENT_DIR}/outcome_reviw.py"}),
+        ],
+    )
+
+    status = await _run(engine, library, model)
+
+    assert status["status"] == "complete"
+    listing, bad_read = model.tool_results
+    assert "zebra-tasks/zebra_tasks/agent/outcome_review.py (" in listing
+    assert "Did you mean: zebra-tasks/zebra_tasks/agent/outcome_review.py" in bad_read
+    assert "list_zebra_source" in bad_read
 
 
 async def test_agreement_completes_without_a_human(engine, library):

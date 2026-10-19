@@ -1,8 +1,8 @@
 name: "Search Zebra Source"
-description: "Search Zebra's own deployed source code for a regex; returns path:line: text hits."
+description: "Search Zebra's own deployed source code for a regex; returns path:line: text hits. Covers zebra-py/, zebra-tasks/, zebra-agent/, zebra-agent-web/, specs/, docs/, openspec/, scripts/, deploy/ and the root *.md files."
 tags: ["code", "source", "search"]
 use_when: "You need to find where something is defined or used in Zebra's own codebase."
-version: 1
+version: 2
 first_task: search
 result_key: source
 # Requires a pattern, so it is a tool for llm_agent and never selected for a goal (#190).
