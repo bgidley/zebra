@@ -100,7 +100,8 @@ def recorded_steps(
             for key, value in events[i].changed.items():
                 changed[key] = value
                 removed.discard(key)
-        route = events[end].next_route
+        # No route recorded (before #170; Oracle may give "" for NULL): infer it.
+        route = events[end].next_route or None
         if route is None:
             route = _infer_route(events, end, task_id, definition)
         steps.setdefault(task_id, []).append(

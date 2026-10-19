@@ -422,6 +422,18 @@ async def test_old_events_without_a_route_follow_the_path_taken(engine, store):
     assert steps["decide"][0].next_route == "rejected"
 
 
+async def test_empty_route_counts_as_unrecorded(engine, store):
+    """Oracle reads an old event's NULL route back as "": infer it like None."""
+    original = await _run(engine, FAILING, choice="rejected")
+    events = await store.load_process_events([original.id])
+    legacy = [e.model_copy(update={"next_route": ""}) for e in events]
+
+    steps = replay.recorded_steps(legacy, FAILING)
+
+    assert steps["decide"][0].next_route == "rejected"
+    assert steps["stop"][0].next_route is None
+
+
 async def test_route_is_journalled_on_task_end(engine, store):
     original = await _run(engine, FAILING, choice="rejected")
     events = await store.load_process_events([original.id])

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from io import StringIO
 from types import SimpleNamespace
 
@@ -128,6 +129,25 @@ async def test_django_store_keeps_route_and_large_values():
     (loaded,) = await store.load_process_events(["p1"])
     assert loaded.next_route == "approved"
     assert loaded.changed["whole"] == whole
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_django_store_reads_a_blank_route_as_none():
+    """Oracle stores "" as NULL and reads NULL back as ""; either way it is no route."""
+    from asgiref.sync import sync_to_async
+    from zebra_agent_web.api.models import ProcessEventModel
+    from zebra_agent_web.storage import DjangoStore
+
+    await sync_to_async(ProcessEventModel.objects.create)(
+        id="e2",
+        process_id="p2",
+        kind=ProcessEventKind.TASK_COMPLETED.value,
+        occurred_at=datetime.now(UTC),
+        next_route="",
+    )
+
+    (loaded,) = await DjangoStore().load_process_events(["p2"])
+    assert loaded.next_route is None
 
 
 # =============================================================================
