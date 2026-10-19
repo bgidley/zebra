@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 17
+version: 18
 first_task: consult_memory
 
 tasks:
@@ -25,7 +25,7 @@ tasks:
       output_key: knowledge_context
 
   # Step 2a: History need (F138) - does the goal refer to past runs? Goals with
-  # no history cues route "no_history" with no LLM call; otherwise a haiku call
+  # no history cues route "no_history" with no LLM call; otherwise a low-tier call
   # decides and extracts since/until/text filters.
   assess_history_need:
     name: "Assess History Need"
@@ -116,7 +116,7 @@ tasks:
       goal: "{{goal}}"
       plan_context: "{{workflow_name}}"
       reasoning: "{{selection.reasoning}}"
-      model: haiku
+      model: low
       output_key: planning_concerns
 
   # Step 6: Ethics plan review - is the chosen approach ethical?
@@ -214,7 +214,7 @@ tasks:
       success: "{{execution_result.success}}"
       error: "{{execution_result.error}}"
       max_help_requests: 2
-      model: haiku
+      model: low
       output_key: help_request
 
   # Step 7b: The human answers the help request; the decision drives routing.
@@ -298,7 +298,7 @@ tasks:
       workflow_name: "{{workflow_name}}"
       success: "{{execution_result.success}}"
       error: "{{execution_result.error}}"
-      model: haiku
+      model: low
       output_key: postmortem
 
   # Step 9: Ethics post-execution review - did we behave ethically?
@@ -338,7 +338,7 @@ tasks:
         Output summary: {{execution_result.output}}
         Assessment: {{assess_result.effectiveness_notes}}
       response_format: json
-      model: haiku
+      model: low
       temperature: 0.3
       output_key: ethics_post_assessment
 
@@ -375,7 +375,7 @@ tasks:
       result: "{{execution_result.output}}"
       max_entries: 5
       min_confidence: 0.5
-      model: haiku
+      model: low
       output_key: knowledge_candidates
 
   # Step 10a: Store candidates as source=agent (confidence <= 0.5, below the

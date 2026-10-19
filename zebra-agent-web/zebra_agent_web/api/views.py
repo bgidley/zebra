@@ -401,10 +401,9 @@ def execute_goal(request):
     model_name = req_serializer.validated_data.get("model")
     run_id = str(uuid.uuid4())
 
-    # Resolve friendly model name (e.g. "haiku") to API model ID
-    from zebra_tasks.llm.models import resolve_model_name
+    from zebra_tasks.llm.models import normalize_model
 
-    resolved_model = resolve_model_name(model_name) if model_name else None
+    resolved_model = normalize_model(model_name) if model_name else None
 
     from zebra_agent_web.api.identity import goal_identity_sync
 
@@ -684,7 +683,6 @@ def run_status(request, run_id):
         )
 
     # Completed (success or failure)
-    from zebra_tasks.llm.models import friendly_model_name
 
     return Response(
         {
@@ -696,7 +694,7 @@ def run_status(request, run_id):
             "error": run.error,
             "tokens_used": run.tokens_used,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
-            "model": friendly_model_name(run.model),
+            "model": run.model,
         }
     )
 

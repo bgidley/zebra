@@ -16,7 +16,7 @@ from zebra_tasks.llm.base import LLMProvider, Message, MessageRole
 
 logger = logging.getLogger(__name__)
 
-# finish_reason values meaning the reply hit max_tokens (Anthropic, OpenAI-compatible)
+# finish_reason values meaning the reply hit max_tokens (OpenAI-compatible: OpenRouter)
 TRUNCATED_FINISH_REASONS = frozenset({"max_tokens", "length"})
 # Characters kept from each end of an unusable reply
 RAW_KEEP_CHARS = 2000

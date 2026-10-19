@@ -127,7 +127,7 @@ async def assess_reversibility(
         context: Execution context (used for provider/model resolution).
         declared: Workflow-declared reversibility, passed to the LLM as untrusted
             context only.
-        model: Model override; defaults to haiku.
+        model: Model override; defaults to the low tier.
 
     Returns:
         A ReversibilityAssessment. Fails closed to irreversible on any error.

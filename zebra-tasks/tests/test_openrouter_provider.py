@@ -3,12 +3,12 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from zebra_tasks.llm.action import LLMCallAction
-from zebra_tasks.llm.base import Message, TokenUsage
 from zebra_tasks.llm.pricing import calculate_cost, usage_cost
 from zebra_tasks.llm.providers.openrouter import OpenRouterProvider
 from zebra_tasks.llm.providers.registry import get_provider
+
+from zebra_tasks.llm.action import LLMCallAction
+from zebra_tasks.llm.base import Message, TokenUsage
 
 
 def _response(cost=None):

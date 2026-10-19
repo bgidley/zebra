@@ -166,7 +166,6 @@ class LLMCallAction(TaskAction):
                 max_tokens=max_tokens,
             )
 
-
             # Process response
             content = response.content or ""
             output = self._process_response(content, task)

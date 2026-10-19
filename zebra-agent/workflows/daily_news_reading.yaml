@@ -2,7 +2,7 @@ name: "Daily News Reading"
 description: "Read today's news on news.kagi.com: pick the 5 stories most worth learning about, read them, write a digest and remember what was learned as world knowledge."
 tags: ["news", "kagi", "learning", "knowledge", "daily", "routine"]
 use_when: "The goal is to read, catch up on or learn from today's news / headlines (e.g. the daily news reading routine, 'what's in the news today'). Not for researching one specific topic — use Web Research for that."
-version: 1
+version: 2
 first_task: consult_knowledge
 result_key: digest
 
@@ -29,7 +29,7 @@ tasks:
     action: llm_call
     auto: true
     properties:
-      model: haiku
+      model: low
       temperature: 0.3
       response_format: json
       system_prompt: |
@@ -82,7 +82,7 @@ tasks:
     action: llm_call
     auto: true
     properties:
-      model: haiku
+      model: low
       temperature: 0.2
       response_format: json
       system_prompt: |

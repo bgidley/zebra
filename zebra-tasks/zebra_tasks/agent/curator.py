@@ -425,5 +425,3 @@ def _yaml_field(content: str, key: str) -> str:
 def _duplicate_pairs(data: Any) -> list[dict[str, Any]]:
     pairs = data.get("duplicates") if isinstance(data, dict) else None
     return [p for p in pairs or [] if isinstance(p, dict)]
-
-

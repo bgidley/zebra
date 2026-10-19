@@ -37,7 +37,7 @@ async def queue_goal(
 
     Args:
         goal: The goal text (must be non-empty).
-        model: Model alias or full model name; resolved via resolve_model_name.
+        model: Model tier (low / medium / high / max) or OpenRouter slug.
         priority: 1 (highest) to 5; clamped to that range.
         deadline: ISO datetime string, or None.
         user_id: Authenticated user id, or None.
@@ -58,7 +58,7 @@ async def queue_goal(
         ValueError: If goal is empty or the Agent Main Loop workflow is missing.
     """
     from zebra_agent.library import list_goal_workflows
-    from zebra_tasks.llm.models import resolve_model_name
+    from zebra_tasks.llm.models import normalize_model
 
     from zebra_agent_web.api import agent_engine, engine
     from zebra_agent_web.api.engine import get_engine
@@ -67,7 +67,7 @@ async def queue_goal(
     if not goal:
         raise ValueError("Goal is required")
 
-    resolved_model = resolve_model_name(model) if model else None
+    resolved_model = normalize_model(model) if model else None
     priority = max(1, min(5, priority))
 
     await agent_engine.ensure_initialized()
@@ -87,7 +87,6 @@ async def queue_goal(
         "run_id": run_id,
         "priority": priority,
         "available_workflows": available,
-        "__llm_provider_name__": agent_engine.get_llm_provider_name(),
         "__llm_model__": resolved_model,
         "__started_at__": datetime.now(UTC).isoformat(),
         "__user_display_name__": identity.get("user_display_name", ""),

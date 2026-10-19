@@ -2,7 +2,7 @@ name: "Postmortem"
 description: "Write a postmortem for a goal run that timed out, crashed or was rated badly, and store the lesson in long-term memory"
 tags: ["agent", "internal", "system", "memory"]
 use_when: "INTERNAL USE ONLY - started for timed-out / crashed goals and runs rated 1 or 2 (#175)"
-version: 1
+version: 2
 first_task: write_postmortem
 
 # Started by zebra_agent.postmortem.start_postmortem with the run's goal,
@@ -22,7 +22,7 @@ tasks:
       error: "{{error}}"
       rating: "{{rating}}"
       user_feedback: "{{user_feedback}}"
-      model: haiku
+      model: low
       output_key: postmortem
 
 routings: []

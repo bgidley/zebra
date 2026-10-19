@@ -3,9 +3,9 @@
 from types import SimpleNamespace
 
 import pytest
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 from zebra_tasks.agent import reversibility
-from zebra_tasks.llm.providers.registry import default_provider_name
 
 
 def test_default_is_anthropic_without_setting(monkeypatch):

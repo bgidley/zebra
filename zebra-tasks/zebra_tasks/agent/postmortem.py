@@ -159,7 +159,7 @@ class WritePostmortemAction(TaskAction):
         ParameterDef(
             name="model",
             type="string",
-            description="LLM model for the postmortem (default haiku)",
+            description="LLM model for the postmortem (default low)",
             required=False,
         ),
         ParameterDef(

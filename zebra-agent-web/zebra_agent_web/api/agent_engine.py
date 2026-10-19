@@ -44,15 +44,9 @@ def _get_agent_settings() -> dict:
         "ZEBRA_AGENT_SETTINGS",
         {
             "LIBRARY_PATH": "~/.zebra/workflows",
-            "LLM_PROVIDER": "anthropic",
             "LLM_MODEL": None,
         },
     )
-
-
-def get_llm_provider_name() -> str:
-    """Return the configured LLM provider name (``LLM_PROVIDER``, default anthropic)."""
-    return _get_agent_settings().get("LLM_PROVIDER", "anthropic")
 
 
 def initialize() -> None:
@@ -186,7 +180,6 @@ async def _async_init() -> None:
         memory=_memory,
         profile=_profile,
         knowledge=_knowledge,
-        provider=get_llm_provider_name(),
         model=agent_settings.get("LLM_MODEL"),
         goal_timeout=agent_settings.get("GOAL_TIMEOUT_SECONDS", DEFAULT_GOAL_TIMEOUT),
     )

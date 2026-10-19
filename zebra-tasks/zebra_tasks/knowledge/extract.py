@@ -285,7 +285,7 @@ class ExtractKnowledgeAction(TaskAction):
             default=False,
         ),
         ParameterDef(
-            name="model", type="string", description="LLM model (default haiku)", required=False
+            name="model", type="string", description="LLM model (default low)", required=False
         ),
         ParameterDef(
             name="output_key",

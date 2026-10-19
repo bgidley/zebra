@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Extra attempts (at TRUNCATION_RETRY_MAX_TOKENS) when the LLM output is truncated.
 TRUNCATION_RETRIES = 1
 # Retry budget for a truncated workflow. Not doubled from GENERATED_WORKFLOW_MAX_TOKENS:
-# Opus at ~85 tokens/s must finish inside the 180s per-attempt LLM timeout (#188).
+# A slow model at ~85 tokens/s must finish inside the 180s per-attempt LLM timeout (#188).
 TRUNCATION_RETRY_MAX_TOKENS = 14000
 
 # Priority ``source`` marking continuation-driven proposals (F136).

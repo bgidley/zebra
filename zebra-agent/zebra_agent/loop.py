@@ -375,7 +375,7 @@ class AgentLoop:
             user_feedback=memory_entry.user_feedback if memory_entry else "",
             source_properties={
                 "__user_id__": run.user_id,
-                },
+            },
         )
 
     async def record_feedback(self, run_id: str, feedback: str) -> bool:

@@ -13,7 +13,7 @@ Example:
     from zebra_agent.ioc import ZebraContainer, IoCActionRegistry
 
     container = ZebraContainer()
-    container.config.from_dict({"llm": {"provider": "anthropic"}})
+    container.config.from_dict({"library": {"path": "~/.zebra/workflows"}})
 
     registry = IoCActionRegistry(container)
     registry.discover_and_register()

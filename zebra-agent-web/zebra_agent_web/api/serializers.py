@@ -88,12 +88,12 @@ class ExecuteGoalRequestSerializer(serializers.Serializer):
 
     goal = serializers.CharField(help_text="The goal to accomplish")
     model = serializers.ChoiceField(
-        choices=["haiku", "sonnet", "opus"],
+        choices=["low", "medium", "high", "max"],
         required=False,
         allow_null=True,
         allow_blank=True,
         default=None,
-        help_text="LLM model: haiku, sonnet, opus (default: sonnet)",
+        help_text="Model tier: low, medium, high, max (default: medium)",
     )
 
 
@@ -104,12 +104,12 @@ class ContinueRunRequestSerializer(serializers.Serializer):
         help_text="Where the previous run got to and what should happen next"
     )
     model = serializers.ChoiceField(
-        choices=["haiku", "sonnet", "opus"],
+        choices=["low", "medium", "high", "max"],
         required=False,
         allow_null=True,
         allow_blank=True,
         default=None,
-        help_text="LLM model: haiku, sonnet, opus (default: server setting)",
+        help_text="Model tier: low, medium, high, max (default: server setting)",
     )
     priority = serializers.IntegerField(
         required=False, default=3, min_value=1, max_value=5, help_text="1 (highest) to 5"

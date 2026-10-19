@@ -38,7 +38,7 @@ class WorkflowMemoryEntry:
     rating: int | None = None  # User rating 1-5 if provided
     user_feedback: str = ""  # Free-text user feedback for next run
     run_id: str = ""  # Link back to the workflow run for post-hoc updates
-    model: str = ""  # LLM model used (e.g. "claude-sonnet-4-20250514")
+    model: str = ""  # LLM model used (e.g. "deepseek/deepseek-v4.1-flash")
     tier: str = "hot"  # Compaction tier: hot | warm | cold
 
     @classmethod

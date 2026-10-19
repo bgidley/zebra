@@ -317,7 +317,7 @@ class AssessHistoryNeedAction(TaskAction):
     """Decide whether a goal needs past workflow history and extract filters.
 
     Goals with no history cues route ``no_history`` without an LLM call.
-    Otherwise a cheap (haiku) call decides and extracts ``since``/``until``/
+    Otherwise a cheap (low tier) call decides and extracts ``since``/``until``/
     ``text``. LLM errors degrade to ``no_history`` rather than failing.
 
     Routes:
@@ -333,7 +333,7 @@ class AssessHistoryNeedAction(TaskAction):
         ParameterDef(
             name="model",
             type="string",
-            description="LLM model (defaults to haiku — this is a cheap classifier)",
+            description="LLM model (default low — a cheap classifier)",
             required=False,
         ),
         ParameterDef(

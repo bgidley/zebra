@@ -101,7 +101,7 @@ class FlagConcernsAction(TaskAction):
         ParameterDef(
             name="model",
             type="string",
-            description="LLM model name (defaults to haiku — this is a cheap pre-gate scan)",
+            description="LLM model name (default low — a cheap pre-gate scan)",
             required=False,
         ),
         ParameterDef(
@@ -149,7 +149,7 @@ class FlagConcernsAction(TaskAction):
             context.set_process_property(output_key, result)
             return TaskResult.ok(output=result)
 
-        # Default to haiku: this is a cheap, advisory pre-gate scan.
+        # Default low: a cheap, advisory pre-gate scan.
         model = task.properties.get("model") or context.process.properties.get("__llm_model__")
         if not model:
             model = "low"

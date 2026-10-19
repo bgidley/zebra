@@ -427,4 +427,3 @@ Respond with JSON only:
             "improvement_priorities": [],
             "new_workflow_suggestions": [],
         }
-

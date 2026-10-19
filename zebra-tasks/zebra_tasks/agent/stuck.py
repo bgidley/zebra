@@ -185,7 +185,7 @@ class AssessStuckAction(TaskAction):
         ParameterDef(
             name="model",
             type="string",
-            description="LLM model for the help request (default haiku)",
+            description="LLM model for the help request (default low)",
             required=False,
         ),
         ParameterDef(
@@ -366,4 +366,3 @@ def _parse_json(content: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValueError("help request is not a JSON object")
     return parsed
-

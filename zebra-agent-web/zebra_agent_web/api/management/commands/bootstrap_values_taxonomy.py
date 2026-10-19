@@ -19,15 +19,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 from pathlib import Path
 
 import yaml
 from django.core.management.base import BaseCommand, CommandError
-from zebra_tasks.llm import get_provider
 from zebra_tasks.llm.base import Message
-from zebra_tasks.llm.models import resolve_model_name
+from zebra_tasks.llm.client import get_llm
 
 _DEFAULT_OUTPUT = (
     Path(__file__).parent.parent.parent.parent.parent / "fixtures" / "values_taxonomy_seed.yaml"
@@ -87,22 +85,15 @@ class Command(BaseCommand):
             help="Overwrite an existing fixture file. Default: refuse.",
         )
         parser.add_argument(
-            "--provider",
-            type=str,
-            default=os.environ.get("ZEBRA_LLM_PROVIDER") or "anthropic",
-            help="LLM provider name (default: ZEBRA_LLM_PROVIDER, else anthropic).",
-        )
-        parser.add_argument(
             "--model",
             type=str,
-            default="sonnet",
-            help="LLM model alias or full id (default: sonnet).",
+            default="medium",
+            help="Model tier or OpenRouter slug (default: medium).",
         )
 
     def handle(self, *args, **options):
         output = Path(options["output"])
         force = options["force"]
-        provider_name = options["provider"]
         model = options["model"]
 
         if output.exists() and not force:
@@ -112,12 +103,10 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(
-            self.style.MIGRATE_HEADING(
-                f"Bootstrapping values taxonomy via {provider_name}/{model}..."
-            )
+            self.style.MIGRATE_HEADING(f"Bootstrapping values taxonomy via OpenRouter ({model})...")
         )
         try:
-            taxonomy = asyncio.run(_call_llm(provider_name, model))
+            taxonomy = asyncio.run(_call_llm(model))
         except Exception as exc:
             raise CommandError(f"LLM call failed: {exc}") from exc
 
@@ -139,9 +128,8 @@ class Command(BaseCommand):
         )
 
 
-async def _call_llm(provider_name: str, model: str) -> dict:
-    resolved = resolve_model_name(model)
-    provider = get_provider(provider_name, model=resolved)
+async def _call_llm(model: str) -> dict:
+    provider = get_llm(model)
     response = await provider.complete(
         messages=[
             Message(role="system", content=_SYSTEM_PROMPT),

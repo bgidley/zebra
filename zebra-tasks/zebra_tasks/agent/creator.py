@@ -14,8 +14,8 @@ from zebra_tasks.llm.client import get_llm
 
 logger = logging.getLogger(__name__)
 
-# Generated workflows embed JSON Schemas for human forms, so they are long. Opus writes
-# ~85 tokens/s, so this stays inside the 180s per-attempt LLM timeout (#188).
+# Generated workflows embed JSON Schemas for human forms, so they are long. A slow
+# model writes ~85 tokens/s, so this stays inside the 180s per-attempt LLM timeout (#188).
 GENERATED_WORKFLOW_MAX_TOKENS = 12000
 
 TRUNCATED_FINISH_REASONS = {"max_tokens", "length"}
@@ -264,11 +264,12 @@ routings:
 """
 
     _PROMPT_FOOTER = """
-## Model aliases for llm_call
-The optional `model` property on any `llm_call` task accepts these aliases:
+## Model tiers for llm_call
+The optional `model` property on any `llm_call` task accepts these tiers:
 - "low" — fastest and cheapest, good for simple extraction or classification
 - "medium" — balanced quality and speed (default if omitted)
-- "high" — highest quality, use for complex reasoning or creative writing
+- "high" — more capable, for complex reasoning or creative writing
+- "max" — the best available, only for the hardest tasks
 Only set `model` when a task has clearly different requirements from the default.
 
 ## Human input task (auto: false) — Pause for user input via a web form

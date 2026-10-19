@@ -131,8 +131,6 @@ def _empty_output(cutoff: datetime | None = None) -> dict[str, Any]:
     }
 
 
-
-
 async def last_dream_cycle_at(context: ExecutionContext) -> datetime | None:
     """Return when the previous completed run of this workflow started, if known."""
     try:

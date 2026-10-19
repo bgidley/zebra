@@ -34,7 +34,7 @@ class WorkflowRun:
     cost: float = 0.0  # USD cost of this run
     error: str | None = None
     output: Any = None
-    model: str | None = None  # LLM model used (e.g. "claude-sonnet-4-20250514")
+    model: str | None = None  # LLM model used (e.g. "deepseek/deepseek-v4.1-flash")
     extends_run_id: str | None = None  # F116: run this one follows up on
     # F134/F135: continuation of a previous run (extends_run_id is the predecessor)
     continuation_comment: str | None = None  # user's "where it got to / what next"
