@@ -752,7 +752,7 @@ def _extraction_provider(*candidates):
     provider.complete = AsyncMock(
         return_value=LLMResponse(
             content=json.dumps({"candidates": list(candidates)}),
-            model="haiku",
+            model="low",
             usage={},
             tool_calls=[],
             finish_reason="end_turn",

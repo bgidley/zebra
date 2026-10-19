@@ -164,7 +164,7 @@ class TestGetWorkflowHistory:
 
 def _provider(content: str) -> MagicMock:
     provider = MagicMock()
-    provider.complete = AsyncMock(return_value=MagicMock(content=content, model="haiku"))
+    provider.complete = AsyncMock(return_value=MagicMock(content=content, model="low"))
     return provider
 
 

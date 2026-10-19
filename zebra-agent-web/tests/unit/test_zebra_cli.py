@@ -63,10 +63,10 @@ class TestGoalHandler:
         with patch(
             "zebra_agent_web.api.goals.queue_goal", new=AsyncMock(return_value=process)
         ) as mock_queue:
-            code = await _goal_async("Do a thing", model="haiku", queue=True, priority=2)
+            code = await _goal_async("Do a thing", model="low", queue=True, priority=2)
 
         assert code == 0
-        mock_queue.assert_awaited_once_with("Do a thing", model="haiku", priority=2)
+        mock_queue.assert_awaited_once_with("Do a thing", model="low", priority=2)
         assert "proc-abc123" in capsys.readouterr().out
 
     async def test_run_mode_calls_process_goal(self, capsys):
@@ -81,7 +81,6 @@ class TestGoalHandler:
         result.output = "Hello!"
 
         agent_loop = MagicMock()
-        agent_loop.provider_name = "anthropic"
         agent_loop.process_goal = AsyncMock(return_value=result)
 
         engine = MagicMock()
@@ -92,12 +91,12 @@ class TestGoalHandler:
             patch("zebra_agent_web.api.agent_engine.get_agent_loop", return_value=agent_loop),
             patch("zebra_agent_web.api.engine.get_engine", return_value=engine),
         ):
-            code = await _goal_async("Say hi", model="haiku", queue=False, priority=3)
+            code = await _goal_async("Say hi", model="low", queue=False, priority=3)
 
         assert code == 0
         call = agent_loop.process_goal.call_args
         assert call.kwargs["goal"] == "Say hi"
-        assert call.kwargs["model"] == "haiku"
+        assert call.kwargs["model"] == "low"
         out = capsys.readouterr().out
         assert "Hello!" in out
         assert "Test WF" in out
@@ -114,7 +113,6 @@ class TestGoalHandler:
         result.output = None
 
         agent_loop = MagicMock()
-        agent_loop.provider_name = "anthropic"
         agent_loop.process_goal = AsyncMock(return_value=result)
 
         engine = MagicMock()
@@ -125,7 +123,7 @@ class TestGoalHandler:
             patch("zebra_agent_web.api.agent_engine.get_agent_loop", return_value=agent_loop),
             patch("zebra_agent_web.api.engine.get_engine", return_value=engine),
         ):
-            code = await _goal_async("Say hi", model="haiku", queue=False, priority=3)
+            code = await _goal_async("Say hi", model="low", queue=False, priority=3)
 
         assert code == 1
 

@@ -34,7 +34,7 @@ _VALID_PAYLOAD = {
 
 
 def _mock_provider(payload):
-    response = MagicMock(content=json.dumps(payload), model="claude-sonnet")
+    response = MagicMock(content=json.dumps(payload), model="test/model")
     provider = MagicMock()
     provider.complete = AsyncMock(return_value=response)
     return provider

@@ -29,7 +29,7 @@ class TestCliIntegration:
 
         process_id = None
         try:
-            code = await _goal_async(goal_text, model="haiku", queue=True, priority=5)
+            code = await _goal_async(goal_text, model="low", queue=True, priority=5)
             assert code == 0
 
             # The dashboard activity view reads CREATED processes from this store.
@@ -43,7 +43,7 @@ class TestCliIntegration:
             props = ours.properties
             assert props["priority"] == 5
             assert props["run_id"]
-            assert props["__llm_model__"]  # haiku alias resolved
+            assert props["__llm_model__"]  # the tier was stored
             assert props["available_workflows"]
         finally:
             if process_id:

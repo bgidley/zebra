@@ -59,7 +59,7 @@ def say(text: str) -> Step:
         tool_calls=None,
         finish_reason="end_turn",
         usage=TokenUsage(100, 50, cost_usd=0.001),
-        model="claude-haiku-5-5",
+        model="test/model",
     )
 
 
@@ -72,7 +72,7 @@ def use(*calls: tuple[str, dict]) -> Step:
         ],
         finish_reason="tool_use",
         usage=TokenUsage(100, 20, cost_usd=0.001),
-        model="claude-haiku-5-5",
+        model="test/model",
     )
 
 
@@ -99,7 +99,7 @@ class ScriptedProvider(LLMProvider):
 
     @property
     def model(self) -> str:
-        return "claude-haiku-5-5"
+        return "test/model"
 
     @property
     def max_context_tokens(self) -> int:

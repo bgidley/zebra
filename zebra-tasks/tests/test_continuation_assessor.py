@@ -192,7 +192,7 @@ async def test_missing_provider_falls_back(task):
 
 
 async def test_model_resolved_from_process_property(task):
-    props = _continuation_props(__llm_model__="haiku")
+    props = _continuation_props(__llm_model__="low")
     context = _context(props, _Library(["Brainstorm Ideas"]))
     content = json.dumps({"decision": "existing_workflow", "rationale": "x"})
 

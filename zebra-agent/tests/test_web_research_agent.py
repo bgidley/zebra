@@ -46,7 +46,7 @@ def _response(content: str = "", tool_calls: list[ToolCall] | None = None) -> LL
         tool_calls=tool_calls,
         finish_reason="tool_use" if tool_calls else "end_turn",
         usage=TokenUsage(200, 80),
-        model="claude-haiku-5-5",
+        model="test/model",
     )
 
 
@@ -78,7 +78,7 @@ class ResearchModel(LLMProvider):
 
     @property
     def model(self) -> str:
-        return "claude-haiku-5-5"
+        return "test/model"
 
     @property
     def max_context_tokens(self) -> int:

@@ -68,13 +68,13 @@ class TestZebraContainer:
         container = ZebraContainer()
         container.config.from_dict(
             {
-                "llm": {"provider_name": "anthropic", "model": "claude-sonnet-4-6"},
+                "llm": {"provider_name": "openrouter", "model": "test/model"},
                 "debug": True,
             }
         )
 
-        assert container.config.llm.provider_name() == "anthropic"
-        assert container.config.llm.model() == "claude-sonnet-4-6"
+        assert container.config.llm.provider_name() == "openrouter"
+        assert container.config.llm.model() == "test/model"
         assert container.config.debug() is True
 
     def test_store_dependency(self):
@@ -441,7 +441,7 @@ class TestIoCActionRegistryIntegration:
         container = ZebraContainer()
         container.config.from_dict(
             {
-                "llm": {"provider": "anthropic"},
+                "llm": {"provider": "openrouter"},
             }
         )
 

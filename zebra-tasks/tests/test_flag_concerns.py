@@ -85,8 +85,8 @@ class TestFlagConcernsAction:
         assert result.success is True
         assert result.output["concerns"] == []
 
-    async def test_uses_haiku_by_default(self, mock_task, mock_context):
-        """The advisory scan defaults to the cheap haiku model."""
+    async def test_uses_low_tier_by_default(self, mock_task, mock_context):
+        """The advisory scan defaults to the cheap low tier."""
         provider = _make_provider(json.dumps({"concerns": [], "summary": "ok"}))
         mock_task.properties = {"goal": "Do a thing"}
 

@@ -178,12 +178,11 @@ async def test_cli_goal_runs_as_named_user(owner):
     fake, agent_loop = _fake_agent_engine(
         MagicMock(run_id="r", workflow_name="W", success=True, tokens_used=0, error=None, output="")
     )
-    agent_loop.provider_name = "anthropic"
     with (
         patch("zebra_agent_web.api.agent_engine.ensure_initialized", fake.ensure_initialized),
         patch("zebra_agent_web.api.agent_engine.get_agent_loop", fake.get_agent_loop),
     ):
-        code = await _goal_async("hi", model="haiku", queue=False, priority=3, user="f151_owner")
+        code = await _goal_async("hi", model="low", queue=False, priority=3, user="f151_owner")
 
     assert code == 0
     assert agent_loop.process_goal.call_args.kwargs["user_id"] == owner.id
@@ -194,7 +193,7 @@ async def test_cli_goal_runs_as_named_user(owner):
 async def test_cli_unknown_user_exits_with_error(capsys):
     from zebra_agent_web.cli import _goal_async
 
-    code = await _goal_async("hi", model="haiku", queue=True, priority=3, user="nobody")
+    code = await _goal_async("hi", model="low", queue=True, priority=3, user="nobody")
 
     assert code == 2
     assert "nobody" in capsys.readouterr().err

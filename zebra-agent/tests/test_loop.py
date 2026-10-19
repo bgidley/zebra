@@ -190,9 +190,9 @@ class TestAgentLoopInitialization:
             library=library,
             engine=mock_engine,
             metrics=metrics,
-            model="claude-3-opus",
+            model="test/model",
         )
-        assert loop.model == "claude-3-opus"
+        assert loop.model == "test/model"
 
 
 class TestRecordRating:
@@ -734,7 +734,7 @@ class TestProcessGoalSurfacesTaskErrors:
                 ok_task,
                 self._failed_task(
                     "ethics_input_gate",
-                    "Failed to get LLM provider for ethics gate: Kimi API key required.",
+                    "Failed to get LLM provider for ethics gate: OpenRouter API key required.",
                 ),
             ]
         )
@@ -744,7 +744,8 @@ class TestProcessGoalSurfacesTaskErrors:
 
         assert result.success is False
         assert result.error == (
-            "ethics_input_gate: Failed to get LLM provider for ethics gate: Kimi API key required."
+            "ethics_input_gate: Failed to get LLM provider for ethics gate: "
+            "OpenRouter API key required."
         )
 
     async def test_complete_process_with_unsuccessful_execution_reports_its_error(

@@ -804,7 +804,7 @@ class TestExecuteGoalWorkflowAction:
         # Setup mocks with LLM settings
         mock_workflow_library.get_workflow.return_value = mock_definition
         mock_context.extras["__workflow_library__"] = mock_workflow_library
-        mock_context.process.properties["__llm_model__"] = "claude-3-opus"
+        mock_context.process.properties["__llm_model__"] = "test/model"
         mock_context.engine = mock_engine
         mock_context.store = mock_store
 
@@ -827,7 +827,7 @@ class TestExecuteGoalWorkflowAction:
         # Check that create_process was called with LLM settings
         create_call = mock_engine.create_process.call_args
         props = create_call[1]["properties"]
-        assert props["__llm_model__"] == "claude-3-opus"
+        assert props["__llm_model__"] == "test/model"
 
     async def test_inherits_submitting_user(
         self,

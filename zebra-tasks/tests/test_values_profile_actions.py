@@ -108,7 +108,7 @@ async def test_load_fails_without_user_id(mock_task, mock_context):
 def _llm_response(payload: dict) -> MagicMock:
     return MagicMock(
         content=json.dumps(payload),
-        model="claude-haiku",
+        model="test/model",
         usage=MagicMock(input_tokens=100, output_tokens=50, total_tokens=150),
     )
 
@@ -250,7 +250,7 @@ async def test_save_persists_version_and_tags(mock_task, mock_context):
     mock_context.extras["__profile_store__"] = store
     mock_task.properties = {
         "user_id": 1,
-        "extraction_model": "claude-haiku",
+        "extraction_model": "test/model",
         "confirmed": {
             "core_values": {
                 "text": "honesty and growth",
@@ -279,7 +279,7 @@ async def test_save_persists_version_and_tags(mock_task, mock_context):
     assert current.core_values_text == "honesty and growth"
     assert current.core_values_tags == ["honesty", "growth"]
     assert current.priorities_tags == ["family"]
-    assert current.tags_extraction_model == "claude-haiku"
+    assert current.tags_extraction_model == "test/model"
 
     # Tag rows accumulated as candidates with usage_count = 1.
     core_tags = await store.get_approved_tags("core_values")

@@ -73,13 +73,13 @@ def _failed_props(**extra) -> dict:
 
 def _provider(content: str) -> MagicMock:
     provider = MagicMock()
-    provider.model = "claude-haiku-5-5"
+    provider.model = "test/model"
     provider.complete = AsyncMock(
         return_value=LLMResponse(
             content=content,
             tool_calls=None,
             finish_reason="end_turn",
-            model="claude-haiku-5-5",
+            model="test/model",
             usage=TokenUsage(input_tokens=100, output_tokens=50, cost_usd=0.001),
         )
     )

@@ -41,7 +41,7 @@ def _provider(content):
     provider = MagicMock()
     provider.complete = AsyncMock(
         return_value=LLMResponse(
-            content=content, model="haiku", usage={}, tool_calls=[], finish_reason="end_turn"
+            content=content, model="low", usage={}, tool_calls=[], finish_reason="end_turn"
         )
     )
     return provider
