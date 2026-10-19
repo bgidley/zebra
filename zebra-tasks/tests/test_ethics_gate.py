@@ -81,7 +81,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -99,7 +99,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -117,7 +117,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             await action.run(mock_task, mock_context)
 
         # Verify the prompt sent to the LLM
@@ -138,7 +138,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             await action.run(mock_task, mock_context)
 
         call_args = provider.complete.call_args
@@ -165,7 +165,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -188,7 +188,7 @@ class TestEthicsGateAction:
         mock_task.properties = {"goal": "Count to 100", "check_type": "plan_review"}
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.next_route == "reject"
@@ -200,7 +200,7 @@ class TestEthicsGateAction:
         mock_task.properties = {"goal": "Test goal", "check_type": "input_gate"}
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             await action.run(mock_task, mock_context)
 
         assert provider.complete.call_args.kwargs["max_tokens"] >= 2000
@@ -214,7 +214,7 @@ class TestEthicsGateAction:
 
         action = EthicsGateAction()
         with patch(
-            "zebra_tasks.agent.ethics_gate.get_provider",
+            "zebra_tasks.agent.ethics_gate.get_llm",
             side_effect=RuntimeError("No provider"),
         ):
             result = await action.run(mock_task, mock_context)
@@ -241,7 +241,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             await action.run(mock_task, mock_context)
 
         expected = {**_approved_response(), "values_assessment": None, "dilemma": None}
@@ -265,7 +265,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -287,7 +287,7 @@ class TestEthicsGateAction:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -393,7 +393,7 @@ class TestEthicsGateDilemmaEscalation:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.next_route == "escalate"
@@ -414,7 +414,7 @@ class TestEthicsGateDilemmaEscalation:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.next_route == "reject"
@@ -429,7 +429,7 @@ class TestEthicsGateDilemmaEscalation:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.next_route == "proceed"
@@ -450,7 +450,7 @@ class TestEthicsGateValuesIntegration:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             await action.run(mock_task, mock_context)
 
         call_args = provider.complete.call_args
@@ -471,7 +471,7 @@ class TestEthicsGateValuesIntegration:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -489,7 +489,7 @@ class TestEthicsGateValuesIntegration:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -507,7 +507,7 @@ class TestEthicsGateValuesIntegration:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -525,7 +525,7 @@ class TestEthicsGateValuesIntegration:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -543,7 +543,7 @@ class TestEthicsGateValuesIntegration:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -558,7 +558,7 @@ class TestEthicsGateValuesIntegration:
         mock_task.properties = {"goal": "Help a user", "check_type": "input_gate"}
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.output["values_assessment"] is None
@@ -576,7 +576,7 @@ class TestEthicsGateValuesIntegration:
         }
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         va = result.output["values_assessment"]
@@ -603,7 +603,7 @@ class TestEthicsGateAuditWrite:
         provider = _make_provider(_approved_response())
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success
@@ -622,7 +622,7 @@ class TestEthicsGateAuditWrite:
         provider = _make_provider(_rejected_response())
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success
@@ -642,7 +642,7 @@ class TestEthicsGateAuditWrite:
         )
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             await action.run(mock_task, mock_context)
 
         audit_store.append.assert_awaited_once()
@@ -661,7 +661,7 @@ class TestEthicsGateAuditWrite:
         provider = _make_provider(_approved_response())
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             with caplog.at_level(logging.WARNING, logger="zebra_tasks.agent.ethics_gate"):
                 result = await action.run(mock_task, mock_context)
 
@@ -683,7 +683,7 @@ class TestEthicsGateAuditWrite:
         provider = _make_provider(_approved_response())
 
         action = EthicsGateAction()
-        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
             with caplog.at_level(logging.ERROR, logger="zebra_tasks.agent.ethics_gate"):
                 result = await action.run(mock_task, mock_context)
 

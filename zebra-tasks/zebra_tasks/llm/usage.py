@@ -42,6 +42,6 @@ def record_usage(context: ExecutionContext, response: LLMResponse) -> float:
     if budget_manager is not None:
         try:
             asyncio.get_running_loop().create_task(budget_manager.check_and_warn(total))
-        except RuntimeError:
-            pass  # no running loop: skip the warning
+        except Exception:  # noqa: BLE001 - a warning must never fail the LLM call
+            logger.debug("Budget warning skipped", exc_info=True)
     return cost

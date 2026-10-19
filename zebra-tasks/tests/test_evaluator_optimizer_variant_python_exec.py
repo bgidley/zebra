@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from zebra_tasks.llm.base import LLMResponse, TokenUsage
+from zebra_tasks.llm.client import set_llm_factory
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -288,7 +289,7 @@ class TestWorkflowEvaluatorAction:
             "recommendations": ["Looking good"],
         }
         provider = _mock_provider(json.dumps(_GOOD_EVALUATION))
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {"metrics_analysis": metrics}
 
         result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
@@ -302,7 +303,7 @@ class TestWorkflowEvaluatorAction:
 
         wrapped = f"```json\n{json.dumps(_GOOD_EVALUATION)}\n```"
         provider = _mock_provider(wrapped)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
 
         result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
@@ -314,7 +315,7 @@ class TestWorkflowEvaluatorAction:
         from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
 
         provider = _mock_provider("This is not JSON at all!")
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
 
         result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
@@ -332,7 +333,7 @@ class TestWorkflowEvaluatorAction:
 
         reply = f"Here is my evaluation:\n{json.dumps(_GOOD_EVALUATION)}\nLet me know!"
         provider = _mock_provider(reply)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
 
         result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
@@ -352,7 +353,7 @@ class TestWorkflowEvaluatorAction:
                 _llm_response(json.dumps(_GOOD_EVALUATION)),
             ]
         )
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
 
         result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
@@ -369,7 +370,7 @@ class TestWorkflowEvaluatorAction:
         provider = _mock_provider(
             '```json\n{"overall_assessment": {"su', finish_reason="max_tokens"
         )
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {"metrics_analysis": {"workflow_stats": []}, "max_tokens": 1000}
 
         result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
@@ -389,35 +390,30 @@ class TestWorkflowEvaluatorAction:
 
     async def test_cost_tracked_for_every_call(self, mock_task, mock_context):
         from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
-        from zebra_tasks.llm.pricing import usage_cost
 
         mock_context.process.properties["__total_cost__"] = 1.0
         response = LLMResponse(
             content="not json",
             tool_calls=None,
             finish_reason="end_turn",
-            usage=TokenUsage(input_tokens=1000, output_tokens=500),
-            model="claude-sonnet-5-5",
+            usage=TokenUsage(input_tokens=1000, output_tokens=500, cost_usd=0.01),
+            model="vendor/model",
         )
         provider = MagicMock()
         provider.complete = AsyncMock(return_value=response)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
 
         await WorkflowEvaluatorAction().run(mock_task, mock_context)
 
-        per_call = usage_cost("claude-sonnet-5-5", response.usage)
-        assert per_call > 0
-        assert mock_context.process.properties["__total_cost__"] == pytest.approx(
-            1.0 + 2 * per_call
-        )
+        assert mock_context.process.properties["__total_cost__"] == pytest.approx(1.0 + 2 * 0.01)
         assert mock_context.process.properties["__total_tokens__"] == 3000
 
     async def test_custom_output_key(self, mock_task, mock_context):
         from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
 
         provider = _mock_provider(json.dumps(_GOOD_EVALUATION))
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {
             "metrics_analysis": {"workflow_stats": []},
             "output_key": "my_eval",
@@ -435,7 +431,7 @@ class TestWorkflowEvaluatorAction:
 
         mock_context.process.properties["__total_tokens__"] = 100
         provider = _mock_provider(json.dumps(_GOOD_EVALUATION), input_tokens=5, output_tokens=15)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
 
         await WorkflowEvaluatorAction().run(mock_task, mock_context)
@@ -449,7 +445,7 @@ class TestWorkflowEvaluatorAction:
         metrics_dict = {"workflow_stats": [], "total_runs_analyzed": 5}
         mock_context.process.properties["metrics_data"] = metrics_dict
         provider = _mock_provider(json.dumps(_GOOD_EVALUATION))
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {"metrics_analysis": "{{metrics_data}}"}
 
         result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
@@ -467,7 +463,7 @@ class TestWorkflowEvaluatorAction:
 
         provider = MagicMock()
         provider.complete = capture_complete
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
 
         mock_task.properties = {
             "metrics_analysis": {
@@ -537,7 +533,7 @@ class TestWorkflowOptimizerAction:
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 
         provider = _mock_provider(_SIMPLE_YAML)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {
             "evaluation": {
                 "improvement_priorities": [],
@@ -564,7 +560,7 @@ class TestWorkflowOptimizerAction:
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 
         provider = _mock_provider(_SIMPLE_YAML)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {
             "evaluation": {
                 "improvement_priorities": [],
@@ -584,7 +580,7 @@ class TestWorkflowOptimizerAction:
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 
         provider = _mock_provider(_SIMPLE_YAML)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {
             "evaluation": {
                 "improvement_priorities": [],
@@ -611,7 +607,7 @@ class TestWorkflowOptimizerAction:
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 
         provider = _mock_provider(_SIMPLE_YAML)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {
             "evaluation": {
                 "improvement_priorities": [
@@ -634,7 +630,7 @@ class TestWorkflowOptimizerAction:
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 
         provider = _mock_provider(_SIMPLE_YAML)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         suggestions = [
             {"name": f"Workflow {i}", "description": "x", "use_case": "y", "rationale": "z"}
             for i in range(5)
@@ -657,7 +653,7 @@ class TestWorkflowOptimizerAction:
 
         modified_yaml = _SIMPLE_YAML.replace("A new workflow", "Improved workflow")
         provider = _mock_provider(modified_yaml)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {
             "evaluation": {
                 "improvement_priorities": [
@@ -686,7 +682,7 @@ class TestWorkflowOptimizerAction:
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 
         provider = _mock_provider(_SIMPLE_YAML)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {
             "evaluation": {
                 "improvement_priorities": [
@@ -715,7 +711,7 @@ class TestWorkflowOptimizerAction:
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 
         provider = _mock_provider(_SIMPLE_YAML)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {
             "evaluation": {"improvement_priorities": [], "new_workflow_suggestions": []},
             "dry_run": True,
@@ -751,7 +747,7 @@ class TestWorkflowOptimizerValidation:
     def _setup(self, mock_task, mock_context, tmp_path, responses, evaluation):
         provider = MagicMock()
         provider.complete = AsyncMock(side_effect=responses)
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_context.engine.actions.has_action = MagicMock(
             side_effect=lambda name: name in {"llm_call"}
         )
@@ -1034,7 +1030,7 @@ class TestWorkflowVariantCreatorAction:
         }
 
         with patch(
-            "zebra_tasks.agent.variant_creator.get_provider",
+            "zebra_tasks.agent.variant_creator.get_llm",
             side_effect=Exception("No API key"),
         ):
             result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
@@ -1057,7 +1053,7 @@ class TestWorkflowVariantCreatorAction:
         }
 
         provider = _mock_provider(_VARIANT_YAML)
-        with patch("zebra_tasks.agent.variant_creator.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.variant_creator.get_llm", return_value=provider):
             result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
 
         assert result.success is True
@@ -1079,7 +1075,7 @@ class TestWorkflowVariantCreatorAction:
         }
 
         provider = _mock_provider(_VARIANT_YAML)
-        with patch("zebra_tasks.agent.variant_creator.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.variant_creator.get_llm", return_value=provider):
             result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
 
         assert result.success is True
@@ -1097,7 +1093,7 @@ class TestWorkflowVariantCreatorAction:
         }
 
         provider = _mock_provider("this is: not: valid: yaml: {{{{")
-        with patch("zebra_tasks.agent.variant_creator.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.variant_creator.get_llm", return_value=provider):
             result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
 
         assert result.success is False
@@ -1122,7 +1118,7 @@ class TestWorkflowVariantCreatorAction:
                 _llm_response(_VARIANT_YAML),
             ]
         )
-        with patch("zebra_tasks.agent.variant_creator.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.variant_creator.get_llm", return_value=provider):
             result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
 
         assert result.success is True
@@ -1140,7 +1136,7 @@ class TestWorkflowVariantCreatorAction:
         mock_task.properties = {"goal": "Strict code review", "source_workflow_name": "code_review"}
 
         provider = _mock_provider(_VARIANT_YAML, finish_reason="max_tokens")
-        with patch("zebra_tasks.agent.variant_creator.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.variant_creator.get_llm", return_value=provider):
             result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
 
         assert result.success is False
@@ -1162,7 +1158,7 @@ class TestWorkflowVariantCreatorAction:
         }
 
         provider = _mock_provider(_VARIANT_YAML)
-        with patch("zebra_tasks.agent.variant_creator.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.variant_creator.get_llm", return_value=provider):
             result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
 
         assert result.success is True
@@ -1188,7 +1184,7 @@ class TestWorkflowVariantCreatorAction:
         }
 
         provider = _mock_provider(_VARIANT_YAML)
-        with patch("zebra_tasks.agent.variant_creator.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.variant_creator.get_llm", return_value=provider):
             await WorkflowVariantCreatorAction().run(mock_task, mock_context)
 
         event_names = [e[0] for e in progress_events]
@@ -1210,7 +1206,7 @@ class TestWorkflowVariantCreatorAction:
 
         wrapped = f"```yaml\n{_VARIANT_YAML}\n```"
         provider = _mock_provider(wrapped)
-        with patch("zebra_tasks.agent.variant_creator.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.variant_creator.get_llm", return_value=provider):
             result = await WorkflowVariantCreatorAction().run(mock_task, mock_context)
 
         assert result.success is True

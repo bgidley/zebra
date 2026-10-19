@@ -77,7 +77,7 @@ class _FakeJudge:
             content=content,
             tool_calls=None,
             finish_reason="stop",
-            usage=TokenUsage(input_tokens=100, output_tokens=20),
+            usage=TokenUsage(input_tokens=100, output_tokens=20, cost_usd=0.002),
             model=self.model,
         )
 
@@ -114,7 +114,7 @@ criteria:
 @pytest.fixture
 def judge(monkeypatch) -> _FakeJudge:
     fake = _FakeJudge()
-    monkeypatch.setattr(gym_module, "get_provider", lambda *a, **k: fake)
+    monkeypatch.setattr(gym_module, "get_llm", lambda *a, **k: fake)
     return fake
 
 
@@ -333,7 +333,7 @@ async def test_no_judge_provider_rejects_gated_but_saves_ungated(engine, library
     def no_provider(*args, **kwargs):
         raise RuntimeError("no API key")
 
-    monkeypatch.setattr(gym_module, "get_provider", no_provider)
+    monkeypatch.setattr(gym_module, "get_llm", no_provider)
     ungated = _candidate(_workflow("x").replace("Answer Question", "Brainstorm"))
     ungated["name"] = "Brainstorm"
     process = await _gate(engine, library, _candidate(_workflow("Canberra")), ungated)
@@ -405,12 +405,9 @@ async def test_continuation_status_follows_gate(engine, library, judge):
 
 
 async def test_gym_cost_includes_runs_and_judge(engine, library, judge):
-    from zebra_tasks.llm.pricing import usage_cost
-
     process = await _gate(engine, library, _candidate(_workflow("Canberra")))
-    judge_cost = usage_cost("fake-judge", TokenUsage(input_tokens=100, output_tokens=20))
-    # 4 runs at $0.01 each, plus 4 judge calls
-    assert process.properties["__total_cost__"] == pytest.approx(0.04 + 4 * judge_cost)
+    # 4 runs at $0.01 each, plus 4 judge calls at the $0.002 OpenRouter reported
+    assert process.properties["__total_cost__"] == pytest.approx(0.04 + 4 * 0.002)
     assert judge.calls == 4
 
 

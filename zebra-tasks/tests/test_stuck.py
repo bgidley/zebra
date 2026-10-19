@@ -89,7 +89,7 @@ def _provider(content: str) -> MagicMock:
 class TestAssessStuck:
     async def test_success_proceeds_without_llm(self):
         context = _context({"goal": "g", "execution_result": {"success": True}})
-        with patch("zebra_tasks.agent.stuck.get_provider") as get_provider:
+        with patch("zebra_tasks.agent.stuck.get_llm") as get_provider:
             result = await AssessStuckAction().run(_assess_task(), context)
         assert result.next_route == "proceed"
         get_provider.assert_not_called()
@@ -105,7 +105,7 @@ class TestAssessStuck:
             "confidence": 0.7,
         }
         provider = _provider(json.dumps(reply))
-        with patch("zebra_tasks.agent.stuck.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.stuck.get_llm", return_value=provider):
             result = await AssessStuckAction().run(_assess_task(), context)
 
         assert result.next_route == "ask_human"
@@ -122,7 +122,7 @@ class TestAssessStuck:
 
     async def test_provider_error_falls_back_to_plain_request(self):
         context = _context(_failed_props())
-        with patch("zebra_tasks.agent.stuck.get_provider", side_effect=RuntimeError("no key")):
+        with patch("zebra_tasks.agent.stuck.get_llm", side_effect=RuntimeError("no key")):
             result = await AssessStuckAction().run(_assess_task(), context)
         assert result.success
         assert result.next_route == "ask_human"
@@ -133,7 +133,7 @@ class TestAssessStuck:
     async def test_no_recorded_steps(self):
         context = _context(_failed_props(__task_executions__=[]))
         provider = _provider("{}")
-        with patch("zebra_tasks.agent.stuck.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.stuck.get_llm", return_value=provider):
             result = await AssessStuckAction().run(_assess_task(), context)
         assert result.next_route == "ask_human"
         prompt = provider.complete.call_args.kwargs["messages"][1].content
@@ -141,14 +141,14 @@ class TestAssessStuck:
 
     async def test_unparseable_reply_falls_back(self):
         context = _context(_failed_props())
-        with patch("zebra_tasks.agent.stuck.get_provider", return_value=_provider("not json")):
+        with patch("zebra_tasks.agent.stuck.get_llm", return_value=_provider("not json")):
             result = await AssessStuckAction().run(_assess_task(), context)
         assert result.next_route == "ask_human"
         assert "It failed: NameError" in context.process.properties[HELP_DISPLAY_KEY]
 
     async def test_budget_spent_proceeds(self):
         context = _context(_failed_props(**{HELP_REQUESTS_KEY: 2}))
-        with patch("zebra_tasks.agent.stuck.get_provider") as get_provider:
+        with patch("zebra_tasks.agent.stuck.get_llm") as get_provider:
             result = await AssessStuckAction().run(_assess_task(), context)
         assert result.next_route == "proceed"
         assert result.output["help_budget_spent"] is True

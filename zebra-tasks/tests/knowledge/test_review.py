@@ -231,7 +231,7 @@ async def test_review_acceptance(engine, knowledge, metrics):
         }
     )
     context = await _context(engine)
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         result = await ReviewKnowledgeAction().run(_task(), context)
 
     assert result.success
@@ -317,7 +317,7 @@ async def test_revert_restores_previous_state(engine, knowledge, metrics):
         }
     )
     context = await _context(engine)
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         out = (await ReviewKnowledgeAction().run(_task(), context)).output
 
     reverted = await revert_knowledge_changes(knowledge, out["changes"])
@@ -339,7 +339,7 @@ async def test_no_recent_runs_means_no_llm_call(engine, knowledge, metrics):
     await _seed_run(metrics, "old", "old goal", hours_ago=24 * 30)
     provider = _provider({})
     context = await _context(engine)
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         out = (await ReviewKnowledgeAction().run(_task(lookback_days=7), context)).output
     provider.complete.assert_not_awaited()
     assert out["users_reviewed"] == 0
@@ -355,7 +355,7 @@ async def test_cutoff_is_previous_dream_cycle(engine, knowledge, metrics):
     await engine.store.save_process(previous)
     await _seed_run(metrics, "before", "seen last time", hours_ago=3)
     provider = _provider({})
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         out = (await ReviewKnowledgeAction().run(_task(), context)).output
     provider.complete.assert_not_awaited()
     assert out["cutoff"] == previous.created_at.isoformat()
@@ -375,7 +375,7 @@ async def test_unparseable_reply_changes_nothing(engine, knowledge, metrics):
     await _seed_run(metrics, "r1", "goal")
     provider = _provider("I am not JSON", "still not JSON")
     context = await _context(engine)
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         result = await ReviewKnowledgeAction().run(_task(), context)
     assert result.success
     assert result.output["changes"] == []
@@ -389,7 +389,7 @@ async def test_unparseable_reply_recovered_on_retry(engine, knowledge, metrics):
     await _seed_run(metrics, "r1", "goal")
     provider = _provider("Sure! Here you go.", {})
     context = await _context(engine)
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         result = await ReviewKnowledgeAction().run(_task(), context)
     assert result.success
     assert result.output["errors"] == []
@@ -409,7 +409,7 @@ async def test_invalid_proposals_are_ignored(engine, knowledge, metrics):
         }
     )
     context = await _context(engine)
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         out = (await ReviewKnowledgeAction().run(_task(), context)).output
     assert out["changes"] == []
     assert (await knowledge.get_entry("other")).value == "X"
@@ -420,7 +420,7 @@ async def test_same_value_new_fact_reinforces_agent_entry(engine, knowledge, met
     await _seed_run(metrics, "r1", "goal")
     provider = _provider({"new": [{"category": "facts", "key": "team", "value": "Platform"}]})
     context = await _context(engine)
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         out = (await ReviewKnowledgeAction().run(_task(), context)).output
     assert out["counts"]["reinforced"] == 1 and out["counts"]["added"] == 0
     assert (await knowledge.get_entry("e1")).confidence == pytest.approx(0.7)
@@ -431,7 +431,7 @@ async def test_pending_contradiction_not_duplicated(engine, knowledge, metrics):
     await _seed_run(metrics, "r1", "Globex goal")
     payload = {"update": [{"entry_id": "e-employer", "value": "Globex"}]}
     provider = _provider(payload, payload)
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         first = (await ReviewKnowledgeAction().run(_task(), await _context(engine))).output
         second = (await ReviewKnowledgeAction().run(_task(), await _context(engine))).output
     assert first["counts"]["contradictions_proposed"] == 1
@@ -444,7 +444,7 @@ async def test_change_cap_per_user(engine, knowledge, metrics):
         {"new": [{"category": "facts", "key": f"k{i}", "value": str(i)} for i in range(5)]}
     )
     context = await _context(engine)
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         out = (await ReviewKnowledgeAction().run(_task(max_changes_per_user=2), context)).output
     assert out["counts"]["added"] == 2
 
@@ -455,7 +455,7 @@ async def test_user_without_entries_can_learn(engine, knowledge, metrics):
         {"new": [{"category": "preferences", "key": "diet", "value": "vegan"}], "stale": []}
     )
     context = await _context(engine)
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         out = (await ReviewKnowledgeAction().run(_task(), context)).output
     assert out["counts"]["added"] == 1
     assert (await knowledge.get_entries(USER))[0].value == "vegan"
@@ -470,7 +470,7 @@ async def test_resolution_of_proposal_updates_human_entry(engine, knowledge, met
     await knowledge.add_entry(_entry("e-employer", "employer", "Acme", "human"))
     await _seed_run(metrics, "r1", "Globex goal")
     provider = _provider({"update": [{"entry_id": "e-employer", "value": "Globex"}]})
-    with patch("zebra_tasks.knowledge.review._get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.review.get_llm", return_value=provider):
         out = (await ReviewKnowledgeAction().run(_task(), await _context(engine))).output
     process_id = out["changes"][0]["process_id"]
     (task,) = await engine.get_pending_tasks(process_id)

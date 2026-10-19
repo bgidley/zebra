@@ -174,7 +174,7 @@ class TestAssessHistoryNeed:
         content = json.dumps(
             {"needs_history": True, "since": "-7d", "until": None, "text": "pensions"}
         )
-        with patch("zebra_tasks.agent.history.get_provider", return_value=_provider(content)) as gp:
+        with patch("zebra_tasks.agent.history.get_llm", return_value=_provider(content)) as gp:
             result = await AssessHistoryNeedAction().run(
                 _task(goal="what did I ask you about pensions last week?"), context
             )
@@ -185,7 +185,7 @@ class TestAssessHistoryNeed:
         assert context.process.properties["history_need"]["needs_history"] is True
 
     async def test_ordinary_goal_skips_llm(self, context):
-        with patch("zebra_tasks.agent.history.get_provider") as gp:
+        with patch("zebra_tasks.agent.history.get_llm") as gp:
             result = await AssessHistoryNeedAction().run(
                 _task(goal="write a haiku about autumn"), context
             )
@@ -194,7 +194,7 @@ class TestAssessHistoryNeed:
 
     async def test_llm_says_no(self, context):
         provider = _provider('```json\n{"needs_history": false, "reasoning": "topic"}\n```')
-        with patch("zebra_tasks.agent.history.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.history.get_llm", return_value=provider):
             result = await AssessHistoryNeedAction().run(
                 _task(goal="explain the history of Rome"), context
             )
@@ -203,7 +203,7 @@ class TestAssessHistoryNeed:
     async def test_llm_failure_degrades(self, context):
         provider = MagicMock()
         provider.complete = AsyncMock(side_effect=RuntimeError("boom"))
-        with patch("zebra_tasks.agent.history.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.history.get_llm", return_value=provider):
             result = await AssessHistoryNeedAction().run(
                 _task(goal="what did we do yesterday?"), context
             )
@@ -211,7 +211,7 @@ class TestAssessHistoryNeed:
         assert result.next_route == "no_history"
 
     async def test_unparseable_degrades(self, context):
-        with patch("zebra_tasks.agent.history.get_provider", return_value=_provider("nope")):
+        with patch("zebra_tasks.agent.history.get_llm", return_value=_provider("nope")):
             result = await AssessHistoryNeedAction().run(
                 _task(goal="have we tried this before?"), context
             )
@@ -219,7 +219,7 @@ class TestAssessHistoryNeed:
 
     async def test_bad_extracted_time_is_dropped(self, context):
         provider = _provider(json.dumps({"needs_history": True, "since": "last tuesday"}))
-        with patch("zebra_tasks.agent.history.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.history.get_llm", return_value=provider):
             result = await AssessHistoryNeedAction().run(
                 _task(goal="what did I ask last tuesday?"), context
             )
@@ -234,7 +234,7 @@ class TestAssessHistoryNeed:
         }
         context.process.properties["continuation_comment"] = "Check workflow history"
         provider = _provider(json.dumps({"needs_history": True, "text": "holiday"}))
-        with patch("zebra_tasks.agent.history.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.history.get_llm", return_value=provider):
             result = await AssessHistoryNeedAction().run(_task(goal="Holiday ideas"), context)
         assert result.next_route == "needs_history"
         assert result.output["text"] == "holiday"
@@ -246,7 +246,7 @@ class TestAssessHistoryNeed:
         context.process.properties["previous_run_context"] = {"goal": "x"}
         provider = MagicMock()
         provider.complete = AsyncMock(side_effect=RuntimeError("boom"))
-        with patch("zebra_tasks.agent.history.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.history.get_llm", return_value=provider):
             result = await AssessHistoryNeedAction().run(_task(goal="write a haiku"), context)
         assert result.success
         assert result.next_route == "no_history"
@@ -262,7 +262,7 @@ class TestAssessHistoryNeed:
     )
     async def test_continuation_phrasing_is_a_cue(self, context, goal):
         provider = _provider(json.dumps({"needs_history": False}))
-        with patch("zebra_tasks.agent.history.get_provider", return_value=provider) as gp:
+        with patch("zebra_tasks.agent.history.get_llm", return_value=provider) as gp:
             await AssessHistoryNeedAction().run(_task(goal=goal), context)
         gp.assert_called_once()
 

@@ -398,9 +398,7 @@ class TestWorkflowEvaluatorAction:
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(return_value=mock_response)
 
-        mock_context.process.properties["__llm_provider_name__"] = "anthropic"
-
-        with patch("zebra_tasks.llm.providers.registry.get_provider", return_value=mock_provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: mock_provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -483,9 +481,7 @@ routings: []"""
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(return_value=mock_response)
 
-        mock_context.process.properties["__llm_provider_name__"] = "anthropic"
-
-        with patch("zebra_tasks.llm.providers.registry.get_provider", return_value=mock_provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: mock_provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -545,9 +541,7 @@ routings: []"""
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(return_value=mock_response)
 
-        mock_context.process.properties["__llm_provider_name__"] = "anthropic"
-
-        with patch("zebra_tasks.llm.providers.registry.get_provider", return_value=mock_provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: mock_provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -615,9 +609,7 @@ routings: []"""
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(return_value=mock_response)
 
-        mock_context.process.properties["__llm_provider_name__"] = "anthropic"
-
-        with patch("zebra_tasks.llm.providers.registry.get_provider", return_value=mock_provider):
+        with patch("zebra_tasks.llm.client._factory", lambda m: mock_provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True

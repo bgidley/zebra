@@ -410,9 +410,7 @@ class TestAssessAndRecordAction:
         mock_response.content = '{"effectiveness_notes": "Worked well"}'
         mock_provider.complete = AsyncMock(return_value=mock_response)
 
-        with mock_patch(
-            "zebra_tasks.agent.assess_and_record.get_provider", return_value=mock_provider
-        ):
+        with mock_patch("zebra_tasks.agent.assess_and_record.get_llm", return_value=mock_provider):
             action = AssessAndRecordAction()
             result = await action.run(mock_task, mock_context)
 
@@ -440,9 +438,7 @@ class TestAssessAndRecordAction:
         mock_response.content = '{"effectiveness_notes": "Good result"}'
         mock_provider.complete = AsyncMock(return_value=mock_response)
 
-        with mock_patch(
-            "zebra_tasks.agent.assess_and_record.get_provider", return_value=mock_provider
-        ):
+        with mock_patch("zebra_tasks.agent.assess_and_record.get_llm", return_value=mock_provider):
             action = AssessAndRecordAction()
             result = await action.run(mock_task, mock_context)
 
@@ -473,9 +469,7 @@ class TestAssessAndRecordAction:
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(return_value=MagicMock(content="{}"))
 
-        with mock_patch(
-            "zebra_tasks.agent.assess_and_record.get_provider", return_value=mock_provider
-        ):
+        with mock_patch("zebra_tasks.agent.assess_and_record.get_llm", return_value=mock_provider):
             await AssessAndRecordAction().run(mock_task, mock_context)
 
         assert mock_metrics_store.record_run.call_args[0][0].user_id == 7
@@ -504,9 +498,7 @@ class TestAssessAndRecordAction:
         mock_response.content = '{"effectiveness_notes": "Good result"}'
         mock_provider.complete = AsyncMock(return_value=mock_response)
 
-        with mock_patch(
-            "zebra_tasks.agent.assess_and_record.get_provider", return_value=mock_provider
-        ):
+        with mock_patch("zebra_tasks.agent.assess_and_record.get_llm", return_value=mock_provider):
             await AssessAndRecordAction().run(mock_task, mock_context)
 
         recorded_run = mock_metrics_store.record_run.call_args[0][0]
@@ -531,9 +523,7 @@ class TestAssessAndRecordAction:
         mock_response.content = '{"effectiveness_notes": "Worked well"}'
         mock_provider.complete = AsyncMock(return_value=mock_response)
 
-        with mock_patch(
-            "zebra_tasks.agent.assess_and_record.get_provider", return_value=mock_provider
-        ):
+        with mock_patch("zebra_tasks.agent.assess_and_record.get_llm", return_value=mock_provider):
             action = AssessAndRecordAction()
             result = await action.run(mock_task, mock_context)
 
@@ -560,7 +550,7 @@ class TestAssessAndRecordAction:
         }
 
         with mock_patch(
-            "zebra_tasks.agent.assess_and_record.get_provider",
+            "zebra_tasks.agent.assess_and_record.get_llm",
             side_effect=Exception("No provider"),
         ):
             action = AssessAndRecordAction()
@@ -814,7 +804,6 @@ class TestExecuteGoalWorkflowAction:
         # Setup mocks with LLM settings
         mock_workflow_library.get_workflow.return_value = mock_definition
         mock_context.extras["__workflow_library__"] = mock_workflow_library
-        mock_context.process.properties["__llm_provider_name__"] = "anthropic"
         mock_context.process.properties["__llm_model__"] = "claude-3-opus"
         mock_context.engine = mock_engine
         mock_context.store = mock_store
@@ -838,7 +827,6 @@ class TestExecuteGoalWorkflowAction:
         # Check that create_process was called with LLM settings
         create_call = mock_engine.create_process.call_args
         props = create_call[1]["properties"]
-        assert props["__llm_provider_name__"] == "anthropic"
         assert props["__llm_model__"] == "claude-3-opus"
 
     async def test_inherits_submitting_user(
@@ -1258,7 +1246,7 @@ class TestUpdateConceptualMemoryActionUserFeedback:
         }
 
         action = UpdateConceptualMemoryAction()
-        patch_target = "zebra_tasks.agent.update_conceptual_memory.get_provider"
+        patch_target = "zebra_tasks.agent.update_conceptual_memory.get_llm"
         with patch(patch_target, return_value=mock_provider):
             result = await action.run(mock_task, mock_context)
 
@@ -1301,7 +1289,7 @@ class TestUpdateConceptualMemoryActionUserFeedback:
         }
 
         action = UpdateConceptualMemoryAction()
-        patch_target = "zebra_tasks.agent.update_conceptual_memory.get_provider"
+        patch_target = "zebra_tasks.agent.update_conceptual_memory.get_llm"
         with patch(patch_target, return_value=mock_provider):
             result = await action.run(mock_task, mock_context)
 
@@ -1384,7 +1372,7 @@ class TestCompactMemoryAction:
         )
 
         action = CompactMemoryAction()
-        patch_target = "zebra_tasks.agent.compact_memory.get_provider"
+        patch_target = "zebra_tasks.agent.compact_memory.get_llm"
         with patch(patch_target, return_value=mock_provider):
             result = await action.run(mock_task, mock_context)
 
@@ -1417,7 +1405,7 @@ class TestCompactMemoryAction:
         mock_context.extras["__memory_store__"] = store
 
         action = CompactMemoryAction()
-        patch_target = "zebra_tasks.agent.compact_memory.get_provider"
+        patch_target = "zebra_tasks.agent.compact_memory.get_llm"
         with patch(patch_target, return_value=None):
             result = await action.run(mock_task, mock_context)
 
@@ -1463,7 +1451,7 @@ class TestCompactMemoryAction:
         )
 
         action = CompactMemoryAction()
-        patch_target = "zebra_tasks.agent.compact_memory.get_provider"
+        patch_target = "zebra_tasks.agent.compact_memory.get_llm"
         with patch(patch_target, return_value=mock_provider):
             result = await action.run(mock_task, mock_context)
 
@@ -1496,7 +1484,7 @@ class TestCompactMemoryAction:
         mock_context.extras["__memory_store__"] = store
 
         action = CompactMemoryAction()
-        patch_target = "zebra_tasks.agent.compact_memory.get_provider"
+        patch_target = "zebra_tasks.agent.compact_memory.get_llm"
         with patch(patch_target, return_value=None):
             result = await action.run(mock_task, mock_context)
 
@@ -1534,7 +1522,7 @@ class TestCompactMemoryAction:
         mock_provider.complete = AsyncMock(side_effect=RuntimeError("LLM down"))
 
         action = CompactMemoryAction()
-        patch_target = "zebra_tasks.agent.compact_memory.get_provider"
+        patch_target = "zebra_tasks.agent.compact_memory.get_llm"
         with patch(patch_target, return_value=mock_provider):
             result = await action.run(mock_task, mock_context)
 

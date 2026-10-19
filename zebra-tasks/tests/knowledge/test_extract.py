@@ -132,7 +132,7 @@ def test_resolve_raw_keeps_structure():
 
 async def test_skips_without_user_and_makes_no_llm_call():
     context = _make_context({"goal": "I work at Acme"})
-    with patch("zebra_tasks.knowledge.extract.get_provider") as gp:
+    with patch("zebra_tasks.knowledge.extract.get_llm") as gp:
         result = await ExtractKnowledgeAction().run(_make_task(goal="I work at Acme"), context)
     gp.assert_not_called()
     assert result.success
@@ -143,7 +143,7 @@ async def test_skips_without_user_and_makes_no_llm_call():
 
 async def test_skips_without_user_text():
     context = _make_context({"__user_id__": 1})
-    with patch("zebra_tasks.knowledge.extract.get_provider") as gp:
+    with patch("zebra_tasks.knowledge.extract.get_llm") as gp:
         result = await ExtractKnowledgeAction().run(_make_task(goal=""), context)
     gp.assert_not_called()
     assert result.output["skipped"] == "no_user_text"
@@ -174,7 +174,7 @@ async def test_extracts_candidates_and_offers_existing_keys():
         continuation_comment="",
         result="Take the 8:05 train",
     )
-    with patch("zebra_tasks.knowledge.extract.get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.extract.get_llm", return_value=provider):
         result = await ExtractKnowledgeAction().run(task, context)
 
     assert result.next_route == "has_candidates"
@@ -197,7 +197,7 @@ async def test_extracts_candidates_and_offers_existing_keys():
 async def test_nothing_personal_yields_no_candidates():
     context = _make_context({"__user_id__": 1})
     with patch(
-        "zebra_tasks.knowledge.extract.get_provider",
+        "zebra_tasks.knowledge.extract.get_llm",
         return_value=_provider(_candidates()),
     ):
         result = await ExtractKnowledgeAction().run(_make_task(goal="Summarise this text"), context)
@@ -209,7 +209,7 @@ async def test_llm_error_degrades_to_empty():
     context = _make_context({"__user_id__": 1})
     provider = MagicMock()
     provider.complete = AsyncMock(side_effect=RuntimeError("boom"))
-    with patch("zebra_tasks.knowledge.extract.get_provider", return_value=provider):
+    with patch("zebra_tasks.knowledge.extract.get_llm", return_value=provider):
         result = await ExtractKnowledgeAction().run(_make_task(goal="I live in Leeds"), context)
     assert result.success
     assert result.next_route == "no_candidates"
@@ -218,7 +218,7 @@ async def test_llm_error_degrades_to_empty():
 
 async def test_unparseable_response_degrades_to_empty():
     context = _make_context({"__user_id__": 1})
-    with patch("zebra_tasks.knowledge.extract.get_provider", return_value=_provider("not json")):
+    with patch("zebra_tasks.knowledge.extract.get_llm", return_value=_provider("not json")):
         result = await ExtractKnowledgeAction().run(_make_task(goal="I live in Leeds"), context)
     assert result.success
     assert result.output["count"] == 0
@@ -230,7 +230,7 @@ async def test_sensitive_opt_in_via_env(monkeypatch):
     content = _candidates(
         {"category": "facts", "key": "faith", "value": "x", "confidence": 0.9, "sensitive": True}
     )
-    with patch("zebra_tasks.knowledge.extract.get_provider", return_value=_provider(content)):
+    with patch("zebra_tasks.knowledge.extract.get_llm", return_value=_provider(content)):
         result = await ExtractKnowledgeAction().run(_make_task(goal="..."), context)
     assert result.output["count"] == 1
 
@@ -240,7 +240,7 @@ async def test_sensitive_dropped_by_default():
     content = _candidates(
         {"category": "facts", "key": "faith", "value": "x", "confidence": 0.9, "sensitive": True}
     )
-    with patch("zebra_tasks.knowledge.extract.get_provider", return_value=_provider(content)):
+    with patch("zebra_tasks.knowledge.extract.get_llm", return_value=_provider(content)):
         result = await ExtractKnowledgeAction().run(_make_task(goal="..."), context)
     assert result.output["count"] == 0
     assert result.output["dropped"][0]["reason"] == "sensitive"

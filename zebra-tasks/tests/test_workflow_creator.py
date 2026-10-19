@@ -74,7 +74,7 @@ def context():
 async def _run(task, context, response: LLMResponse):
     provider = MagicMock()
     provider.complete = AsyncMock(return_value=response)
-    with patch("zebra_tasks.agent.creator.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.creator.get_llm", return_value=provider):
         result = await WorkflowCreatorAction().run(task, context)
     return result, provider
 
@@ -123,7 +123,7 @@ async def test_invalid_workflow_is_repaired_once(task, context):
     provider = MagicMock()
     provider.complete = AsyncMock(side_effect=[_response(_TRUNCATED_YAML), _response(_VALID_YAML)])
 
-    with patch("zebra_tasks.agent.creator.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.creator.get_llm", return_value=provider):
         result = await WorkflowCreatorAction().run(task, context)
 
     assert result.success is True
@@ -146,7 +146,7 @@ async def test_unparseable_yaml_is_repaired(task, context):
         side_effect=[_response("name: [unclosed"), _response(_VALID_YAML)]
     )
 
-    with patch("zebra_tasks.agent.creator.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.creator.get_llm", return_value=provider):
         result = await WorkflowCreatorAction().run(task, context)
 
     assert result.success is True
@@ -170,7 +170,7 @@ async def test_truncated_then_complete_is_accepted(task, context):
         side_effect=[_response(_TRUNCATED_YAML, "max_tokens"), _response(_VALID_YAML)]
     )
 
-    with patch("zebra_tasks.agent.creator.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.creator.get_llm", return_value=provider):
         result = await WorkflowCreatorAction().run(task, context)
 
     assert result.success is True

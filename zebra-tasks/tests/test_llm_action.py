@@ -10,6 +10,7 @@ from zebra_tasks.llm.base import (
     MessageRole,
     TokenUsage,
 )
+from zebra_tasks.llm.client import set_llm_factory
 
 
 class MockLLMProvider(LLMProvider):
@@ -67,7 +68,8 @@ class TestLLMCallAction:
 
     @pytest.fixture
     def llm_context(self, mock_context, mock_llm_provider):
-        mock_context.process.properties["__llm_provider__"] = mock_llm_provider
+        mock_context.llm = mock_llm_provider
+        set_llm_factory(lambda m: mock_llm_provider)
         return mock_context
 
     @pytest.mark.asyncio
@@ -85,7 +87,7 @@ class TestLLMCallAction:
         assert llm_context.process.properties["answer"] == "Test response"
 
         # Verify LLM was called
-        provider = llm_context.process.properties["__llm_provider__"]
+        provider = llm_context.llm
         assert len(provider.calls) == 1
         assert provider.calls[0]["messages"][0].role == MessageRole.USER
         assert provider.calls[0]["messages"][0].content == "What is 2 + 2?"
@@ -104,7 +106,7 @@ class TestLLMCallAction:
 
         assert result.success is True
 
-        provider = llm_context.process.properties["__llm_provider__"]
+        provider = llm_context.llm
         messages = provider.calls[0]["messages"]
         assert len(messages) == 2
         assert messages[0].role == MessageRole.SYSTEM
@@ -126,7 +128,7 @@ class TestLLMCallAction:
         action = LLMCallAction()
         await action.run(mock_task, llm_context)
 
-        provider = llm_context.process.properties["__llm_provider__"]
+        provider = llm_context.llm
         prompt = provider.calls[0]["messages"][0].content
         assert "Hello Alice" in prompt
         assert "previous result" in prompt
@@ -134,7 +136,7 @@ class TestLLMCallAction:
     @pytest.mark.asyncio
     async def test_json_response_format(self, llm_context, mock_task):
         """Test JSON response parsing."""
-        provider = llm_context.process.properties["__llm_provider__"]
+        provider = llm_context.llm
         provider.response_content = '{"sentiment": "positive", "confidence": 0.95}'
 
         mock_task.properties = {
@@ -155,7 +157,7 @@ class TestLLMCallAction:
     @pytest.mark.asyncio
     async def test_json_in_markdown_code_block(self, llm_context, mock_task):
         """Test JSON extraction from markdown code block."""
-        provider = llm_context.process.properties["__llm_provider__"]
+        provider = llm_context.llm
         provider.response_content = """Here's the analysis:
 ```json
 {"result": "success", "value": 42}
@@ -188,7 +190,7 @@ That's the result."""
         action = LLMCallAction()
         await action.run(mock_task, llm_context)
 
-        provider = llm_context.process.properties["__llm_provider__"]
+        provider = llm_context.llm
         assert provider.calls[0]["temperature"] == 0.9
         assert provider.calls[0]["max_tokens"] == 500
 
@@ -243,7 +245,7 @@ That's the result."""
         action = LLMCallAction()
         await action.run(mock_task, llm_context)
 
-        provider = llm_context.process.properties["__llm_provider__"]
+        provider = llm_context.llm
         messages = provider.calls[0]["messages"]
         assert len(messages) == 4
         assert messages[0].role == MessageRole.SYSTEM
@@ -274,7 +276,7 @@ That's the result."""
     @pytest.mark.asyncio
     async def test_llm_error_handling(self, llm_context, mock_task):
         """Test error handling when LLM call fails."""
-        provider = llm_context.process.properties["__llm_provider__"]
+        provider = llm_context.llm
 
         async def raise_error(*args, **kwargs):
             raise Exception("API rate limit exceeded")
@@ -292,7 +294,7 @@ That's the result."""
     @pytest.mark.asyncio
     async def test_invalid_json_returns_raw(self, llm_context, mock_task):
         """Test that invalid JSON returns raw content."""
-        provider = llm_context.process.properties["__llm_provider__"]
+        provider = llm_context.llm
         provider.response_content = "This is not valid JSON {broken"
 
         mock_task.properties = {

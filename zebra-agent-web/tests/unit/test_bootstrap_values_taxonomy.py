@@ -44,7 +44,7 @@ def test_writes_fixture_to_default_path(tmp_path):
     output = tmp_path / "out.yaml"
     out = StringIO()
     with patch(
-        "zebra_agent_web.api.management.commands.bootstrap_values_taxonomy.get_provider",
+        "zebra_agent_web.api.management.commands.bootstrap_values_taxonomy.get_llm",
         return_value=_mock_provider(_VALID_PAYLOAD),
     ):
         call_command(
@@ -71,7 +71,7 @@ def test_refuses_to_overwrite_existing(tmp_path):
 
     with pytest.raises(CommandError, match="Refusing to overwrite"):
         with patch(
-            "zebra_agent_web.api.management.commands.bootstrap_values_taxonomy.get_provider",
+            "zebra_agent_web.api.management.commands.bootstrap_values_taxonomy.get_llm",
             return_value=_mock_provider(_VALID_PAYLOAD),
         ):
             call_command("bootstrap_values_taxonomy", f"--output={output}")
@@ -85,7 +85,7 @@ def test_force_allows_overwrite(tmp_path):
     output.write_text("existing: content\n")
 
     with patch(
-        "zebra_agent_web.api.management.commands.bootstrap_values_taxonomy.get_provider",
+        "zebra_agent_web.api.management.commands.bootstrap_values_taxonomy.get_llm",
         return_value=_mock_provider(_VALID_PAYLOAD),
     ):
         call_command(
@@ -106,7 +106,7 @@ def test_validation_rejects_missing_field(tmp_path):
 
     with pytest.raises(CommandError):
         with patch(
-            "zebra_agent_web.api.management.commands.bootstrap_values_taxonomy.get_provider",
+            "zebra_agent_web.api.management.commands.bootstrap_values_taxonomy.get_llm",
             return_value=_mock_provider(bad_payload),
         ):
             call_command("bootstrap_values_taxonomy", f"--output={output}")

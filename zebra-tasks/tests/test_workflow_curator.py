@@ -275,8 +275,7 @@ def _llm(pairs: list[dict]) -> MagicMock:
 
 
 async def _run_dupes(context, provider):
-    context.process.properties["__llm_provider_name__"] = "anthropic"
-    with patch("zebra_tasks.llm.providers.registry.get_provider", return_value=provider):
+    with patch("zebra_tasks.llm.client._factory", lambda m: provider):
         return await _run(context, detect_duplicates=True)
 
 

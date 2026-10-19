@@ -140,7 +140,7 @@ class TestRouting:
         """No target_task_id and no action_description -> approve without LLM."""
         mock_context.extras["__trust_store__"] = _store_with_level("SEMI_AUTONOMOUS")
 
-        with patch("zebra_tasks.agent.reversibility.get_provider") as get_provider:
+        with patch("zebra_tasks.agent.reversibility.get_llm") as get_provider:
             result = await TrustGateAction().run(mock_task, mock_context)
 
         get_provider.assert_not_called()

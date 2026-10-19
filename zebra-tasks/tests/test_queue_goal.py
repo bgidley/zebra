@@ -133,10 +133,9 @@ class TestQueueGoalAction:
         assert "library" in result.output.lower() if isinstance(result.output, str) else True
 
     async def test_copies_llm_settings(self, mock_task, mock_context):
-        """Copies LLM settings from parent process."""
+        """Copies the model tier from the parent process."""
         mock_context.process.properties = {
-            "__llm_provider_name__": "anthropic",
-            "__llm_model__": "claude-haiku-4-5-20251001",
+            "__llm_model__": "low",
         }
         mock_task.properties = {"goal": "Test goal"}
         action = QueueGoalAction()
@@ -148,8 +147,7 @@ class TestQueueGoalAction:
         created_props = call_args[1].get(
             "properties", call_args[0][1] if len(call_args[0]) > 1 else {}
         )
-        assert created_props.get("__llm_provider_name__") == "anthropic"
-        assert created_props.get("__llm_model__") == "claude-haiku-4-5-20251001"
+        assert created_props.get("__llm_model__") == "low"
 
     async def test_sets_output_key(self, mock_task, mock_context):
         """Result is stored under the specified output key."""

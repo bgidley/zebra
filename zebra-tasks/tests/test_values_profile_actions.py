@@ -139,7 +139,7 @@ async def test_extract_returns_empty_when_llm_fails(mock_task, mock_context):
     failing = MagicMock()
     failing.complete = AsyncMock(side_effect=RuntimeError("network down"))
 
-    with patch("zebra_tasks.agent.extract_values_tags.get_provider", return_value=failing):
+    with patch("zebra_tasks.agent.extract_values_tags.get_llm", return_value=failing):
         result = await ExtractValuesTagsAction().run(mock_task, mock_context)
 
     assert result.success
@@ -174,7 +174,7 @@ async def test_extract_parses_approved_and_candidate_tags(mock_task, mock_contex
     }
 
     with patch(
-        "zebra_tasks.agent.extract_values_tags.get_provider",
+        "zebra_tasks.agent.extract_values_tags.get_llm",
         return_value=_llm_provider(_llm_response(payload)),
     ):
         result = await ExtractValuesTagsAction().run(mock_task, mock_context)
@@ -206,7 +206,7 @@ async def test_extract_drops_unknown_approved_tags(mock_task, mock_context):
     }
 
     with patch(
-        "zebra_tasks.agent.extract_values_tags.get_provider",
+        "zebra_tasks.agent.extract_values_tags.get_llm",
         return_value=_llm_provider(_llm_response(payload)),
     ):
         await ExtractValuesTagsAction().run(mock_task, mock_context)
@@ -231,7 +231,7 @@ async def test_extract_caps_candidates_to_five(mock_task, mock_context):
     }
 
     with patch(
-        "zebra_tasks.agent.extract_values_tags.get_provider",
+        "zebra_tasks.agent.extract_values_tags.get_llm",
         return_value=_llm_provider(_llm_response(payload)),
     ):
         await ExtractValuesTagsAction().run(mock_task, mock_context)

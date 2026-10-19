@@ -55,7 +55,7 @@ def llm():
             usage=TokenUsage(input_tokens=80, output_tokens=40),
         )
     )
-    with patch("zebra_tasks.agent.postmortem.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.postmortem.get_llm", return_value=provider):
         yield provider
 
 

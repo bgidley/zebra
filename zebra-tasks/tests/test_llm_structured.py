@@ -71,29 +71,23 @@ class TestParseLlmJson:
 class TestCompleteJson:
     async def test_first_reply_parses(self):
         provider = _provider(_response(json.dumps(GOOD)))
-        seen = []
 
-        result = await complete_json(
-            provider, MESSAGES, temperature=0.3, max_tokens=100, on_response=seen.append
-        )
+        result = await complete_json(provider, MESSAGES, temperature=0.3, max_tokens=100)
 
         assert result == GOOD
         assert provider.complete.await_count == 1
-        assert len(seen) == 1
+        assert provider.complete.await_count == 1
 
     async def test_truncated_then_complete_retries_with_double_tokens(self):
         provider = _provider(
             _response('```json\n{"overall_assessment": {"summ', finish_reason="max_tokens"),
             _response(json.dumps(GOOD)),
         )
-        seen = []
 
-        result = await complete_json(
-            provider, MESSAGES, temperature=0.3, max_tokens=4000, on_response=seen.append
-        )
+        result = await complete_json(provider, MESSAGES, temperature=0.3, max_tokens=4000)
 
         assert result == GOOD
-        assert len(seen) == 2
+        assert provider.complete.await_count == 2
         first, second = provider.complete.await_args_list
         assert first.kwargs["max_tokens"] == 4000
         assert second.kwargs["max_tokens"] == 8000
@@ -134,12 +128,9 @@ class TestCompleteJson:
             _response('```json\n{"a": "' + long_tail, finish_reason="max_tokens"),
             _response('```json\n{"a": "' + long_tail, finish_reason="max_tokens"),
         )
-        seen = []
 
         with pytest.raises(LLMJSONError) as exc:
-            await complete_json(
-                provider, MESSAGES, temperature=0.3, max_tokens=100, on_response=seen.append
-            )
+            await complete_json(provider, MESSAGES, temperature=0.3, max_tokens=100)
 
         failure = exc.value.failure
         assert failure["attempts"] == 2
@@ -152,7 +143,7 @@ class TestCompleteJson:
         assert "chars omitted" in raw
         assert len(raw) < 2 * RAW_KEEP_CHARS + 100
         json.dumps(failure)  # storable as a process property
-        assert len(seen) == 2
+        assert provider.complete.await_count == 2
         assert "truncated at the token limit" in str(exc.value)
 
     async def test_provider_error_propagates(self):

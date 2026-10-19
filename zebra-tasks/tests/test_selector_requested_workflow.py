@@ -58,7 +58,7 @@ async def test_requested_workflow_is_used_without_llm(mock_task, mock_context):
     mock_context.process.properties["requested_workflow"] = "Daily News Reading"
     provider = _provider("Web Research")
 
-    with patch("zebra_tasks.agent.selector.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.selector.get_llm", return_value=provider):
         result = await WorkflowSelectorAction().run(mock_task, mock_context)
 
     provider.complete.assert_not_awaited()
@@ -73,7 +73,7 @@ async def test_missing_requested_workflow_falls_back_to_llm(mock_task, mock_cont
     mock_context.process.properties["requested_workflow"] = "Retired Workflow"
     provider = _provider("Web Research")
 
-    with patch("zebra_tasks.agent.selector.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.selector.get_llm", return_value=provider):
         result = await WorkflowSelectorAction().run(mock_task, mock_context)
 
     provider.complete.assert_awaited_once()
@@ -84,7 +84,7 @@ async def test_missing_requested_workflow_falls_back_to_llm(mock_task, mock_cont
 async def test_no_requested_workflow_uses_llm(mock_task, mock_context):
     provider = _provider("Daily News Reading")
 
-    with patch("zebra_tasks.agent.selector.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.selector.get_llm", return_value=provider):
         result = await WorkflowSelectorAction().run(mock_task, mock_context)
 
     provider.complete.assert_awaited_once()

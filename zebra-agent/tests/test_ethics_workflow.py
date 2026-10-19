@@ -199,7 +199,7 @@ WORKFLOW_YAML_PATH = Path(__file__).parent.parent / "workflows" / "agent_main_lo
 @pytest.fixture(autouse=True)
 def _no_help_request_llm():
     """#176: the help request falls back to plain text instead of calling an LLM."""
-    with patch("zebra_tasks.agent.stuck.get_provider", side_effect=RuntimeError("no LLM")):
+    with patch("zebra_tasks.agent.stuck.get_llm", side_effect=RuntimeError("no LLM")):
         yield
 
 
@@ -585,7 +585,7 @@ class TestContinuationRouting:
         engine = WorkflowEngine(store, registry, extras={"__workflow_library__": _Library(library)})
         process = await engine.create_process(definition, properties=properties)
         with patch(
-            "zebra_tasks.agent.continuation_assessor.get_provider",
+            "zebra_tasks.agent.continuation_assessor.get_llm",
             return_value=provider or _llm_returning({}),
         ) as get_provider:
             await engine.start_process(process.id)
@@ -708,7 +708,7 @@ class TestHistoryRouting:
             definition, properties={"goal": goal, "available_workflows": []}
         )
         with patch(
-            "zebra_tasks.agent.history.get_provider",
+            "zebra_tasks.agent.history.get_llm",
             return_value=provider or _llm_returning({}),
         ) as get_provider:
             await engine.start_process(process.id)
@@ -777,7 +777,7 @@ class TestKnowledgeLearning:
             props["__user_id__"] = user_id
         process = await engine.create_process(definition, properties=props)
         with patch(
-            "zebra_tasks.knowledge.extract.get_provider",
+            "zebra_tasks.knowledge.extract.get_llm",
             return_value=provider or _extraction_provider(),
         ) as gp:
             await engine.start_process(process.id)

@@ -63,7 +63,7 @@ class TestFlagConcernsAction:
         }
 
         action = FlagConcernsAction()
-        with patch("zebra_tasks.agent.flag_concerns.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.flag_concerns.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -79,7 +79,7 @@ class TestFlagConcernsAction:
         mock_task.properties = {"goal": "Summarise this article", "plan_context": "Summarize Text"}
 
         action = FlagConcernsAction()
-        with patch("zebra_tasks.agent.flag_concerns.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.flag_concerns.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -92,7 +92,7 @@ class TestFlagConcernsAction:
 
         action = FlagConcernsAction()
         with patch(
-            "zebra_tasks.agent.flag_concerns.get_provider", return_value=provider
+            "zebra_tasks.agent.flag_concerns.get_llm", return_value=provider
         ) as get_provider:
             await action.run(mock_task, mock_context)
 
@@ -105,7 +105,7 @@ class TestFlagConcernsAction:
         mock_task.properties = {"goal": "Do a thing", "plan_context": "Some Workflow"}
 
         action = FlagConcernsAction()
-        with patch("zebra_tasks.agent.flag_concerns.get_provider", return_value=provider):
+        with patch("zebra_tasks.agent.flag_concerns.get_llm", return_value=provider):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -117,9 +117,7 @@ class TestFlagConcernsAction:
         mock_task.properties = {"goal": "Do a thing"}
 
         action = FlagConcernsAction()
-        with patch(
-            "zebra_tasks.agent.flag_concerns.get_provider", side_effect=RuntimeError("no key")
-        ):
+        with patch("zebra_tasks.agent.flag_concerns.get_llm", side_effect=RuntimeError("no key")):
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
@@ -130,7 +128,7 @@ class TestFlagConcernsAction:
         mock_task.properties = {}
 
         action = FlagConcernsAction()
-        with patch("zebra_tasks.agent.flag_concerns.get_provider") as get_provider:
+        with patch("zebra_tasks.agent.flag_concerns.get_llm") as get_provider:
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True

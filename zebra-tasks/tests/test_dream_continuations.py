@@ -16,6 +16,7 @@ from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
 from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
 from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 from zebra_tasks.llm.base import LLMResponse, TokenUsage
+from zebra_tasks.llm.client import set_llm_factory
 
 _REPORT_YAML = """name: Write Report
 description: Draft a report
@@ -260,7 +261,7 @@ class TestEvaluatorContinuations:
     async def _evaluate(self, analysis, llm_json, mock_task, mock_context, definitions):
         provider = MagicMock()
         provider.complete = AsyncMock(return_value=_response(json.dumps(llm_json)))
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {
             "metrics_analysis": analysis,
             "workflow_definitions": definitions,
@@ -322,7 +323,7 @@ class TestOptimizerContinuations:
     def _setup(self, mock_task, mock_context, tmp_path, responses, priorities, suggestions=()):
         provider = MagicMock()
         provider.complete = AsyncMock(side_effect=[_response(r) for r in responses])
-        mock_context.process.properties["__llm_provider__"] = provider
+        set_llm_factory(lambda m: provider)
         mock_task.properties = {
             "evaluation": {
                 "improvement_priorities": priorities,
@@ -408,7 +409,7 @@ async def test_seeded_chains_produce_targeted_change(
     eval_provider.complete = AsyncMock(
         return_value=_response(json.dumps({"improvement_priorities": []}))
     )
-    mock_context.process.properties["__llm_provider__"] = eval_provider
+    set_llm_factory(lambda m: eval_provider)
     mock_task.properties = {
         "metrics_analysis": analysis,
         "workflow_definitions": {"Write Report": _REPORT_YAML},
@@ -417,7 +418,7 @@ async def test_seeded_chains_produce_targeted_change(
 
     opt_provider = MagicMock()
     opt_provider.complete = AsyncMock(return_value=_response(_REPORT_YAML))
-    mock_context.process.properties["__llm_provider__"] = opt_provider
+    set_llm_factory(lambda m: opt_provider)
     mock_task.properties = {
         "evaluation": evaluation,
         "existing_workflows": {"Write Report": _REPORT_YAML},

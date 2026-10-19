@@ -23,7 +23,7 @@ from zebra_tasks.agent.improvements import (
 from zebra_tasks.llm.base import LLMResponse, TokenUsage
 
 BUILTIN = Path(__file__).parents[2] / "zebra-agent" / "workflows"
-PATCH_PROVIDER = "zebra_tasks.agent.improvements._get_provider"
+PATCH_PROVIDER = "zebra_tasks.agent.improvements.get_llm"
 
 FINDINGS = {
     "evaluation": {

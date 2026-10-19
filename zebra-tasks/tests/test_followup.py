@@ -169,7 +169,7 @@ async def test_ethics_input_gate_judges_goal_with_previous_run():
     task.id = "task-1"
     task.properties = {"goal": "Now make it shorter", "check_type": "input_gate"}
 
-    with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+    with patch("zebra_tasks.agent.ethics_gate.get_llm", return_value=provider):
         result = await EthicsGateAction().run(task, context)
 
     assert result.success is True

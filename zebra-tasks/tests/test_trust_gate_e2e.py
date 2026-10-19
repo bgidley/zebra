@@ -245,7 +245,7 @@ async def test_protected_path_delete_classified_irreversible_forces_gate():
     definition = load_definition_from_yaml(ASSESSED_WORKFLOW_YAML)
 
     with patch(
-        "zebra_tasks.agent.reversibility.get_provider",
+        "zebra_tasks.agent.reversibility.get_llm",
         return_value=_path_judging_provider(),
     ):
         process = await engine.create_process(
@@ -279,7 +279,7 @@ async def test_temp_path_delete_classified_reversible_proceeds(tmp_path):
     definition = load_definition_from_yaml(ASSESSED_WORKFLOW_YAML)
 
     with patch(
-        "zebra_tasks.agent.reversibility.get_provider",
+        "zebra_tasks.agent.reversibility.get_llm",
         return_value=_path_judging_provider(),
     ):
         process = await engine.create_process(

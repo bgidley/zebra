@@ -63,7 +63,7 @@ def _provider(content=None, error=None):
 
 async def _run(task, context, provider):
     with patch(
-        "zebra_tasks.agent.continuation_assessor.get_provider", return_value=provider
+        "zebra_tasks.agent.continuation_assessor.get_llm", return_value=provider
     ) as get_provider:
         result = await ContinuationAssessorAction().run(task, context)
     return result, get_provider
@@ -183,7 +183,7 @@ async def test_missing_provider_falls_back(task):
     props = _continuation_props()
     context = _context(props, _Library(["Brainstorm Ideas"]))
     with patch(
-        "zebra_tasks.agent.continuation_assessor.get_provider",
+        "zebra_tasks.agent.continuation_assessor.get_llm",
         side_effect=ValueError("Unknown LLM provider"),
     ):
         result = await ContinuationAssessorAction().run(task, context)
