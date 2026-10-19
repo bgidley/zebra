@@ -41,23 +41,23 @@ def _verdict(reversible: bool, **extra) -> str:
 
 class TestHintShortCircuit:
     async def test_always_reversible_skips_llm(self, mock_context):
-        with patch("zebra_tasks.agent.reversibility.get_llm") as get_provider:
+        with patch("zebra_tasks.agent.reversibility.get_llm") as get_llm_mock:
             assessment = await assess_reversibility(
                 "file_read", "always_reversible", {"path": "/x"}, "read a file", mock_context
             )
 
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
         assert assessment.reversible is True
         assert assessment.source == "hint"
         assert assessment.confidence == 1.0
 
     async def test_always_irreversible_skips_llm(self, mock_context):
-        with patch("zebra_tasks.agent.reversibility.get_llm") as get_provider:
+        with patch("zebra_tasks.agent.reversibility.get_llm") as get_llm_mock:
             assessment = await assess_reversibility(
                 "send_email", "always_irreversible", {}, "send", mock_context
             )
 
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
         assert assessment.reversible is False
         assert assessment.source == "hint"
 
@@ -124,19 +124,19 @@ class TestLLMPath:
         provider = _make_provider(_verdict(True))
         with patch(
             "zebra_tasks.agent.reversibility.get_llm", return_value=provider
-        ) as get_provider:
+        ) as get_llm_mock:
             await assess_reversibility("x", "context_dependent", {}, "", mock_context)
 
-        assert get_provider.call_args.args[0] == "low"
+        assert get_llm_mock.call_args.args[0] == "low"
 
     async def test_model_override(self, mock_context):
         provider = _make_provider(_verdict(True))
         with patch(
             "zebra_tasks.agent.reversibility.get_llm", return_value=provider
-        ) as get_provider:
+        ) as get_llm_mock:
             await assess_reversibility("x", "context_dependent", {}, "", mock_context, model="high")
 
-        assert get_provider.call_args.args[0] == "high"
+        assert get_llm_mock.call_args.args[0] == "high"
 
 
 class TestFailClosed:

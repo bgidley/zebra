@@ -93,11 +93,11 @@ class TestFlagConcernsAction:
         action = FlagConcernsAction()
         with patch(
             "zebra_tasks.agent.flag_concerns.get_llm", return_value=provider
-        ) as get_provider:
+        ) as get_llm_mock:
             await action.run(mock_task, mock_context)
 
-        # get_provider(provider_name, model) — second positional arg is the model
-        assert get_provider.call_args.args[0] == "low"
+        # get_llm_mock(provider_name, model) — second positional arg is the model
+        assert get_llm_mock.call_args.args[0] == "low"
 
     async def test_unparseable_response_degrades_gracefully(self, mock_task, mock_context):
         """A non-JSON response yields empty concerns and still succeeds."""
@@ -128,9 +128,9 @@ class TestFlagConcernsAction:
         mock_task.properties = {}
 
         action = FlagConcernsAction()
-        with patch("zebra_tasks.agent.flag_concerns.get_llm") as get_provider:
+        with patch("zebra_tasks.agent.flag_concerns.get_llm") as get_llm_mock:
             result = await action.run(mock_task, mock_context)
 
         assert result.success is True
         assert result.output["concerns"] == []
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()

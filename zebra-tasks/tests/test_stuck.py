@@ -89,10 +89,10 @@ def _provider(content: str) -> MagicMock:
 class TestAssessStuck:
     async def test_success_proceeds_without_llm(self):
         context = _context({"goal": "g", "execution_result": {"success": True}})
-        with patch("zebra_tasks.agent.stuck.get_llm") as get_provider:
+        with patch("zebra_tasks.agent.stuck.get_llm") as get_llm_mock:
             result = await AssessStuckAction().run(_assess_task(), context)
         assert result.next_route == "proceed"
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
         assert HELP_REQUESTS_KEY not in context.process.properties
 
     async def test_failure_asks_human_with_llm_request(self):
@@ -148,11 +148,11 @@ class TestAssessStuck:
 
     async def test_budget_spent_proceeds(self):
         context = _context(_failed_props(**{HELP_REQUESTS_KEY: 2}))
-        with patch("zebra_tasks.agent.stuck.get_llm") as get_provider:
+        with patch("zebra_tasks.agent.stuck.get_llm") as get_llm_mock:
             result = await AssessStuckAction().run(_assess_task(), context)
         assert result.next_route == "proceed"
         assert result.output["help_budget_spent"] is True
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
         assert context.process.properties[HELP_REQUESTS_KEY] == 2
 
 

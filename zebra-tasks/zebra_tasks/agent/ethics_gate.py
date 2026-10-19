@@ -146,6 +146,39 @@ not just the goal."""
 _MAX_PROFILE_FIELD_LEN = 300
 
 
+async def _describe_plan(plan_context: str, context: ExecutionContext) -> str:
+    """The planned workflow as the gate should judge it: what it does, not just its name.
+
+    ``plan_context`` is usually a workflow name. A name alone can mislead (*Basic Hello*
+    reads as "reply with a greeting" even when it counts to 100), so the description,
+    when to use it and its steps are added from the library when the name is found.
+    """
+    if not plan_context:
+        return "unknown"
+    library = context.extras.get("__workflow_library__")
+    if library is None:
+        return plan_context
+    try:
+        info = next((w for w in await library.list_workflows() if w.name == plan_context), None)
+        definition = library.get_workflow(plan_context)
+    except Exception:  # noqa: BLE001 - an unknown or unreadable workflow keeps its name
+        return plan_context
+    lines = [plan_context]
+    if info is not None and info.description:
+        lines.append(f"What it does: {info.description.strip()}")
+    if info is not None and info.use_when:
+        lines.append(f"Use when: {info.use_when.strip()}")
+    steps = [f"{t.name} ({t.action or 'human input'})" for t in definition.tasks.values()][
+        :_MAX_PLAN_STEPS
+    ]
+    if steps:
+        lines.append("Steps: " + "; ".join(steps))
+    return "\n".join(lines)
+
+
+_MAX_PLAN_STEPS = 20
+
+
 def _format_dilemma_display(dilemma: dict | None, values_assessment: dict | None) -> str:
     """Render a dilemma into human-readable text for the escalation UI ('both sides')."""
     lines: list[str] = []
@@ -371,7 +404,7 @@ class EthicsGateAction(TaskAction):
         prompt_goal = with_previous_run(goal, context.process.properties)
         if check_type == "plan_review":
             user_prompt = PLAN_REVIEW_PROMPT.format(
-                goal=prompt_goal, plan_context=plan_context or "unknown"
+                goal=prompt_goal, plan_context=await _describe_plan(plan_context, context)
             )
         else:
             user_prompt = INPUT_GATE_PROMPT.format(goal=prompt_goal)

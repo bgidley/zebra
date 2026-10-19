@@ -587,17 +587,17 @@ class TestContinuationRouting:
         with patch(
             "zebra_tasks.agent.continuation_assessor.get_llm",
             return_value=provider or _llm_returning({}),
-        ) as get_provider:
+        ) as get_llm_mock:
             await engine.start_process(process.id)
         process = await store.load_process(process.id)
         assert process.state == ProcessState.COMPLETE
-        return process.properties, get_provider
+        return process.properties, get_llm_mock
 
     async def test_non_continuation_goal_bypasses_assessment(self, definition):
-        props, get_provider = await self._run(
+        props, get_llm_mock = await self._run(
             definition, {"goal": "Write a poem", "available_workflows": []}
         )
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
         assert "continuation_decision" not in props
         assert "__task_output_select_workflow" in props
         assert props["workflow_name"] == "Test Workflow"
@@ -710,11 +710,11 @@ class TestHistoryRouting:
         with patch(
             "zebra_tasks.agent.history.get_llm",
             return_value=provider or _llm_returning({}),
-        ) as get_provider:
+        ) as get_llm_mock:
             await engine.start_process(process.id)
         process = await store.load_process(process.id)
         assert process.state == ProcessState.COMPLETE
-        return process.properties, get_provider
+        return process.properties, get_llm_mock
 
     async def test_needs_history_reaches_child_goal(self, definition):
         provider = _llm_returning({"needs_history": True, "since": "-7d", "text": "pension"})
@@ -729,8 +729,8 @@ class TestHistoryRouting:
         assert "Vanguard has the lowest fees" in child_goal
 
     async def test_no_history_leaves_goal_untouched(self, definition):
-        props, get_provider = await self._run(definition, "Write a poem")
-        get_provider.assert_not_called()
+        props, get_llm_mock = await self._run(definition, "Write a poem")
+        get_llm_mock.assert_not_called()
         assert "__task_output_get_workflow_history" not in props
         assert "workflow_history" not in props
         assert props["execution_result"]["output"] == "Write a poem"

@@ -136,33 +136,33 @@ class TestWritePostmortem:
     async def test_successful_run_is_skipped_without_llm(self):
         memory = InMemoryMemoryStore()
         props = _failed_props(execution_result={"success": True, "error": None})
-        with patch("zebra_tasks.agent.postmortem.get_llm") as get_provider:
+        with patch("zebra_tasks.agent.postmortem.get_llm") as get_llm_mock:
             result = await WritePostmortemAction().run(_loop_task(), _context(props, memory))
 
         assert result.success
         assert result.output == {"written": False, "reason": "run succeeded"}
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
         assert await memory.get_recent_postmortems() == []
 
     async def test_no_memory_store_is_skipped(self):
-        with patch("zebra_tasks.agent.postmortem.get_llm") as get_provider:
+        with patch("zebra_tasks.agent.postmortem.get_llm") as get_llm_mock:
             result = await WritePostmortemAction().run(_loop_task(), _context(_failed_props()))
 
         assert result.success
         assert result.output["written"] is False
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
 
     async def test_one_postmortem_per_run(self):
         memory = InMemoryMemoryStore()
         await memory.add_postmortem(_entry("earlier", "earlier lesson", run_id="run-1"))
 
-        with patch("zebra_tasks.agent.postmortem.get_llm") as get_provider:
+        with patch("zebra_tasks.agent.postmortem.get_llm") as get_llm_mock:
             result = await WritePostmortemAction().run(
                 _loop_task(), _context(_failed_props(), memory)
             )
 
         assert result.output == {"written": False, "reason": "run already has a postmortem"}
-        get_provider.assert_not_called()
+        get_llm_mock.assert_not_called()
         assert len(await memory.get_recent_postmortems()) == 1
 
     async def test_llm_unavailable_stores_nothing_and_succeeds(self):
