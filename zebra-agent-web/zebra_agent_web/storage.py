@@ -527,7 +527,8 @@ class DjangoStore(StateStore):
                     changed=json.loads(m.changed) if m.changed else {},
                     removed=json.loads(m.removed) if m.removed else [],
                     error=m.error,
-                    next_route=m.next_route,
+                    # Oracle reads a NULL varchar back as "" (#170)
+                    next_route=m.next_route or None,
                 )
                 for m in qs.order_by("occurred_at")
             ]
