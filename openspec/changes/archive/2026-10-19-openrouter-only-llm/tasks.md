@@ -18,4 +18,4 @@ Branch: `f205/openrouter-only`
 - [x] 3.2 Drop anthropic extra / SDK; deploy secrets; CI comments; e2e_live on OpenRouter
 - [x] 3.3 `specs/openrouter-llm-design.md`, `specs/zebra-as-is.md`, AGENTS.md files, READMEs, `.env.example`
 - [x] 3.4 Run lint + format (`uv run ruff check --fix . && uv run ruff format .`), full unit suite
-- [ ] 3.5 Prod: `site.env` `ZEBRA_LLM_MODEL=medium`, drop `ZEBRA_LLM_PROVIDER` / `OPENROUTER_ROUTING`; deploy + smoke green; a real goal completes
+- [x] 3.5 Prod: `site.env` `ZEBRA_LLM_MODEL=medium`, drop `ZEBRA_LLM_PROVIDER` / `OPENROUTER_ROUTING`; deploy + smoke green; a real goal completes
