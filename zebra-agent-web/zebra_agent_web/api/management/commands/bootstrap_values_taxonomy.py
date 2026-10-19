@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from pathlib import Path
 
@@ -88,8 +89,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--provider",
             type=str,
-            default="anthropic",
-            help="LLM provider name (default: anthropic).",
+            default=os.environ.get("ZEBRA_LLM_PROVIDER") or "anthropic",
+            help="LLM provider name (default: ZEBRA_LLM_PROVIDER, else anthropic).",
         )
         parser.add_argument(
             "--model",

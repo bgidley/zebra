@@ -35,6 +35,14 @@ OPENROUTER_TIER_MODELS: dict[str, str] = {
     "opus": "anthropic/claude-opus-5.5",
 }
 
+# With OPENROUTER_ROUTING=auto, tiers go to openrouter/auto at these auto-router cost tiers
+# (low / medium / high / xhigh / max), so cheap steps stay cheap (#204).
+OPENROUTER_AUTO_COST_TIERS: dict[str, str] = {
+    "haiku": "low",
+    "sonnet": "medium",
+    "opus": "high",
+}
+
 # Ordered list of friendly names for UI dropdowns / API validation.
 MODEL_CHOICES: list[str] = ["haiku", "sonnet", "opus"]
 

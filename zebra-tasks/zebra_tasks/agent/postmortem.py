@@ -20,6 +20,7 @@ from zebra_tasks.agent.stuck import _as_bool, _parse_json, _task_lines, _track_c
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +276,9 @@ class WritePostmortemAction(TaskAction):
             if feedback and feedback != "None"
             else ""
         )
-        provider_name = context.get_process_property("__llm_provider_name__") or "anthropic"
+        provider_name = (
+            context.get_process_property("__llm_provider_name__") or default_provider_name()
+        )
         # A cheap model: a short reflection, not the goal's work.
         model = props.get("model") or "haiku"
         try:

@@ -19,6 +19,7 @@ from zebra.tasks.base import ExecutionContext
 
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,9 @@ async def assess_reversibility(
             source="hint",
         )
 
-    provider_name = context.process.properties.get("__llm_provider_name__") or "anthropic"
+    provider_name = (
+        context.process.properties.get("__llm_provider_name__") or default_provider_name()
+    )
     resolved_model = model or context.process.properties.get("__llm_model__") or _DEFAULT_MODEL
     try:
         provider = get_provider(provider_name, resolved_model)

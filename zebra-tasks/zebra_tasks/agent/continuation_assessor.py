@@ -23,6 +23,7 @@ from zebra_tasks.agent.followup import (
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +260,7 @@ class ContinuationAssessorAction(TaskAction):
         provider_name = (
             task.properties.get("provider")
             or context.process.properties.get("__llm_provider_name__")
-            or "anthropic"
+            or default_provider_name()
         )
         model = task.properties.get("model") or context.process.properties.get("__llm_model__")
 

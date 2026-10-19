@@ -14,6 +14,28 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _anthropic_account_can_pay():
+    """Skip when the Anthropic account has no credit (prod runs on OpenRouter, #204).
+
+    Only that billing error skips; any other failure of the probe is left to the tests.
+    """
+    import asyncio
+
+    import anthropic
+
+    from zebra_tasks.llm.base import Message
+    from zebra_tasks.llm.providers import get_provider
+
+    try:
+        asyncio.run(get_provider("anthropic").complete([Message.user("hi")], max_tokens=5))
+    except anthropic.BadRequestError as e:
+        if "credit balance is too low" in str(e):
+            pytest.skip("Anthropic account has no credit")
+    except Exception:
+        pass
+
+
 class TestAnthropicIntegration:
     """Integration tests using real Anthropic API."""
 

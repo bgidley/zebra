@@ -21,6 +21,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -349,7 +350,7 @@ class ExtractKnowledgeAction(TaskAction):
         provider_name = (
             props.get("provider")
             or context.process.properties.get("__llm_provider_name__")
-            or "anthropic"
+            or default_provider_name()
         )
         model = props.get("model") or "haiku"
         try:

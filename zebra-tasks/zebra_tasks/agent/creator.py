@@ -11,6 +11,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import LLMResponse, Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ class WorkflowCreatorAction(TaskAction):
             type="string",
             description="LLM provider name",
             required=False,
-            default="anthropic",
+            default=None,
         ),
         ParameterDef(
             name="model",
@@ -422,7 +423,7 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
                     existing_workflows = []
 
         # Get LLM provider
-        provider_name = task.properties.get("provider", "anthropic")
+        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
 
         try:

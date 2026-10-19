@@ -22,6 +22,7 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ class ExtractValuesTagsAction(TaskAction):
             type="string",
             description="LLM provider name",
             required=False,
-            default="anthropic",
+            default=None,
         ),
         ParameterDef(
             name="model",
@@ -131,7 +132,7 @@ class ExtractValuesTagsAction(TaskAction):
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         texts = {field: _resolve(task, context, f"{field}_text") for field in _FIELDS}
-        provider_name = task.properties.get("provider", "anthropic")
+        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model", "haiku")
         output_key = task.properties.get("output_key", "extracted_tags")
 

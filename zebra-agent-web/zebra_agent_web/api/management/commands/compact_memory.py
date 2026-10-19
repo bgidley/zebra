@@ -34,6 +34,7 @@ class Command(BaseCommand):
 
         from zebra_tasks.agent.compact_memory import CompactMemoryAction
         from zebra_tasks.llm.providers import get_provider
+        from zebra_tasks.llm.providers.registry import default_provider_name
 
         now = datetime.now(UTC)
         batch = await agent_loop.memory.get_entries_for_compaction(now)
@@ -50,7 +51,7 @@ class Command(BaseCommand):
         )
 
         action = CompactMemoryAction()
-        provider = get_provider("anthropic")
+        provider = get_provider(default_provider_name())
 
         # Warm workflow
         for entry in batch.warm_workflow:

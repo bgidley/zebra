@@ -47,6 +47,7 @@ def _provider(model=None, cost=None):
 )
 def test_model_resolution(alias, model, monkeypatch):
     monkeypatch.delenv("OPENROUTER_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_ROUTING", raising=False)
     assert _provider(alias)._model == model
 
 
@@ -62,6 +63,43 @@ def test_default_model_from_env(monkeypatch):
     monkeypatch.setenv("OPENROUTER_MODEL", "google/gemma-4-31b-it")
     assert _provider("openrouter")._model == "google/gemma-4-31b-it"
     assert _provider("haiku")._model == "anthropic/claude-haiku-5.5"
+
+
+@pytest.mark.parametrize(
+    ("alias", "tier"),
+    [
+        ("haiku", "low"),
+        ("sonnet", "medium"),
+        ("opus", "high"),
+        ("claude-haiku-5-5", "low"),
+        ("openrouter", "medium"),
+        (None, "medium"),
+    ],
+)
+def test_auto_routing_maps_tiers_to_cost_tiers(alias, tier, monkeypatch):
+    """OPENROUTER_ROUTING=auto: tiers go to openrouter/auto at a cost tier (#204)."""
+    monkeypatch.setenv("OPENROUTER_ROUTING", "auto")
+    provider = _provider(alias)
+    assert provider._model == "openrouter/auto"
+    assert provider._sampling_kwargs(0.7)["extra_body"] == {
+        "plugins": [{"id": "auto-router", "cost_tier": tier}]
+    }
+
+
+def test_auto_routing_keeps_explicit_slugs(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_ROUTING", "auto")
+    provider = _provider("moonshotai/kimi-k3")
+    assert provider._model == "moonshotai/kimi-k3"
+    assert "extra_body" not in provider._sampling_kwargs(0.7)
+
+
+async def test_auto_routed_request_sends_the_plugin(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_ROUTING", "auto")
+    provider = _provider("haiku")
+    await provider.complete(messages=[Message.user("hi")])
+    kwargs = provider._client.chat.completions.create.call_args.kwargs
+    assert kwargs["model"] == "openrouter/auto"
+    assert kwargs["extra_body"]["plugins"][0]["cost_tier"] == "low"
 
 
 def test_context_windows():

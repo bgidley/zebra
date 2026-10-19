@@ -11,6 +11,7 @@ from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, extract_voice, voice_fields
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 
 @dataclass
@@ -174,7 +175,7 @@ class WorkflowSelectorAction(TaskAction):
             type="string",
             description="LLM provider name",
             required=False,
-            default="anthropic",
+            default=None,
         ),
         ParameterDef(
             name="model",
@@ -371,7 +372,7 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
             history_context = context.resolve_template(history_context)
 
         # Get LLM provider
-        provider_name = task.properties.get("provider", "anthropic")
+        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
 
         callback = context.extras.get("__progress_callback__")

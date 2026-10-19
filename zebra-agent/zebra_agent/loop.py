@@ -21,6 +21,7 @@ from typing import Any
 
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState, TaskState
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 from zebra_agent.human_tasks import find_pending_human_task
 from zebra_agent.library import WorkflowLibrary, list_goal_workflows
@@ -86,7 +87,7 @@ class AgentLoop:
         memory: MemoryStore | None = None,
         profile: ProfileStore | None = None,
         knowledge: PersonalKnowledgeStore | None = None,
-        provider: str = "anthropic",
+        provider: str | None = None,
         model: str | None = None,
         goal_timeout: float = DEFAULT_GOAL_TIMEOUT,
     ):
@@ -111,7 +112,7 @@ class AgentLoop:
         self.memory = memory
         self.profile = profile
         self.knowledge = knowledge
-        self.provider_name = provider
+        self.provider_name = provider or default_provider_name()
         self.model = model
         self.goal_timeout = goal_timeout
         # Fire-and-forget work (low-rating postmortems, #175), kept referenced until done.

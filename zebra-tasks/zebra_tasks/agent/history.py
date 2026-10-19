@@ -18,6 +18,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.agent.followup import CONTINUATION_COMMENT_KEY, PREVIOUS_RUN_CONTEXT_KEY
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -335,7 +336,7 @@ class AssessHistoryNeedAction(TaskAction):
             type="string",
             description="LLM provider name",
             required=False,
-            default="anthropic",
+            default=None,
         ),
         ParameterDef(
             name="model",
@@ -384,7 +385,7 @@ class AssessHistoryNeedAction(TaskAction):
         provider_name = (
             task.properties.get("provider")
             or context.process.properties.get("__llm_provider_name__")
-            or "anthropic"
+            or default_provider_name()
         )
         model = task.properties.get("model") or "haiku"
         try:

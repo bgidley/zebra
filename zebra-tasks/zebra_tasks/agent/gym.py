@@ -34,6 +34,7 @@ from zebra_tasks.agent.optimizer import save_workflow_file
 from zebra_tasks.agent.stuck import _parse_json, _track_cost
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 from zebra_tasks.subtasks.common import start_child
 
 logger = logging.getLogger(__name__)
@@ -563,7 +564,9 @@ class RunGoldenGymAction(TaskAction):
         context.set_process_property(key, results)
 
     def _judge_provider(self, task: TaskInstance, context: ExecutionContext) -> Any:
-        provider_name = context.process.properties.get("__llm_provider_name__") or "anthropic"
+        provider_name = (
+            context.process.properties.get("__llm_provider_name__") or default_provider_name()
+        )
         try:
             return get_provider(provider_name, task.properties.get("model") or "sonnet")
         except Exception as e:  # noqa: BLE001
