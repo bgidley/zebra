@@ -147,6 +147,40 @@ class TestEthicsGateAction:
         assert "Report Writer Workflow" in user_msg.content
         assert "planned approach" in user_msg.content
 
+    async def test_plan_review_judges_what_the_workflow_does(self, mock_task, mock_context):
+        """A misleading name is judged with the workflow's description and steps (#204)."""
+        from types import SimpleNamespace
+
+        provider = _make_provider(_approved_response())
+        library = MagicMock()
+        library.list_workflows = AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    name="Basic Hello",
+                    description="Counts or lists simple sequences and greets the user",
+                    use_when="The user wants a trivial count or greeting",
+                )
+            ]
+        )
+        library.get_workflow.return_value = SimpleNamespace(
+            tasks={"count": SimpleNamespace(name="Count Numbers", action="python_exec")}
+        )
+        mock_context.extras["__workflow_library__"] = library
+        mock_task.properties = {
+            "goal": "Count from 1 to 100",
+            "check_type": "plan_review",
+            "plan_context": "Basic Hello",
+        }
+
+        with patch("zebra_tasks.agent.ethics_gate.get_provider", return_value=provider):
+            await EthicsGateAction().run(mock_task, mock_context)
+
+        messages = provider.complete.call_args.kwargs["messages"]
+        user_msg = [m for m in messages if m.role == "user"][0].content
+        assert "What it does: Counts or lists simple sequences" in user_msg
+        assert "Use when: The user wants a trivial count" in user_msg
+        assert "Steps: Count Numbers (python_exec)" in user_msg
+
     async def test_handles_malformed_json(self, mock_task, mock_context):
         """Malformed JSON fails closed — rejects rather than approving (#118)."""
         provider = MagicMock()

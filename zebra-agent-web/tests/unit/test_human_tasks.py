@@ -1145,6 +1145,31 @@ class TestRunStatus:
         data = response.json()
         assert "status" in data
 
+    async def test_run_stopped_by_ethics_gate_reports_failed(self, client, store):
+        """A run with no metrics record reports how its process ended, not 404 (#204)."""
+        from zebra.core.models import ProcessInstance, ProcessState
+
+        await store.save_process(
+            ProcessInstance(
+                id="proc-rejected",
+                definition_id="def-1",
+                state=ProcessState.COMPLETE,
+                properties={
+                    "run_id": "run-rejected",
+                    "workflow_name": "Basic Hello",
+                    "ethics_rejection": {"gate": "plan_review", "reasoning": "Not a count"},
+                },
+            )
+        )
+
+        response = await client.get("/api/runs/run-rejected/status/")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "failed"
+        assert data["error"] == "Rejected by the ethics gate: Not a count"
+        assert data["workflow_name"] == "Basic Hello"
+
 
 # ===========================================================================
 # API Tests: Process Cancel / Delete
