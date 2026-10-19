@@ -75,17 +75,6 @@ async def record_run_totals(
     except Exception:  # noqa: BLE001 - bookkeeping never fails a goal
         logger.warning("Could not record run totals for %s", run_id, exc_info=True)
         return False
-    history = props.get("__token_history__") or []
-    try:
-        return await metrics.update_run_totals(
-            run_id,
-            cost=float(props.get("__total_cost__") or 0.0),
-            input_tokens=sum(int(h.get("input") or 0) for h in history),
-            output_tokens=sum(int(h.get("output") or 0) for h in history),
-        )
-    except Exception:  # noqa: BLE001 - bookkeeping never fails a goal
-        logger.warning("Could not record run totals for %s", run_id, exc_info=True)
-        return False
 
 
 @dataclass
