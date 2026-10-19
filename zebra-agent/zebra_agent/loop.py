@@ -466,12 +466,15 @@ class AgentLoop:
                 max_tokens=600,
             )
             # No task context here, so add the call to the spend ledger directly (#206).
-            await self.metrics.record_llm_spend(
-                cost=response.usage.cost_usd or 0.0,
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-                model=response.model or "",
-            )
+            try:
+                await self.metrics.record_llm_spend(
+                    cost=response.usage.cost_usd or 0.0,
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                    model=response.model or "",
+                )
+            except Exception:  # noqa: BLE001 - spend bookkeeping never stops the refresh
+                logger.warning("Could not record LLM spend", exc_info=True)
 
             content = response.content or "{}"
             if "```" in content:
