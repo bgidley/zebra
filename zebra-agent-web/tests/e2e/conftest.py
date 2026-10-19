@@ -135,9 +135,7 @@ def agent_loop(workflow_library, workflow_engine, django_stores):
 
     E2E tests must exercise the full stack including real LLM requests so
     that provider-level bugs (wrong kwargs, deprecated parameters, model changes)
-    are caught before deployment.  Cassette replay is opt-in for local development
-    via the CassetteProvider in zebra_tasks.llm._testing — it must never be the
-    default in CI.
+    are caught before deployment.
     """
     from zebra_agent.loop import AgentLoop
 
