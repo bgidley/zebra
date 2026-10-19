@@ -50,6 +50,8 @@ e2e:
     # the default ~/.zebra/workflows would let one branch's newer built-in YAML
     # (copied only on version bump) leak into another branch's e2e run.
     - export ZEBRA_LIBRARY_PATH="$CI_PROJECT_DIR/.ci-workflows" && rm -rf "$ZEBRA_LIBRARY_PATH"
+    # Real LLM calls go through OpenRouter like prod (#204); OPENROUTER_API_KEY is a CI variable.
+    - export ZEBRA_LLM_PROVIDER=openrouter OPENROUTER_ROUTING=auto
     # E2E_PROVISIONER_* are GitLab CI variables (set in project settings).
     - |
       if [ -n "$E2E_PROVISIONER_DSN" ] && [ -n "$E2E_PROVISIONER_USERNAME" ] && [ -n "$E2E_PROVISIONER_PASSWORD" ]; then

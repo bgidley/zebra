@@ -133,7 +133,7 @@ def workflow_engine(django_stores):
 def agent_loop(workflow_library, workflow_engine, django_stores):
     """Create an AgentLoop that makes real LLM API calls.
 
-    E2E tests must exercise the full stack including real Anthropic requests so
+    E2E tests must exercise the full stack including real LLM requests so
     that provider-level bugs (wrong kwargs, deprecated parameters, model changes)
     are caught before deployment.  Cassette replay is opt-in for local development
     via the CassetteProvider in zebra_tasks.llm._testing — it must never be the
@@ -146,7 +146,7 @@ def agent_loop(workflow_library, workflow_engine, django_stores):
         engine=workflow_engine,
         metrics=django_stores.metrics,
         memory=django_stores.memory,
-        provider="anthropic",
+        provider=None,  # the server's provider (ZEBRA_LLM_PROVIDER)
         model=None,
     )
 
