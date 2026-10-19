@@ -644,6 +644,40 @@ def _run_status_impl(run_id):
     return async_to_sync(_get_data)()
 
 
+def _ended_without_record(run_id: str) -> dict | None:
+    """Outcome of a run that finished without a metrics record, from its process.
+
+    A goal stopped by an ethics gate, or failed before ``assess_and_record``,
+    leaves no ``WorkflowRun``; its root process still says how it ended (#204).
+    """
+    from zebra.core.models import ProcessState
+
+    from zebra_agent_web.api import run_trace
+
+    async def _find():
+        await engine.ensure_initialized()
+        return await run_trace.find_run_root(engine.get_store(), run_id)
+
+    process = async_to_sync(_find)()
+    if process is None or process.state not in (ProcessState.COMPLETE, ProcessState.FAILED):
+        return None
+    props = process.properties or {}
+    rejection = props.get("ethics_rejection") or {}
+    error = (
+        (rejection.get("reasoning") and f"Rejected by the ethics gate: {rejection['reasoning']}")
+        or props.get("__error__")
+        or "The run ended without a result"
+    )
+    return {
+        "status": "failed",
+        "run_id": run_id,
+        "workflow_name": props.get("workflow_name"),
+        "success": False,
+        "output": None,
+        "error": str(error),
+    }
+
+
 @api_view(["GET"])
 def run_status(request, run_id):
     """Get current status of a run (for recovery if WebSocket disconnects).
@@ -667,6 +701,9 @@ def run_status(request, run_id):
                     "message": "Goal execution in progress",
                 }
             )
+        ended = _ended_without_record(run_id)
+        if ended is not None:
+            return Response(ended)
         return Response(
             {"status": "not_found", "error": f"Run '{run_id}' not found"},
             status=status.HTTP_404_NOT_FOUND,
