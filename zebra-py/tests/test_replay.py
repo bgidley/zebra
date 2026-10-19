@@ -350,9 +350,107 @@ async def test_restarted_engine_continues_a_replay_from_the_journal(store):
     assert CALLS == {"loop": 3, "spend": 1}
 
 
+class _Crash(BaseException):
+    """Escapes the engine's ``except Exception`` like a killed process would."""
+
+
+class CrashOnceAction(TaskAction):
+    """Crashes on its first attempt, then sets ``tries`` and succeeds."""
+
+    async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+        _count("crash_once")
+        if CALLS["crash_once"] == 1:
+            raise _Crash()
+        context.set_process_property("tries", CALLS["crash_once"])
+        return TaskResult.ok(output="done on retry")
+
+
+RETRIED = ProcessDefinition(
+    id="retried",
+    name="Retried",
+    first_task_id="work",
+    tasks={
+        "work": TaskDefinition(id="work", name="Work", action="crash_once"),
+        "after": _spend("after", "summary"),
+    },
+    routings=[_route("work", "after")],
+)
+
+
+async def test_step_retried_after_a_crash_replays_its_final_attempt(store):
+    """O2: a step interrupted, flagged by recovery and retried replays as it ended."""
+    engine = WorkflowEngine(store, _registry(crash_once=CrashOnceAction))
+    process = await engine.create_process(RETRIED)
+    with pytest.raises(_Crash):
+        await engine.start_process(process.id)
+    (task,) = await store.get_running_tasks(process.id)
+    await engine.resume_all_processes()  # flags the interrupted step for manual review
+    await engine.retry_task(task.id)
+    original = await store.load_process(process.id)
+    assert original.state == ProcessState.COMPLETE
+    started = [
+        e
+        for e in await store.load_process_events([original.id])
+        if e.task_definition_id == "work" and e.kind == ProcessEventKind.TASK_STARTED
+    ]
+    assert len(started) == 2  # the crashed attempt and the retry
+    calls_before = dict(CALLS)
+
+    replayed = await _replay(engine, original.id)
+
+    assert CALLS == calls_before
+    assert replayed.state == ProcessState.COMPLETE
+    assert replayed.properties["tries"] == 2
+    assert replayed.properties["__task_output_work"] == "done on retry"
+    assert _workflow_props(replayed.properties) == _workflow_props(original.properties)
+    assert replayed.properties[replay.REPLAY_KEY]["served"] == {"work": 1, "after": 1}
+
+
 # =============================================================================
 # Live steps (O3)
 # =============================================================================
+
+
+def _answer_action(answer: str) -> type[TaskAction]:
+    class AnswerAction(TaskAction):
+        async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+            _count("answer")
+            context.set_process_property("answer", answer)
+            return TaskResult.ok(output=answer)
+
+    return AnswerAction
+
+
+ANSWERED = ProcessDefinition(
+    id="answered",
+    name="Answered",
+    first_task_id="draft",
+    tasks={
+        "draft": _spend("draft", "outline"),
+        "work": TaskDefinition(id="work", name="Work", action="answer"),
+        "after": _spend("after", "summary"),
+    },
+    routings=[_route("draft", "work"), _route("work", "after")],
+)
+
+
+async def test_only_the_live_action_runs_and_its_output_survives_replayed_steps(store):
+    """O3: one live step re-runs; its new output stays through the replayed next step."""
+    original = await _run(WorkflowEngine(store, _registry(answer=_answer_action("v1"))), ANSWERED)
+    assert original.properties["answer"] == "v1"
+    CALLS.clear()
+
+    engine = WorkflowEngine(store, _registry(answer=_answer_action("v2")))
+    replayed = await _replay(engine, original.id, live=["work"])
+
+    assert CALLS == {"answer": 1}  # draft and after were served, not run
+    assert replayed.state == ProcessState.COMPLETE
+    assert replayed.properties["answer"] == "v2"
+    assert replayed.properties["__task_output_work"] == "v2"
+    # The replayed steps before and after restore their own recorded effects only.
+    assert replayed.properties["outline"] == original.properties["outline"]
+    assert replayed.properties["summary"] == original.properties["summary"]
+    assert replayed.properties[replay.REPLAY_KEY]["served"] == {"draft": 1, "after": 1}
 
 
 async def test_live_step_runs_while_the_rest_replays(store):

@@ -29,7 +29,8 @@ async def postgres_store():
     """Create a PostgreSQL store for testing."""
     # Use Unix socket for peer authentication
     store = PostgreSQLStore(
-        host="/var/run/postgresql",  # Unix socket path
+        host=os.environ.get("TEST_POSTGRES_HOST", "/var/run/postgresql"),  # default: Unix socket
+        port=int(os.environ.get("TEST_POSTGRES_PORT", "5432")),
         database="opc",
         user="opc",
     )
@@ -428,8 +429,11 @@ class TestPostgreSQLJournal:
 
         await postgres_store.save_definition(sample_definition)
         await postgres_store.save_process(sample_process)
-        whole = "x" * (journal.MAX_JOURNAL_VALUE_CHARS - 2)
-        changed, _ = journal.property_diff({}, {"whole": whole})
+        cap = journal.MAX_JOURNAL_VALUE_CHARS  # JSON adds two quotes to a string
+        under = "u" * (cap - 3)  # one under the cap
+        at_cap = "x" * (cap - 2)  # exactly at it
+        over = "y" * (cap - 1)  # one over
+        changed, _ = journal.property_diff({}, {"under": under, "at_cap": at_cap, "over": over})
         await postgres_store.save_process_event(
             ProcessEvent(
                 id="evt-170",
@@ -442,4 +446,7 @@ class TestPostgreSQLJournal:
 
         (loaded,) = await postgres_store.load_process_events([sample_process.id])
         assert loaded.next_route == "approved"
-        assert loaded.changed["whole"] == whole
+        assert loaded.changed["under"] == under
+        assert loaded.changed["at_cap"] == at_cap
+        assert loaded.changed["over"][journal.TRUNCATED_KEY] is True
+        assert loaded.changed["over"]["size"] == cap + 1
