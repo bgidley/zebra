@@ -146,7 +146,6 @@ def agent_loop(workflow_library, workflow_engine, django_stores):
         engine=workflow_engine,
         metrics=django_stores.metrics,
         memory=django_stores.memory,
-        provider=None,  # the server's provider (ZEBRA_LLM_PROVIDER)
         model=None,
     )
 

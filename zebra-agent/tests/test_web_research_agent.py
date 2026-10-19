@@ -16,7 +16,7 @@ from zebra.tasks.registry import ActionRegistry
 from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.llm.agent import LLMAgentAction
 from zebra_tasks.llm.base import LLMProvider, LLMResponse, TokenUsage, ToolCall
-from zebra_tasks.llm.providers.registry import register_provider
+from zebra_tasks.llm.client import set_llm_factory
 
 from zebra_agent.library import WorkflowLibrary, list_goal_workflows
 
@@ -110,7 +110,7 @@ async def test_read_web_page_is_tool_only(library):
 
 async def test_answers_with_cited_urls_via_tool_subflows(library):
     model = ResearchModel()
-    register_provider("research-model", lambda m: model)
+    set_llm_factory(lambda m: model)
     registry = ActionRegistry()
     registry.register_defaults()
     registry.register_action("llm_agent", LLMAgentAction)
@@ -124,7 +124,6 @@ async def test_answers_with_cited_urls_via_tool_subflows(library):
         library.get_workflow("Web Research Agent"),
         properties={
             "goal": "Why do zebras have stripes?",
-            "__llm_provider_name__": "research-model",
         },
     )
     process = await engine.start_process(process.id)
