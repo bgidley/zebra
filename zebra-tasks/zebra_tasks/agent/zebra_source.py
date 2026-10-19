@@ -79,7 +79,7 @@ def resolve_source_path(root: Path, path: str) -> Path:
     except ValueError:
         raise SourceAccessError(f"'{path}' is outside the Zebra source tree") from None
     if not _allowed(rel):
-        raise SourceAccessError(f"'{path}' is not readable source. {RECOVERY_HINT}")
+        raise SourceAccessError(f"'{path}' is not readable source.")
     return candidate
 
 
@@ -154,13 +154,13 @@ def missing_path_message(root: Path, path: str, resolved: Path) -> str:
         deployed = ", ".join(_deployed_entries(root))
         return (
             f"'{path}' is not deployed: '{rel.parts[0]}' is not in the source tree. "
-            f"Deployed: {deployed}. {RECOVERY_HINT}"
+            f"Deployed: {deployed}."
         )
     message = f"'{path}' does not exist."
     suggestions = suggest_paths(root, rel)
     if suggestions:
         message += " Did you mean: " + ", ".join(suggestions) + "?"
-    return f"{message} {RECOVERY_HINT}"
+    return message
 
 
 def _glob_match(rel: Path, glob: str) -> bool:
@@ -273,7 +273,10 @@ class ZebraSourceAction(TaskAction):
             else:
                 text = self._read(root, props)
         except SourceAccessError as e:
-            return TaskResult.fail(str(e))
+            # Every failure says how to recover, so an agent need not retry blind (#211).
+            message = str(e)
+            end = " " if message.endswith((".", "?")) else ". "
+            return TaskResult.fail(f"{message}{end}{RECOVERY_HINT}")
 
         context.set_process_property(props.get("output_key") or "source", text)
         return TaskResult.ok(output={"text": text})
