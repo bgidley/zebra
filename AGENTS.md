@@ -748,7 +748,7 @@ Users can choose between Claude Haiku, Sonnet, and Opus at multiple levels:
 
 Model resolution: task property > process property (`__llm_model__`) > server default > provider default.
 
-Provider resolution works the same way: task `provider` > process `__llm_provider_name__` > `ZEBRA_LLM_PROVIDER` (`zebra_tasks.llm.providers.registry.default_provider_name()`) > `anthropic`. Never hard-code `"anthropic"` as a fallback (#204). Under `openrouter` the tier names map to `anthropic/claude-*-5.5`.
+Provider resolution works the same way: task `provider` > process `__llm_provider_name__` > `ZEBRA_LLM_PROVIDER` (`zebra_tasks.llm.providers.registry.default_provider_name()`) > `anthropic`. Never hard-code `"anthropic"` as a fallback (#204). Under `openrouter` the tier names map to `anthropic/claude-*-5.5`, or with `OPENROUTER_ROUTING=auto` (prod) to `openrouter/auto` at an auto-router cost tier: `haiku` low, `sonnet` medium, `opus` high (anything else medium); explicit `vendor/model` slugs still go to that model.
 
 Valid model aliases: `haiku`, `sonnet`, `opus` (resolved to full model IDs like `claude-sonnet-5-5`).
 

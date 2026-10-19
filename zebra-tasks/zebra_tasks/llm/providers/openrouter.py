@@ -5,6 +5,7 @@ behind one OpenAI-compatible API. Model ids are ``vendor/model`` slugs, e.g.
 ``anthropic/claude-sonnet-5.5`` or ``moonshotai/kimi-k3``.
 
 Set OPENROUTER_API_KEY. Optional: OPENROUTER_MODEL (default model),
+OPENROUTER_ROUTING (``auto``: tiers go to OpenRouter's auto router at a cost tier),
 OPENROUTER_BASE_URL (override endpoint).
 """
 
@@ -24,11 +25,17 @@ class OpenRouterProvider(OpenAIProvider):
     raw ``vendor/model`` slugs pass through, and anything else (e.g. a ``claude-*`` id
     from a workflow written for Anthropic) falls back to the default model.
 
+    With ``OPENROUTER_ROUTING=auto`` (#204) a tier instead goes to ``openrouter/auto``
+    with the matching auto-router ``cost_tier`` (``haiku`` low, ``sonnet`` medium,
+    ``opus`` high; anything else medium), so the router picks a model per prompt
+    within that price band. Raw slugs still pass through.
+
     OpenRouter reports the real USD cost of each call; it is carried on
     ``TokenUsage.cost_usd`` so cost tracking needs no price table (#182).
     """
 
     DEFAULT_MODEL = "anthropic/claude-sonnet-5.5"
+    AUTO_MODEL = "openrouter/auto"
     BASE_URL = "https://openrouter.ai/api/v1"
     DEFAULT_CONTEXT_WINDOW = 128000
 
@@ -54,7 +61,7 @@ class OpenRouterProvider(OpenAIProvider):
         if not resolved_key:
             raise ValueError("OpenRouter API key required. Set OPENROUTER_API_KEY or pass api_key.")
 
-        self._model = self.resolve_model(model)
+        self._model, self._cost_tier = self.resolve(model)
         self._api_key = resolved_key
         self._client = openai.AsyncOpenAI(
             api_key=self._api_key,
@@ -67,18 +74,29 @@ class OpenRouterProvider(OpenAIProvider):
     @classmethod
     def resolve_model(cls, model: str | None) -> str:
         """Map a tier name, an ``openrouter`` alias or a raw slug to an OpenRouter model id."""
-        from zebra_tasks.llm.models import ANTHROPIC_MODELS, OPENROUTER_TIER_MODELS
+        return cls.resolve(model)[0]
+
+    @classmethod
+    def resolve(cls, model: str | None) -> tuple[str, str | None]:
+        """The OpenRouter model id for *model*, and the auto-router cost tier if routed."""
+        from zebra_tasks.llm.models import (
+            ANTHROPIC_MODELS,
+            OPENROUTER_AUTO_COST_TIERS,
+            OPENROUTER_TIER_MODELS,
+        )
 
         model = (model or "").strip()
         tier = {v: k for k, v in ANTHROPIC_MODELS.items()}.get(model, model)
+        if "/" in model and tier not in OPENROUTER_TIER_MODELS:
+            return model, None
+        if os.environ.get("OPENROUTER_ROUTING", "").strip().lower() == "auto":
+            return cls.AUTO_MODEL, OPENROUTER_AUTO_COST_TIERS.get(tier, "medium")
         if tier in OPENROUTER_TIER_MODELS:
-            return OPENROUTER_TIER_MODELS[tier]
-        if "/" in model:
-            return model
+            return OPENROUTER_TIER_MODELS[tier], None
         default = os.environ.get("OPENROUTER_MODEL") or cls.DEFAULT_MODEL
         if model not in ("", "openrouter"):
             logger.warning("OpenRouter has no model %r; using %s", model, default)
-        return default
+        return default, None
 
     @property
     def name(self) -> str:
@@ -87,6 +105,15 @@ class OpenRouterProvider(OpenAIProvider):
     @property
     def max_context_tokens(self) -> int:
         return self.CONTEXT_WINDOWS.get(self._model, self.DEFAULT_CONTEXT_WINDOW)
+
+    def _sampling_kwargs(self, temperature: float) -> dict:
+        """Add the auto-router plugin with this request's cost tier when auto-routed."""
+        kwargs = super()._sampling_kwargs(temperature)
+        if self._cost_tier:
+            kwargs["extra_body"] = {
+                "plugins": [{"id": "auto-router", "cost_tier": self._cost_tier}]
+            }
+        return kwargs
 
     def _convert_response(self, response) -> LLMResponse:
         """Add OpenRouter's reported cost to the usage."""
