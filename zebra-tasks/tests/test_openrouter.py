@@ -102,6 +102,13 @@ async def test_messages_and_tools_in_openai_format():
     assert response.tool_calls == [ToolCall(id="c1", name="search", arguments={"q": "zebras"})]
 
 
+async def test_reasoning_headroom_added_to_max_tokens():
+    """Reasoning would otherwise use a small budget up and leave an empty reply (#204)."""
+    llm = _llm("low")
+    await llm.complete([Message.user("hi")], max_tokens=500)
+    assert _sent(llm)["max_tokens"] == 500 + OpenRouterLLM.REASONING_HEADROOM_TOKENS
+
+
 def test_missing_key_raises(monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):

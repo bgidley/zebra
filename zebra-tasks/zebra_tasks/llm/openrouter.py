@@ -31,6 +31,10 @@ class OpenRouterLLM(LLMProvider):
 
     BASE_URL = "https://openrouter.ai/api/v1"
     AUTO_MODEL = "openrouter/auto"
+    #: Reasoning models, which the auto router often picks, spend output tokens thinking
+    #: before they answer. Added to every request's max_tokens so a small budget is not
+    #: used up by reasoning, leaving an empty reply (#204).
+    REASONING_HEADROOM_TOKENS = 4096
 
     def __init__(self, model: str | None = None, api_key: str | None = None):
         import openai
@@ -72,7 +76,7 @@ class OpenRouterLLM(LLMProvider):
         kwargs: dict = {
             "model": model,
             "messages": [_to_openai(m) for m in messages],
-            "max_tokens": max_tokens,
+            "max_tokens": max_tokens + self.REASONING_HEADROOM_TOKENS,
             "temperature": temperature,
         }
         if extra_body:
