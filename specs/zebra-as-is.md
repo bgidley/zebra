@@ -218,7 +218,7 @@ Three-tier model (matches the design in REQ-DATA-004):
 
 ### Metrics
 
-`MetricsStore` records workflow runs, task executions, tokens, USD cost, and user ratings. Two implementations (in-memory, Django). `get_total_cost_since()` feeds the budget manager. `search_runs()` (F138) filters runs by `since`/`until`/goal text (any keyword from `search_keywords()`, #150)/workflow/success, newest first, limit ≤200; the Django store scopes to an explicit `user_id` or the request user.
+`MetricsStore` records workflow runs, task executions, tokens, USD cost, and user ratings. Two implementations (in-memory, Django). **Spend ledger (#206)**: every LLM call made through `get_llm(model, context)` appends `(time, cost, tokens, model, process)` via `record_llm_spend()` (Django table `zebra_llm_spend`); `get_total_cost_since()` sums it for the budget, so goals, Dream Cycle, routines, postmortems and outcome reviews all count, each call once. When a goal finishes (daemon `_record_finished`, `AgentLoop`), `record_run_totals()` sets its `WorkflowRun` cost/tokens to the ledger sum over its process tree (`get_spend_for_processes`); before, the run held only the goal workflow's own spend. See [llm-spend-ledger-design.md](llm-spend-ledger-design.md). `search_runs()` (F138) filters runs by `since`/`until`/goal text (any keyword from `search_keywords()`, #150)/workflow/success, newest first, limit ≤200; the Django store scopes to an explicit `user_id` or the request user.
 
 ### Workflow library
 
@@ -245,7 +245,7 @@ The web library page lists retired workflows with a Restore button. The detail p
 
 ### Budget
 
-`BudgetManager` enforces daily USD limits with linear time-of-day pacing (`allowed = daily * hours_elapsed / 24`). Soft warnings only; no hard block mid-run. Stateless — it reads live from `MetricsStore`.
+`BudgetManager` enforces daily USD limits with linear time-of-day pacing (`allowed = daily * hours_elapsed / 24`). Soft warnings only; no hard block mid-run. Stateless — it reads the spend ledger live from `MetricsStore` (#206).
 
 ### IoC
 

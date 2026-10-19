@@ -24,7 +24,7 @@ recorded $0. Closes #206.
 
 | # | Outcome | How we'll know |
 |---|---------|----------------|
-| O1 | Every LLM call made with a context is in the spend ledger | Tests: a call through `get_llm(model, context)` adds one ledger entry with its cost, tokens, model and process; a failing ledger write does not fail the call |
-| O2 | The daily budget counts all LLM spend, not just goal workflows | Tests: `get_total_cost_since` sums ledger entries since the reset (in-memory and Django); prod: after a goal and a Dream Cycle, today's budget spend equals the sum of their processes' `__total_cost__` |
-| O3 | A finished goal's run record shows its real cost | Tests: daemon and `AgentLoop` completion set `WorkflowRun.cost` / tokens to the root process totals; prod: a new goal's run page cost equals its process `__total_cost__` (no more $0 for a paid run) |
-| O4 | Nothing else changes for stores or callers | Third-party `MetricsStore` subclasses keep working (new methods have defaults); full unit suite and e2e green |
+| O1 | Every LLM call made with a context is in the spend ledger, once | Tests: a call through `get_llm(model, context)` adds one entry with cost, tokens, model and process; calls in a parent and its subflow each appear once; a failing ledger write is logged and does not fail the call. Context-free calls are listed in the design (AgentLoop's writes directly; two hand-run commands are excluded) |
+| O2 | The daily budget counts all LLM spend, not just goal workflows | Tests: in an isolated engine run with a subflow, budget == ledger sum == the calls' reported costs; reset-instant boundary in the in-memory and Django stores |
+| O3 | A finished goal's run record shows its real cost | Tests: the daemon's finish hook and `record_run_totals` set the run to the ledger total of its process tree (fallback without a ledger); prod: a goal finished after deploy has run cost equal to the ledger sum for its processes, not $0 |
+| O4 | Custom `MetricsStore` implementations keep working | The new methods have defaults (not abstract), tested; full unit suite and e2e green |

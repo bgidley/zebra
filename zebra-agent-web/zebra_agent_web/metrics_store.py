@@ -369,10 +369,26 @@ class DjangoMetricsStore(MetricsStore):
 
         await _save()
 
+    async def get_spend_for_processes(self, process_ids: list[str]) -> tuple[float, int, int]:
+        """Ledger totals for these processes (#206)."""
+
+        @sync_to_async(thread_sensitive=False)
+        def _sum():
+            result = LLMSpendModel.objects.filter(process_id__in=list(process_ids)).aggregate(
+                cost=Sum("cost"), input=Sum("input_tokens"), output=Sum("output_tokens")
+            )
+            return (
+                float(result["cost"] or 0),
+                int(result["input"] or 0),
+                int(result["output"] or 0),
+            )
+
+        return await _sum()
+
     async def update_run_totals(
         self, run_id: str, *, cost: float, input_tokens: int = 0, output_tokens: int = 0
     ) -> bool:
-        """Set a run's cost and tokens to its process's final totals (#206)."""
+        """Set a run's cost and tokens to its process tree's final totals (#206)."""
 
         @sync_to_async(thread_sensitive=False)
         def _update():

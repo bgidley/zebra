@@ -575,6 +575,15 @@ class MetricsStore(ABC):
         so the budget counts each call exactly once. The default keeps no ledger.
         """
 
+    async def get_spend_for_processes(
+        self, process_ids: list[str]
+    ) -> tuple[float, int, int] | None:
+        """Ledger totals ``(cost, input_tokens, output_tokens)`` for these processes (#206).
+
+        None when the store keeps no ledger (the default).
+        """
+        return None
+
     async def update_run_totals(
         self, run_id: str, *, cost: float, input_tokens: int = 0, output_tokens: int = 0
     ) -> bool:

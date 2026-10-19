@@ -262,7 +262,7 @@ class AgentLoop:
                 )
                 # A timeout or crash skips the loop's own postmortem step (#175).
                 await postmortem_failed_goal(self.engine, self.library, process)
-                await record_run_totals(self.metrics, process)
+                await record_run_totals(self.metrics, self.engine.store, process)
                 return {
                     "workflow_name": process.properties.get("workflow_name", "unknown"),
                     "output": None,
@@ -309,7 +309,7 @@ class AgentLoop:
                 "error": "Agent loop timed out",
             }
 
-        await record_run_totals(self.metrics, process)
+        await record_run_totals(self.metrics, self.engine.store, process)
 
         # Extract results from process properties
         execution_result = process.properties.get("execution_result", {})

@@ -16,22 +16,64 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from zebra.core.models import ProcessInstance
+    from zebra.storage.base import StateStore
 
     from zebra_agent.storage.interfaces import MetricsStore
 
 logger = logging.getLogger(__name__)
 
 
-async def record_run_totals(metrics: MetricsStore | None, process: ProcessInstance) -> bool:
-    """Set a finished goal's run record to its root process's final spend (#206).
+#: Most processes one run's tree is searched for (root, subflows, tool calls).
+MAX_RUN_PROCESSES = 500
 
-    ``assess_and_record`` records only the goal workflow's cost; the Agent Main Loop's
-    own calls (selection, gates, assessment, memory, knowledge) come before and after
-    it. The root process's ``__total_cost__`` holds them all. Never raises.
+
+async def run_process_ids(store: StateStore, root_id: str) -> list[str]:
+    """The run's root process and every descendant (subflows, tool calls), breadth first."""
+    ids, frontier = [root_id], [root_id]
+    while frontier and len(ids) < MAX_RUN_PROCESSES:
+        children = []
+        for process_id in frontier:
+            children.extend(c.id for c in await store.list_child_processes(process_id))
+        ids.extend(children)
+        frontier = children
+    return ids[:MAX_RUN_PROCESSES]
+
+
+async def record_run_totals(
+    metrics: MetricsStore | None, store: StateStore | None, process: ProcessInstance
+) -> bool:
+    """Set a finished goal's run record to everything its process tree spent (#206).
+
+    ``assess_and_record`` records only the goal workflow's cost; the Agent Main Loop's own
+    calls (selection, gates, assessment, memory, knowledge) and any retries are missed.
+    The spend ledger has each call once with its process, so the run's spend is the
+    ledger sum over the root and its descendants. A store without a ledger falls back
+    to the root's ``__total_cost__`` plus the goal workflow's cost. Never raises.
     """
     props = process.properties or {}
     run_id = props.get("run_id")
     if metrics is None or not run_id:
+        return False
+    try:
+        totals = None
+        if store is not None:
+            totals = await metrics.get_spend_for_processes(await run_process_ids(store, process.id))
+        if totals is None:
+            history = props.get("__token_history__") or []
+            child = props.get("execution_result") or {}
+            totals = (
+                float(props.get("__total_cost__") or 0.0) + float(child.get("cost") or 0.0),
+                sum(int(h.get("input") or 0) for h in history)
+                + int(child.get("input_tokens") or 0),
+                sum(int(h.get("output") or 0) for h in history)
+                + int(child.get("output_tokens") or 0),
+            )
+        cost, input_tokens, output_tokens = totals
+        return await metrics.update_run_totals(
+            run_id, cost=cost, input_tokens=input_tokens, output_tokens=output_tokens
+        )
+    except Exception:  # noqa: BLE001 - bookkeeping never fails a goal
+        logger.warning("Could not record run totals for %s", run_id, exc_info=True)
         return False
     history = props.get("__token_history__") or []
     try:
