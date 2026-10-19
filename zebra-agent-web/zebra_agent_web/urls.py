@@ -114,6 +114,8 @@ urlpatterns = [
     path("dreams/", web_views.dream_cycles, name="dream_cycles"),
     # Postmortem journal (#175)
     path("journal/", web_views.postmortem_journal, name="postmortem_journal"),
+    # Golden gym (#171)
+    path("gym/", web_views.golden_gym, name="golden_gym"),
     # Bug reports (#186)
     path("bugs/", web_views.bug_reports_page, name="bug_reports"),
     path("bugs/report/", web_views.bug_report_submit, name="bug_report_submit"),

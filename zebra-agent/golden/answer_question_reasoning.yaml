@@ -1,0 +1,11 @@
+# Golden task (#171): a short reasoning question with one right answer.
+id: answer_question_reasoning
+workflow: "Answer Question"
+goal: >-
+  A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball.
+  How much does the ball cost?
+expected: "The ball costs $0.05 (5 cents) and the bat $1.05."
+criteria:
+  - "Gives the ball's price as $0.05 (5 cents)"
+  - "Does not give $0.10 as the final answer"
+  - "Shows or briefly explains the reasoning"

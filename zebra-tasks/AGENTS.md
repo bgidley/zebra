@@ -33,13 +33,14 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/selector.py` | WorkflowSelectorAction - LLM workflow selection |
 | `zebra_tasks/agent/creator.py` | WorkflowCreatorAction - LLM workflow creation |
 | `zebra_tasks/agent/memory_check.py` | MemoryCheckAction - memory compaction check |
-| `zebra_tasks/agent/execute_workflow.py` | ExecuteGoalWorkflowAction - run workflow by name |
+| `zebra_tasks/agent/execute_workflow.py` | ExecuteGoalWorkflowAction - run workflow by name; `extract_workflow_output()` / `OUTPUT_KEYS` (shared with the gym) |
 | `zebra_tasks/agent/record_metrics.py` | RecordMetricsAction - record run to metrics |
 | `zebra_tasks/agent/followup.py` | `with_previous_run()` / `build_previous_run_context()` / `load_previous_run_context()` - follow-up and continuation context with task progress + chain summary (F116, F134) |
 | `zebra_tasks/agent/update_memory.py` | UpdateMemoryAction - add memory entry |
 | `zebra_tasks/agent/analyzer.py` | MetricsAnalyzerAction - analyze workflow metrics |
 | `zebra_tasks/agent/evaluator.py` | WorkflowEvaluatorAction - LLM workflow evaluation via `complete_json` (`max_tokens` 8000); an unusable reply leaves a fallback with `parse_failure` and the cause as key issue; adds its cost to `__total_cost__` (#195) |
-| `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization (tags created workflows `llm-defined`) |
+| `zebra_tasks/agent/optimizer.py` | WorkflowOptimizerAction - LLM workflow optimization (tags created workflows `llm-defined`); `gym_gate: true` stages *modify* changes in `pending_gym` for the golden gym instead of saving; `save_workflow_file()` (#171) |
+| `zebra_tasks/agent/gym.py` | RunGoldenGymAction (`run_golden_gym`): golden tasks as concurrent child processes + suspend, sonnet judge (criteria 0/0.5/1), `GymScore`s to the `MetricsStore`. Gate mode (`candidates`): promote a staged modification only if its mean is ≥ current − `tolerance` (0.1), else `failed_changes`; no golden tasks → ungated; unsafe (manual task, unregistered / irreversible action), unscored, no judge, over `max_runs` (12) → rejected; never fails. On demand (no `candidates`): score current workflows. `unsafe_reason()` (#171) |
 | `zebra_tasks/agent/curator.py` | WorkflowCuratorAction - dream-cycle retirement of broken/superseded/failing/unused/duplicate workflows; `ZEBRA_CURATOR_*` settings (#148) |
 | `zebra_tasks/knowledge/review.py` | ReviewKnowledgeAction - dream-cycle review of personal knowledge against recent runs; `revert_knowledge_changes()` (#153) |
 | `zebra_tasks/agent/improvements.py` | ProposeZebraImprovementsAction (`propose_zebra_improvements`) - dream-cycle requests for changes to Zebra's own code, each a *Zebra Improvement Request* process with a human review task; `max_requests` (2), title dedupe across workflow versions, never fails the cycle (#189); FileImprovementIssueAction (`file_improvement_issue`) files an accepted request as a GitLab issue (`ZEBRA_GITLAB_TOKEN`/`_URL`/`_PROJECT`), adopts an existing issue by marker, neutralises quick actions and mentions, never fails (#194) |

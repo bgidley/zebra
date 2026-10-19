@@ -1,0 +1,20 @@
+# Golden task (#171): summarise a short text without inventing facts.
+id: summarize_text_meeting
+workflow: "Summarize Text"
+goal: >-
+  The team met on Tuesday to review the Q3 launch. The mobile app shipped two weeks late
+  because the payment provider changed its API. Sign-ups were 18% above target, but
+  support tickets doubled, mostly about password resets. Priya will add a self-service
+  reset flow by the end of October. Marco will renegotiate the payment provider contract
+  before renewal in December. The web redesign is on hold until January.
+expected: >-
+  A short summary: the app launched two weeks late (payment API change); sign-ups beat
+  target by 18% but support tickets doubled (password resets); Priya adds self-service
+  reset by end of October; Marco renegotiates the payment contract before December;
+  the web redesign waits until January.
+criteria:
+  - "Mentions the two-week delay and its cause (the payment provider's API change)"
+  - "Mentions sign-ups 18% above target and support tickets doubling over password resets"
+  - "Lists both actions with their owners: Priya's reset flow and Marco's contract renegotiation"
+  - "Mentions the web redesign being on hold until January"
+  - "Is clearly shorter than the original and adds no facts that are not in it"

@@ -12,6 +12,7 @@ import yaml
 from zebra.core.models import ProcessDefinition
 from zebra.definitions.loader import load_definition
 
+from zebra_agent.gym import GoldenTask, golden_dir, load_golden_tasks
 from zebra_agent.metrics import MetricsStore, WorkflowStats
 
 logger = logging.getLogger(__name__)
@@ -185,7 +186,12 @@ class WorkflowLibrary:
     Metrics are optionally tracked via a MetricsStore.
     """
 
-    def __init__(self, library_path: Path, metrics_store: MetricsStore | None = None):
+    def __init__(
+        self,
+        library_path: Path,
+        metrics_store: MetricsStore | None = None,
+        golden_path: Path | None = None,
+    ):
         """
         Initialize the workflow library.
 
@@ -193,9 +199,12 @@ class WorkflowLibrary:
             library_path: Directory containing workflow YAML files
             metrics_store: Optional store for workflow metrics. If None,
                           workflows will have default stats (0 uses, 0% success).
+            golden_path: Directory of golden task YAML files (#171). Defaults to
+                         ``ZEBRA_GOLDEN_TASKS_DIR`` or the built-in ``zebra-agent/golden``.
         """
         self.library_path = Path(library_path).expanduser()
         self.metrics = metrics_store
+        self.golden_path = Path(golden_path).expanduser() if golden_path else None
         self._cache: dict[str, ProcessDefinition] = {}
 
     def ensure_initialized(self) -> None:
@@ -378,6 +387,13 @@ class WorkflowLibrary:
             return yaml_file.read_text().split(_RETIRED_MARKER, 1)[0]
 
         raise ValueError(f"Workflow not found: {name}")
+
+    def list_golden_tasks(self, workflow_name: str | None = None) -> list[GoldenTask]:
+        """Return the golden tasks (#171), optionally only those for *workflow_name*."""
+        tasks = load_golden_tasks(self.golden_path or golden_dir())
+        if workflow_name is not None:
+            tasks = [t for t in tasks if t.workflow == workflow_name]
+        return tasks
 
     @property
     def retired_path(self) -> Path:

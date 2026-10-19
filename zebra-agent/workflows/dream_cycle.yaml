@@ -2,7 +2,7 @@ name: "Dream Cycle"
 description: "Self-improvement cycle that analyzes performance, evaluates workflows, and optimizes the system"
 tags: ["system", "optimization", "self-improvement", "dream"]
 use_when: "Use this workflow periodically (e.g., daily) to review and improve the agent's capabilities"
-version: 7
+version: 8
 first_task: analyze_metrics
 
 tasks:
@@ -50,7 +50,24 @@ tasks:
       existing_workflows: "{{workflow_definitions}}"
       max_changes: 3
       dry_run: false
+      # Modifications wait for the golden gym instead of being saved (#171).
+      gym_gate: true
       output_key: optimization_results
+
+  # Runs the current and modified versions of each staged workflow on its golden
+  # tasks and saves the modification only if it does not score worse (#171).
+  # Fails closed; never fails the cycle.
+  golden_gym:
+    name: "Test Changes on Golden Tasks"
+    action: run_golden_gym
+    auto: true
+    idempotent: true
+    properties:
+      candidates: "{{optimization_results.pending_gym}}"
+      tolerance: 0.1
+      timeout: 150
+      max_runs: 12
+      output_key: golden_gym
 
   # Reviews each active user's personal knowledge against their runs since the
   # last dream cycle (#153). Never fails the cycle; human entries only change
@@ -106,6 +123,9 @@ tasks:
         Modified workflows: {{optimization_results.modified_workflows}}
         Failed changes (rejected, NOT saved): {{optimization_results.failed_changes}}
 
+        ### Golden gym (modifications tested on golden tasks before saving)
+        Decisions (workflow, decision, reason, current vs candidate score): {{golden_gym.decisions}}
+
         ### Library Curation (dry run: {{curation.dry_run}})
         Retired workflows (rule, reason, superseded_by): {{curation.retired}}
         Deferred to a later cycle (per-cycle cap): {{curation.deferred}}
@@ -130,7 +150,8 @@ tasks:
         Provide a brief summary (3-5 sentences) of:
         1. Current system health
         2. Key improvements made — only those listed under "Changes made"
-        3. Any failed changes and why they were rejected
+        3. Any failed changes and why they were rejected, including modifications the
+           golden gym rejected for scoring worse than the current version
         4. Continuations: how many goals were continued, the top continued workflows,
            and which continuation-driven changes were made (status "made" only)
         5. Library curation: which workflows were retired and why (only entries with
@@ -156,6 +177,8 @@ routings:
   - from: evaluate_workflows
     to: optimize_workflows
   - from: optimize_workflows
+    to: golden_gym
+  - from: golden_gym
     to: review_knowledge
   - from: review_knowledge
     to: propose_improvements

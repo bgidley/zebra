@@ -2785,6 +2785,30 @@ async def postmortem_journal(request):
 
 
 # =============================================================================
+# Golden gym (#171)
+# =============================================================================
+
+_GYM_SCORE_LIMIT = 500
+
+
+async def golden_gym(request):
+    """Golden tasks with their latest scores, and recent gate decisions on my own edits."""
+    from zebra_agent_web.api import gym
+
+    await agent_engine.ensure_initialized()
+    golden = agent_engine.get_library().list_golden_tasks()
+    scores = await agent_engine.get_metrics().get_gym_scores(limit=_GYM_SCORE_LIMIT)
+    return render(
+        request,
+        "pages/golden_gym.html",
+        {
+            "rows": gym.golden_task_rows(golden, scores),
+            "decisions": gym.gate_decisions(scores),
+        },
+    )
+
+
+# =============================================================================
 # Run Trace (#184)
 # =============================================================================
 

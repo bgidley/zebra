@@ -260,6 +260,8 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
 
         max_changes = task.properties.get("max_changes", 3)
         dry_run = task.properties.get("dry_run", False)
+        # #171: stage modifications for the golden gym instead of saving them.
+        gym_gate = bool(task.properties.get("gym_gate", False))
         output_key = task.properties.get("output_key", "optimization_results")
 
         if not evaluation:
@@ -282,6 +284,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                 "skipped": [],
                 "failed_changes": [],
                 "continuation_changes": [],
+                "pending_gym": [],
                 "dry_run": dry_run,
             }
 
@@ -300,7 +303,12 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                     self._skip_priority(results, priority, "max_changes limit reached")
                     continue
                 if await self._apply_priority(
-                    results, priority, *apply_args, dry_run=dry_run, library_path=library_path
+                    results,
+                    priority,
+                    *apply_args,
+                    dry_run=dry_run,
+                    library_path=library_path,
+                    gym_gate=gym_gate,
                 ):
                     changes_count += 1
 
@@ -348,7 +356,12 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                     self._skip_priority(results, priority, "max_changes limit reached")
                     continue
                 if await self._apply_priority(
-                    results, priority, *apply_args, dry_run=dry_run, library_path=library_path
+                    results,
+                    priority,
+                    *apply_args,
+                    dry_run=dry_run,
+                    library_path=library_path,
+                    gym_gate=gym_gate,
                 ):
                     changes_count += 1
 
@@ -618,6 +631,7 @@ Maintain the same name and general purpose, but improve the implementation."""
         *,
         dry_run: bool,
         library_path: str | None,
+        gym_gate: bool = False,
     ) -> bool:
         """Generate, validate and (unless dry run) save one priority's change.
 
@@ -659,6 +673,22 @@ Maintain the same name and general purpose, but improve the implementation."""
                 self._record_failure(results, "modify", target, error)
                 self._track_continuation(results, priority, "failed", error)
                 return False
+            # A modified workflow keeps its provenance: hand-written stays hand-written.
+            llm_defined = LLM_DEFINED_TAG in _yaml_tags(existing_workflows[target])
+            if gym_gate and not dry_run:
+                # #171: the golden gym saves it only if it does not score worse.
+                results["pending_gym"].append(
+                    {
+                        "name": target,
+                        "original_yaml": existing_workflows[target],
+                        "modified_yaml": modified_yaml,
+                        "llm_defined": llm_defined,
+                        "reason": priority.get("rationale", ""),
+                        "change": self._change(priority, "modify", target),
+                    }
+                )
+                self._track_continuation(results, priority, "pending_gym")
+                return True
             results["modified_workflows"].append(
                 {
                     "name": target,
@@ -668,13 +698,7 @@ Maintain the same name and general purpose, but improve the implementation."""
                 }
             )
             if not dry_run and library_path:
-                # A modified workflow keeps its provenance: hand-written stays hand-written.
-                self._save_workflow(
-                    library_path,
-                    target,
-                    modified_yaml,
-                    llm_defined=LLM_DEFINED_TAG in _yaml_tags(existing_workflows[target]),
-                )
+                self._save_workflow(library_path, target, modified_yaml, llm_defined=llm_defined)
             self._record_change(results, priority, "modify", target)
             return True
 
@@ -683,11 +707,15 @@ Maintain the same name and general purpose, but improve the implementation."""
     def _record_change(
         self, results: dict[str, Any], priority: dict[str, Any], change_type: str, name: str
     ) -> None:
+        results["changes_made"].append(self._change(priority, change_type, name))
+        self._track_continuation(results, priority, "made")
+
+    @staticmethod
+    def _change(priority: dict[str, Any], change_type: str, name: str) -> dict[str, Any]:
         change = {"type": change_type, "workflow": name, "action": priority.get("action", "")}
         if priority.get("source"):
             change["source"] = priority["source"]
-        results["changes_made"].append(change)
-        self._track_continuation(results, priority, "made")
+        return change
 
     def _skip_priority(self, results: dict[str, Any], priority: dict[str, Any], reason: str):
         results["skipped"].append(
@@ -721,25 +749,31 @@ Maintain the same name and general purpose, but improve the implementation."""
     def _save_workflow(
         self, library_path: str, name: str, yaml_content: str, llm_defined: bool = True
     ) -> None:
-        """Save a workflow to the library.
+        """Save a workflow to the library (see ``save_workflow_file``)."""
+        save_workflow_file(library_path, name, yaml_content, llm_defined)
 
-        New workflows are tagged ``llm-defined`` so the dream-cycle curator may
-        retire them when unused (#148).
-        """
-        if llm_defined:
-            yaml_content = _tag_llm_defined(yaml_content)
-        path = Path(library_path)
-        path.mkdir(parents=True, exist_ok=True)
 
-        # Create filename from name
-        filename = name.lower().replace(" ", "_").replace("-", "_")
-        filename = "".join(c for c in filename if c.isalnum() or c == "_")
-        filepath = path / f"{filename}.yaml"
+def save_workflow_file(
+    library_path: str, name: str, yaml_content: str, llm_defined: bool = True
+) -> None:
+    """Save a workflow to the library directory, never overwriting a file.
 
-        # Don't overwrite if exists - add suffix
-        counter = 1
-        while filepath.exists():
-            filepath = path / f"{filename}_{counter}.yaml"
-            counter += 1
+    New workflows are tagged ``llm-defined`` so the dream-cycle curator may
+    retire them when unused (#148). A name already taken gets a ``_N`` suffix;
+    the library uses the newest file for a name.
+    """
+    if llm_defined:
+        yaml_content = _tag_llm_defined(yaml_content)
+    path = Path(library_path)
+    path.mkdir(parents=True, exist_ok=True)
 
-        filepath.write_text(yaml_content)
+    filename = name.lower().replace(" ", "_").replace("-", "_")
+    filename = "".join(c for c in filename if c.isalnum() or c == "_")
+    filepath = path / f"{filename}.yaml"
+
+    counter = 1
+    while filepath.exists():
+        filepath = path / f"{filename}_{counter}.yaml"
+        counter += 1
+
+    filepath.write_text(yaml_content)

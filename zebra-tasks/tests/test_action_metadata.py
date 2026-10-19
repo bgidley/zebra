@@ -6,6 +6,7 @@ from zebra.tasks import ActionMetadata, ParameterDef
 from zebra_tasks.agent.analyzer import MetricsAnalyzerAction
 from zebra_tasks.agent.creator import WorkflowCreatorAction
 from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
+from zebra_tasks.agent.gym import RunGoldenGymAction
 from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 from zebra_tasks.agent.selector import WorkflowSelectorAction
 from zebra_tasks.compute.python_exec import PythonExecAction
@@ -47,6 +48,7 @@ ALL_ACTIONS = [
     MetricsAnalyzerAction,
     WorkflowEvaluatorAction,
     WorkflowOptimizerAction,
+    RunGoldenGymAction,
     WorkflowCreatorAction,
     WorkflowSelectorAction,
 ]

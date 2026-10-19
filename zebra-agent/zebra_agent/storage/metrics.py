@@ -19,7 +19,7 @@ from zebra_agent.storage.interfaces import (
 )
 
 if TYPE_CHECKING:
-    from zebra_agent.metrics import TaskExecution, WorkflowRun, WorkflowStats
+    from zebra_agent.metrics import GymScore, TaskExecution, WorkflowRun, WorkflowStats
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ class InMemoryMetricsStore(MetricsStore):
     def __init__(self):
         self._runs: dict[str, WorkflowRun] = {}
         self._tasks: dict[str, list[TaskExecution]] = {}  # run_id -> list of tasks
+        self._gym_scores: list[GymScore] = []
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -217,3 +218,31 @@ class InMemoryMetricsStore(MetricsStore):
 
         tasks = self._tasks.get(run_id, [])
         return sorted(tasks, key=lambda t: t.execution_order)
+
+    # =========================================================================
+    # Golden gym scores (#171)
+    # =========================================================================
+
+    async def record_gym_scores(self, scores: list[GymScore]) -> None:
+        """Record golden-task scores from one gym run."""
+        await self._ensure_initialized()
+        self._gym_scores.extend(scores)
+
+    async def get_gym_scores(
+        self,
+        golden_id: str | None = None,
+        workflow_name: str | None = None,
+        variant: str | None = None,
+        limit: int = 200,
+    ) -> list[GymScore]:
+        """Return gym scores, newest first, optionally filtered."""
+        await self._ensure_initialized()
+        scores = [
+            s
+            for s in self._gym_scores
+            if (golden_id is None or s.golden_id == golden_id)
+            and (workflow_name is None or s.workflow_name == workflow_name)
+            and (variant is None or s.variant == variant)
+        ]
+        scores.sort(key=lambda s: s.created_at, reverse=True)
+        return scores[:limit]
