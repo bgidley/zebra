@@ -1,8 +1,8 @@
 name: "Read Zebra Source"
-description: "Read a file from Zebra's own deployed source code, with line numbers."
+description: "Read a file from Zebra's own deployed source code, with line numbers. A missing path fails with the nearest existing paths; use List Zebra Source to see what exists."
 tags: ["code", "source", "read"]
 use_when: "You need to see the code of a specific file in Zebra's own codebase."
-version: 1
+version: 2
 first_task: read
 result_key: source
 # Requires a path, so it is a tool for llm_agent and never selected for a goal (#190).

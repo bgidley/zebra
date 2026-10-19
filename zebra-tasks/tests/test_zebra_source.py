@@ -156,3 +156,140 @@ def test_default_root_is_the_checkout(monkeypatch):
     monkeypatch.delenv("ZEBRA_SOURCE_ROOT", raising=False)
 
     assert (source_root() / "zebra-tasks" / "zebra_tasks" / "agent" / "zebra_source.py").is_file()
+
+
+# --- list and recoverable read errors (#211) ---
+
+HIDDEN = (".env", ".venv", "sqlite3", "tmp", "escape")
+
+
+def _list(**props) -> TaskInstance:
+    return _task(operation="list", **props)
+
+
+async def test_list_root_shows_deployed_entries(root, context):
+    result = await ZebraSourceAction().run(_list(), context)
+
+    assert result.success
+    assert result.output["text"].splitlines() == [
+        "README.md (25 B)",
+        "zebra-agent-web/ (0 files)",
+        "zebra-tasks/ (1 file)",
+    ]
+    assert context.process.properties["source"] == result.output["text"]
+
+
+async def test_list_directory_one_level_hides_symlinks(root, context):
+    result = await ZebraSourceAction().run(_list(path="zebra-tasks"), context)
+
+    assert result.output["text"] == "zebra-tasks/zebra_tasks/ (1 file)"
+
+
+async def test_list_by_glob_is_recursive_and_root_relative(root, context):
+    result = await ZebraSourceAction().run(_list(path="zebra-tasks", glob="**/*.py"), context)
+
+    assert result.output["text"] == "zebra-tasks/zebra_tasks/thing.py"
+
+
+async def test_list_never_names_hidden_entries(root, context):
+    for props in ({}, {"path": "zebra-agent-web"}, {"glob": "**/*"}):
+        result = await ZebraSourceAction().run(_list(**props), context)
+
+        assert result.success
+        assert not any(h in result.output["text"] for h in HIDDEN), props
+
+
+async def test_list_is_capped(root, context):
+    for n in range(5):
+        (root / "zebra-tasks" / "zebra_tasks" / f"m{n}.py").write_text("x")
+
+    result = await ZebraSourceAction().run(_list(glob="**/*.py", max_results="2"), context)
+
+    lines = result.output["text"].splitlines()
+    assert len(lines) == 3
+    assert lines[2] == "... 4 more; narrow it with path or glob"
+
+
+async def test_list_empty_directory_and_no_glob_match(root, context):
+    (root / "zebra-tasks" / "empty").mkdir()
+
+    empty = await ZebraSourceAction().run(_list(path="zebra-tasks/empty"), context)
+    no_match = await ZebraSourceAction().run(_list(glob="**/*.rs"), context)
+
+    assert empty.output["text"] == "zebra-tasks/empty has no readable source."
+    assert no_match.output["text"] == "No files match '**/*.rs' under the source root."
+
+
+@pytest.mark.parametrize(
+    "props",
+    [
+        {"path": "../"},
+        {"path": ".venv"},
+        {"path": "/etc"},
+        {"path": "zebra-agent-web/tmp"},
+        {"path": "zebra-tasks/zebra_tasks/thing.py"},
+        {"glob": "../*"},
+    ],
+)
+async def test_list_refuses_hidden_outside_and_files(root, context, props):
+    result = await ZebraSourceAction().run(_list(**props), context)
+
+    assert not result.success
+    assert "source" not in context.process.properties
+
+
+async def test_mistyped_file_suggests_the_right_one(root, context):
+    result = await ZebraSourceAction().run(_task(path="zebra-tasks/zebra_tasks/thng.py"), context)
+
+    assert not result.success
+    assert "Did you mean: zebra-tasks/zebra_tasks/thing.py?" in result.error
+    assert "list_zebra_source" in result.error and "search_zebra_source" in result.error
+
+
+async def test_file_name_elsewhere_is_suggested_by_full_path(root, context):
+    result = await ZebraSourceAction().run(_task(path="zebra-tasks/thing.py"), context)
+
+    assert "zebra-tasks/zebra_tasks/thing.py" in result.error
+
+
+async def test_no_close_match_gives_only_the_hint(root, context):
+    result = await ZebraSourceAction().run(_task(path="zebra-tasks/qqqq/zzzzzz.yaml"), context)
+
+    assert "Did you mean" not in result.error
+    assert "does not exist" in result.error and "list_zebra_source" in result.error
+
+
+async def test_at_most_five_suggestions(root, context):
+    for n in range(8):
+        (root / "zebra-tasks" / f"pkg{n}").mkdir()
+        (root / "zebra-tasks" / f"pkg{n}" / "same.py").write_text("x")
+
+    result = await ZebraSourceAction().run(_task(path="zebra-tasks/same.py"), context)
+
+    suggested = result.error.split("Did you mean: ")[1].split("?")[0].split(", ")
+    assert len(suggested) == 5
+    assert all(s.endswith("/same.py") for s in suggested)
+
+
+async def test_suggestions_never_name_hidden_entries(root, context):
+    for path in ("zebra-tasks/escap.py", "zebra-agent-web/db.sqlite", "zebra-agent-web/tmp.log"):
+        result = await ZebraSourceAction().run(_task(path=path), context)
+
+        assert not result.success
+        assert not any(h in result.error.replace(path, "") for h in HIDDEN), path
+
+
+async def test_directory_read_returns_its_listing(root, context):
+    result = await ZebraSourceAction().run(_task(path="zebra-tasks"), context)
+
+    assert not result.success
+    assert "is a directory" in result.error
+    assert "zebra-tasks/zebra_tasks/ (1 file)" in result.error
+
+
+async def test_undeployed_entry_names_what_is_deployed(root, context):
+    result = await ZebraSourceAction().run(_task(path="specs/zebra-as-is.md"), context)
+
+    assert not result.success
+    assert "'specs/zebra-as-is.md' is not deployed" in result.error
+    assert "Deployed: README.md, zebra-agent-web/, zebra-tasks/." in result.error

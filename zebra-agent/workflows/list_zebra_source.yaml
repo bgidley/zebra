@@ -1,0 +1,34 @@
+name: "List Zebra Source"
+description: >-
+  List what is in Zebra's own deployed source: a directory's subdirectories (with file counts)
+  and files (with sizes), or with a glob, every matching file path. Deployed top-level entries:
+  zebra-py/, zebra-tasks/, zebra-agent/, zebra-agent-web/, specs/, docs/, openspec/, scripts/,
+  deploy/, pyproject.toml, version.json and the root *.md files.
+tags: ["code", "source", "list"]
+use_when: "You need to know which files or directories exist in Zebra's own codebase before reading one."
+version: 1
+first_task: list
+result_key: source
+# Requires a path, so it is a tool for llm_agent and never selected for a goal (#190, #211).
+inputs:
+  type: object
+  required: [path]
+  properties:
+    path:
+      type: string
+      description: "Directory relative to the repository root, e.g. zebra-tasks/zebra_tasks/agent, or '.' for the root"
+    glob:
+      type: string
+      description: "List matching files recursively instead, relative to the repository root, e.g. 'specs/**/*.md'"
+
+tasks:
+  list:
+    name: "List source"
+    action: zebra_source
+    auto: true
+    properties:
+      operation: list
+      path: "{{path}}"
+      glob: "{{glob}}"
+      max_results: 200
+      output_key: source

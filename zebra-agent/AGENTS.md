@@ -348,7 +348,7 @@ These workflows are internal to the agent and excluded from LLM selection:
 | `Postmortem` | `postmortem.yaml` | `write_postmortem` for timed-out / crashed goals and runs rated 1–2, started by `zebra_agent/postmortem.py` (#175) |
 | `Bug Report` | `bug_report.yaml` | Web UI "Report a bug": one human review task over the stored report (#186) |
 | `Zebra Improvement Request` | `zebra_improvement_request.yaml` | Dream cycle request for a change to Zebra's code: human review task (accept / reject / duplicate / later, issue link) (#189), then `file_issue` files an accepted request as a GitLab issue (#194) |
-| `Outcome Review` | `outcome_review.yaml` | Delivery review of a deployed change: Zebra reviews blind with *Read/Search Zebra Source* tools, compares with Claude's verdicts, reconsiders once, then a human ruling task (#190). Run with `manage.py run_workflow` |
+| `Outcome Review` | `outcome_review.yaml` | Delivery review of a deployed change: Zebra reviews blind with *List/Read/Search Zebra Source* tools, compares with Claude's verdicts, reconsiders once, then a human ruling task (#190). Run with `manage.py run_workflow` |
 | `Golden Gym` | `golden_gym.yaml` | `run_golden_gym` on demand: score the current workflows on their golden tasks, or check `candidates` without saving. Run with `manage.py run_workflow "Golden Gym"` (#171) |
 | `Define Workflow` | `define_workflow.yaml` | `llm_agent`'s `define_workflow` tool: ethics gate → `workflow_creator` (#146) |
 

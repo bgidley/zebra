@@ -23,8 +23,8 @@ None. All state lives in process properties: inputs (`issue`, `title`, `outcomes
 |---|---|
 | `## Outcomes` in `proposal.md` | Required by `openspec/config.yaml`: `#`, outcome, how we'll know. Posted on the issue |
 | `scripts/zebra-feedback.sh` | Now reviews the proposed outcomes at the start (advisory, always exits 0) |
-| `zebra_source` action | `operation: read` (line range, 12000-char cap) / `search` (regex, glob, 50 hits). Root `ZEBRA_SOURCE_ROOT` or the checkout above the installed `zebra_tasks` (`/app` in prod). Allowlist: the four packages, `specs`, `openspec`, `docs`, `scripts`, `deploy`, `pyproject.toml`, `version.json`, top-level `*.md`. Refuses dot-entries, `*.sqlite3`/`*.db`/keys, `tmp/`, `staticfiles/`, `fixtures/`, symlinks and anything resolving outside the root |
-| *Read Zebra Source*, *Search Zebra Source* | Tool-only workflows around `zebra_source` for `llm_agent` |
+| `zebra_source` action | `operation: read` (line range, 12000-char cap) / `search` (regex, glob, 50 hits) / `list` (one directory level: subdirectories with file counts, files with sizes; or with a `glob`, matching file paths; 200 entries) (#211). A read of a missing path fails with up to 5 nearest existing paths (same file name first, then `difflib` close matches) and a hint to list or search; a directory read fails with its listing; a path under an allowlisted entry that is not deployed names the entries that are. Suggestions and listings come from the allowed file walk, so hidden entries are never named. Root `ZEBRA_SOURCE_ROOT` or the checkout above the installed `zebra_tasks` (`/app` in prod). Allowlist: the four packages, `specs`, `openspec`, `docs`, `scripts`, `deploy`, `pyproject.toml`, `version.json`, top-level `*.md`. Refuses dot-entries, `*.sqlite3`/`*.db`/keys, `tmp/`, `staticfiles/`, `fixtures/`, symlinks and anything resolving outside the root |
+| *List Zebra Source*, *Read Zebra Source*, *Search Zebra Source* | Tool-only workflows around `zebra_source` for `llm_agent`; their descriptions name the deployed top-level entries (#211) |
 | `compare_outcome_reviews` action | Parses both reviews (dict, list or fenced JSON), lines them up per outcome id, routes `agreed` / `disputed`. Missing, unknown or garbled verdicts are disputed, and every id in the outcomes table (`outcomes_key`) is compared, so an outcome neither reviewer judged is disputed too (#191). `reconsidered_key` overlays Zebra's second verdicts; `ruling_key` records the human ruling (`ruled`); `final` records without routing |
 | *Outcome Review* workflow | System, tool-only (required `inputs`), `result_key: review_result` |
 | `zebra_agent.direct_run` | `run_named_workflow()` creates and starts a named workflow from inputs (required inputs checked); `workflow_status()` → `complete` / `awaiting_input` / `failed` / `running` |
@@ -63,6 +63,7 @@ merge → deploy green → fresh Claude subagent writes `claude.json` → `zebra
 - Cost: up to two medium-tier `llm_agent` passes per feature. Both set `answer_on_budget`, so a review
   that spends its tool turns (12, then 6) still answers instead of failing (#191; the first real
   run, of #190, failed after 8 turns).
-- In prod `/app` holds only the packages, `pyproject.toml` and `version.json`, so Zebra judges
-  docs and script outcomes from the diff alone.
+- Since #212 the image also ships `specs/`, `docs/`, `openspec/`, `scripts/`, `deploy/` and the
+  root `*.md` files, so Zebra can read the docs and scripts an outcome names. Before that every
+  failed source read on prod (18 of 171) was for one of these paths.
 - A diff over 60000 chars is truncated; Zebra reads the source for the rest.
