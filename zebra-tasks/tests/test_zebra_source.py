@@ -7,7 +7,7 @@ import pytest
 from zebra.core.models import ProcessDefinition, ProcessInstance, TaskDefinition, TaskInstance
 from zebra.tasks.base import ExecutionContext
 
-from zebra_tasks.agent.zebra_source import ZebraSourceAction, source_root
+from zebra_tasks.agent.zebra_source import RECOVERY_HINT, ZebraSourceAction, source_root
 
 
 @pytest.fixture
@@ -285,6 +285,38 @@ async def test_directory_read_returns_its_listing(root, context):
     assert not result.success
     assert "is a directory" in result.error
     assert "zebra-tasks/zebra_tasks/ (1 file)" in result.error
+
+
+@pytest.mark.parametrize(
+    "props",
+    [
+        {"path": ""},
+        {"path": "../outside.py"},
+        {"path": ".env"},
+        {"path": "zebra-tasks"},
+        {"path": "zebra-tasks/zebra_tasks/thng.py"},
+        {"path": "specs/zebra-as-is.md"},
+        {"operation": "list", "path": "zebra-tasks/zebra_tasks/thing.py"},
+        {"operation": "list", "path": "zebra-tasks/nope"},
+        {"operation": "search", "pattern": "("},
+        {"operation": "search", "pattern": "x", "glob": "../*"},
+    ],
+)
+async def test_every_failure_ends_with_the_recovery_hint(root, context, props):
+    result = await ZebraSourceAction().run(_task(**props), context)
+
+    assert not result.success
+    assert result.error.endswith(RECOVERY_HINT)
+    assert result.error.count(RECOVERY_HINT) == 1
+    assert "?." not in result.error and ".." not in result.error.replace("../", "")
+
+
+async def test_too_large_file_fails_with_the_hint(root, context, monkeypatch):
+    monkeypatch.setattr("zebra_tasks.agent.zebra_source.MAX_FILE_BYTES", 10)
+
+    result = await ZebraSourceAction().run(_task(path="zebra-tasks/zebra_tasks/thing.py"), context)
+
+    assert "too large to read. " + RECOVERY_HINT == result.error.split("' is ", 1)[1]
 
 
 async def test_undeployed_entry_names_what_is_deployed(root, context):
