@@ -2,8 +2,9 @@
 
 ``get_llm(model, context)`` returns an LLM for a tier (``low`` / ``medium`` / ``high``
 / ``max``) or an exact OpenRouter ``vendor/model`` slug. Given the task's execution
-context, every call it makes adds its tokens and cost to that process. ``model_for``
-picks the model a task should use. Tests swap the backend with ``set_llm_factory``.
+context, every call it makes adds its tokens and cost to that process and to the
+spend ledger (#206). ``model_for`` picks the model a task should use. Tests swap the
+backend with ``set_llm_factory``.
 """
 
 from collections.abc import Callable
@@ -11,7 +12,7 @@ from typing import Any
 
 from zebra_tasks.llm.base import LLMProvider, LLMResponse
 from zebra_tasks.llm.models import normalize_model
-from zebra_tasks.llm.usage import record_usage
+from zebra_tasks.llm.usage import record_spend, record_usage
 
 LLMFactory = Callable[[str], LLMProvider]
 
@@ -66,4 +67,5 @@ class _Recorded(LLMProvider):
     async def complete(self, *args: Any, **kwargs: Any) -> LLMResponse:
         response = await self._llm.complete(*args, **kwargs)
         record_usage(self._context, response)
+        await record_spend(self._context, response)
         return response

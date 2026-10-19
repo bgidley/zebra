@@ -24,6 +24,7 @@ from zebra.core.models import ProcessState, TaskState
 
 from zebra_agent.human_tasks import find_pending_human_task
 from zebra_agent.library import WorkflowLibrary, list_goal_workflows
+from zebra_agent.metrics import record_run_totals
 from zebra_agent.postmortem import LOW_RATING_MAX, postmortem_failed_goal, start_postmortem
 from zebra_agent.storage.interfaces import (
     MemoryStore,
@@ -261,6 +262,7 @@ class AgentLoop:
                 )
                 # A timeout or crash skips the loop's own postmortem step (#175).
                 await postmortem_failed_goal(self.engine, self.library, process)
+                await record_run_totals(self.metrics, process)
                 return {
                     "workflow_name": process.properties.get("workflow_name", "unknown"),
                     "output": None,
@@ -306,6 +308,8 @@ class AgentLoop:
                 "tokens_used": 0,
                 "error": "Agent loop timed out",
             }
+
+        await record_run_totals(self.metrics, process)
 
         # Extract results from process properties
         execution_result = process.properties.get("execution_result", {})
@@ -460,6 +464,13 @@ class AgentLoop:
                 messages=[Message.system(system_prompt), Message.user(prompt)],
                 temperature=0.3,
                 max_tokens=600,
+            )
+            # No task context here, so add the call to the spend ledger directly (#206).
+            await self.metrics.record_llm_spend(
+                cost=response.usage.cost_usd or 0.0,
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+                model=response.model or "",
             )
 
             content = response.content or "{}"

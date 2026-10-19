@@ -8,13 +8,42 @@ For custom storage backends, implement the MetricsStore interface from
 zebra_agent.storage.interfaces.
 """
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    pass
+    from zebra.core.models import ProcessInstance
+
+    from zebra_agent.storage.interfaces import MetricsStore
+
+logger = logging.getLogger(__name__)
+
+
+async def record_run_totals(metrics: MetricsStore | None, process: ProcessInstance) -> bool:
+    """Set a finished goal's run record to its root process's final spend (#206).
+
+    ``assess_and_record`` records only the goal workflow's cost; the Agent Main Loop's
+    own calls (selection, gates, assessment, memory, knowledge) come before and after
+    it. The root process's ``__total_cost__`` holds them all. Never raises.
+    """
+    props = process.properties or {}
+    run_id = props.get("run_id")
+    if metrics is None or not run_id:
+        return False
+    history = props.get("__token_history__") or []
+    try:
+        return await metrics.update_run_totals(
+            run_id,
+            cost=float(props.get("__total_cost__") or 0.0),
+            input_tokens=sum(int(h.get("input") or 0) for h in history),
+            output_tokens=sum(int(h.get("output") or 0) for h in history),
+        )
+    except Exception:  # noqa: BLE001 - bookkeeping never fails a goal
+        logger.warning("Could not record run totals for %s", run_id, exc_info=True)
+        return False
 
 
 @dataclass

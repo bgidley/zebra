@@ -332,8 +332,12 @@ async def _tick(
 
 
 async def _record_finished(process, engine, library) -> None:
-    """Log a finished goal and write a postmortem if it failed unreflected (#175)."""
+    """Log a finished goal, record its full spend on its run (#206), and write a
+    postmortem if it failed unreflected (#175)."""
+    from zebra_agent.metrics import record_run_totals
+
     _log_outcome(process)
+    await record_run_totals(engine.extras.get("__metrics_store__"), process)
     if library is not None:
         from zebra_agent.postmortem import postmortem_failed_goal
 

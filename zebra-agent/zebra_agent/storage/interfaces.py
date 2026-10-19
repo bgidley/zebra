@@ -553,11 +553,36 @@ class MetricsStore(ABC):
 
     @abstractmethod
     async def get_total_cost_since(self, since: datetime) -> float:
-        """Return the total USD cost of all runs completed since *since*.
+        """Return the total USD LLM spend since *since*: the spend ledger's sum (#206).
 
         Used by BudgetManager to calculate daily spend.
         """
         ...
+
+    async def record_llm_spend(
+        self,
+        *,
+        cost: float,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        model: str = "",
+        process_id: str | None = None,
+        at: datetime | None = None,
+    ) -> None:
+        """Append one LLM call's spend to the ledger (#206).
+
+        Every call made through ``get_llm(model, context)`` lands here, goal or not,
+        so the budget counts each call exactly once. The default keeps no ledger.
+        """
+
+    async def update_run_totals(
+        self, run_id: str, *, cost: float, input_tokens: int = 0, output_tokens: int = 0
+    ) -> bool:
+        """Set a run's cost and tokens to its process's final totals (#206).
+
+        Returns False when there is no such run (the default keeps none).
+        """
+        return False
 
     # =========================================================================
     # Task Execution Operations
