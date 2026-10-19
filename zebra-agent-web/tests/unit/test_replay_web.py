@@ -114,8 +114,11 @@ async def test_django_store_keeps_route_and_large_values():
     from zebra_agent_web.storage import DjangoStore
 
     store = DjangoStore()
-    whole = "x" * (journal.MAX_JOURNAL_VALUE_CHARS - 2)
-    changed, _ = journal.property_diff({}, {"whole": whole})
+    cap = journal.MAX_JOURNAL_VALUE_CHARS  # JSON adds two quotes to a string
+    under = "u" * (cap - 3)  # one under the cap
+    at_cap = "x" * (cap - 2)  # exactly at it
+    over = "y" * (cap - 1)  # one over
+    changed, _ = journal.property_diff({}, {"under": under, "at_cap": at_cap, "over": over})
     await store.save_process_event(
         ProcessEvent(
             id="e1",
@@ -128,7 +131,10 @@ async def test_django_store_keeps_route_and_large_values():
 
     (loaded,) = await store.load_process_events(["p1"])
     assert loaded.next_route == "approved"
-    assert loaded.changed["whole"] == whole
+    assert loaded.changed["under"] == under
+    assert loaded.changed["at_cap"] == at_cap
+    assert loaded.changed["over"][journal.TRUNCATED_KEY] is True
+    assert loaded.changed["over"]["size"] == cap + 1
 
 
 @pytest.mark.django_db(transaction=True)

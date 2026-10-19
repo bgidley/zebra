@@ -429,6 +429,11 @@ uv run pytest zebra-agent-web/tests/test_agent_loop_integration.py -v
 DJANGO_SETTINGS_MODULE=zebra_agent_web.settings uv run pytest -v
 ```
 
+`tests/browser/` holds opt-in Playwright tests (#213). They skip unless Playwright and their
+`ZEBRA_BROWSER_*` env vars are set, so CI skips them. Run them in the Playwright container against
+a local server (never port 8000). Login is passkey-only, so pass a `sessionid` made in
+`manage.py shell`. See the module docstring for the command.
+
 #### Django Migrations and Ruff
 
 `python manage.py makemigrations` produces long lines that fail ruff's E501 check. Always run `uv run ruff check --fix . && uv run ruff format .` immediately after generating a migration, before committing. Treat it as one atomic step:
