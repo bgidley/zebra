@@ -297,6 +297,30 @@ async def test_loop_replays_each_iteration_in_order(engine):
     assert replayed.properties[replay.REPLAY_KEY]["served"] == {"step": 3, "end": 1}
 
 
+async def test_process_construct_and_destruct_do_not_run_in_a_replay(store):
+    """Lifecycle hooks can have side effects; a replay runs none of them (#207)."""
+
+    class LifecycleAction(TaskAction):
+        async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+            _count(task.task_definition_id)
+            context.set_process_property(task.task_definition_id, True)
+            return TaskResult.ok()
+
+    hooked = LOOP.model_copy(
+        update={"id": "hooked", "construct_action": "lifecycle", "destruct_action": "lifecycle"}
+    )
+    engine = WorkflowEngine(store, _registry(lifecycle=LifecycleAction))
+    original = await _run(engine, hooked)
+    assert CALLS["__process_construct__"] == 1 and CALLS["__process_destruct__"] == 1
+    calls_before = dict(CALLS)
+
+    replayed = await _replay(engine, original.id)
+
+    assert CALLS == calls_before
+    assert replayed.state == ProcessState.COMPLETE
+    assert replayed.properties["__process_construct__"] is True  # its recorded effect is kept
+
+
 async def test_subflow_step_is_served_without_starting_children(engine, store):
     original = await _run(engine, PARENT)
     assert original.state == ProcessState.COMPLETE

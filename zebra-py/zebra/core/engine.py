@@ -1089,8 +1089,8 @@ class WorkflowEngine:
     async def _run_process_construct(
         self, process: ProcessInstance, definition: ProcessDefinition
     ) -> None:
-        """Run the process construct action."""
-        if not definition.construct_action:
+        """Run the process construct action (never in a replay, #207)."""
+        if not definition.construct_action or replay.REPLAY_KEY in process.properties:
             return
 
         try:
@@ -1123,8 +1123,8 @@ class WorkflowEngine:
     async def _run_process_destruct(
         self, process: ProcessInstance, definition: ProcessDefinition
     ) -> None:
-        """Run the process destruct action."""
-        if not definition.destruct_action:
+        """Run the process destruct action (never in a replay, #207)."""
+        if not definition.destruct_action or replay.REPLAY_KEY in process.properties:
             return
 
         try:
@@ -1730,6 +1730,8 @@ class WorkflowEngine:
         logger.debug(f"Reconciling process lifecycle for process {process.id}")
 
         definition = await self._load_definition(process.definition_id)
+        if replay.REPLAY_KEY in process.properties:
+            return  # a replay runs no lifecycle actions (#207)
         tasks = await self.store.load_tasks_for_process(process.id)
 
         # Check if construct action completed
