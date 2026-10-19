@@ -12,7 +12,13 @@ OPENROUTER_BASE_URL (override endpoint).
 import logging
 import os
 
-from zebra_tasks.llm.base import LLM_MAX_RETRIES, LLMResponse, llm_request_timeout
+from zebra_tasks.llm.base import (
+    LLM_MAX_RETRIES,
+    LLMResponse,
+    Message,
+    ToolDefinition,
+    llm_request_timeout,
+)
 from zebra_tasks.llm.providers.openai import OpenAIProvider
 
 logger = logging.getLogger(__name__)
@@ -97,6 +103,28 @@ class OpenRouterProvider(OpenAIProvider):
         if model not in ("", "openrouter"):
             logger.warning("OpenRouter has no model %r; using %s", model, default)
         return default, None
+
+    #: Reasoning models, which the auto router often picks, spend output tokens thinking
+    #: before they answer. Added to every request's max_tokens so a small budget (e.g. the
+    #: selector's 500) is not used up by reasoning, leaving an empty reply (#204).
+    REASONING_HEADROOM_TOKENS = 4096
+
+    async def complete(
+        self,
+        messages: list[Message],
+        tools: list[ToolDefinition] | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        stop_sequences: list[str] | None = None,
+    ) -> LLMResponse:
+        """Generate a completion with reasoning headroom on top of *max_tokens*."""
+        return await super().complete(
+            messages,
+            tools,
+            temperature,
+            max_tokens + self.REASONING_HEADROOM_TOKENS,
+            stop_sequences,
+        )
 
     @property
     def name(self) -> str:

@@ -157,3 +157,11 @@ def test_llm_call_tracks_reported_cost():
 
     assert props["__total_cost__"] == pytest.approx(1.0123)
     assert props["__token_history__"][0]["cost"] == 0.0123
+
+
+async def test_reasoning_headroom_added_to_max_tokens():
+    """Reasoning would otherwise use a small budget up and leave an empty reply (#204)."""
+    provider = _provider("low")
+    await provider.complete([Message.user("hi")], max_tokens=500)
+    sent = provider._client.chat.completions.create.call_args.kwargs
+    assert sent["max_tokens"] == 500 + OpenRouterProvider.REASONING_HEADROOM_TOKENS
