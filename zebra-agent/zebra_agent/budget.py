@@ -4,8 +4,8 @@ The BudgetManager is injected via IoC into ``engine.extras["__budget_manager__"]
 so that both the daemon loop and individual task actions (e.g. ``LLMCallAction``)
 can consult it.
 
-Budget is *stateless* — ``get_spent_today`` queries the ``MetricsStore`` for
-the sum of ``WorkflowRun.cost`` completed since the last reset.
+Budget is *stateless* — ``get_spent_today`` sums the ``MetricsStore`` spend
+ledger (every LLM call, goal or not, #206) since the last reset.
 """
 
 from __future__ import annotations

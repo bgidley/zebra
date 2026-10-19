@@ -219,6 +219,25 @@ class WorkflowRunModel(models.Model):
         return f"{self.workflow_name} ({status}) - {self.started_at}"
 
 
+class LLMSpendModel(models.Model):
+    """One LLM call's spend: the ledger the daily budget sums (#206)."""
+
+    occurred_at = models.DateTimeField(db_index=True)
+    cost = models.DecimalField(max_digits=12, decimal_places=8, default=0)
+    input_tokens = models.IntegerField(default=0)
+    output_tokens = models.IntegerField(default=0)
+    model = models.CharField(max_length=255, blank=True, default="")
+    process_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
+
+    class Meta:
+        db_table = "zebra_llm_spend"
+        verbose_name = "LLM Spend"
+        verbose_name_plural = "LLM Spend"
+
+    def __str__(self):
+        return f"${self.cost} {self.model} at {self.occurred_at}"
+
+
 class TaskExecutionModel(models.Model):
     """Record of a single task execution within a workflow run."""
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from asgiref.sync import sync_to_async
@@ -25,6 +25,7 @@ from zebra_agent_web.middleware import get_current_user_id
 
 from .api.models import (
     GymScoreModel,
+    LLMSpendModel,
     ProcessInstanceModel,
     TaskExecutionModel,
     WorkflowRunModel,
@@ -331,17 +332,76 @@ class DjangoMetricsStore(MetricsStore):
         return await _get()
 
     async def get_total_cost_since(self, since: datetime) -> float:
-        """Return the total USD cost of all runs completed since *since*."""
+        """Return the total USD LLM spend since *since*: the spend ledger (#206)."""
 
         @sync_to_async(thread_sensitive=False)
         def _get():
             # Budget is system-wide (not user-scoped) — no filtering by user_id
-            result = WorkflowRunModel.objects.filter(completed_at__gte=since).aggregate(
+            result = LLMSpendModel.objects.filter(occurred_at__gte=since).aggregate(
                 total=Sum("cost")
             )
             return float(result["total"] or 0)
 
         return await _get()
+
+    async def record_llm_spend(
+        self,
+        *,
+        cost: float,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        model: str = "",
+        process_id: str | None = None,
+        at: datetime | None = None,
+    ) -> None:
+        """Append one LLM call's spend to the ledger (#206)."""
+
+        @sync_to_async(thread_sensitive=False)
+        def _save():
+            LLMSpendModel.objects.create(
+                occurred_at=at or datetime.now(UTC),
+                cost=round(float(cost or 0.0), 8),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model=(model or "")[:255],
+                process_id=process_id,
+            )
+
+        await _save()
+
+    async def get_spend_for_processes(self, process_ids: list[str]) -> tuple[float, int, int]:
+        """Ledger totals for these processes (#206)."""
+
+        @sync_to_async(thread_sensitive=False)
+        def _sum():
+            result = LLMSpendModel.objects.filter(process_id__in=list(process_ids)).aggregate(
+                cost=Sum("cost"), input=Sum("input_tokens"), output=Sum("output_tokens")
+            )
+            return (
+                float(result["cost"] or 0),
+                int(result["input"] or 0),
+                int(result["output"] or 0),
+            )
+
+        return await _sum()
+
+    async def update_run_totals(
+        self, run_id: str, *, cost: float, input_tokens: int = 0, output_tokens: int = 0
+    ) -> bool:
+        """Set a run's cost and tokens to its process tree's final totals (#206)."""
+
+        @sync_to_async(thread_sensitive=False)
+        def _update():
+            return bool(
+                WorkflowRunModel.objects.filter(id=run_id).update(
+                    cost=round(float(cost or 0.0), 6),
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    tokens_used=input_tokens + output_tokens,
+                )
+            )
+
+        return await _update()
 
     def _model_to_run(self, model: WorkflowRunModel) -> WorkflowRun:
         """Convert Django model to WorkflowRun dataclass."""

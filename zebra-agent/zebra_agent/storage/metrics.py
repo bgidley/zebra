@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from zebra_agent.storage.interfaces import (
@@ -34,6 +34,8 @@ class InMemoryMetricsStore(MetricsStore):
         self._runs: dict[str, WorkflowRun] = {}
         self._tasks: dict[str, list[TaskExecution]] = {}  # run_id -> list of tasks
         self._gym_scores: list[GymScore] = []
+        # LLM spend ledger (#206): (at, cost, input_tokens, output_tokens, process_id)
+        self._spend: list[tuple[datetime, float, int, int, str | None]] = []
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -176,13 +178,43 @@ class InMemoryMetricsStore(MetricsStore):
         return runs[: max(0, min(limit, SEARCH_RUNS_MAX_LIMIT))]
 
     async def get_total_cost_since(self, since: datetime) -> float:
-        """Return the total USD cost of all runs completed since *since*."""
+        """Return the total USD LLM spend since *since* (the spend ledger, #206)."""
         await self._ensure_initialized()
-        return sum(
-            r.cost
-            for r in self._runs.values()
-            if r.completed_at is not None and r.completed_at >= since
+        return sum(entry[1] for entry in self._spend if entry[0] >= since)
+
+    async def record_llm_spend(
+        self,
+        *,
+        cost: float,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        model: str = "",
+        process_id: str | None = None,
+        at: datetime | None = None,
+    ) -> None:
+        await self._ensure_initialized()
+        self._spend.append(
+            (at or datetime.now(UTC), float(cost or 0.0), input_tokens, output_tokens, process_id)
         )
+
+    async def get_spend_for_processes(self, process_ids: list[str]) -> tuple[float, int, int]:
+        await self._ensure_initialized()
+        wanted = set(process_ids)
+        rows = [e for e in self._spend if e[4] in wanted]
+        return (sum(e[1] for e in rows), sum(e[2] for e in rows), sum(e[3] for e in rows))
+
+    async def update_run_totals(
+        self, run_id: str, *, cost: float, input_tokens: int = 0, output_tokens: int = 0
+    ) -> bool:
+        await self._ensure_initialized()
+        run = self._runs.get(run_id)
+        if run is None:
+            return False
+        run.cost = float(cost or 0.0)
+        run.input_tokens = input_tokens
+        run.output_tokens = output_tokens
+        run.tokens_used = input_tokens + output_tokens
+        return True
 
     # =========================================================================
     # Task Execution Operations

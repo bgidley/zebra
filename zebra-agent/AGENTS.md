@@ -26,7 +26,8 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/storage/interfaces.py` | Abstract storage interfaces (MemoryStore, MetricsStore) |
 | `zebra_agent/storage/memory.py` | InMemoryMemoryStore implementation |
 | `zebra_agent/storage/metrics.py` | InMemoryMetricsStore implementation |
-| `zebra_agent/budget.py` | BudgetManager — daily budget with linear pacing |
+| `zebra_agent/budget.py` | BudgetManager — daily budget with linear pacing, from the spend ledger (#206) |
+| `zebra_agent/metrics.py` | `WorkflowRun` etc.; `record_run_totals(metrics, store, process)` sets a finished goal's run cost/tokens to the ledger sum over its process tree (`run_process_ids`), fallback root `__total_cost__` + `execution_result.cost` (#206) |
 | `zebra_agent/scheduler.py` | GoalScheduler — priority + deadline + age scoring |
 | `zebra_agent/scheduler/` | Polling scheduler: `Routine` (cron/interval; `workflow`, or `goal` + `goal_priority` + `run_as` to queue a goal — F155), `RoutineRegistry`, `SchedulerLoop` (`queue_goal_fn` dispatches goal routines; skips while one is `CREATED`/`RUNNING`) |
 | `zebra_agent/scheduler/goal_tracker.py` | GoalTracker — daemon's in-flight goals: background start, human-task hand-off, reconciliation (#141) |
@@ -277,7 +278,7 @@ breaks portability across deployments.
 - Linear pacing: `allowed_at_time = daily_budget * (elapsed / 24h)`
 - `can_start_goal(estimated_cost)` checks remaining budget
 - `warn_if_over(goal_id, cost_so_far)` logs soft warning if per-goal threshold exceeded
-- Stateless: calculates "spent today" by querying `MetricsStore.get_total_cost_since()`
+- Stateless: "spent today" is `MetricsStore.get_total_cost_since()`, the sum of the LLM spend ledger (every call made with a task context, #206)
 
 **GoalScheduler** (`scheduler.py`):
 - Picks the next goal to execute from CREATED processes

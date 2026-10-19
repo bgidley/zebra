@@ -42,11 +42,11 @@ def fake():
     set_llm_factory(previous)
 
 
-def _context(**props):
+def _context(extras=None, **props):
     store: dict = dict(props)
     return SimpleNamespace(
-        process=SimpleNamespace(properties=store),
-        extras={},
+        process=SimpleNamespace(id="proc-1", properties=store),
+        extras=extras or {},
         get_process_property=lambda k, d=None: store.get(k, d),
         set_process_property=store.__setitem__,
     )
@@ -125,3 +125,41 @@ def test_model_for(task_model, process_model, default, expected):
     task = SimpleNamespace(properties={"model": task_model} if task_model else {})
     context = _context(**({"__llm_model__": process_model} if process_model else {}))
     assert model_for(task, context, default) == expected
+
+
+class LedgerStore:
+    def __init__(self, fail: bool = False):
+        self.entries: list[dict] = []
+        self.fail = fail
+
+    async def record_llm_spend(self, **entry):
+        if self.fail:
+            raise RuntimeError("db down")
+        self.entries.append(entry)
+
+
+async def test_llm_with_context_writes_the_spend_ledger(fake):
+    """Every call made with a context lands in the budget's spend ledger (#206)."""
+    ledger = LedgerStore()
+    llm = get_llm("low", _context(extras={"__metrics_store__": ledger}))
+
+    await llm.complete([Message.user("a")])
+
+    assert ledger.entries == [
+        {
+            "cost": 0.25,
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "model": "vendor/picked",
+            "process_id": "proc-1",
+        }
+    ]
+
+
+async def test_ledger_failure_does_not_fail_the_call(fake, caplog):
+    llm = get_llm("low", _context(extras={"__metrics_store__": LedgerStore(fail=True)}))
+
+    response = await llm.complete([Message.user("a")])
+
+    assert response.content == "ok"
+    assert "Could not record LLM spend" in caplog.text
