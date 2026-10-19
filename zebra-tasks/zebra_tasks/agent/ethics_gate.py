@@ -10,6 +10,7 @@ from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 _MAX_GOAL_LEN = 500
 # The Kantian + values + dilemma JSON runs past 800 tokens; a truncated response is
@@ -308,7 +309,7 @@ class EthicsGateAction(TaskAction):
             type="string",
             description="LLM provider name",
             required=False,
-            default="anthropic",
+            default=None,
         ),
         ParameterDef(
             name="model",
@@ -387,7 +388,7 @@ class EthicsGateAction(TaskAction):
         provider_name = (
             task.properties.get("provider")
             or context.process.properties.get("__llm_provider_name__")
-            or "anthropic"
+            or default_provider_name()
         )
         model = task.properties.get("model")
         if not model:

@@ -18,6 +18,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ class FlagConcernsAction(TaskAction):
             type="string",
             description="LLM provider name",
             required=False,
-            default="anthropic",
+            default=None,
         ),
         ParameterDef(
             name="model",
@@ -159,7 +160,7 @@ class FlagConcernsAction(TaskAction):
         provider_name = (
             task.properties.get("provider")
             or context.process.properties.get("__llm_provider_name__")
-            or "anthropic"
+            or default_provider_name()
         )
         # Default to haiku: this is a cheap, advisory pre-gate scan.
         model = task.properties.get("model") or context.process.properties.get("__llm_model__")

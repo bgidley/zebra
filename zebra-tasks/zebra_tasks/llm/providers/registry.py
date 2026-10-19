@@ -1,5 +1,6 @@
 """Provider registry for LLM providers."""
 
+import os
 from collections.abc import Callable
 
 from zebra_tasks.llm.base import LLMProvider
@@ -9,6 +10,20 @@ _providers: dict[str, Callable[[str | None], LLMProvider]] = {}
 
 # Track if we've loaded dotenv
 _dotenv_loaded = False
+
+
+#: Provider used when a task, its process and the caller name none.
+DEFAULT_PROVIDER = "anthropic"
+
+
+def default_provider_name() -> str:
+    """The server's LLM provider: ``ZEBRA_LLM_PROVIDER``, else ``anthropic`` (#204).
+
+    Every action that falls back to a provider when neither the task nor its
+    process names one uses this, so switching the server (e.g. to
+    ``openrouter``) moves every LLM call.
+    """
+    return os.environ.get("ZEBRA_LLM_PROVIDER") or DEFAULT_PROVIDER
 
 
 def register_provider(name: str, factory: Callable[[str | None], LLMProvider]) -> None:

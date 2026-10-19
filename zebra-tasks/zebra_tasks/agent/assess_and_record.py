@@ -9,6 +9,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.agent.followup import continuation_fields, previous_run_id
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +134,7 @@ class AssessAndRecordAction(TaskAction):
             type="string",
             description="LLM provider name",
             required=False,
-            default="anthropic",
+            default=None,
         ),
         ParameterDef(name="model", type="string", description="LLM model name", required=False),
         ParameterDef(
@@ -181,7 +182,7 @@ Respond with JSON only:
         cost = self._resolve(task, context, "cost", "0")
         error = self._resolve(task, context, "error", "")
         started_at = self._resolve(task, context, "started_at", "")
-        provider_name = task.properties.get("provider", "anthropic")
+        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
         output_key = task.properties.get("output_key", "assess_result")
 

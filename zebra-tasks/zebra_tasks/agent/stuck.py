@@ -21,6 +21,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.agent.voice import VOICE_SCHEMA_FIELDS, voice_fields
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +256,9 @@ class AssessStuckAction(TaskAction):
             "need": "Tell me how to fix this and I'll retry, give me a different goal, "
             "or tell me to stop.",
         }
-        provider_name = context.get_process_property("__llm_provider_name__") or "anthropic"
+        provider_name = (
+            context.get_process_property("__llm_provider_name__") or default_provider_name()
+        )
         # A cheap model: this is a short note to the user, not the goal's work.
         model = task.properties.get("model") or "haiku"
         try:

@@ -7,6 +7,7 @@ from zebra_tasks.agent.creator import generate_workflow
 from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.providers import get_provider
+from zebra_tasks.llm.providers.registry import default_provider_name
 
 
 class WorkflowVariantCreatorAction(TaskAction):
@@ -79,7 +80,7 @@ class WorkflowVariantCreatorAction(TaskAction):
             type="string",
             description="LLM provider",
             required=False,
-            default="anthropic",
+            default=None,
         ),
         ParameterDef(name="model", type="string", description="LLM model", required=False),
         ParameterDef(
@@ -140,7 +141,7 @@ class WorkflowVariantCreatorAction(TaskAction):
         source_name = self._resolve(task, context, "source_workflow_name", "")
         suggested_name = self._resolve(task, context, "suggested_name", "")
         reasoning = self._resolve(task, context, "reasoning", "")
-        provider_name = task.properties.get("provider", "anthropic")
+        provider_name = task.properties.get("provider") or default_provider_name()
         model = task.properties.get("model")
         output_key = task.properties.get("output_key", "created_workflow")
 
