@@ -32,6 +32,7 @@ This directory contains requirements and design specifications for Zebra.
 | [postmortem-journal-design.md](postmortem-journal-design.md) | #175: postmortems for failed / timed-out / badly rated goals stored in `MemoryStore`, recalled by `consult_memory` into the selector and child goal; `/journal/` page | Implemented |
 | [golden-gym-design.md](golden-gym-design.md) | #171: golden tasks (`zebra-agent/golden/`), LLM-judged `run_golden_gym`, Dream Cycle promotion gate for self-modified workflows (fails closed), *Golden Gym* on-demand runs, `gym_scores`, `/gym/` page | Implemented |
 | [outcome-review-design.md](outcome-review-design.md) | #190: outcomes agreed at a feature's start; after deploy Zebra (reading its own source) and Claude review blind, compare, and escalate disagreement as a human task that blocks sign-off | Implemented |
+| [claude-code-builder-design.md](claude-code-builder-design.md) | #98 + #172: Claude Code builds in a podman sandbox run by a host builder service (spool directory, capability budgets, escape probe), parked on an external wait the daemon's `BuilderWatcher` completes, published as a draft MR only after a human approves the exact patch | Implemented |
 | [podman-single-host-design.md](podman-single-host-design.md) | F117: Single-host rootless Podman deployment (Quadlet web + daemon, GitLab shell runner) — replaces the lost OKE cluster (F108–F111) | Implemented |
 
 The concrete feature backlog is tracked as [GitLab issues](https://gitlab.com/gidley/zebra/-/issues).

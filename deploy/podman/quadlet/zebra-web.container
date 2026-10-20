@@ -19,6 +19,9 @@ Environment=ZEBRA_DAEMON_AUTO_START=0
 Volume=zebra-logs:/app/zebra-agent-web/tmp
 # Workflow library (built-ins + agent-created) — shared with zebra-daemon, survives redeploys.
 Volume=zebra-workflows:/root/.zebra/workflows
+# Host builder spool (#98): Zebra writes Claude Code build jobs here; zebra-builder.service runs them.
+Volume=%h/.local/share/zebra/builds:/builds:z
+Environment=ZEBRA_BUILDER_SPOOL=/builds
 HealthCmd=python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=5)"
 HealthInterval=30s
 HealthStartPeriod=20s

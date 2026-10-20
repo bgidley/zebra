@@ -36,6 +36,13 @@ def _definition() -> ProcessDefinition:
                 properties={"schema": {"type": "object", "title": "Approve the digest"}},
             ),
             "send": TaskDefinition(id="send", name="Send Email", auto=True),
+            # Completed by the host builder, not a person (#98)
+            "await_build": TaskDefinition(
+                id="await_build",
+                name="Claude Code Is Building",
+                auto=False,
+                properties={"external": "builder"},
+            ),  # fmt: skip
         },
     )
 
@@ -109,6 +116,9 @@ async def _mixed(store) -> None:
     await _task(store, "stale-1", "done", "ask")
     await _process(store, "dead", state=ProcessState.FAILED)
     await _task(store, "stale-2", "dead", "ask")
+    # Parked on an external wait: nothing for a person to do
+    await _process(store, "e")
+    await _task(store, "ext-1", "e", "await_build")
 
 
 # ---------------------------------------------------------------------------

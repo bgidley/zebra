@@ -40,6 +40,9 @@ laptop ──git push──▶ gitlab.com/gidley/zebra
    systemd --user (linger)          ~/.config/containers/systemd/
      zebra-web.service     Daphne, 127.0.0.1:8000, health-gated, 1.5 GB cap
      zebra-daemon.service  manage.py run_daemon — exactly one, 768 MB cap
+     zebra-builder.service host builder (#98): Claude Code builds in throwaway
+                           zebra-builder-sandbox containers (3 GB cap), spool at
+                           ~/.local/share/zebra/builds (= /builds in web + daemon)
    cloudflared.service     Cloudflare Tunnel (outbound only) → 127.0.0.1:8000
                            https://zebra.gidley.co.uk, behind Cloudflare Access
    Oracle ADB "Zebra"      remote, TLS DSN, no wallet
@@ -73,6 +76,9 @@ scripts/deploy-podman.sh --rollback # re-promote :previous
 touch ~/.config/zebra/hold-daemon   # future deploys leave the daemon stopped
 rm ~/.config/zebra/hold-daemon && systemctl --user start zebra-daemon   # resume
 podman exec zebra-web python zebra-agent-web/manage.py kill_switch --status
+systemctl --user status zebra-builder; journalctl --user -u zebra-builder -f   # builds
+tail ~/.local/share/zebra/builds/audit.jsonl   # rejections, overruns, cancels, publishes
+uv run --no-project --python 3.14 ~/.local/share/zebra/builder/zebra_builder.py --probe
 ```
 
 ## Secrets
@@ -88,6 +94,7 @@ source of truth; the host copy is regenerated on every deploy.
 | `ZEBRA_SMTP_USERNAME` / `ZEBRA_SMTP_PASSWORD` | prod containers — `notify_email` via OCI Email Delivery (an OCI user SMTP credential; host/sender live in `site.env`) |
 | `ZEBRA_NOTIFY_WEBHOOK_URL` (optional) | prod containers — default target for `notify_webhook` |
 | `ZEBRA_GITLAB_TOKEN` (masked, protected) | prod containers — `file_improvement_issue` files accepted dream-cycle improvement requests on gidley/zebra (#194). A fine-grained personal access token limited to work items (issue search + create) on this project; project access tokens need a paid plan. It cannot read the project or user, so only the issues endpoints work; optional `ZEBRA_GITLAB_URL` / `ZEBRA_GITLAB_PROJECT` in `site.env` |
+| `CLAUDE_CODE_OAUTH_TOKEN` (masked, **protected**) | host builder only (#98): written to `~/.config/zebra/builder.env`, never to `prod.env`, so Zebra's containers never see it. A one-year token from `claude setup-token` on the owner's Claude Pro/Max account; builds use that subscription's limits. Keep it protected so branch pipelines (which may run Claude-authored code) cannot read it. Ceilings and repo allowlist go in the hand-maintained `~/.config/zebra/builder-site.env` (`ZEBRA_BUILDER_REPOS`, `_MAX_TURNS`, `_MAX_MINUTES`, `_MEMORY`) |
 | `SMOKE_PASSWORD` | deploy (creates `smoke` user), `smoke` |
 | `E2E_PROVISIONER_DSN` / `_USERNAME` / `_PASSWORD` | `e2e` ephemeral Oracle schema (SQLite fallback when unset) |
 
@@ -116,6 +123,8 @@ Then re-run the latest `master` pipeline (or push) to deploy.
 | `deploy/podman/bootstrap-host.sh` | Idempotent host setup (uv, runner, linger, cloudflared, growfs) |
 | `deploy/podman/setup-tunnel.sh` | Cloudflare Tunnel: hostname → `127.0.0.1:8000`, system service |
 | `deploy/podman/quadlet/` | `zebra-web` / `zebra-daemon` Quadlet units |
+| `deploy/podman/zebra-builder.service`, `scripts/zebra_builder.py` | Host builder for Claude Code builds (#98); `--probe` checks the sandbox, `--once` runs one pass |
+| `deploy/builder/` | Sandbox image (Claude Code, uv), its entrypoint and the escape probe |
 | `deploy/podman/site.env.example` | Non-secret prod settings template |
 | `scripts/deploy-podman.sh` | Build + health-gated promote + rollback |
 | `scripts/e2e_oracle_schema.py` | Ephemeral E2E Oracle schema provisioner |

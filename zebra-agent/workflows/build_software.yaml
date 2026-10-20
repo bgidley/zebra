@@ -1,0 +1,280 @@
+# Build Software (#98, #172)
+#
+# Turns a goal into a Claude Code build run by the host builder in a sandbox, and publishes the
+# result as a draft merge request only after a human approves the exact patch.
+#
+#   brief           llm_call: the goal as a build brief (title, prompt, repo, tests, budget)
+#   confirm_brief   human: edit and approve the brief and budget, or cancel
+#   build           claude_code_build: write the job to the builder spool
+#   await_build     external wait; the daemon's BuilderWatcher completes it with the result,
+#                   routed done / failed / over_budget / rejected / cancelled
+#   review_build    human: diffstat, patch, tests, turns, notional cost; approve or reject
+#   publish         publish_build: ask the builder to push zebra-build/<job> + open a draft MR
+#   await_publish   external wait: published / publish_failed
+#   report          low-tier summary of how it ended -> `answer`
+#   build_failed    propagate_failure, so the main loop's stuck handoff can help
+#
+# Claude Code runs on the owner's Claude subscription; its reported cost is notional and is not
+# counted against DAILY_BUDGET_USD. Design: specs/claude-code-builder-design.md.
+
+name: "Build Software"
+version: 1
+description: "Build or change software in a git repository with Claude Code in a sandbox, then deliver it as a draft merge request after you review the diff."
+tags: ["code", "build", "development", "implementation"]
+use_when: "The goal is to implement, build, fix or change software in a GitLab repository (Zebra itself or another allowlisted project) and deliver a reviewed change, not just discuss or sketch code."
+first_task: brief
+result_key: answer
+
+tasks:
+  brief:
+    name: "Write the Build Brief"
+    action: llm_call
+    auto: true
+    properties:
+      model: medium
+      response_format: json
+      max_tokens: 3000
+      system_prompt: |
+        You turn a goal into a brief for Claude Code, which will do the work alone in a sandbox
+        on a fresh clone of the repository, with no one to ask. Write the brief it needs:
+        - title: under 80 characters, imperative ("Add ...", "Fix ...").
+        - prompt: what to build and why, the constraints, and numbered acceptance criteria a
+          reviewer can check. Say which tests to add or run. Be concrete; do not invent
+          requirements the goal does not imply.
+        - repo: the GitLab project path. Zebra's own repository is "gidley/zebra"; use it unless
+          the goal names another project.
+        - base_branch: "master" unless the goal names another branch.
+        - test_command: one shell command that runs the relevant tests from the repo root
+          (for gidley/zebra: "uv sync --all-packages -q && uv run pytest -q -x <paths>"), or ""
+          when there are none.
+        - max_turns: 40 for a small change, 100 for a feature, 200 at most.
+        - minutes: 20 for a small change, 60 for a feature, 90 at most.
+        Reply with JSON only:
+        {"title": "...", "prompt": "...", "repo": "...", "base_branch": "...",
+         "test_command": "...", "max_turns": 40, "minutes": 20}
+      prompt: "{{goal}}"
+      output_key: brief
+
+  confirm_brief:
+    name: "Approve the Build Brief"
+    auto: false
+    properties:
+      show_prior_outputs: false
+      schema:
+        type: object
+        title: "Build with Claude Code?"
+        description: "Claude Code will work on a fresh clone in a sandbox, using your Claude subscription. Nothing is pushed until you approve the result."
+        required: [title, prompt, repo, max_turns, minutes]
+        properties:
+          title:
+            type: string
+            title: "Title"
+            default: "{{brief.title}}"
+          prompt:
+            type: string
+            title: "Brief for Claude Code"
+            format: multiline
+            default: "{{brief.prompt}}"
+          repo:
+            type: string
+            title: "Repository"
+            description: "GitLab project path; must be on the builder's allowlist."
+            default: "{{brief.repo}}"
+          base_branch:
+            type: string
+            title: "Base branch"
+            default: "{{brief.base_branch}}"
+          test_command:
+            type: string
+            title: "Test command"
+            description: "Run in the sandbox after Claude Code finishes. Leave empty for none."
+            default: "{{brief.test_command}}"
+          max_turns:
+            type: integer
+            title: "Turn budget"
+            minimum: 1
+            maximum: 200
+            default: "{{brief.max_turns}}"
+          minutes:
+            type: integer
+            title: "Time budget (minutes)"
+            minimum: 1
+            maximum: 90
+            default: "{{brief.minutes}}"
+
+  build:
+    name: "Start the Claude Code Build"
+    action: claude_code_build
+    auto: true
+    properties:
+      title: "{{__task_output_confirm_brief.title}}"
+      prompt: "{{__task_output_confirm_brief.prompt}}"
+      repo: "{{__task_output_confirm_brief.repo}}"
+      base_branch: "{{__task_output_confirm_brief.base_branch}}"
+      test_command: "{{__task_output_confirm_brief.test_command}}"
+      max_turns: "{{__task_output_confirm_brief.max_turns}}"
+      minutes: "{{__task_output_confirm_brief.minutes}}"
+      output_key: build_job
+
+  await_build:
+    name: "Claude Code Is Building"
+    auto: false
+    properties:
+      external: builder
+      job_key: build_job
+      wait_for: result
+
+  review_build:
+    name: "Review the Build"
+    auto: false
+    properties:
+      show_prior_outputs: false
+      schema:
+        type: object
+        title: "Review the Claude Code build"
+        description: "{{build_job.title}}. Approve to push this exact patch to a new zebra-build branch on {{build_job.repo}} and open a draft merge request. The branch's GitLab pipeline then runs on the prod host's shell runner, so check any CI, script or deploy changes."
+        properties:
+          summary:
+            type: string
+            title: "Claude Code's summary"
+            readOnly: true
+            default: "{{__task_output_await_build.summary}}"
+          stats:
+            type: string
+            title: "Run"
+            readOnly: true
+            default: "Tests (`{{__task_output_await_build.test.command}}`) exit code: **{{__task_output_await_build.test.rc}}** · {{__task_output_await_build.turns}} turns · {{__task_output_await_build.duration_s}} s · notional cost ${{__task_output_await_build.notional_cost_usd}} (subscription) · CI/deploy files touched: {{__task_output_await_build.sensitive_files}}"
+          test_log:
+            type: string
+            title: "Test output (tail)"
+            readOnly: true
+            default: "```\n{{__task_output_await_build.test.log_tail}}\n```"
+          diffstat:
+            type: string
+            title: "Files changed"
+            readOnly: true
+            default: "```\n{{__task_output_await_build.diffstat}}\n```"
+          patch:
+            type: string
+            title: "Patch"
+            readOnly: true
+            default: "```diff\n{{__task_output_await_build.patch_excerpt}}\n```"
+          notes:
+            type: string
+            title: "Notes"
+            description: "Added to the merge request description."
+            format: multiline
+
+  publish:
+    name: "Publish as a Draft Merge Request"
+    action: publish_build
+    auto: true
+    properties:
+      job_key: build_job
+      result_key: __task_output_await_build
+      mr_title: "{{build_job.title}}"
+      mr_description: |
+        Built by Zebra with Claude Code (build job {{build_job.job_id}}), reviewed and approved
+        in Zebra before publishing.
+
+        ## Summary
+        {{__task_output_await_build.summary}}
+
+        ## Tests in the sandbox
+        `{{__task_output_await_build.test.command}}` exit code {{__task_output_await_build.test.rc}}
+
+        ## Reviewer notes
+        {{__task_output_review_build.notes}}
+
+  await_publish:
+    name: "Publishing"
+    auto: false
+    properties:
+      external: builder
+      job_key: build_job
+      wait_for: published
+
+  report:
+    name: "Report"
+    action: llm_call
+    auto: true
+    properties:
+      model: low
+      max_tokens: 400
+      system_prompt: |
+        Tell the user in two or three plain sentences how their build ended. Give the merge
+        request link when there is one. Do not invent details.
+      prompt: |
+        Goal: {{goal}}
+        Build: {{build_job.title}} on {{build_job.repo}}
+        Claude Code summary: {{__task_output_await_build.summary}}
+        Review decision: {{__task_output_review_build}}
+        Publish result: {{__task_output_await_publish}}
+        Brief decision: {{__task_output_confirm_brief}}
+      output_key: answer
+
+  build_failed:
+    name: "Build Did Not Finish"
+    action: propagate_failure
+    auto: true
+    properties:
+      success: false
+      error: "Claude Code build {{__task_output_await_build.state}}: {{__task_output_await_build.error}} {{__task_output_await_build.violations}}"
+
+routings:
+  - from: brief
+    to: confirm_brief
+
+  - from: confirm_brief
+    to: build
+    condition: route_name
+    name: "build"
+  - from: confirm_brief
+    to: report
+    condition: route_name
+    name: "cancel"
+
+  - from: build
+    to: await_build
+
+  - from: await_build
+    to: review_build
+    condition: route_name
+    name: "done"
+  - from: await_build
+    to: build_failed
+    condition: route_name
+    name: "failed"
+  - from: await_build
+    to: build_failed
+    condition: route_name
+    name: "over_budget"
+  - from: await_build
+    to: build_failed
+    condition: route_name
+    name: "rejected"
+  - from: await_build
+    to: build_failed
+    condition: route_name
+    name: "cancelled"
+
+  - from: review_build
+    to: publish
+    condition: route_name
+    name: "approve"
+  - from: review_build
+    to: report
+    condition: route_name
+    name: "reject"
+
+  - from: publish
+    to: await_publish
+
+  - from: await_publish
+    to: report
+    condition: route_name
+    name: "published"
+  - from: await_publish
+    to: report
+    condition: route_name
+    name: "publish_failed"

@@ -1,0 +1,27 @@
+# Zebra host builder (#98, #172) — systemd user unit, installed to ~/.config/systemd/user/ by
+# scripts/deploy-podman.sh.
+#
+# Runs scripts/zebra_builder.py on the host (not in a container): it reads Claude Code build
+# jobs from ~/.local/share/zebra/builds (mounted into zebra-web / zebra-daemon at /builds) and
+# runs each in a throwaway localhost/zebra-builder-sandbox:prod container.
+#
+# Restarting it is safe mid-build: sandboxes live in their own podman scopes, and a restarted
+# builder re-attaches to them from the spool. KillMode=process keeps a stop from touching them.
+[Unit]
+Description=Zebra host builder (Claude Code sandboxes)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+# CLAUDE_CODE_OAUTH_TOKEN and optional ZEBRA_BUILDER_* ceilings; written by deploy-podman.sh.
+EnvironmentFile=-%h/.config/zebra/builder.env
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h
+ExecStart=%h/.local/bin/uv run --no-project --python 3.14 %h/.local/share/zebra/builder/zebra_builder.py
+KillMode=process
+Restart=always
+RestartSec=10
+MemoryMax=256M
+
+[Install]
+WantedBy=default.target

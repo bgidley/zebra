@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from zebra_agent.loop import DEFAULT_GOAL_TIMEOUT
 
 if TYPE_CHECKING:
+    from zebra_agent.scheduler.builder_watch import BuilderWatcher
     from zebra_agent.scheduler.goal_tracker import GoalTracker
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,7 @@ async def run_daemon_loop(
         wf_engine,
         goal_timeout=agent_settings.get("GOAL_TIMEOUT_SECONDS", DEFAULT_GOAL_TIMEOUT),
     )
+    builder_watcher = make_builder_watcher(wf_engine)
 
     async def _goal_queue_tick_fn() -> None:
         await _tick(
@@ -98,6 +100,7 @@ async def run_daemon_loop(
             dry_run=False,
             tracker=goal_tracker,
             library=agent_engine.get_library(),
+            builder_watcher=builder_watcher,
         )
 
     # Routine-dispatched workflows (e.g. the 03:00 Dream Cycle) need the same
@@ -150,6 +153,19 @@ async def run_daemon_loop(
             recovery.cancel()
 
     logger.info("Daemon stopped.")
+
+
+def make_builder_watcher(engine) -> BuilderWatcher | None:
+    """A watcher for the host builder's spool, or None when no spool is mounted (#98)."""
+    from zebra_agent.scheduler.builder_watch import BuilderWatcher
+    from zebra_tasks.builder.spool import BuilderSpool
+
+    spool = BuilderSpool.from_env()
+    if spool is None:
+        logger.info("No builder spool (ZEBRA_BUILDER_SPOOL) — Claude Code builds are off")
+        return None
+    logger.info("Watching the builder spool at %s", spool.root)
+    return BuilderWatcher(engine, spool)
 
 
 async def resolve_routine_user(username: str | None) -> int | None:
@@ -227,6 +243,7 @@ async def _tick(
     tracker: GoalTracker | None = None,
     poll_interval: float = 1.0,
     library=None,
+    builder_watcher: BuilderWatcher | None = None,
 ) -> None:
     """One goal-queue iteration: reconcile, pick a goal, check budget, execute.
 
@@ -235,7 +252,8 @@ async def _tick(
     queue (#141). *tracker* carries in-flight goals between ticks; when omitted
     a fresh one is used (single-tick callers such as tests). With a workflow
     *library*, a goal that failed before it could write its own postmortem (a
-    timeout or crash) gets one from the *Postmortem* workflow (#175).
+    timeout or crash) gets one from the *Postmortem* workflow (#175). A *builder_watcher*
+    hands host-builder answers to workflows waiting on them (#98).
     """
     from zebra_agent.scheduler.goal_tracker import GoalTracker
 
@@ -251,6 +269,13 @@ async def _tick(
             logger.warning("[daemon:halted] Kill switch active — cancelled %s", process_id[:12])
         logger.warning("[daemon:halted] Kill switch active — skipping pickup")
         return
+
+    # 0b. Hand finished builds to the workflows waiting on them; cancel orphaned builds
+    if builder_watcher is not None:
+        try:
+            await builder_watcher.tick()
+        except Exception:
+            logger.exception("[daemon:builder] Builder watcher tick failed")
 
     # 1. Record goals that finished since the last tick (e.g. after a human answered)
     for finished in await tracker.reconcile():

@@ -34,7 +34,8 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/gym.py` | `GoldenTask`, `load_golden_tasks()`, `golden_dir()` (`ZEBRA_GOLDEN_TASKS_DIR`, default `golden/`); `WorkflowLibrary.list_golden_tasks()` (#171) |
 | `golden/` | Golden task YAML files (`id`, `workflow`, `goal`, `expected`, `criteria`) the gym scores workflows on (#171) |
 | `zebra_agent/postmortem.py` | `start_postmortem` / `postmortem_failed_goal` / `needs_failure_postmortem` — run the *Postmortem* workflow for timeouts, crashes and low ratings (#175) |
-| `zebra_agent/human_tasks.py` | `find_pending_human_task` — READY `auto: false` task in a process tree |
+| `zebra_agent/human_tasks.py` | `find_pending_human_task` — READY `auto: false` task in a process tree (external waits included, so the goal parks) |
+| `zebra_agent/scheduler/builder_watch.py` | `BuilderWatcher` — on each daemon tick, completes READY `external: builder` waits from the host builder's spool (routed by result state, violations to `__builder_violations__`) and cancels builds whose process ended (#98) |
 | `zebra_agent/direct_run.py` | `run_named_workflow()` (start a named workflow from inputs, required `inputs` checked, no selection) and `workflow_status()` (`complete` + `result_key` output / `awaiting_input` + task id / `failed` / `running`) — used by `manage.py run_workflow` (#190) |
 | `zebra_agent/replay.py` | `replay_process()` / `replay_status()`: create and run a replay of a finished process (#170), status plus `replay_of`, `live`, `cost`. Used by `manage.py replay_process` |
 | `zebra_agent/ioc/` | IoC (Inversion of Control) module |

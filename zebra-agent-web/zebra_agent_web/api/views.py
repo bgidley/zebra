@@ -20,7 +20,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from zebra.core.models import TaskResult
-from zebra.forms import resolve_task_schema
+from zebra.forms import is_human_task, resolve_task_schema
 
 from zebra_agent_web.api import agent_engine, engine, manual_review
 from zebra_agent_web.api.serializers import (
@@ -970,7 +970,7 @@ def process_pending_tasks(request, process_id):
         result = []
         for task in pending:
             task_def = definition.tasks.get(task.task_definition_id)
-            if not task_def or task_def.auto:
+            if not task_def or not is_human_task(task_def):
                 continue
 
             task_data = pydantic_to_dict(task)
