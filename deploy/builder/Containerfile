@@ -15,8 +15,11 @@ ARG CLAUDE_CODE_VERSION=2.1.304
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" && npm cache clean --force
 
 # uv-managed Pythons land somewhere every uid can write (the sandbox runs as the host uid).
+# The pinned Claude Code must not update itself or phone home beyond the API.
 ENV UV_PYTHON_INSTALL_DIR=/tmp/uv-python \
-    UV_TOOL_BIN_DIR=/tmp/uv-bin
+    UV_TOOL_BIN_DIR=/tmp/uv-bin \
+    DISABLE_AUTOUPDATER=1 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 
 COPY sandbox-run.sh /usr/local/bin/sandbox-run
 COPY sandbox-probe.sh /usr/local/bin/sandbox-probe

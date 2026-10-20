@@ -282,6 +282,20 @@ class TestStart:
         assert read(first, "status.json")["state"] == "running"
         assert read(second, "status.json")["state"] == "queued"
 
+    def test_older_queued_job_waits_for_the_running_one(self, builder, config, runner):
+        older = make_job(config)
+        week_ago = time.time() - 3600
+        os.utime(older / "job.json", (week_ago, week_ago))
+        (older / "status.json").write_text(json.dumps({"state": "queued"}))
+        newer = make_job(config)
+        # Pretend `newer` is already running (started by an earlier pass).
+        builder.start(newer)
+        runner.calls.clear()
+        os.utime(newer, None)  # a status write bumps the directory mtime
+        builder.tick()
+        assert runner.podman_runs() == []
+        assert read(older, "status.json")["state"] == "queued"
+
     def test_ignores_non_job_directories(self, builder, config, runner):
         (config.spool / "not-a-job").mkdir()
         (config.spool / "probe-abc").mkdir()

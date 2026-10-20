@@ -199,6 +199,14 @@ def read_output(path: Path, cap: int) -> str | None:
         os.close(fd)
 
 
+def submitted_at(job_dir: Path) -> float:
+    """When Zebra wrote the job (``job.json``'s mtime); later status writes do not change it."""
+    try:
+        return (job_dir / "job.json").stat().st_mtime
+    except OSError:
+        return job_dir.stat().st_mtime
+
+
 def sha256(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
@@ -286,7 +294,7 @@ class Builder:
             for p in self.config.spool.iterdir()
             if JOB_ID_RE.match(p.name) and p.is_dir() and not p.is_symlink()
         ]
-        return sorted(dirs, key=lambda p: p.stat().st_mtime)
+        return sorted(dirs, key=submitted_at)
 
     def audit(self, job_id: str, event: str, **detail) -> None:
         line = json.dumps({"at": _iso(), "job_id": job_id, "event": event, **detail})
@@ -314,22 +322,20 @@ class Builder:
     # ---- main loop
 
     def tick(self) -> None:
-        """One pass over the spool."""
-        running = None
-        for job_dir in self.job_dirs():
-            status = read_json(job_dir / "status.json") or {}
+        """One pass over the spool, oldest job first. At most one sandbox runs at a time."""
+        jobs = [(d, read_json(d / "status.json") or {}) for d in self.job_dirs()]
+        busy = any(status.get("state") == "running" for _, status in jobs)
+        for job_dir, status in jobs:
             state = status.get("state")
             try:
                 if state == "running":
-                    if not self.supervise(job_dir, status):
-                        running = job_dir
+                    self.supervise(job_dir, status)
                 elif state in (None, "queued"):
                     if (job_dir / "cancel").exists():
                         self.finish(job_dir, {"state": "cancelled", "error": "cancelled"})
                         self.audit(job_dir.name, "cancelled", before="start")
-                    elif running is None:
-                        if self.start(job_dir):
-                            running = job_dir
+                    elif not busy:
+                        busy = self.start(job_dir)
                     elif state is None:
                         write_json(job_dir / "status.json", {"state": "queued"})
                 elif state == "done":
@@ -713,6 +719,7 @@ PROBE_ALLOWED_ENV = {
     "PATH", "HOME", "HOSTNAME", "TERM", "container", "NODE_VERSION", "YARN_VERSION",
     "UV_PYTHON_INSTALL_DIR", "UV_TOOL_BIN_DIR", "PWD", "SHLVL", "_",
     "LC_CTYPE",  # set by Python's own locale coercion (PEP 538) in the probe
+    "DISABLE_AUTOUPDATER", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",  # image ENV
     "CLAUDE_CODE_OAUTH_TOKEN", "MAX_TURNS", "BASE_SHA", "BUILD_TITLE", "TEST_COMMAND",
 }  # fmt: skip
 # Host-filesystem mounts podman itself adds to every container.
