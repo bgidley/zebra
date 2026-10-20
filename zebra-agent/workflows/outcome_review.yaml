@@ -2,7 +2,7 @@ name: "Outcome Review"
 description: "Review a shipped Zebra change against its agreed outcomes, compare with Claude's independent review, and ask a human to rule where the two still disagree."
 tags: ["review", "outcomes", "process", "code", "system"]
 use_when: "Run by the delivery process after a deploy, with the outcomes, the diff and Claude's verdicts."
-version: 3
+version: 4
 first_task: zebra_review
 result_key: review_result
 # Requires inputs, so it is never selected for a goal; run it with
@@ -137,6 +137,8 @@ tasks:
     name: "Outcome Review — Your Ruling"
     auto: false
     properties:
+      # The fields below already show what matters; the raw review JSON is noise (#215).
+      show_prior_outputs: false
       schema:
         type: object
         title: "Zebra and Claude disagree on this change"
@@ -151,9 +153,9 @@ tasks:
             readOnly: true
           comparison:
             type: string
-            title: "Verdicts side by side"
+            title: "Verdicts"
             format: multiline
-            default: "{{review_result.table_markdown}}"
+            default: "{{review_result.summary_markdown}}"
             readOnly: true
           positions:
             type: string

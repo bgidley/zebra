@@ -2154,6 +2154,11 @@ def _resolve_schema_defaults(schema: dict, process_properties: dict) -> dict:
                     key = f"__task_output_{task_id}"
                     output = process_properties.get(key)
                     return str(output) if output is not None else ""
+                # A field of a dict property, e.g. {{review_result.dispute_notes}} (#215)
+                parent = process_properties.get(task_id)
+                if isinstance(parent, dict):
+                    value = parent.get(attr)
+                    return str(value) if value is not None else ""
             return str(process_properties.get(var, ""))
 
         return re.sub(r"\{\{(\w+(?:\.\w+)?)\}\}", replace_var, value)
@@ -2257,8 +2262,10 @@ async def human_task_form(request, task_id):
     # Collect prior task outputs so the template can show them as context.
     # Only include __task_output_* values, labelled by their task definition name,
     # so the user can see what earlier tasks produced before filling in this form.
+    # A task whose form already shows what matters opts out (#215).
+    show_prior = task_def.properties.get("show_prior_outputs", True) is not False
     prior_outputs = {}
-    for key, value in proc_props.items():
+    for key, value in proc_props.items() if show_prior else ():
         if key.startswith("__task_output_"):
             task_def_id = key[len("__task_output_") :]
             label = (

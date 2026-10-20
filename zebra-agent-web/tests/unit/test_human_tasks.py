@@ -706,6 +706,48 @@ class TestHumanTaskForm:
         assert "## Plan" not in content
         assert "<script>alert(1)</script>" not in content
 
+    async def test_resolves_a_field_of_a_dict_property(self, client, wf_engine):
+        """{{prop.field}} reads a field of a dict property, as the ruling form does (#215).
+
+        Regression test: the outcome review ruling form rendered its comparison and
+        dispute notes empty, because only {{task.output}} dotted paths resolved.
+        """
+        defn = _template_default_definition()
+        schema = defn.tasks["show_questions"].properties["schema"]
+        schema["properties"]["questions"]["default"] = "{{review_result.dispute_notes}}"
+        process, pending = await _start_workflow(wf_engine, defn)
+        task = pending[0]
+
+        running = await wf_engine.store.load_process(process.id)
+        props = {"review_result": {"dispute_notes": "O5: Zebra met, Claude partial"}}
+        await wf_engine.store.save_process(running.model_copy(update={"properties": props}))
+
+        response = await client.get(f"/tasks/{task.id}/")
+        content = response.content.decode()
+        assert "O5: Zebra met, Claude partial" in content
+        assert "{{review_result" not in content
+
+    async def test_task_can_hide_prior_outputs(self, client, wf_engine):
+        """show_prior_outputs: false drops earlier outputs from the page (#215)."""
+        defn = _template_default_definition()
+        defn.tasks["show_questions"].properties["show_prior_outputs"] = False
+        process, pending = await _start_workflow(wf_engine, defn)
+        task = pending[0]
+
+        running = await wf_engine.store.load_process(process.id)
+        props = {
+            "questions": "Q1: What is 1+1?",
+            "__task_output_draft": {"response": {"verdicts": [{"id": "O1"}]}},
+        }
+        await wf_engine.store.save_process(running.model_copy(update={"properties": props}))
+
+        response = await client.get(f"/tasks/{task.id}/")
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "Q1: What is 1+1?" in content
+        assert "verdicts" not in content
+        assert "<pre>" not in content
+
     async def test_read_only_markdown_field_renders_server_side(self, client, wf_engine):
         """readOnly string fields render markdown on the server, no marked.js needed."""
         defn = _template_default_definition()
