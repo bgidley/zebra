@@ -21,20 +21,27 @@
         </div>
     </div>
 
-    {% comment %}Needs you (#162): goals waiting on a human task come first, in the only amber on the page.{% endcomment %}
+    {% comment %}Needs you (#162): the head of the tasks inbox (#217) comes first, in the only amber on the page.{% endcomment %}
     {% if needs_you %}
     <section class="rounded-[10px] border border-needs/45 bg-needs/10" data-testid="needs-you" aria-labelledby="needs-you-title">
         <h2 id="needs-you-title" class="sr-only">Needs you</h2>
         <div class="divide-y divide-needs/20">
-            {% for a in needs_you %}
+            {% for item in needs_you %}
             <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
                 <div class="min-w-0">
-                    <p class="truncate text-ink"><span class="font-semibold text-needs">Needs you</span>&ensp;{{ a.goal }}</p>
-                    <p class="truncate text-sm text-muted">{{ a.workflow_name }}{% if a.current_tasks %}, {{ a.current_tasks|join:", " }}{% endif %}, started {{ a.started_at|ago }}</p>
+                    <p class="truncate text-ink"><span class="font-semibold text-needs">{% if item.kind == "review" %}Needs review{% else %}Needs you{% endif %}</span>&ensp;{{ item.goal|truncatechars:80 }}</p>
+                    <p class="truncate text-sm text-muted">{{ item.workflow_name }}, {{ item.task_name }}, {% if item.kind == "review" %}flagged{% else %}asked{% endif %} {{ item.waiting_since|ago }}</p>
                 </div>
-                <a href="/tasks/{{ a.human_task_id }}/" class="btn btn-sm shrink-0">Open task</a>
+                {% if item.kind == "review" %}
+                <a href="/tasks/" class="btn btn-sm shrink-0">Review</a>
+                {% else %}
+                <a href="/tasks/{{ item.id }}/" class="btn btn-sm shrink-0">Open task</a>
+                {% endif %}
             </div>
             {% endfor %}
+            {% if needs_you_more %}
+            <a href="/tasks/" class="block px-5 py-2.5 text-sm font-medium text-needs hover:underline" data-testid="needs-you-more">{{ needs_you_more }} more waiting on you</a>
+            {% endif %}
         </div>
     </section>
     {% endif %}

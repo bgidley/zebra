@@ -44,11 +44,25 @@ def _activity(goal, awaiting, task_id=None):
     }
 
 
+def _inbox_item(task_id, goal, kind="human"):
+    return {
+        "id": task_id,
+        "kind": kind,
+        "task_name": "Review",
+        "title": "",
+        "goal": goal,
+        "run_id": f"run-{goal}",
+        "workflow_name": "Weekly Digest",
+        "waiting_since": datetime.now(UTC) - timedelta(minutes=12),
+    }
+
+
 def _home_context(**overrides):
     running = [_activity("waiting", True, "ht-1"), _activity("busy", False)]
     base = {
         "running_activities": running,
-        "needs_you": [a for a in running if a["awaiting_human"]],
+        "needs_you": [_inbox_item("ht-1", "waiting")],
+        "needs_you_more": 0,
         "running_count": len(running),
         "workflows_count": 18,
         "total_runs": 36,
@@ -82,6 +96,24 @@ def test_home_leads_with_needs_you(db):
     assert html.index('data-testid="needs-you"') < html.index('data-testid="vitals"')
     assert "waiting" in needs and 'href="/tasks/ht-1/"' in needs
     assert "busy" not in needs
+
+
+def test_home_links_to_inbox_when_more_wait(db):
+    html = _page("pages/dashboard.html", _home_context(needs_you_more=2))
+    needs = html.split('data-testid="needs-you"', 1)[1].split("</section>", 1)[0]
+
+    more = needs.split('data-testid="needs-you-more"', 1)[1]
+    assert "2 more waiting on you" in more
+    assert 'href="/tasks/"' in needs
+
+
+def test_home_review_item_links_to_inbox(db):
+    review = _inbox_item("rv-1", "x", "review")
+    html = _page("pages/dashboard.html", _home_context(needs_you=[review]))
+    needs = html.split('data-testid="needs-you"', 1)[1].split("</section>", 1)[0]
+
+    assert "Needs review" in needs and 'href="/tasks/"' in needs
+    assert "/tasks/rv-1/" not in needs
 
 
 def test_home_hides_needs_you_when_nothing_waits(db):

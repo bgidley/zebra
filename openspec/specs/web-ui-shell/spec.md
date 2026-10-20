@@ -6,7 +6,7 @@ TBD - created by archiving change web-ui-shell. Update Purpose after archive.
 ## Requirements
 
 ### Requirement: Grouped navigation with a needs-you count
-The app shell SHALL group navigation into core items (Dashboard, Tasks, Run Goal, Activity), an **Agent** group (Workflows, Knowledge, Dream Cycles) and a **Governance** group (Trust, Values Tags, and Ethics Audit for staff). The Tasks item SHALL link to `/tasks/` and SHALL show the number of running goals waiting on a human task, loaded from `/nav/needs-you/` after the page renders.
+The app shell SHALL group navigation into core items (Dashboard, Tasks, Run Goal, Activity), an **Agent** group (Workflows, Knowledge, Dream Cycles) and a **Governance** group (Trust, Values Tags, and Ethics Audit for staff). The Tasks item SHALL link to the `/tasks/` inbox and SHALL show the number of inbox items (tasks waiting on a human), loaded from `/nav/needs-you/` after the page renders.
 
 #### Scenario: Groups render in order
 - **WHEN** a staff user loads any page that extends `base.html`
@@ -16,12 +16,16 @@ The app shell SHALL group navigation into core items (Dashboard, Tasks, Run Goal
 - **WHEN** two running goals each have a READY human task and the browser requests `/nav/needs-you/`
 - **THEN** the response shows the count 2
 
+#### Scenario: Review-flagged tasks count
+- **WHEN** one running goal has a READY human task and another has a task flagged for manual review
+- **THEN** `/nav/needs-you/` shows the count 2
+
 #### Scenario: No badge when nothing waits
-- **WHEN** no running goal has a READY human task
+- **WHEN** no running goal has a READY human task or a task flagged for manual review
 - **THEN** `/nav/needs-you/` returns an empty badge
 
 #### Scenario: Store failure does not break the page
-- **WHEN** loading running processes raises an error
+- **WHEN** loading tasks raises an error
 - **THEN** `/nav/needs-you/` returns HTTP 200 with an empty badge and the error is logged
 
 ### Requirement: Bare layout for signed-out pages
