@@ -12,7 +12,7 @@ import logging
 from datetime import UTC, datetime
 
 from zebra.core.models import ProcessInstance, ProcessState
-from zebra.forms import resolve_task_schema
+from zebra.forms import is_human_task, resolve_task_schema
 from zebra.storage.base import StateStore
 
 from zebra_agent_web.api import manual_review
@@ -83,7 +83,7 @@ async def inbox_items(store: StateStore) -> list[dict]:
             continue
         definition = await lookup.definition(process.definition_id)
         task_def = definition.tasks.get(task.task_definition_id) if definition else None
-        if task_def is None or task_def.auto:
+        if task_def is None or not is_human_task(task_def):
             continue
         schema = resolve_task_schema(task_def.properties.get("schema"), process.properties or {})
         items.append(
