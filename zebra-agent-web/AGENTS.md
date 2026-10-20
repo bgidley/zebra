@@ -559,7 +559,8 @@ The web UI renders human task forms from JSON Schema definitions stored in `task
 - `{% load form_tags %}` then `{% render_schema_form form field_errors submitted_values %}` renders the form as Tailwind-styled HTML
 - Supports: text, textarea, number, select, checkbox, multiselect, email, url, date inputs
 - Shows per-field validation errors, required markers, descriptions, placeholders
-- `readOnly` string fields and prior task outputs render markdown server-side via the `|markdown` filter (`markdown_tags.py`), styled by the shared `.md-body` class in `static/css/src/app.css`
+- `readOnly` string fields and prior task outputs render markdown server-side via the `|markdown` filter (`markdown_tags.py`), styled by the shared `.md-body` class in `static/css/src/app.css`; read-only panels grow with their content (no inner vertical scroll)
+- Schema `default`s resolve `{{key}}`, `{{task_id.output}}` and `{{key.field}}` (a field of a dict property) via `_resolve_schema_defaults`; a task with `show_prior_outputs: false` hides earlier tasks' outputs (#215)
 
 **Templates:**
 - `partials/human_task_form.html` - HTMX form partial (renders form, route buttons, Submit)

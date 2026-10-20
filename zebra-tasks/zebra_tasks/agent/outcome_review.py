@@ -62,25 +62,32 @@ def _sort_key(outcome_id: str) -> tuple[int, str]:
     return (int(digits) if digits else 10**6, outcome_id)
 
 
-def outcome_ids(outcomes: Any) -> set[str]:
-    """Outcome ids from the first cell of a markdown outcomes table (header and rules skipped)."""
-    ids = set()
+def outcome_texts(outcomes: Any) -> dict[str, str]:
+    """``{id: outcome}`` from the first two cells of a markdown outcomes table (#215)."""
+    texts = {}
     for line in str(outcomes or "").splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if line.strip().startswith("|") and re.fullmatch(r"[A-Za-z]+\d+", cells[0] or ""):
-            ids.add(cells[0].upper())
-    return ids
+            texts[cells[0].upper()] = cells[1] if len(cells) > 1 else ""
+    return texts
+
+
+def outcome_ids(outcomes: Any) -> set[str]:
+    """Outcome ids from the first cell of a markdown outcomes table (header and rules skipped)."""
+    return set(outcome_texts(outcomes))
 
 
 def compare_reviews(
     zebra: dict[str, dict[str, str]],
     claude: dict[str, dict[str, str]],
     expected: set[str] | None = None,
+    texts: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Line up two parsed reviews per outcome.
 
     ``expected`` ids (from the outcomes table) are always compared, so an outcome
     that neither reviewer judged is disputed rather than silently skipped.
+    ``texts`` (from ``outcome_texts``) name each outcome in the summary and notes.
     """
     rows = []
     for oid in sorted(set(zebra) | set(claude) | (expected or set()), key=_sort_key):
@@ -105,7 +112,8 @@ def compare_reviews(
         "disputed": disputed,
         "followups": [r["id"] for r in rows if r["agreed"] and r["zebra"] != "met"],
         "table_markdown": _table(rows),
-        "dispute_notes": _dispute_notes(rows),
+        "summary_markdown": _summary(rows, texts or {}),
+        "dispute_notes": _dispute_notes(rows, texts or {}),
     }
 
 
@@ -125,17 +133,35 @@ def _table(rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _dispute_notes(rows: list[dict[str, Any]]) -> str:
+def _summary(rows: list[dict[str, Any]], texts: dict[str, str]) -> str:
+    """Verdicts without evidence, narrow enough for the ruling form (#215)."""
+    lines = ["| # | Outcome | Zebra | Claude | Agreed |", "|---|---|---|---|---|"]
+    for r in rows:
+        lines.append(
+            f"| {r['id']} | {_cell(texts.get(r['id'], ''))} | {r['zebra'] or '?'} | "
+            f"{r['claude'] or '?'} | {'yes' if r['agreed'] else '**no**'} |"
+        )
+    if not rows:
+        lines.append("| — | No readable verdicts | ? | ? | **no** |")
+    return "\n".join(lines)
+
+
+def _dispute_notes(rows: list[dict[str, Any]], texts: dict[str, str]) -> str:
+    """One markdown section per disputed outcome: both verdicts, the outcome, each side's case."""
     notes = []
     for r in rows:
         if r["agreed"]:
             continue
-        notes.append(
-            f"{r['id']}: Zebra said {r['zebra'] or 'nothing readable'} "
-            f"({r['zebra_evidence'] or 'no evidence'}); Claude said "
-            f"{r['claude'] or 'nothing readable'} ({r['claude_evidence'] or 'no evidence'})."
-        )
-    return "\n".join(notes) or "No readable verdicts from either reviewer."
+        section = [
+            f"#### {r['id']}: Zebra {r['zebra'] or 'nothing readable'}, "
+            f"Claude {r['claude'] or 'nothing readable'}"
+        ]
+        if texts.get(r["id"]):
+            section.append(f"*{texts[r['id']]}*")
+        section.append(f"**Zebra:** {r['zebra_evidence'] or 'no evidence'}")
+        section.append(f"**Claude:** {r['claude_evidence'] or 'no evidence'}")
+        notes.append("\n\n".join(section))
+    return "\n\n".join(notes) or "No readable verdicts from either reviewer."
 
 
 class CompareOutcomeReviewsAction(TaskAction):
@@ -220,6 +246,16 @@ class CompareOutcomeReviewsAction(TaskAction):
             name="followups", type="list", description="Outcomes agreed as partial or missed"
         ),
         ParameterDef(name="table_markdown", type="string", description="Side-by-side table"),
+        ParameterDef(
+            name="summary_markdown",
+            type="string",
+            description="Verdicts per outcome without evidence (for the ruling form)",
+        ),
+        ParameterDef(
+            name="dispute_notes",
+            type="string",
+            description="Markdown section per disputed outcome with both sides' evidence",
+        ),
     ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
@@ -232,8 +268,8 @@ class CompareOutcomeReviewsAction(TaskAction):
             context.get_process_property(props.get("claude_key", "claude_review"))
         )
 
-        expected = outcome_ids(context.get_process_property(props.get("outcomes_key", "outcomes")))
-        result = compare_reviews(zebra, claude, expected)
+        texts = outcome_texts(context.get_process_property(props.get("outcomes_key", "outcomes")))
+        result = compare_reviews(zebra, claude, set(texts), texts)
         output_key = props.get("output_key", "review_result")
 
         ruling_key = props.get("ruling_key")

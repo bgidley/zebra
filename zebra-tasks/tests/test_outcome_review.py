@@ -10,6 +10,7 @@ from zebra_tasks.agent.outcome_review import (
     CompareOutcomeReviewsAction,
     compare_reviews,
     outcome_ids,
+    outcome_texts,
     parse_review,
 )
 
@@ -87,7 +88,7 @@ def test_disagreement_missing_or_garbled_verdicts_are_disputed(zebra, claude):
 
     assert result["status"] == "disputed"
     assert result["disputed"]
-    assert "Claude said" in result["dispute_notes"]
+    assert "**Claude:**" in result["dispute_notes"]
 
 
 def test_no_verdicts_at_all_is_disputed():
@@ -189,6 +190,55 @@ async def test_action_compares_every_outcome_in_the_table():
 
     assert result.next_route == "disputed"
     assert result.output["disputed"] == ["O2"]
+
+
+def test_outcome_texts_come_from_the_second_cell():
+    assert outcome_texts(OUTCOMES) == {"O1": "Reviews compare", "O2": "Disputes escalate"}
+
+
+def test_dispute_notes_give_each_disputed_outcome_its_own_section():
+    result = compare_reviews(
+        parse_review(_review(("O1", "met"), ("O2", "met"))),
+        parse_review(_review(("O1", "met"), ("O2", "partial"))),
+        texts=outcome_texts(OUTCOMES),
+    )
+
+    sections = result["dispute_notes"].split("####")[1:]
+    assert len(sections) == 1
+    assert sections[0].startswith(" O2: Zebra met, Claude partial\n")
+    assert "\n\n*Disputes escalate*\n\n" in sections[0]
+    assert "\n\n**Zebra:** O2 met\n\n**Claude:** O2 partial" in sections[0]
+    assert "O1" not in result["dispute_notes"]
+
+
+def test_summary_names_each_outcome_without_evidence():
+    result = compare_reviews(
+        parse_review(_review(("O1", "met"), ("O2", "met"))),
+        parse_review(_review(("O1", "met"), ("O2", "partial"))),
+        texts=outcome_texts(OUTCOMES),
+    )
+
+    lines = result["summary_markdown"].splitlines()
+    assert lines[0] == "| # | Outcome | Zebra | Claude | Agreed |"
+    assert lines[2:] == [
+        "| O1 | Reviews compare | met | met | yes |",
+        "| O2 | Disputes escalate | met | partial | **no** |",
+    ]
+    assert "| O2 | met | partial | **no** | O2 met | O2 partial |" in result["table_markdown"]
+
+
+async def test_action_names_outcomes_from_the_table():
+    context = _context(
+        {
+            "outcomes": OUTCOMES,
+            "zebra_review": _review(("O1", "met"), ("O2", "met")),
+            "claude_review": _review(("O1", "met"), ("O2", "met")),
+        }
+    )
+
+    result = await CompareOutcomeReviewsAction().run(_task(), context)
+
+    assert "| O2 | Disputes escalate | met | met | yes |" in result.output["summary_markdown"]
 
 
 async def test_final_step_records_without_routing():
