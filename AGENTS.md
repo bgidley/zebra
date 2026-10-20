@@ -697,6 +697,8 @@ my_task:
 
 Use `readOnly: true` on schema fields to display computed/read-only values. Use `default: "{{template}}"` to pre-populate fields from workflow properties. A whole schema can also be generated at runtime: `schema: "{{followup_form}}"` resolves to a JSON Schema an earlier `llm_call` (`response_format: json`) wrote, giving one field per follow-up question (#179).
 
+**External waits (#98):** an `auto: false` task with `properties.external` (e.g. `external: builder`) parks the process like a human task (no goal timeout) but another system completes it; `zebra.forms.is_human_task()` keeps it out of human-task lists. Use it, not `not task_def.auto`, wherever "needs a person" is meant.
+
 See `zebra-py/AGENTS.md` for JSON Schema widget mapping and form utility functions (`zebra.forms` module).
 
 **Lifecycle:**

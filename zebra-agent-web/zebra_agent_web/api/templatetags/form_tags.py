@@ -250,7 +250,9 @@ def _render_markdown(field: FormField, value: Any = _UNSET) -> str:
 
     Markdown is rendered server-side with the same filter as run output, so it
     displays without any client-side library. A hidden input carries the raw
-    value so it is submitted with the form if needed.
+    value so it is submitted with the form if needed. The panel grows with its
+    content rather than scrolling inside the page; only wide content (tables)
+    scrolls sideways (#215).
     """
     effective = _effective_value(value, field.default)
     content = str(effective) if effective is not None else ""
@@ -259,7 +261,7 @@ def _render_markdown(field: FormField, value: Any = _UNSET) -> str:
     <label class="{LABEL_CLASS}">{escape(field.title)}</label>
     <div id="md_{escape(field.name)}"
          class="md-body rounded-md bg-gray-750 border border-gray-600 px-4 py-3
-                overflow-auto max-h-96">{render_markdown(content)}</div>
+                overflow-x-auto">{render_markdown(content)}</div>
     <input type="hidden" name="{escape(field.name)}" value="{escape(content)}" />
     {_render_description(field)}
 </div>"""

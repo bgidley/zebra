@@ -38,7 +38,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/urls.py` | API URL routing |
 | `zebra_agent_web/api/engine.py` | Engine integration |
 | `zebra_agent_web/api/agent_engine.py` | Agent engine wrapper (creates BudgetManager + injection) |
-| `zebra_agent_web/api/daemon.py` | Shared daemon loop (`run_daemon_loop()`); `queue_routine_goal()` / `resolve_routine_user()` queue scheduled routine goals as `run_as` or the owner (first active superuser, else earliest-created active user) (F155) |
+| `zebra_agent_web/api/daemon.py` | Shared daemon loop (`run_daemon_loop()`; with a builder spool each tick runs `BuilderWatcher`, `make_builder_watcher()`, #98); `queue_routine_goal()` / `resolve_routine_user()` queue scheduled routine goals as `run_as` or the owner (first active superuser, else earliest-created active user) (F155) |
 | `fixtures/routines/*.yaml` | Built-in routines: `goal_queue_tick`, `dream_cycle`, `compact_memory`, `daily_news_reading` (F155) |
 | `zebra_agent_web/api/identity.py` | Single-user identity; `goal_identity()` (async views) / `goal_identity_sync()` give the identity every goal entry point stamps with `__user_id__` (#151) |
 | `zebra_agent_web/api/gym.py` | `/gym/` read model (#171): `golden_task_rows()` (latest + last 10 current-version scores per golden task), `gate_decisions()` (per gym run + workflow: decision and both means). Template `pages/golden_gym.html` |
@@ -559,7 +559,8 @@ The web UI renders human task forms from JSON Schema definitions stored in `task
 - `{% load form_tags %}` then `{% render_schema_form form field_errors submitted_values %}` renders the form as Tailwind-styled HTML
 - Supports: text, textarea, number, select, checkbox, multiselect, email, url, date inputs
 - Shows per-field validation errors, required markers, descriptions, placeholders
-- `readOnly` string fields and prior task outputs render markdown server-side via the `|markdown` filter (`markdown_tags.py`), styled by the shared `.md-body` class in `static/css/src/app.css`
+- `readOnly` string fields and prior task outputs render markdown server-side via the `|markdown` filter (`markdown_tags.py`), styled by the shared `.md-body` class in `static/css/src/app.css`; read-only panels grow with their content (no inner vertical scroll)
+- Schema `default`s resolve `{{key}}`, `{{task_id.output}}` and `{{key.field.subfield}}` (keys of a dict property, any depth, #98) via `_resolve_schema_defaults`; a task with `show_prior_outputs: false` hides earlier tasks' outputs (#215)
 
 **Templates:**
 - `partials/human_task_form.html` - HTMX form partial (renders form, route buttons, Submit)

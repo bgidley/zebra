@@ -2,21 +2,28 @@
 
 ### Requirement: Builds run in a secret-free sandbox
 The host builder SHALL run each build's Claude Code session in a new podman container from the
-sandbox image, as a non-root user mapped to the host user (`--userns=keep-id`), with memory, CPU
-and pids limits, `no-new-privileges`, all capabilities dropped, and only the job's workspace and
+sandbox image, as a non-root user mapped to the host user (`--userns=keep-id`), with memory and
+pids limits, lowered CPU priority, `no-new-privileges`, all capabilities dropped, and only the job's workspace and
 output directory mounted. The container environment SHALL contain the Claude Code OAuth token
 and the job's own parameters, and no other credential.
 
+#### Scenario: Escape probe passes
+- **WHEN** `zebra_builder.py --probe` runs the sandbox command with the probe entrypoint
+- **THEN** the sandbox runs as a non-root uid with no effective capabilities and `NoNewPrivs`,
+  sees only `/workspace` and `/out` from the host, no secret files and no container socket, and
+  cannot write system directories
+
 #### Scenario: Sandbox command is constrained
 - **WHEN** the builder starts a build
-- **THEN** the `podman run` arguments include `--userns=keep-id`, `--memory`, `--cpus`,
+- **THEN** the `podman run` arguments include `--userns=keep-id`, `--memory`,
   `--pids-limit`, `--cap-drop=all`, `--security-opt=no-new-privileges`, exactly two `-v` mounts
   (workspace and output), and pass `CLAUDE_CODE_OAUTH_TOKEN` by name only
 
 ### Requirement: The host treats sandbox output as untrusted data
 The builder SHALL NOT run git or any other program inside a workspace after a sandbox has run in
 it. It SHALL read sandbox outputs only as regular files opened without following symlinks, and
-SHALL ignore any output larger than its size cap.
+SHALL ignore any output larger than its size cap. It SHALL redact the Claude token from all text
+it returns, and SHALL refuse a patch that contains the token.
 
 #### Scenario: Symlinked output is refused
 - **WHEN** a sandbox leaves `changes.patch` as a symlink to a host file
@@ -33,7 +40,7 @@ cloning any job whose repo is not on `ZEBRA_BUILDER_REPOS` or whose limits excee
 ceilings. It SHALL kill a sandbox that runs past its minutes, and SHALL report a run that hits
 `max_turns` as over budget. Every rejection and overrun SHALL be appended to the builder audit log
 and returned in the result's `violations`, and `claude_code_build` results SHALL be recorded in
-the process property `__builder_violations__`.
+the process property `__builder_violations__` by the builder watcher.
 
 #### Scenario: Repo not on the allowlist
 - **WHEN** a job names a repo not on the allowlist
@@ -50,13 +57,18 @@ the process property `__builder_violations__`.
 
 ### Requirement: Nothing is published without human approval
 The *Build Software* workflow SHALL run `publish_build` only on the `approve` route of its human
-review task. The builder SHALL push only to a branch it names itself, `zebra-build/<job id
+review task, sending the `patch_sha256` of the result the reviewer saw. The builder SHALL
+publish only a patch with that hash, at most once, and SHALL push only to a branch it names itself, `zebra-build/<job id
 prefix>`, on an allowlisted repo, and SHALL open a draft merge request. It SHALL NOT push to any
 other ref.
 
 #### Scenario: Rejected review discards the build
 - **WHEN** the reviewer chooses `reject`
-- **THEN** no publish request is written and the builder deletes the workspace
+- **THEN** no publish request is written and nothing is pushed
+
+#### Scenario: Stale approval is refused
+- **WHEN** the publish request's `patch_sha256` differs from the built patch
+- **THEN** the builder pushes nothing and answers with an error
 
 #### Scenario: Approved review opens a draft MR
 - **WHEN** the reviewer chooses `approve`

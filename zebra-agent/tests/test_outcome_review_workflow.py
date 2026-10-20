@@ -218,6 +218,18 @@ async def test_a_lasting_dispute_waits_for_a_human_ruling(engine, library):
     assert status["status"] == "awaiting_input"
     assert status["task_name"] == "Outcome Review — Your Ruling"
 
+    # The ruling form shows the summary and the dispute, not the raw reviews (#215)
+    process = await engine.store.load_process(status["process_id"])
+    form = (await engine.store.load_definition(process.definition_id)).tasks["human_ruling"]
+    fields = form.properties["schema"]["properties"]
+    assert form.properties["show_prior_outputs"] is False
+    assert fields["comparison"]["default"] == "{{review_result.summary_markdown}}"
+    assert fields["positions"]["default"] == "{{review_result.dispute_notes}}"
+    result = process.properties["review_result"]
+    assert "| O2 | Disputes escalate | met | partial | **no** |" in result["summary_markdown"]
+    assert result["dispute_notes"].startswith("#### O2: Zebra met, Claude partial")
+    assert f"**Claude:** {CLAUDE_SECRET}" in result["dispute_notes"]
+
     await engine.complete_task(status["task_id"], TaskResult.ok(output={"ruling": "O2 partial"}))
     status = await workflow_status(engine, status["process_id"])
 

@@ -59,6 +59,7 @@ tasks:
     name: "Approve the Build Brief"
     auto: false
     properties:
+      show_prior_outputs: false
       schema:
         type: object
         title: "Build with Claude Code?"
@@ -127,6 +128,7 @@ tasks:
     name: "Review the Build"
     auto: false
     properties:
+      show_prior_outputs: false
       schema:
         type: object
         title: "Review the Claude Code build"

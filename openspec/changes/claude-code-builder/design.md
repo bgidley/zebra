@@ -49,7 +49,7 @@ then runs the job's `test_command` into `test.log` / `test.rc`. Run with:
 
 ```
 podman run -d --name zebra-build-<id> --userns=keep-id --user <uid>:<gid>
-  --memory=<mem> --memory-swap=<mem> --cpus=<cpus> --pids-limit=512
+  --memory=<mem> --memory-swap=<mem> --pids-limit=512   (under `nice -n 10`)
   --security-opt=no-new-privileges --cap-drop=all
   -v <ws>:/workspace:Z -v <jobdir>/sandbox:/out:Z
   -e CLAUDE_CODE_OAUTH_TOKEN -e HOME=/tmp/home -e MAX_TURNS -e BASE_SHA -e TEST_COMMAND
@@ -57,6 +57,9 @@ podman run -d --name zebra-build-<id> --userns=keep-id --user <uid>:<gid>
 ```
 
 `--userns=keep-id` makes files the sandbox writes belong to `opc`, so the host can clean them up.
+The host delegates only the memory and pids cgroup controllers to rootless podman, so CPU is
+bounded by priority; `--cpus` is added only when `ZEBRA_BUILDER_CPUS` is set. `--probe` runs this
+command with an escape probe in place of Claude Code (`check_probe`).
 The token is passed by name from the builder's own environment, so it never appears in argv.
 
 The workspace is a clone the host made. After the sandbox has run, the host treats it as hostile:
@@ -69,7 +72,7 @@ there.
 
 Ceilings come from `builder.env`: `ZEBRA_BUILDER_REPOS` (allowlist, default `gidley/zebra`),
 `ZEBRA_BUILDER_MAX_TURNS` (200), `ZEBRA_BUILDER_MAX_MINUTES` (90), `ZEBRA_BUILDER_MEMORY` (3g),
-`ZEBRA_BUILDER_CPUS` (1.5). A job outside them is `rejected` before any clone. Minutes are
+`ZEBRA_BUILDER_CPUS` (off). A job outside them is `rejected` before any clone. Minutes are
 enforced by the builder, which kills the container when they run out. Turns are enforced by
 `claude --max-turns`; a result of subtype `error_max_turns` is reported as `over_budget`. Every
 breach is a `violations` entry `{limit, requested|used, allowed}`, appended to `audit.jsonl`;
@@ -103,7 +106,8 @@ restart the builder but never stop sandboxes.
 
 ### 6. Publish
 
-`publish_build` runs only on the review's `approve` route. It writes `publish.json` and the
+`publish_build` runs only on the review's `approve` route. It writes `publish.json` with the
+`patch_sha256` the reviewer saw; the builder publishes only that patch, once. Then the
 workflow parks on a second external wait. The builder:
 1. rechecks the repo against the allowlist;
 2. makes a fresh clone, runs `git am` with `-c core.hooksPath=/dev/null`, and pushes
@@ -112,8 +116,8 @@ workflow parks on a second external wait. The builder:
 3. runs `glab mr create --draft --source-branch … --target-branch <base>`;
 4. writes `published.json` and deletes the workspace.
 
-A rejected review writes `cancel`, which deletes the workspace. Workspaces older than 7 days are
-pruned.
+The workspace is already gone once the result is collected (the host keeps only the patch copy),
+so a rejected review just ends the workflow. Finished jobs older than 7 days are pruned.
 
 ### 7. Cost
 

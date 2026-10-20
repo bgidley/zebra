@@ -15,7 +15,11 @@ fixes) skip both steps. Decisions came from the workflow brainstorm linked on th
 
 None. All state lives in process properties: inputs (`issue`, `title`, `outcomes`, `diff`,
 `claude_review`, `deployed_hash`), `zebra_review`, `zebra_reconsidered`, and `review_result =
-{status: agreed|disputed|ruled, rows, disputed, followups, table_markdown, dispute_notes, ruling?}`.
+{status: agreed|disputed|ruled, rows, disputed, followups, table_markdown, summary_markdown,
+dispute_notes, ruling?}`. `table_markdown` (posted on the issue) has both sides' evidence;
+`summary_markdown` (the ruling form) has id, outcome text, verdicts and agreed only;
+`dispute_notes` is a markdown section per disputed outcome with the outcome text and each side's
+evidence (#215).
 
 ## Interfaces
 
@@ -41,7 +45,8 @@ zebra_review (llm_agent + source tools, JSON, blind)
                                          └─ disputed → human_ruling (auto: false) → record_ruling
 ```
 
-The human task shows the side-by-side table and both positions; the ruling is free text. It
+The human task shows the summary table and a section per disputed outcome, without the earlier
+steps' raw output (`show_prior_outputs: false`, v4, #215); the ruling is free text. It
 appears on `/tasks/`. The process runs with a `run_id`, outside the Agent Main Loop (no
 selection, metrics or memory).
 
