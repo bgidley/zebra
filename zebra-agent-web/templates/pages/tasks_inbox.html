@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load format_tags %}
+
+{% block title %}Tasks - Zebra Agent{% endblock %}
+{% block page_title %}Tasks{% endblock %}
+
+{% block content %}
+{% comment %}
+Tasks inbox (#217): everything waiting on a human, oldest first. Same items as
+the nav badge and the dashboard Needs-you strip (api/inbox.py).
+
+Context:
+  items - inbox_items() dicts: id, kind ("human" | "review"), task_name, title,
+          goal, run_id, root_process_id, workflow_name, waiting_since,
+          execution_attempt (review only)
+  error - true when the inbox could not be loaded
+{% endcomment %}
+<div class="space-y-6">
+    <div>
+        <h1 class="text-2xl font-bold text-ink">Tasks</h1>
+        <p class="text-gray-400 mt-1">Things I'm waiting on you for, oldest first. Goals and their progress are under <a href="/activity/" class="text-muted hover:text-ink underline">Activity</a>.</p>
+    </div>
+
+    {% if error %}
+    <div class="panel px-5 py-4 text-sm text-fail" data-testid="inbox-error">Tasks could not be loaded. Try again in a moment.</div>
+    {% elif items %}
+    <section class="panel divide-y divide-line" data-testid="inbox" aria-label="Waiting on you">
+        {% for item in items %}
+        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
+             data-inbox-item="{{ item.id }}" data-kind="{{ item.kind }}"{% if item.kind == "review" %} data-review-task="{{ item.id }}"{% endif %}>
+            <div class="min-w-0 flex items-start gap-3">
+                <span class="mt-1.5">{% include "components/state_dot.html" with state="needs" %}</span>
+                <div class="min-w-0">
+                    <p class="truncate text-ink">
+                        <span class="font-medium">{{ item.title|default:item.task_name }}</span>
+                        {% if item.kind == "review" %}<span class="ml-2 text-xs font-medium text-needs">Needs review</span>{% endif %}
+                    </p>
+                    <p class="truncate text-sm text-muted">
+                        {% if item.run_id %}<a href="/runs/{{ item.run_id }}/" class="hover:text-ink hover:underline">{{ item.goal|truncatechars:100 }}</a>{% else %}<a href="/processes/{{ item.root_process_id }}/trace/" class="hover:text-ink hover:underline">{{ item.goal|truncatechars:100 }}</a>{% endif %}
+                    </p>
+                    <p class="text-xs text-faint">
+                        {{ item.workflow_name }}{% if item.title and item.title != item.task_name %} · {{ item.task_name }}{% endif %} ·
+                        {% if item.kind == "review" %}interrupted {{ item.execution_attempt }}&times;, flagged{% else %}asked{% endif %}
+                        <time datetime="{{ item.waiting_since|date:'c' }}">{{ item.waiting_since|ago }}</time>
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                {% if item.kind == "review" %}
+                <button hx-post="{% url 'review_task_retry' task_id=item.id %}"
+                        hx-target="closest [data-review-task]" hx-swap="innerHTML"
+                        hx-disabled-elt="this"
+                        hx-confirm="Re-run '{{ item.task_name }}'? Its side effects may happen twice."
+                        class="btn btn-sm">Retry</button>
+                <button hx-post="{% url 'review_task_fail' task_id=item.id %}"
+                        hx-target="closest [data-review-task]" hx-swap="innerHTML"
+                        hx-disabled-elt="this"
+                        hx-confirm="Fail this run?"
+                        class="btn btn-sm btn-danger">Fail</button>
+                {% else %}
+                <a href="/tasks/{{ item.id }}/" class="btn btn-sm btn-primary">Open</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+    {% else %}
+    <div class="panel px-5 py-10 text-center" data-testid="inbox-empty">
+        <p class="text-ink">Nothing is waiting on you.</p>
+        <p class="text-sm text-muted mt-1">When a goal needs your input or a review, it shows up here.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

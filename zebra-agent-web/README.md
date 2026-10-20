@@ -221,7 +221,6 @@ uv run zebra-web-agent-dev
 - **`goal_processing.html`** - Live goal execution progress UI
 - **`human_task_form.html`** - JSON Schema-driven form for human tasks (HTMX)
 - **`human_task_complete.html`** - Success state after form submission (HTMX swap)
-- **`pending_tasks_list.html`** - List of pending human tasks (HTMX)
 - **`nav_item.html`** - Navigation sidebar items
 
 ### Static Assets

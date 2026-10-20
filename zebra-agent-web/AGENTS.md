@@ -47,6 +47,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/bug_reports.py` | Bug reports (#186): validate the dialog's fields, parse the browser's `client_context`, add server context + linked process/task/run state, render the reviewer markdown, list reports for `/bugs/`. UI: `partials/bug_report_dialog.html` (in `base.html`), `static/js/bug-report.js` (buffers JS/HTMX errors from `<head>`). See `specs/bug-report-design.md` |
 | `zebra_agent_web/api/thoughts.py` | Voice layer read model (#161): `thoughts_for_process(props)` (ordered recorded reasoning, voice line preferred) and `recent_thoughts()` (per-user feed for the dashboard). Rendered by `components/thought.html`, `partials/thought_trail.html`, `partials/on_my_mind.html` |
 | `zebra_agent_web/api/manual_review.py` | Find / retry / fail tasks flagged `__requires_manual_review__` by recovery (#130) |
+| `zebra_agent_web/api/inbox.py` | Tasks inbox read model (#217): `inbox_items(store)`: READY human tasks on unfinished processes plus review-flagged tasks, oldest first, with goal / run / workflow from the root process. Feeds `/tasks/` (`pages/tasks_inbox.html`), the nav badge and the dashboard Needs-you strip |
 | `zebra_agent_web/api/management/commands/run_workflow.py` | `manage.py run_workflow <name> --input-file -` runs a named workflow directly (default tier medium); `--status <process_id>` reports on it; JSON out, exit 1 on failure. Used by `scripts/zebra-outcome-review.sh` (#190) |
 | `zebra_agent_web/api/management/commands/replay_process.py` | `manage.py replay_process <process_id> [--live STEP]... [--definition FILE] [--continue-live]` replays a finished process from its recording (#170); JSON out, exit 1 if it cannot start |
 | `zebra_agent_web/storage.py` | DjangoStore (StateStore for workflow state) |
@@ -566,8 +567,7 @@ The web UI renders human task forms from JSON Schema definitions stored in `task
 - `partials/human_task_form.html` - HTMX form partial (renders form, route buttons, Submit)
 - `partials/human_task_complete.html` - Success partial after submission (HTMX swap)
 - `pages/human_task.html` - Full page wrapper with breadcrumb
-- `pages/pending_tasks.html` - Lists all pending human tasks across processes
-- `partials/pending_tasks_list.html` - HTMX-swappable task list
+- `pages/tasks_inbox.html` - The `/tasks/` inbox: every task waiting on a human, with Open / Retry / Fail (#217)
 
 ### Human Task Completion API
 
@@ -603,12 +603,12 @@ POST /api/tasks/<task_id>/complete/
 
 | URL | View | Purpose |
 |-----|------|---------|
-| `/` | `dashboard` | Main dashboard (running activities panel, budget status card) |
+| `/` | `dashboard` | Main dashboard (Needs-you strip: first 5 inbox items; running activities panel, budget status card) |
 | `/run/` | `run_goal_form` | Goal input form (includes priority/deadline/queue options) |
 | `/run/execute/` | `run_goal_execute` | Start goal execution |
 | `/run/queue/` | `run_goal_queue` | Queue goal for deferred daemon execution |
-| `/runs/` | `recent_runs` | Run history |
-| `/runs/in-progress/` | `in_progress_runs` | Currently running goals |
+| `/runs/` | `recent_runs` | Legacy: redirects to `/activity/?show_completed=true` |
+| `/runs/in-progress/` | `in_progress_runs` | Legacy: redirects to `/activity/` |
 | `/runs/<id>/` | `run_detail` | Run details with diagram (includes cost column) |
 | `/runs/<id>/context/` | `run_context_partial` | HTMX preview of one of your completed runs for "Extend a previous run" (F116) |
 | `/runs/<id>/continue/` | `run_continue` | Continue a finished run with a progress comment; `mode=now\|queue` (POST, HTMX, F134) |
@@ -618,8 +618,8 @@ POST /api/tasks/<task_id>/complete/
 | `/workflows/<name>/restore/` | `workflow_restore` | Restore a retired workflow; 409 if the name is active (POST, HTMX, #148) |
 | `/knowledge/` | `knowledge_list` | Personal knowledge (source badge, confidence; soft-deleted hidden) |
 | `/knowledge/<id>/confirm/` | `knowledge_confirm` | Confirm an entry: confidence 1.0, source human (POST, F152) |
-| `/tasks/` | `pending_tasks` | Pending human tasks list |
-| `/nav/needs-you/` | `nav_needs_you` | HTMX nav badge: running goals waiting on a human task; empty on error (#160) |
+| `/tasks/` | `pending_tasks` | Tasks inbox: everything waiting on a human, oldest first (#217) |
+| `/nav/needs-you/` | `nav_needs_you` | HTMX nav badge: number of inbox items; empty on error (#160, #217) |
 | `/tasks/<id>/` | `human_task_form` | Human task form page |
 | `/tasks/<id>/submit/` | `human_task_submit` | Submit human task form (POST) |
 | `/api/processes/<id>/pending-tasks/` | `process_pending_tasks` | Get pending human tasks with schema (API) |
