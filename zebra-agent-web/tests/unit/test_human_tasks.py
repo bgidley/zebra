@@ -327,11 +327,11 @@ async def _start_workflow(wf_engine, definition):
 class TestPendingTasksList:
     """Tests for the /activity/ view (formerly /tasks/)."""
 
-    async def test_old_tasks_url_redirects(self, client):
-        """The old /tasks/ URL redirects to /activity/."""
+    async def test_tasks_url_is_the_inbox(self, client):
+        """/tasks/ is its own inbox page, no longer a redirect to /activity/ (#217)."""
         response = await client.get("/tasks/")
-        assert response.status_code == 302
-        assert "/activity/" in response.url
+        assert response.status_code == 200
+        assert "pages/tasks_inbox.html" in [t.name for t in response.templates]
 
     async def test_empty_when_no_processes(self, client):
         """No running processes -> empty activity list."""
@@ -1277,3 +1277,75 @@ class TestProcessDelete:
         # Task should also be gone
         task = await store.load_task(task_id)
         assert task is None
+
+
+# ===========================================================================
+# Web View Tests: Tasks inbox (#217)
+# ===========================================================================
+
+
+async def _flagged_review_task(wf_engine, store):
+    """A RUNNING process whose auto task recovery flagged for manual review."""
+    from zebra.core.engine import MANUAL_REVIEW_FLAG
+    from zebra.core.models import ProcessState, TaskInstance, TaskState
+
+    defn = _simple_human_task_definition()
+    await store.save_definition(defn)
+    process = await wf_engine.create_process(defn)
+    await store.save_process(
+        process.model_copy(
+            update={"state": ProcessState.RUNNING, "properties": {"goal": "Email the team"}}
+        )
+    )
+    task = TaskInstance(
+        id="review-task-1",
+        task_definition_id="done",
+        process_id=process.id,
+        state=TaskState.RUNNING,
+        foe_id="foe-review",
+        properties={MANUAL_REVIEW_FLAG: True},
+    )
+    await store.save_task(task)
+    return process, task
+
+
+class TestTasksInbox:
+    """/tasks/ lists only what waits on a human, and drops items once acted on."""
+
+    async def test_goal_without_human_task_is_in_activity_not_tasks(self, client, wf_engine, store):
+        await _create_running_process_with_auto_task(wf_engine, store, "auto-run", "Run auto tasks")
+
+        activity = await client.get("/activity/")
+        tasks = await client.get("/tasks/")
+
+        assert b"Run auto tasks" in activity.content
+        assert b"Run auto tasks" not in tasks.content
+        assert b'data-testid="inbox-empty"' in tasks.content
+
+    async def test_submitting_a_human_task_removes_it(self, client, wf_engine, store):
+        _, pending = await _start_workflow(wf_engine, _simple_human_task_definition())
+        task = pending[0]
+        row = f'data-inbox-item="{task.id}"'.encode()
+
+        assert row in (await client.get("/tasks/")).content
+
+        response = await client.post(
+            f"/tasks/{task.id}/submit/", data={"name": "Alice", "severity": "high"}
+        )
+        assert response.status_code == 200
+
+        assert row not in (await client.get("/tasks/")).content
+        assert b"aria-label=" not in (await client.get("/nav/needs-you/")).content
+
+    async def test_failing_a_review_task_removes_it(self, client, wf_engine, store):
+        _, task = await _flagged_review_task(wf_engine, store)
+        row = f'data-inbox-item="{task.id}" data-kind="review"'.encode()
+
+        assert row in (await client.get("/tasks/")).content
+        assert b'aria-label="1 waiting on you"' in (await client.get("/nav/needs-you/")).content
+
+        response = await client.post(f"/tasks/{task.id}/fail/", headers={"HX-Request": "true"})
+        assert response.status_code == 200
+
+        assert row not in (await client.get("/tasks/")).content
+        assert b"aria-label=" not in (await client.get("/nav/needs-you/")).content

@@ -30,6 +30,7 @@ from zebra_agent.metrics import WorkflowRun
 from zebra_tasks.agent.followup import load_previous_run_context
 
 from zebra_agent_web.api import agent_engine, engine, manual_review
+from zebra_agent_web.api.inbox import inbox_items
 from zebra_agent_web.api.thoughts import recent_thoughts, thoughts_for_process
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ def setup_view(request):
 # =============================================================================
 
 RUNNING_ACTIVITIES_LIMIT = 10
+NEEDS_YOU_LIMIT = 5
 
 
 async def _running_activities(store, limit: int = RUNNING_ACTIVITIES_LIMIT) -> list[dict]:
@@ -224,6 +226,13 @@ async def dashboard(request):
     except Exception:
         logger.warning("Could not load running activities for dashboard", exc_info=True)
 
+    # Needs you (#162): the head of the tasks inbox (#217)
+    needs_you = []
+    try:
+        needs_you = await inbox_items(engine.get_store())
+    except Exception:
+        logger.warning("Could not load the tasks inbox for dashboard", exc_info=True)
+
     # Zebra's voice layer (#161): recent recorded reasoning across runs
     on_my_mind = []
     try:
@@ -238,8 +247,9 @@ async def dashboard(request):
         "total_runs": total_runs,
         "running_count": len(running_activities),
         "running_activities": running_activities,
-        # Goals waiting on a human task lead the dashboard (#162)
-        "needs_you": [a for a in running_activities if a["awaiting_human"]],
+        # Tasks waiting on a human lead the dashboard (#162, #217)
+        "needs_you": needs_you[:NEEDS_YOU_LIMIT],
+        "needs_you_more": max(0, len(needs_you) - NEEDS_YOU_LIMIT),
         "success_rate": f"{success_rate:.0%}",
         "budget": budget_status,
         "trust_levels": trust_levels,
@@ -2108,13 +2118,25 @@ async def in_progress_runs(request):
     return redirect("/activity/")
 
 
+# =============================================================================
+# Tasks inbox
+# =============================================================================
+
+
 async def pending_tasks(request):
-    """Redirect to activity page with human tasks filter."""
-    return redirect("/activity/?human_only=true")
+    """Tasks inbox (#217): everything waiting on a human, oldest first."""
+    items, error = [], False
+    try:
+        await engine.ensure_initialized()
+        items = await inbox_items(engine.get_store())
+    except Exception:
+        logger.warning("Could not load the tasks inbox", exc_info=True)
+        error = True
+    return render(request, "pages/tasks_inbox.html", {"items": items, "error": error})
 
 
 async def nav_needs_you(request):
-    """HTMX badge for the Tasks nav item: running goals waiting on a human task (#160).
+    """HTMX badge for the Tasks nav item: the number of inbox items (#160, #217).
 
     Loaded after the page renders, so a slow or failing store never delays or
     breaks a page. On any error the badge is simply empty.
@@ -2122,10 +2144,9 @@ async def nav_needs_you(request):
     count = 0
     try:
         await engine.ensure_initialized()
-        activities = await _running_activities(engine.get_store(), limit=1000)
-        count = sum(1 for a in activities if a["awaiting_human"])
+        count = len(await inbox_items(engine.get_store()))
     except Exception:
-        logger.warning("Could not count goals waiting on a human task", exc_info=True)
+        logger.warning("Could not count tasks waiting on a human", exc_info=True)
     return render(request, "partials/nav_needs_you.html", {"count": count})
 
 
