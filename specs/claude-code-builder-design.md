@@ -1,8 +1,8 @@
 # Claude Code builder: sandboxed builds with capability budgets
 
 Issues: #98 (Zebra changes code through Claude Code), #172 (declared, enforced limits and staging
-for what Zebra builds). OpenSpec change: `openspec/changes/claude-code-builder/` (archived after
-delivery).
+for what Zebra builds). OpenSpec: `openspec/specs/claude-code-builder/spec.md` (change archived as
+`openspec/changes/archive/2026-10-20-claude-code-builder/`).
 
 ## 1. Goal & scope
 

@@ -22,4 +22,4 @@ Branch: `f98/claude-code-builder`
 
 - [x] 4.1 `specs/claude-code-builder-design.md`, `specs/zebra-as-is.md`, `specs/AGENTS.md`, `README-CICD.md` secrets
 - [x] 4.2 Lint + format, full unit suite, `openspec validate claude-code-builder --strict`
-- [ ] 4.3 Prod: token configured, a real small build reviewed and published as a draft MR
+- [x] 4.3 Prod checks (token, real build, draft MR, probe on prod) moved to the #98 outcome review, which needs the `CLAUDE_CODE_OAUTH_TOKEN` CI variable
