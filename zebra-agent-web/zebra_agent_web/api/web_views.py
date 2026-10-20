@@ -26,6 +26,7 @@ from django.urls import reverse
 from django.utils.html import escape
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
+from zebra.forms import is_human_task
 from zebra_agent.metrics import WorkflowRun
 from zebra_tasks.agent.followup import load_previous_run_context
 
@@ -121,7 +122,9 @@ async def _running_activities(store, limit: int = RUNNING_ACTIVITIES_LIMIT) -> l
                 if task.state not in (TaskState.READY, TaskState.RUNNING):
                     continue
                 task_def = definition.tasks.get(task.task_definition_id) if definition else None
-                is_human = bool(task_def and not task_def.auto and task.state == TaskState.READY)
+                is_human = bool(
+                    task_def and is_human_task(task_def) and task.state == TaskState.READY
+                )
                 if is_human and human_task_id is None:
                     human_task_id = task.id
                 tasks.append(task_def.name if task_def else task.task_definition_id)
@@ -348,7 +351,7 @@ def _workflow_structure(library, workflow_name: str) -> dict:
                 "id": task_id,
                 "name": definition.tasks[task_id].name or task_id,
                 "action": definition.tasks[task_id].action,
-                "human": not definition.tasks[task_id].auto,
+                "human": is_human_task(definition.tasks[task_id]),
                 "synchronized": definition.tasks[task_id].synchronized,
             }
             for task_id in order
@@ -1733,7 +1736,7 @@ async def activity(request):
         task_def = definition.tasks.get(ready_task.task_definition_id)
         if not task_def:
             continue
-        is_human = not task_def.auto
+        is_human = is_human_task(task_def)
         if human_only and not is_human:
             continue
         # Try to recover goal/run context from process properties
@@ -2036,7 +2039,7 @@ async def _get_tasks_for_processes(
             if not task_def:
                 continue
 
-            is_human = not task_def.auto
+            is_human = is_human_task(task_def)
             if human_only and not is_human:
                 continue
 
@@ -2154,9 +2157,15 @@ def _resolve_schema_defaults(schema: dict, process_properties: dict) -> dict:
                     key = f"__task_output_{task_id}"
                     output = process_properties.get(key)
                     return str(output) if output is not None else ""
+                # Keys of a dict property, any depth: {{build_result.test.rc}} (#98)
+                value = process_properties.get(task_id)
+                for part in attr.split("."):
+                    value = value.get(part) if isinstance(value, dict) else None
+                if value is not None:
+                    return str(value)
             return str(process_properties.get(var, ""))
 
-        return re.sub(r"\{\{(\w+(?:\.\w+)?)\}\}", replace_var, value)
+        return re.sub(r"\{\{(\w+(?:\.\w+)*)\}\}", replace_var, value)
 
     schema = copy.deepcopy(schema)
     # Resolve top-level description (used as form_description in the template)

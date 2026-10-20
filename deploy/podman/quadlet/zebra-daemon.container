@@ -19,6 +19,9 @@ Exec=zebra-agent-web/manage.py run_daemon
 WorkingDir=/app
 # Workflow library (built-ins + agent-created) — shared with zebra-daemon, survives redeploys.
 Volume=zebra-workflows:/root/.zebra/workflows
+# Host builder spool (#98): Zebra writes Claude Code build jobs here; zebra-builder.service runs them.
+Volume=%h/.local/share/zebra/builds:/builds:z
+Environment=ZEBRA_BUILDER_SPOOL=/builds
 PodmanArgs=--memory=768m --memory-swap=768m
 
 [Service]

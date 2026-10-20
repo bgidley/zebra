@@ -78,6 +78,16 @@ _WIDGET_MAP: dict[tuple[str, str | None], str] = {
 }
 
 
+def is_human_task(task_def: Any) -> bool:
+    """True for a task a person completes: ``auto: false`` and not an external wait.
+
+    A task with ``properties.external`` (e.g. ``external: builder``, #98) is ``auto: false`` so
+    the process parks on it, but another system completes it, so it is never shown as needing a
+    human.
+    """
+    return not task_def.auto and not (task_def.properties or {}).get("external")
+
+
 def schema_to_form(schema: dict[str, Any]) -> FormSchema:
     """Convert a JSON Schema object into a FormSchema with ordered fields.
 

@@ -6,6 +6,7 @@ from zebra.forms import (
     FormSchema,
     coerce_form_data,
     get_routes_from_definition,
+    is_human_task,
     resolve_task_schema,
     schema_to_form,
     validate_form_data,
@@ -542,3 +543,26 @@ class TestResolveTaskSchema:
         fields = schema_to_form(schema).fields
         assert [f.name for f in fields] == ["q1", "q2"]
         assert validate_form_data(schema, {"q2": "x"})[0].field == "q1"
+
+
+# ---------------------------------------------------------------------------
+# is_human_task (#98)
+# ---------------------------------------------------------------------------
+
+
+class TestIsHumanTask:
+    def test_auto_task_is_not_human(self):
+        from zebra.core.models import TaskDefinition
+
+        assert not is_human_task(TaskDefinition(id="a", name="A", action="x", auto=True))
+
+    def test_manual_task_is_human(self):
+        from zebra.core.models import TaskDefinition
+
+        assert is_human_task(TaskDefinition(id="a", name="A", auto=False))
+
+    def test_external_wait_is_not_human(self):
+        from zebra.core.models import TaskDefinition
+
+        task_def = TaskDefinition(id="a", name="A", auto=False, properties={"external": "builder"})
+        assert not is_human_task(task_def)
