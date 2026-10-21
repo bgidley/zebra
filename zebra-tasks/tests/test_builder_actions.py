@@ -153,6 +153,11 @@ class TestSpool:
 
         assert sorted(spool.live_jobs()) == sorted([(running, "proc-1"), (publishing, "proc-1")])
 
+    def test_live_jobs_empty_when_spool_dir_missing(self, tmp_path):
+        missing = tmp_path / "never-created"
+        assert not missing.exists()
+        assert BuilderSpool(missing).live_jobs() == []
+
     def test_rejects_bad_job_ids(self, spool):
         with pytest.raises(ValueError):
             spool.result("../../etc")
