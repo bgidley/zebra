@@ -6,5 +6,5 @@
 ## 2. Docs and delivery
 
 - [x] 2.1 Update `specs/zebra-as-is.md` and `zebra-agent-web/AGENTS.md`
-- [ ] 2.2 Ruff, unit tests, CI green, merge
+- [x] 2.2 Ruff, unit tests, CI green, merge
 - [ ] 2.3 Outcome review after deploy
