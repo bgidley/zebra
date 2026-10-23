@@ -3,7 +3,9 @@
 - [x] 1.1 #200: Dream Cycles since the #195 deploy store an `evaluation` without `parse_failure`
 - [x] 1.2 #199: prod postmortems exist with embeddings; find why none has trigger `failure`
 - [x] 1.3 #218: find why logged-in smoke tests skip (no `ZEBRA_SMOKE_SESSION` in CI)
-- [ ] 1.4 #210: queue a goal with a stored legacy `__llm_model__` on prod (needs human approval)
+
+Not in this change: #210's prod run (queue a goal with a stored legacy `__llm_model__`) writes
+to prod and is left for the human to approve; #210 stays open.
 
 ## 2. Smoke login
 
