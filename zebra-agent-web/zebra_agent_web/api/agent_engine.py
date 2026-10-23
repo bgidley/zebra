@@ -62,6 +62,24 @@ def initialize() -> None:
     _initialized = True
 
 
+async def install_builtin_workflows(library: "WorkflowLibrary", builtin_path: Path) -> int:
+    """Copy new and upgraded built-in workflows into the library.
+
+    Stored definitions of the old versions are kept: their ids include the version,
+    so they never shadow the new one, and processes still running on an old
+    version (e.g. a parked human task) load their definition by that id (#219).
+
+    Returns:
+        The number of workflows copied or upgraded.
+    """
+    if not builtin_path.exists():
+        return 0
+    copied, upgraded_names = library.copy_builtin_workflows(builtin_path)
+    if copied > 0:
+        logger.info(f"Copied/upgraded {copied} built-in workflows to library: {upgraded_names}")
+    return copied
+
+
 async def _async_init() -> None:
     """Async initialization of agent components."""
     global _library, _metrics, _memory, _profile, _ethics_audit, _trust, _agent_loop
@@ -129,28 +147,7 @@ async def _async_init() -> None:
 
         builtin_path = Path(zebra_agent.__file__).parent.parent / "workflows"
 
-    if builtin_path.exists():
-        copied, upgraded_names = _library.copy_builtin_workflows(builtin_path)
-        if copied > 0:
-            logger.info(f"Copied/upgraded {copied} built-in workflows to library")
-        # Evict stale DB-cached definitions for any upgraded workflows so the
-        # engine will reload them from the updated YAML files on next use.
-        if upgraded_names:
-            from asgiref.sync import sync_to_async
-
-            from zebra_agent_web.api.models import ProcessDefinitionModel
-
-            @sync_to_async(thread_sensitive=False)
-            def _evict_stale(names: list[str]) -> int:
-                deleted, _ = ProcessDefinitionModel.objects.filter(name__in=names).delete()
-                return deleted
-
-            evicted = await _evict_stale(upgraded_names)
-            if evicted:
-                logger.info(
-                    f"Evicted {evicted} stale DB definition(s) for upgraded workflows: "
-                    f"{upgraded_names}"
-                )
+    await install_builtin_workflows(_library, builtin_path)
 
     # Ensure workflow engine is initialized
     await ensure_workflow_engine()
