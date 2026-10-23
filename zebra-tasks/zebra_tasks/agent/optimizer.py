@@ -240,6 +240,9 @@ routings:
 5. Keep workflows focused on one purpose
 6. Add clear system prompts that guide the LLM
 7. For multi-step tasks, use routings to chain tasks
+8. When the user continues an earlier run, {{prior_outputs.<output_key>}} is that run's
+   value of <output_key> (empty otherwise): reuse it instead of redoing work. An input can
+   bind to it with `from_prior`, e.g. `prior_brief: {type: string, from_prior: research_brief}`
 
 Output ONLY valid YAML, no explanations or markdown code blocks."""
 

@@ -247,6 +247,10 @@ routings:
   If the main value is itself an object, `{{output_key.field}}` also works.
 - Human tasks ignore `output_key`: read their form fields with
   `{{__task_output_<task_id>.<field>}}`, or the whole form with `{{<task_id>.output}}`.
+- When the user continues an earlier run, `{{prior_outputs.<output_key>}}` is that
+  run's value of `<output_key>` (empty otherwise), so a refinement can reuse work
+  instead of redoing it. An input can bind to it: under `inputs.properties`,
+  `prior_brief: {type: string, from_prior: research_brief}`.
 
 ## Routing
 

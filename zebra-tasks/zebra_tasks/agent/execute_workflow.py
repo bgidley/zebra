@@ -12,6 +12,9 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.agent.followup import (
     CONTINUATION_DECISION_KEY,
     PREVIOUS_RUN_CONTEXT_KEY,
+    PRIOR_OUTPUTS_KEY,
+    bind_prior_inputs,
+    prior_outputs_from,
     with_previous_run,
 )
 from zebra_tasks.agent.history import with_workflow_history
@@ -29,6 +32,7 @@ CHILD_PROCESS_ID_KEY = "__child_process_id__"
 # Child property recording the failed process a retry resumed from (#187).
 RESUMED_FROM_KEY = "__resumed_from__"
 _DONE_TASK_STATES = {TaskState.COMPLETE}
+_TERMINAL_STATES = frozenset({ProcessState.FAILED, ProcessState.COMPLETE})
 
 
 #: Process properties a goal workflow's output is usually stored under.
@@ -456,6 +460,14 @@ class ExecuteGoalWorkflowAction(TaskAction):
                 previous.id,
                 start_task_ids,
             )
+        else:
+            previous = await self._continued_child(context)
+
+        # #222: a continuation hands the previous run's own values to the workflow.
+        if previous is not None:
+            prior = prior_outputs_from(previous.properties)
+            sub_properties[PRIOR_OUTPUTS_KEY] = prior
+            bind_prior_inputs(definition.properties.get("inputs"), prior, sub_properties)
 
         sub_process = await context.engine.create_process(definition, properties=sub_properties)
 
@@ -513,17 +525,45 @@ class ExecuteGoalWorkflowAction(TaskAction):
             start.append(t.task_definition_id)
         return (child, start) if start else None
 
+    async def _continued_child(self, context: ExecutionContext) -> ProcessInstance | None:
+        """The goal-workflow process of the run this goal continues, if any (#222)."""
+        previous_run = context.process.properties.get(PREVIOUS_RUN_CONTEXT_KEY)
+        if not isinstance(previous_run, dict) or not previous_run.get("run_id"):
+            return None
+        try:
+            child = await self._previous_child(
+                context,
+                previous_run["run_id"],
+                previous_run.get("workflow_name") or "",
+                child_states=_TERMINAL_STATES,
+            )
+        except Exception:
+            logger.warning("Could not load the process of run %s", previous_run, exc_info=True)
+            return None
+        if child is None:
+            logger.warning(
+                "No goal-workflow process for continued run %s; no prior_outputs",
+                previous_run["run_id"],
+            )
+        return child
+
     @staticmethod
     async def _previous_child(
-        context: ExecutionContext, run_id: str, workflow_name: str
+        context: ExecutionContext,
+        run_id: str,
+        workflow_name: str,
+        child_states: frozenset[ProcessState] = frozenset({ProcessState.FAILED}),
     ) -> ProcessInstance | None:
-        """The failed goal-workflow process of run *run_id*, newest first."""
+        """The goal-workflow process of run *run_id* in *child_states*, newest first.
+
+        Failed only by default, for a retry that resumes (#187).
+        """
         for state in (ProcessState.FAILED, ProcessState.COMPLETE):
             for root in await context.store.get_processes_by_state(state, exclude_children=True):
                 if (root.properties or {}).get("run_id") != run_id:
                     continue
                 for child in reversed(await context.store.list_child_processes(root.id)):
-                    if child.state != ProcessState.FAILED:
+                    if child.state not in child_states:
                         continue
                     child_def = await context.store.load_definition(child.definition_id)
                     if child_def is not None and child_def.name == workflow_name:
