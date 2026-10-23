@@ -226,6 +226,8 @@ Three-tier model (matches the design in REQ-DATA-004):
 
 `WorkflowLibrary` loads YAMLs from `~/.zebra-agent/workflows/`, caches them, tracks success rate and use count. Workflows tagged `system` are internal and never offered for goals.
 
+**Built-in upgrades keep old versions (#219).** On startup `agent_engine.install_builtin_workflows()` copies new built-ins and replaces installed ones whose built-in `version` is higher. Stored definitions are keyed by `sha256(name:version)`, and each process pins its `definition_id`, so the old version's row is kept: a process parked on it (e.g. a human ruling) still renders and completes. Until #219 startup deleted every stored definition of an upgraded workflow; the #215 deploy removed *Outcome Review* v3 that way.
+
 **Curation (#148).** Workflows written by the LLM (`workflow_creator`, `workflow_variant_creator`, and the optimizer's creates) are tagged `llm-defined` (`add_workflow(llm_defined=True)` / `tag_llm_defined`). A workflow the optimizer modifies keeps the provenance of the original.
 
 `retire(name, reason, superseded_by)` moves a YAML to `retired/` and appends the metadata after a marker comment. It's soft and reversible with `restore(name)`.

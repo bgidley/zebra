@@ -37,7 +37,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/serializers.py` | DRF serializers |
 | `zebra_agent_web/api/urls.py` | API URL routing |
 | `zebra_agent_web/api/engine.py` | Engine integration |
-| `zebra_agent_web/api/agent_engine.py` | Agent engine wrapper (creates BudgetManager + injection) |
+| `zebra_agent_web/api/agent_engine.py` | Agent engine wrapper (creates BudgetManager + injection); `install_builtin_workflows()` copies new/upgraded built-ins and keeps old versions' stored definitions for processes pinned to them (#219) |
 | `zebra_agent_web/api/daemon.py` | Shared daemon loop (`run_daemon_loop()`; with a builder spool each tick runs `BuilderWatcher`, `make_builder_watcher()`, #98); `queue_routine_goal()` / `resolve_routine_user()` queue scheduled routine goals as `run_as` or the owner (first active superuser, else earliest-created active user) (F155) |
 | `fixtures/routines/*.yaml` | Built-in routines: `goal_queue_tick`, `dream_cycle`, `compact_memory`, `daily_news_reading` (F155) |
 | `zebra_agent_web/api/identity.py` | Single-user identity; `goal_identity()` (async views) / `goal_identity_sync()` give the identity every goal entry point stamps with `__user_id__` (#151) |
