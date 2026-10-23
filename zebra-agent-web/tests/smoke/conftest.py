@@ -2,8 +2,8 @@
 
 Set SMOKE_BASE_URL to point at the running container (default: http://localhost:8000),
 matching test_live_smoke.py and the CI smoke job.
-Set ZEBRA_SMOKE_SESSION to a valid Django session key — the CI job creates one via
-manage.py shell after starting the container.
+Set ZEBRA_SMOKE_SESSION to a valid Django session key — the CI job mints a 15-minute
+one for the smoke user with ``manage.py smoke_session`` in zebra-web (#218).
 """
 
 import os
