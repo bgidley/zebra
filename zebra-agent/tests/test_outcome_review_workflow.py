@@ -46,9 +46,17 @@ def _response(content: str = "", tool_calls: list[ToolCall] | None = None) -> LL
 
 
 class ReviewModel(LLMProvider):
-    """Reads one source file, then answers; reconsiders when asked to."""
+    """Reads one source file, then answers; reconsiders when asked to.
 
-    def __init__(self, review: str, reconsidered: str = "", calls: list[ToolCall] | None = None):
+    ``reconsidered`` may be a list of replies, one per reconsidering answer.
+    """
+
+    def __init__(
+        self,
+        review: str,
+        reconsidered: str | list[str] = "",
+        calls: list[ToolCall] | None = None,
+    ):
         self.review = review
         self.reconsidered = reconsidered
         self.calls = calls
@@ -77,7 +85,11 @@ class ReviewModel(LLMProvider):
                 ]
             )
         self.tool_results.extend(tool_results)
-        return _response(self.reconsidered if reconsidering else self.review)
+        if not reconsidering:
+            return _response(self.review)
+        if isinstance(self.reconsidered, list):
+            return _response(self.reconsidered.pop(0))
+        return _response(self.reconsidered)
 
     async def stream(self, *args, **kwargs):
         raise NotImplementedError
@@ -205,6 +217,33 @@ async def test_zebra_reconsidering_can_settle_a_dispute(engine, library):
     assert status["status"] == "complete"
     assert status["output"]["status"] == "agreed"
     assert any(CLAUDE_SECRET in p for p in model.reconsider_prompts)
+
+
+async def test_junk_reconsideration_is_asked_for_again(engine, library):
+    model = ReviewModel(
+        _verdicts(("O1", "met"), ("O2", "met")),
+        reconsidered=[" the", _verdicts(("O2", "partial"))],
+    )
+
+    status = await _run(engine, library, model)
+
+    assert status["status"] == "complete"
+    assert status["output"]["status"] == "agreed"
+    assert model.reconsidered == []
+    assert "could not be parsed as JSON" in model.reconsider_prompts[-1]
+
+
+async def test_reconsideration_that_stays_junk_fails_the_review(engine, library):
+    model = ReviewModel(_verdicts(("O1", "met"), ("O2", "met")), reconsidered=" the")
+
+    status = await _run(engine, library, model)
+
+    # Zebra never reconsidered, so there is nothing to put to a human (#216).
+    assert status["status"] == "failed"
+    assert status["task_id"] is None
+    process = await engine.store.load_process(status["process_id"])
+    assert "Unusable JSON answer" in process.properties["__error__"]
+    assert "zebra_reconsidered" not in process.properties
 
 
 async def test_a_lasting_dispute_waits_for_a_human_ruling(engine, library):
