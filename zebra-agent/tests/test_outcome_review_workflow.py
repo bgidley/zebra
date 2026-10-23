@@ -178,15 +178,19 @@ async def test_review_can_list_source_and_recover_from_a_bad_path(engine, librar
         calls=[
             ToolCall("l1", "list_zebra_source", {"path": AGENT_DIR}),
             ToolCall("r1", "read_zebra_source", {"path": f"{AGENT_DIR}/outcome_reviw.py"}),
+            ToolCall("r2", "read_zebra_source", {"path": f"{AGENT_DIR}/outcome.py"}),
         ],
     )
 
     status = await _run(engine, library, model)
 
     assert status["status"] == "complete"
-    listing, bad_read = model.tool_results
+    listing, typo_read, bad_read = model.tool_results
     assert "zebra-tasks/zebra_tasks/agent/outcome_review.py (" in listing
-    assert "Did you mean: zebra-tasks/zebra_tasks/agent/outcome_review.py" in bad_read
+    # One clear match is read in the same call (#223)
+    assert "read 'zebra-tasks/zebra_tasks/agent/outcome_review.py' instead" in typo_read
+    assert "class CompareOutcomeReviewsAction" in typo_read
+    assert "zebra-tasks/zebra_tasks/agent/outcome_review.py" in bad_read.split("Did you mean: ")[1]
     assert "list_zebra_source" in bad_read
 
 
