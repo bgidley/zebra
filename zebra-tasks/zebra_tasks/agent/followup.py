@@ -30,6 +30,11 @@ MAX_TASK_TEXT_CHARS = 300
 MAX_CHAIN_LINKS = 5
 MAX_CHAIN_GOAL_CHARS = 200
 MAX_COMMENT_CHARS = 2000
+# #222: the previous goal workflow's own values, handed to a continuation.
+PRIOR_OUTPUTS_KEY = "prior_outputs"
+MAX_PRIOR_VALUE_CHARS = 8000
+MAX_PRIOR_OUTPUTS_CHARS = 32000
+_NOT_PRIOR_OUTPUTS = {"goal", PRIOR_OUTPUTS_KEY}
 
 logger = logging.getLogger(__name__)
 
@@ -215,3 +220,53 @@ def with_previous_run(goal: str, properties: dict[str, Any]) -> str:
             lines.append(f"- {r.get('workflow_name', '')} ({status}): {r.get('goal', '')}{note}")
         lines.append("</earlier_runs>")
     return "\n".join(lines)
+
+
+def prior_outputs_from(properties: dict[str, Any]) -> dict[str, Any]:
+    """The previous goal workflow's own values, for a continuation's ``prior_outputs`` (#222).
+
+    Engine bookkeeping (``__*``), ``goal`` and an earlier ``prior_outputs`` are left
+    out. A long string is cut to ``MAX_PRIOR_VALUE_CHARS``; any other value that
+    large is dropped, as is a value that would take the total past
+    ``MAX_PRIOR_OUTPUTS_CHARS``.
+
+    Args:
+        properties: The previous goal-workflow process's properties.
+
+    Returns:
+        JSON-serializable dict of the kept values, in the order they were written.
+    """
+    prior: dict[str, Any] = {}
+    total = 0
+    for key, value in properties.items():
+        if key.startswith("__") or key in _NOT_PRIOR_OUTPUTS:
+            continue
+        if isinstance(value, str):
+            value = value[:MAX_PRIOR_VALUE_CHARS]
+            size = len(value)
+        else:
+            size = len(json.dumps(value, ensure_ascii=False, default=str))
+            if size > MAX_PRIOR_VALUE_CHARS:
+                continue
+        if total + size > MAX_PRIOR_OUTPUTS_CHARS:
+            continue
+        prior[key] = value
+        total += size
+    return prior
+
+
+def bind_prior_inputs(
+    inputs: dict[str, Any] | None, prior: dict[str, Any], properties: dict[str, Any]
+) -> None:
+    """Set each input declaring ``from_prior: <key>`` from ``prior[<key>]`` (#222).
+
+    Args:
+        inputs: The workflow's ``inputs`` JSON Schema (may be None).
+        prior: The continuation's ``prior_outputs``.
+        properties: The new process's properties, updated in place. An input
+            already set there is left alone.
+    """
+    for name, schema in ((inputs or {}).get("properties") or {}).items():
+        key = schema.get("from_prior") if isinstance(schema, dict) else None
+        if key and key in prior and name not in properties:
+            properties[name] = prior[key]

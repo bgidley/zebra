@@ -32,7 +32,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/memory_check.py` | MemoryCheckAction - memory compaction check |
 | `zebra_tasks/agent/execute_workflow.py` | ExecuteGoalWorkflowAction - run workflow by name; `extract_workflow_output()` / `OUTPUT_KEYS` (shared with the gym) |
 | `zebra_tasks/agent/record_metrics.py` | RecordMetricsAction - record run to metrics |
-| `zebra_tasks/agent/followup.py` | `with_previous_run()` / `build_previous_run_context()` / `load_previous_run_context()` - follow-up and continuation context with task progress + chain summary (F116, F134) |
+| `zebra_tasks/agent/followup.py` | `with_previous_run()` / `build_previous_run_context()` / `load_previous_run_context()` - follow-up and continuation context with task progress + chain summary (F116, F134); `prior_outputs_from()` / `bind_prior_inputs()` - the previous run's values for a continuation (#222) |
 | `zebra_tasks/agent/update_memory.py` | UpdateMemoryAction - add memory entry |
 | `zebra_tasks/agent/analyzer.py` | MetricsAnalyzerAction - analyze workflow metrics |
 | `zebra_tasks/agent/evaluator.py` | WorkflowEvaluatorAction - LLM workflow evaluation via `complete_json` (`max_tokens` 8000); an unusable reply leaves a fallback with `parse_failure` and the cause as key issue; adds its cost to `__total_cost__` (#195) |
@@ -323,6 +323,8 @@ Execute a workflow by name and capture its output.
 **Suspends on the child (#185):** starts the child (inline chain bounded by `timeout`), then returns `TaskResult.suspend([child])` rather than polling. The engine re-runs it with `subflow_results` once the child is terminal; the result (output, cost/tokens, `user_inputs`) is built from the child then, `__task_executions__` gets the child's completed tasks and `task_completed` progress events are emitted in a batch. A goal whose child waits on a human therefore returns from its bounded run (no goal timeout while the human answers), and failing the goal fails the child. A failed or timed-out child reports what it had already spent (#183).
 
 **Retry resumes (#187):** for a `same_workflow` continuation (`continuation_decision`) of a run that failed in this workflow (`previous_run_context`), the new child gets the failed child's workflow properties and `__task_output_*` and starts at its unfinished tasks (`start_process(..., start_task_ids=)`), recorded as `__resumed_from__`. Otherwise it starts at the first task.
+
+**Prior outputs (#222):** for any continuation (`previous_run_context.run_id`) the child gets `prior_outputs`: the previous run's goal-workflow process properties (completed or failed), without `__*`, `goal` or a nested `prior_outputs`, strings cut to `MAX_PRIOR_VALUE_CHARS` (8000), other values that large dropped, `MAX_PRIOR_OUTPUTS_CHARS` (32000) total (`followup.prior_outputs_from`). Workflows read `{{prior_outputs.<key>}}`; an input in `inputs.properties` declaring `from_prior: <key>` is set from it unless already set (`followup.bind_prior_inputs`). No previous process → no `prior_outputs`, with a warning.
 
 **Resumable (#129):** records the child process id on its task (`__child_process_id__`) before starting it; a re-run (e.g. after crash recovery) re-attaches to that child while it is still linked via `parent_process_id`/`parent_task_id` and suspends on it, instead of spawning a duplicate. Declare the task `idempotent: true` so recovery re-runs it.
 
