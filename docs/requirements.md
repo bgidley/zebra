@@ -184,7 +184,7 @@ These are non-negotiable architectural constraints that all requirements must sa
 - The agent functions fully offline (except for LLM API calls and external integrations)
 - Data at rest is encryptable via user-provided key
 
-### REQ-PRIN-007: Workflow Sharing (P1)
+### REQ-PRIN-007: Workflow Sharing (P2)
 
 - Zebra instances can share learned 'skills' in the form of workflow definitions
 - Prior to sharing it should review for accidental personal data leakage, ethical compliance
@@ -961,7 +961,10 @@ from its own viewpoint.
 - An imported workflow is checked for structural validity and registered actions, and scanned for
   personal data
 - It then goes through the ethics gate and the golden gym, and must meet the reputation threshold
-  (REQ-NET-004, REQ-NET-008)
+  from the web of trust (REQ-NET-004). Once REQ-NET-008 is delivered, market price becomes an
+  additional input.
+- The golden gym tests the import against golden tasks shipped with the offer. An offer with no
+  runnable golden tasks is escalated to a human, never passed untested.
 - Adopted workflows keep their provenance (publisher, content hash, parent hash) and start
   supervised, whatever the domain's trust level
 - Rejections are attested (REQ-NET-003), so other Zebras learn from them
@@ -1106,7 +1109,7 @@ and gain or lose as those workflows succeed or fail for others.
 | Web Dashboard & CLI Extensions | REQ-UI-001, REQ-UI-002, REQ-UI-003, REQ-UI-005 |
 | Integration Framework | REQ-INT-001, REQ-INT-003 |
 | Data & Privacy Foundations | REQ-DATA-001, REQ-DATA-003, REQ-DATA-004, REQ-DATA-005, REQ-DATA-006 |
-| Core Principles | REQ-PRIN-001 through REQ-PRIN-009 |
+| Core Principles | REQ-PRIN-001 through REQ-PRIN-009, except REQ-PRIN-007 (Phase 2, with the Zebra Commons) |
 | User Namespace | REQ-USR-001, REQ-USR-002 |
 | Non-Functional Foundations | REQ-NFR-001 through REQ-NFR-004, REQ-NFR-007 |
 
@@ -1131,7 +1134,7 @@ and gain or lose as those workflows succeed or fail for others.
 | Auth Management | REQ-INT-002 |
 | Integration Health | REQ-INT-004 |
 | Offline & Scale | REQ-NFR-005, REQ-NFR-006 |
-| Zebra Commons (identity, offers, attestations, web of trust, judged import) | REQ-NET-001 through REQ-NET-007 |
+| Zebra Commons (identity, offers, attestations, web of trust, judged import) | REQ-PRIN-007, REQ-NET-001 through REQ-NET-007 |
 
 **Independently Valuable**: The agent becomes a proactive partner across more life domains, syncs across devices, and manages itself more independently.
 
@@ -1159,7 +1162,7 @@ Total requirements: 83
 | Category | Count | P1 | P2 | P3 |
 |---|---|---|---|---|
 | User Profiles | 5 | 2 | 0 | 3 |
-| Core Principles | 9 | 9 | 0 | 0 |
+| Core Principles | 9 | 8 | 1 | 0 |
 | Trust & Autonomy | 7 | 5 | 2 | 0 |
 | Ethics Framework | 6 | 4 | 2 | 0 |
 | Collaborative Peer | 6 | 4 | 2 | 0 |
@@ -1177,7 +1180,7 @@ Total requirements: 83
 | External Integrations | 4 | 2 | 2 | 0 |
 | Zebra Commons | 8 | 0 | 7 | 1 |
 | Non-Functional | 7 | 5 | 2 | 0 |
-| **Total** | **83** | **49** | **27** | **7** |
+| **Total** | **83** | **48** | **28** | **7** |
 
 ---
 
