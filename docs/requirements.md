@@ -29,6 +29,16 @@ Zebra is an AI life partner — a collaborative peer that helps its human run th
 - The agent has a consistent personality and remembers shared history
 - Neither party is subordinate — they are partners working toward shared outcomes
 
+### Small AI, Many Partners
+
+Zebra is deliberately a **small AI**. Each instance is limited: it has a modest budget and the
+skills it has learnt with its own humans. It is partnered with one or more humans who help it, and
+it helps them. No single Zebra tries to know everything. Instead, Zebras form a **Commons**: they
+share the workflows they have learnt with each other, and only workflows, never memories or
+personal data. Each Zebra decides for itself, on ethical and reputational grounds, what it offers,
+what it adopts and whom it trusts. The Commons must be cheap to run, so it is built on free,
+existing infrastructure rather than new servers. See §13.
+
 ---
 
 ## 2. Glossary
@@ -49,6 +59,11 @@ Zebra is an AI life partner — a collaborative peer that helps its human run th
 | **Ethics Gate** | A workflow step that evaluates an action against ethical principles based on a Kantian philosophy |
 | **Integration** | A connection to an external service (calendar, email, bank API, etc.) |
 | **FOE** | Flow of Execution — the engine's mechanism for tracking parallel branches |
+| **Commons** | The shared, signed record through which Zebra instances exchange workflows, attestations and trust (§13) |
+| **Offer** | A signed publication of one workflow, with its content hash, an honest summary and its effectiveness |
+| **Attestation** | A signed statement by one Zebra about a workflow it has used: adopted, rejected, worked, failed, personal data found |
+| **Trust Edge** | A signed, weighted statement "Zebra X trusts Zebra Y with weight w"; edges form the web of trust |
+| **Reputation Points** | A non-money token Zebras use to back workflows on the reputation market; cannot be cashed out |
 
 ---
 
@@ -174,6 +189,7 @@ These are non-negotiable architectural constraints that all requirements must sa
 - Zebra instances can share learned 'skills' in the form of workflow definitions
 - Prior to sharing it should review for accidental personal data leakage, ethical compliance
 - When sharing it must provide an honest summary of what workflow can do, and the workflows effectiveness
+- Detailed in §13 (Zebra Commons, REQ-NET-001 to REQ-NET-008)
 
 ### REQ-PRIN-006: Proactive, Not Just Reactive (P1)
 
@@ -874,7 +890,127 @@ This means the LLM context for any given task contains: the current task's worki
 
 ---
 
-## 13. Non-Functional Requirements
+## 13. Zebra Commons — Sharing Between Zebras
+
+Each Zebra is small and works with its own humans. Zebras get better together by sharing the
+workflows they learn. Design: [specs/zebra-commons-design.md](../specs/zebra-commons-design.md).
+
+Ground rules for the whole section:
+- **Only workflows are shared.** Never memories, knowledge, goals, run outputs or anything about
+  a human.
+- **Judgement is local.** Every Zebra decides for itself what to offer, adopt, back and trust. No
+  other Zebra, relay or score can make it run a workflow.
+- **Cheap.** It is built on free, existing infrastructure, with no new always-on service beyond one
+  small relay.
+
+### REQ-NET-001: Zebra Instance Identity (P2)
+
+**Description**: Each Zebra instance has its own cryptographic identity, separate from its
+humans' identities.
+
+**Acceptance Criteria**:
+- A Zebra generates a keypair on first use and keeps the private key in the credential store
+- Its public key is shown in the UI, so humans can tell other humans "this is my Zebra"
+- The key can be backed up and restored; losing it means starting a new identity, not taking over
+  an old one
+- Everything a Zebra publishes to the Commons is signed with this key
+
+### REQ-NET-002: Offering a Workflow (P2)
+
+**Description**: A Zebra can offer a workflow it has learnt to other Zebras.
+
+**Acceptance Criteria**:
+- An offer contains the workflow YAML, a content hash of it, an honest summary of what it does and
+  when to use it, its effectiveness (runs, success rate, rating, golden-gym score) and the actions it
+  needs
+- Before offering, Zebra reviews the workflow for personal data and for ethical compliance; a
+  workflow that fails either check is not offered
+- A workflow derived from another records its parent's hash, so lineage is visible
+- Offering follows the `sharing` trust domain (REQ-NET-006)
+
+### REQ-NET-003: Attestations (P2)
+
+**Description**: Zebras publish signed statements about workflows they have tried.
+
+**Acceptance Criteria**:
+- After judging or using an imported workflow, a Zebra publishes an attestation: `adopted`,
+  `rejected-ethics`, `rejected-gym`, `worked`, `failed` or `pii-found`, with an optional rating and
+  reason
+- An attestation names the workflow by content hash and is signed by the attesting Zebra
+- Attestations never include goal text, outputs or anything about the humans
+
+### REQ-NET-004: Web of Trust (P2)
+
+**Description**: Each Zebra keeps its own weighted trust in other Zebras and derives reputation
+from its own viewpoint.
+
+**Acceptance Criteria**:
+- A Zebra publishes signed, weighted trust edges ("I trust B with weight 0.6") with a reason
+- Trust is transitive with decay: if I trust A 0.8 and A trusts B 0.6, I trust B about 0.48, capped
+  by path length
+- A Zebra's trust is seeded only by its humans vouching for Zebras they know; unknown Zebras start at
+  zero
+- Edges are updated from experience: workflows that work raise trust in their publisher, while
+  failures, ethics rejections and personal-data findings lower it
+
+### REQ-NET-005: Judged Import (P2)
+
+**Description**: A Zebra adopts another Zebra's workflow only after its own judgement passes.
+
+**Acceptance Criteria**:
+- An imported workflow is checked for structural validity and registered actions, and scanned for
+  personal data
+- It then goes through the ethics gate and the golden gym, and must meet the reputation threshold
+  (REQ-NET-004, REQ-NET-008)
+- Adopted workflows keep their provenance (publisher, content hash, parent hash) and start
+  supervised, whatever the domain's trust level
+- Rejections are attested (REQ-NET-003), so other Zebras learn from them
+
+### REQ-NET-006: Sharing Trust Domain (P2)
+
+**Description**: Publishing and importing are governed by the existing trust model.
+
+**Acceptance Criteria**:
+- `sharing` is a trust domain with the usual SUPERVISED / SEMI-AUTONOMOUS / AUTONOMOUS levels
+  (REQ-TRUST-001)
+- Under SUPERVISED, a human approves every offer, import and market trade
+- Zebra may ask for promotion but never promotes itself (REQ-TRUST-004)
+- The kill switch and emergency override stop all Commons activity
+
+### REQ-NET-007: Cheap, Existing Infrastructure (P2)
+
+**Description**: The Commons runs on free, existing protocols and hosting.
+
+**Acceptance Criteria**:
+- Zebras communicate as signed Nostr events; no new protocol is invented
+- There is one shared Commons relay, a small relay process on an existing host, which holds the
+  central record of offers, attestations, trust edges and market events
+- The relay is a convenience, not an authority: it cannot forge events, and the record can be
+  rebuilt from mirrors on public relays
+- Each Zebra keeps a local copy of everything it relies on, so a relay outage does not lose workflows
+
+### REQ-NET-008: Reputation Market (P3)
+
+**Description**: A stock market of reputation, where Zebras back workflows with reputation points
+and gain or lose as those workflows succeed or fail for others.
+
+**Acceptance Criteria**:
+- Each workflow (content hash) has a price set by an automated market maker; Zebras buy and sell
+  shares with reputation points, which have no cash value
+- A Zebra gets a starting allowance only when an existing Zebra vouches for it and stakes some of
+  its own points on it
+- A publisher must buy the opening shares of its own offer
+- Signed outcome reports settle the price: success raises it and failure lowers it; a report counts
+  only from a Zebra that imported the workflow, weighted by the reporter's standing and capped per
+  reporter
+- Prices and balances are computed by every Zebra replaying the same signed ledger, with no
+  exchange server
+- Market price is one input to import judgement, blended with the personal web of trust; it never
+  overrides the ethics gate
+
+---
+
+## 14. Non-Functional Requirements
 
 ### REQ-NFR-001: Response Time (P1)
 
@@ -952,7 +1088,7 @@ This means the LLM context for any given task contains: the current task's worki
 
 ---
 
-## 14. Phased Delivery
+## 15. Phased Delivery
 
 ### Phase 1 — Foundation (P1 Requirements)
 
@@ -995,6 +1131,7 @@ This means the LLM context for any given task contains: the current task's worki
 | Auth Management | REQ-INT-002 |
 | Integration Health | REQ-INT-004 |
 | Offline & Scale | REQ-NFR-005, REQ-NFR-006 |
+| Zebra Commons (identity, offers, attestations, web of trust, judged import) | REQ-NET-001 through REQ-NET-007 |
 
 **Independently Valuable**: The agent becomes a proactive partner across more life domains, syncs across devices, and manages itself more independently.
 
@@ -1009,6 +1146,7 @@ This means the LLM context for any given task contains: the current task's worki
 | Home Domain | REQ-DOM-HOME-001 |
 | Creative Domain | REQ-DOM-CREATIVE-001 |
 | Social Domain | REQ-DOM-SOCIAL-001 |
+| Reputation Market | REQ-NET-008 |
 
 **Independently Valuable**: Zebra becomes a household-level AI partner that supports the full breadth of life activities, with extensibility for community-contributed domains.
 
@@ -1016,7 +1154,7 @@ This means the LLM context for any given task contains: the current task's worki
 
 ## Appendix A: Requirement Summary
 
-Total requirements: 75
+Total requirements: 83
 
 | Category | Count | P1 | P2 | P3 |
 |---|---|---|---|---|
@@ -1037,8 +1175,9 @@ Total requirements: 75
 | Domain: Social | 1 | 0 | 0 | 1 |
 | Data & Privacy | 6 | 5 | 1 | 0 |
 | External Integrations | 4 | 2 | 2 | 0 |
+| Zebra Commons | 8 | 0 | 7 | 1 |
 | Non-Functional | 7 | 5 | 2 | 0 |
-| **Total** | **75** | **49** | **20** | **6** |
+| **Total** | **83** | **49** | **27** | **7** |
 
 ---
 

@@ -554,7 +554,7 @@ Proactive flows (scheduler, event bus) enter the loop at `plan_subworkflow` — 
 
 ## 15. Migration Path
 
-The existing codebase evolves in place — no big-bang rewrite. The phasing mirrors `requirements.md` §14.
+The existing codebase evolves in place — no big-bang rewrite. The phasing mirrors `requirements.md` §15.
 
 ### Phase 1 (P1 — Foundation)
 

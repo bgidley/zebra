@@ -555,6 +555,7 @@ until it is ruled. See [outcome-review-design.md](outcome-review-design.md).
 | Notification system | **Partial** — outbound `notify_email` / `notify_webhook` actions (F65); no channel routing, quiet hours or retries (F30) | REQ-UI-004 |
 | Chat interface | **Missing** | REQ-UI-002 |
 | Multi-user / household support | **Missing** | REQ-USR-003/005 |
+| Workflow sharing between Zebras (Commons: identity, offers, attestations, web of trust, reputation market) | **Missing** — concept in [zebra-commons-design.md](zebra-commons-design.md); only the user-data ZIP export exists | REQ-PRIN-007, REQ-NET-001–008 |
 | Encryption at rest, cloud sync, unattended keys | **Missing** | REQ-DATA-002/006 |
 | Data export | **Implemented** (F9) — `DataExporter` service, `GET /api/export/`, `manage.py export_data` | REQ-DATA-003 |
 | Data deletion (soft + hard, API + CLI) | **Implemented** (F10) | REQ-DATA-005 |
