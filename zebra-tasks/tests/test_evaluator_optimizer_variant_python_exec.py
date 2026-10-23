@@ -312,6 +312,21 @@ class TestWorkflowEvaluatorAction:
         assert result.success is True
         assert result.output["overall_assessment"]["health_score"] == 80
 
+    async def test_unclosed_fence_parsed_in_one_call(self, mock_task, mock_context):
+        """A complete reply whose closing fence is missing needs no retry (#200)."""
+        from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
+
+        unclosed = f"```json\n{json.dumps(_GOOD_EVALUATION, indent=2)}\n"
+        provider = _mock_provider(unclosed)
+        set_llm_factory(lambda m: provider)
+        mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
+
+        result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
+
+        assert result.output["overall_assessment"]["health_score"] == 80
+        assert "parse_failure" not in result.output
+        assert provider.complete.await_count == 1
+
     async def test_invalid_json_fallback(self, mock_task, mock_context):
         from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
 

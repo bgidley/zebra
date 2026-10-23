@@ -23,7 +23,7 @@ lint  →  test  →  e2e  →  deploy  →  smoke
 | e2e | `e2e` | `pytest tests/e2e -m e2e` — ephemeral Oracle schema, or SQLite fallback | every push |
 | e2e | `e2e-live` | real-LLM tests against prod Oracle | schedules only |
 | deploy | `deploy` | `scripts/deploy-podman.sh $SHA` | `master` push |
-| smoke | `smoke` | `pytest tests/smoke -m smoke` against `http://localhost:8000` | after deploy |
+| smoke | `smoke` | `pytest tests/smoke -m smoke` against `http://localhost:8000`, logged in via a 15-minute `manage.py smoke_session` for the `smoke` user (#218) | after deploy |
 
 `deploy` uses `resource_group: zebra-prod`, so deploys never overlap.
 

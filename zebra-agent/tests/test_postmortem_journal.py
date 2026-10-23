@@ -26,6 +26,7 @@ from zebra_agent.postmortem import (
     needs_failure_postmortem,
     postmortem_failed_goal,
     start_postmortem,
+    unreflected_trigger,
 )
 from zebra_agent.storage.memory import InMemoryMemoryStore
 from zebra_agent.storage.metrics import InMemoryMetricsStore
@@ -184,6 +185,32 @@ class TestTimeoutPostmortem:
         assert "timed out or crashed" in prompt
         assert "Goal timed out after 900s" in prompt
         assert "Search [running]" in prompt
+
+    async def test_crashed_goal_records_failure_not_timeout(self, main_loop, library, llm):
+        """The prod case (#199): a goal that crashed on a parse error is not a timeout."""
+        memory = InMemoryMemoryStore()
+        engine = _postmortem_engine(memory)
+        error = "Failed to parse LLM response as JSON: Expecting value: line 1 column 1 (char 0)"
+        process = await _failed_main_loop(engine, main_loop, __error__=error)
+
+        await postmortem_failed_goal(engine, library, process)
+
+        stored = await memory.get_postmortem_by_run_id("run-t")
+        assert stored.trigger == "failure"
+        assert error in llm.complete.call_args.kwargs["messages"][1].content
+
+    @pytest.mark.parametrize(
+        ("error", "trigger"),
+        [
+            ("Timed out after 900.0s", "timeout"),
+            ("Agent loop timed out", "timeout"),
+            ("Goal timed out after 900s", "timeout"),
+            ("Failed to parse LLM response as JSON", "failure"),
+            ("", "failure"),
+        ],
+    )
+    def test_unreflected_trigger(self, error, trigger):
+        assert unreflected_trigger(error) == trigger
 
     async def test_start_failure_is_swallowed(self, tmp_path):
         engine = _postmortem_engine(InMemoryMemoryStore())

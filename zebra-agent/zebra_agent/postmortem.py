@@ -81,7 +81,7 @@ async def start_postmortem(
     Args:
         engine: The workflow engine (with the memory store in its extras).
         library: Workflow library holding the *Postmortem* system workflow.
-        trigger: ``timeout`` or ``low_rating``.
+        trigger: ``timeout``, ``failure`` or ``low_rating``.
         goal: The run's goal.
         run_id: The run the postmortem is about (one postmortem per run).
         workflow_name: The goal workflow that ran, if known.
@@ -114,10 +114,22 @@ async def start_postmortem(
     return process.id
 
 
+def unreflected_trigger(error: str) -> str:
+    """The trigger for a goal that failed before it could reflect.
+
+    ``timeout`` when the goal timeout stopped it (the engine's "Timed out after
+    Ns", the loop's "Agent loop timed out"), else ``failure``: a crash part-way
+    is not a timeout (#199).
+    """
+    return "timeout" if "timed out" in error.lower() else "failure"
+
+
 async def postmortem_failed_goal(
     engine: WorkflowEngine, library: WorkflowLibrary, process: ProcessInstance
 ) -> str | None:
-    """Start a ``timeout`` postmortem for a goal that failed before it could reflect.
+    """Start a postmortem for a goal that failed before it could reflect.
+
+    The trigger is ``timeout`` or ``failure`` (:func:`unreflected_trigger`).
 
     Returns:
         The Postmortem process id, or None when none was needed or it failed.
@@ -129,13 +141,14 @@ async def postmortem_failed_goal(
         logger.warning("Postmortem check failed for %s: %s", process.id[:12], e)
         return None
     props = process.properties or {}
+    error = str(props.get("__error__") or "")
     return await start_postmortem(
         engine,
         library,
-        trigger="timeout",
+        trigger=unreflected_trigger(error),
         goal=str(props.get("goal", "")),
         run_id=str(props.get("run_id", "")),
         workflow_name=str(props.get("workflow_name", "")),
-        error=str(props.get("__error__") or ""),
+        error=error,
         source_properties=props,
     )

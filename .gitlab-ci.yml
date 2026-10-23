@@ -105,6 +105,10 @@ deploy:
 smoke:
   stage: smoke
   script:
+    # Login is passkey-only: mint a 15-minute session for the smoke user so the
+    # logged-in page checks (dashboard, /tasks/, budget) run instead of skipping (#218).
+    - ZEBRA_SMOKE_SESSION="$(podman exec zebra-web python zebra-agent-web/manage.py smoke_session)"
+    - export ZEBRA_SMOKE_SESSION
     - uv run pytest zebra-agent-web/tests/smoke/ -v -m smoke
   variables:
     SMOKE_BASE_URL: "http://localhost:8000"

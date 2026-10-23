@@ -193,6 +193,14 @@ async def test_tasks_on_finished_processes_are_skipped(store):
     assert await inbox_items(store) == []
 
 
+async def test_ready_auto_task_is_skipped(store):
+    """A READY auto task is about to run, not waiting on a person (#218)."""
+    await _process(store, "a")
+    await _task(store, "auto-ready", "a", "work", TaskState.READY)
+
+    assert await inbox_items(store) == []
+
+
 async def test_task_with_unknown_definition_is_skipped(store):
     await _process(store, "a")
     await _task(store, "ghost", "a", "no_such_task")
