@@ -238,18 +238,24 @@ async def test_list_refuses_hidden_outside_and_files(root, context, props):
     assert "source" not in context.process.properties
 
 
-async def test_mistyped_file_suggests_the_right_one(root, context):
+async def test_ambiguous_typo_suggests_the_right_one(root, context):
+    (root / "zebra-tasks" / "zebra_tasks" / "thin.py").write_text("x")
+
     result = await ZebraSourceAction().run(_task(path="zebra-tasks/zebra_tasks/thng.py"), context)
 
     assert not result.success
-    assert "Did you mean: zebra-tasks/zebra_tasks/thing.py?" in result.error
+    assert "zebra-tasks/zebra_tasks/thing.py" in result.error.split("Did you mean: ")[1]
     assert "list_zebra_source" in result.error and "search_zebra_source" in result.error
 
 
-async def test_file_name_elsewhere_is_suggested_by_full_path(root, context):
+async def test_file_name_in_several_places_is_suggested_by_full_path(root, context):
+    (root / "zebra-agent-web" / "thing.py").write_text("x")
+
     result = await ZebraSourceAction().run(_task(path="zebra-tasks/thing.py"), context)
 
+    assert not result.success
     assert "zebra-tasks/zebra_tasks/thing.py" in result.error
+    assert "zebra-agent-web/thing.py" in result.error
 
 
 async def test_no_close_match_gives_only_the_hint(root, context):
@@ -294,7 +300,8 @@ async def test_directory_read_returns_its_listing(root, context):
         {"path": "../outside.py"},
         {"path": ".env"},
         {"path": "zebra-tasks"},
-        {"path": "zebra-tasks/zebra_tasks/thng.py"},
+        {"path": "zebra-tasks/qqqq/zzzzzz.yaml"},
+        {"path": "zebra_qqqq/zzzzzz.yaml"},
         {"path": "specs/zebra-as-is.md"},
         {"operation": "list", "path": "zebra-tasks/zebra_tasks/thing.py"},
         {"operation": "list", "path": "zebra-tasks/nope"},
@@ -325,3 +332,110 @@ async def test_undeployed_entry_names_what_is_deployed(root, context):
     assert not result.success
     assert "'specs/zebra-as-is.md' is not deployed" in result.error
     assert "Deployed: README.md, zebra-agent-web/, zebra-tasks/." in result.error
+
+
+# --- path guard and auto-recovery (#221, #223) ---
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "zebra-tasks/zebra_tasks/thng.py",  # typo
+        "zebra-tasks/thing.py",  # right name, wrong directory
+        "zebra_tasks/thing.py",  # missing package prefix: not an allowlisted entry
+    ],
+)
+async def test_one_clear_match_is_read_with_a_note(root, context, path):
+    result = await ZebraSourceAction().run(_task(path=path, start_line="2", end_line="3"), context)
+
+    assert result.success
+    assert result.output["path"] == "zebra-tasks/zebra_tasks/thing.py"
+    assert result.output["text"].splitlines() == [
+        f"Note: '{path}' does not exist; read 'zebra-tasks/zebra_tasks/thing.py' instead "
+        "(the only close match).",
+        "    2| line 2",
+        "    3| line 3",
+    ]
+    assert context.process.properties["source"] == result.output["text"]
+
+
+async def test_exact_read_reports_its_path_and_no_note(root, context):
+    result = await ZebraSourceAction().run(_task(path="README.md"), context)
+
+    assert result.output["path"] == "README.md"
+    assert not result.output["text"].startswith("Note:")
+
+
+async def test_weak_match_is_not_guessed(root, context):
+    result = await ZebraSourceAction().run(_task(path="zebra-tasks/zebra_tasks/thx.py"), context)
+
+    assert not result.success
+    assert "Did you mean: zebra-tasks/zebra_tasks/thing.py?" in result.error
+
+
+async def test_two_close_paths_are_ambiguous(root, context):
+    (root / "zebra-tasks" / "zebra_tasks" / "thin.py").write_text("x")
+
+    result = await ZebraSourceAction().run(_task(path="zebra-tasks/zebra_tasks/thng.py"), context)
+
+    assert not result.success
+    assert "source" not in context.process.properties
+
+
+async def test_auto_recovery_never_reads_hidden_files(root, context):
+    (root / "zebra-tasks" / "notes.sqlite3").write_text("SECRET")
+    (root / "zebra-tasks" / "tmp").mkdir()
+    (root / "zebra-tasks" / "tmp" / "run.log").write_text("SECRET")
+    (root / "zebra-tasks" / ".hidden.py").write_text("SECRET")
+
+    for path in (
+        "zebra-tasks/x/notes.sqlite3",
+        "zebra-tasks/run.log",
+        "zebra-tasks/hidden.py",
+        "zebra-tasks/escape.py.bak",
+        "zebra-tasks/zebra_tasks/escape.py",
+        "zebra-tasks/zebra_tasks/lib.py",
+    ):
+        result = await ZebraSourceAction().run(_task(path=path), context)
+
+        assert not result.success, path
+        assert "SECRET" not in result.error and "outside" not in result.error, path
+        assert "source" not in context.process.properties, path
+
+
+@pytest.mark.parametrize("path", ["../etc/passwd", "/etc/passwd", "zebra-tasks/escape.py"])
+async def test_outside_paths_say_so(root, context, path):
+    result = await ZebraSourceAction().run(_task(path=path), context)
+
+    assert result.error.startswith(f"'{path}' is outside the Zebra source tree. ")
+
+
+@pytest.mark.parametrize(
+    "path", [".env", ".venv/lib.py", "zebra-agent-web/db.sqlite3", "zebra-agent-web/tmp/zebra.log"]
+)
+async def test_hidden_paths_say_why(root, context, path):
+    result = await ZebraSourceAction().run(_task(path=path), context)
+
+    assert result.error.startswith(
+        f"'{path}' is a hidden, secret or runtime file Zebra never reads. "
+    )
+
+
+async def test_existing_entry_off_the_allowlist_is_refused(root, context):
+    (root / "legacy").mkdir()
+    (root / "legacy" / "Engine.java").write_text("class Engine {}")
+
+    for path in ("legacy/Engine.java", "legacy/Engin.java"):
+        result = await ZebraSourceAction().run(_task(path=path), context)
+
+        assert result.error.startswith(f"'{path}' is not part of Zebra's readable source. ")
+
+
+async def test_unknown_entry_without_a_match_names_the_tree(root, context):
+    result = await ZebraSourceAction().run(_task(path="zebra_qqqq/zzzzzz.yaml"), context)
+
+    assert not result.success
+    assert (
+        "the source tree has no 'zebra_qqqq'. It has README.md, zebra-agent-web/, zebra-tasks/."
+        in result.error
+    )

@@ -5,8 +5,10 @@ against its intended outcomes. The root is ``ZEBRA_SOURCE_ROOT`` or, by default,
 the checkout the installed ``zebra_tasks`` package lives in (``/app`` in the
 prod image, the repo root in development). Only allowlisted top-level entries
 are visible; dot-entries (``.env``, ``.venv``, ``.git``), databases and runtime
-directories are refused. A bad path fails with the nearest existing paths and a
-hint to list or search, so an agent can recover. Nothing is ever written.
+directories are refused, and every refusal says why. A read of a missing path
+with exactly one high-confidence match reads that file, with a note (#221, #223);
+any other bad path fails with the nearest existing paths and a hint to list or
+search, so an agent can recover. Nothing is ever written.
 """
 
 import difflib
@@ -38,6 +40,8 @@ DENIED_PARTS = {"__pycache__", "tmp", "staticfiles", "node_modules", "fixtures"}
 DENIED_SUFFIXES = {".sqlite3", ".db", ".pem", ".key", ".pyc"}
 MAX_FILE_BYTES = 1_000_000
 MAX_SUGGESTIONS = 5
+CONFIDENT_RATIO = 0.9
+CONFIDENT_NAME_RATIO = 0.85
 RECOVERY_HINT = "Use list_zebra_source to see what exists, or search_zebra_source to find a name."
 
 
@@ -54,21 +58,30 @@ def source_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def _hidden(rel: Path) -> bool:
+    """Whether a root-relative path is a dot-entry, database, key or runtime file."""
+    if any(p.startswith(".") or p in DENIED_PARTS for p in rel.parts):
+        return True
+    return rel.suffix in DENIED_SUFFIXES
+
+
+def _allowed_top(rel: Path) -> bool:
+    """Whether a root-relative path starts at an allowlisted top-level entry."""
+    top = rel.parts[0]
+    return top in ALLOWED_TOP_LEVEL or (len(rel.parts) == 1 and top.endswith(".md"))
+
+
 def _allowed(rel: Path) -> bool:
     """Whether a root-relative path is visible to Zebra."""
-    parts = rel.parts
-    if not parts:
-        return False
-    top = parts[0]
-    if top not in ALLOWED_TOP_LEVEL and not (len(parts) == 1 and top.endswith(".md")):
-        return False
-    if any(p.startswith(".") or p in DENIED_PARTS for p in parts):
-        return False
-    return rel.suffix not in DENIED_SUFFIXES
+    return bool(rel.parts) and _allowed_top(rel) and not _hidden(rel)
 
 
 def resolve_source_path(root: Path, path: str) -> Path:
-    """Resolve ``path`` inside ``root`` or raise SourceAccessError."""
+    """Resolve ``path`` inside ``root`` or raise SourceAccessError.
+
+    A path under a top-level entry that is not allowlisted and does not exist is
+    returned as is, so the caller handles it as a miss (e.g. a missing package prefix).
+    """
     path = (path or "").strip()
     if not path:
         raise SourceAccessError("No path given")
@@ -78,8 +91,10 @@ def resolve_source_path(root: Path, path: str) -> Path:
         rel = candidate.relative_to(root)
     except ValueError:
         raise SourceAccessError(f"'{path}' is outside the Zebra source tree") from None
-    if not _allowed(rel):
-        raise SourceAccessError(f"'{path}' is not readable source.")
+    if _hidden(rel):
+        raise SourceAccessError(f"'{path}' is a hidden, secret or runtime file Zebra never reads.")
+    if not rel.parts or (not _allowed_top(rel) and (root / rel.parts[0]).exists()):
+        raise SourceAccessError(f"'{path}' is not part of Zebra's readable source.")
     return candidate
 
 
@@ -147,16 +162,41 @@ def suggest_paths(root: Path, rel: Path) -> list[str]:
     return list(dict.fromkeys(same_name + close))[:MAX_SUGGESTIONS]
 
 
+def _ratio(a: str, b: str) -> float:
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+
+def confident_match(root: Path, rel: Path) -> Path | None:
+    """The one readable file ``rel`` surely meant, or None if it is not clear-cut.
+
+    That is the only file with the same name or, when no file has that name, the
+    only one whose path is at least CONFIDENT_RATIO similar and whose name is at
+    least CONFIDENT_NAME_RATIO similar (a shared directory alone is not enough).
+    """
+    files = [f.relative_to(root).as_posix() for f in _source_files(root)]
+    matches = [f for f in files if f.rsplit("/", 1)[-1] == rel.name]
+    if not matches:
+        close = difflib.get_close_matches(rel.as_posix(), files, n=3, cutoff=CONFIDENT_RATIO)
+        matches = [
+            f for f in close if _ratio(f.rsplit("/", 1)[-1], rel.name) >= CONFIDENT_NAME_RATIO
+        ]
+    return root / matches[0] if len(matches) == 1 else None
+
+
 def missing_path_message(root: Path, path: str, resolved: Path) -> str:
     """Why ``path`` cannot be read, with what to try instead."""
     rel = resolved.relative_to(root)
-    if not (root / rel.parts[0]).exists():
+    top = rel.parts[0]
+    if (root / top).exists():
+        message = f"'{path}' does not exist."
+    elif _allowed_top(rel):
         deployed = ", ".join(_deployed_entries(root))
-        return (
-            f"'{path}' is not deployed: '{rel.parts[0]}' is not in the source tree. "
-            f"Deployed: {deployed}."
+        message = (
+            f"'{path}' is not deployed: '{top}' is not in the source tree. Deployed: {deployed}."
         )
-    message = f"'{path}' does not exist."
+    else:
+        deployed = ", ".join(_deployed_entries(root))
+        message = f"'{path}' does not exist: the source tree has no '{top}'. It has {deployed}."
     suggestions = suggest_paths(root, rel)
     if suggestions:
         message += " Did you mean: " + ", ".join(suggestions) + "?"
@@ -255,6 +295,12 @@ class ZebraSourceAction(TaskAction):
         ParameterDef(
             name="text", type="string", description="File lines, search hits or a listing"
         ),
+        ParameterDef(
+            name="path",
+            type="string",
+            description="Read only: the file actually read (differs from the request when "
+            "a missing path was corrected)",
+        ),
     ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
@@ -264,6 +310,7 @@ class ZebraSourceAction(TaskAction):
             for k, v in task.properties.items()
         }
         root = source_root()
+        output: dict[str, str] = {}
         try:
             operation = props.get("operation", "read")
             if operation == "search":
@@ -271,7 +318,7 @@ class ZebraSourceAction(TaskAction):
             elif operation == "list":
                 text = self._list(root, props)
             else:
-                text = self._read(root, props)
+                text, output["path"] = self._read(root, props)
         except SourceAccessError as e:
             # Every failure says how to recover, so an agent need not retry blind (#211).
             message = str(e)
@@ -279,9 +326,10 @@ class ZebraSourceAction(TaskAction):
             return TaskResult.fail(f"{message}{end}{RECOVERY_HINT}")
 
         context.set_process_property(props.get("output_key") or "source", text)
-        return TaskResult.ok(output={"text": text})
+        return TaskResult.ok(output={"text": text, **output})
 
-    def _read(self, root: Path, props: dict) -> str:
+    def _read(self, root: Path, props: dict) -> tuple[str, str]:
+        """Read lines of a file; returns the text and the root-relative path read."""
         raw = props.get("path", "")
         path = resolve_source_path(root, raw)
         if path.is_dir():
@@ -290,8 +338,17 @@ class ZebraSourceAction(TaskAction):
                 f"'{raw}' is a directory, not a file. It contains:\n{listing}\n"
                 "Read one of these paths."
             )
+        note = ""
         if not path.is_file():
-            raise SourceAccessError(missing_path_message(root, raw, path))
+            # One clear match is read in the same run rather than costing a round trip (#223).
+            match = confident_match(root, path.relative_to(root))
+            if match is None:
+                raise SourceAccessError(missing_path_message(root, raw, path))
+            path = match
+            note = (
+                f"Note: '{raw}' does not exist; read "
+                f"'{path.relative_to(root).as_posix()}' instead (the only close match).\n"
+            )
         if path.stat().st_size > MAX_FILE_BYTES:
             raise SourceAccessError(f"'{props.get('path')}' is too large to read")
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -310,7 +367,7 @@ class ZebraSourceAction(TaskAction):
                 break
             out.append(line)
             size += len(line) + 1
-        return "\n".join(out)
+        return note + "\n".join(out), path.relative_to(root).as_posix()
 
     def _search(self, root: Path, props: dict) -> str:
         pattern = props.get("pattern") or ""
