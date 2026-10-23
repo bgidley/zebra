@@ -179,6 +179,7 @@ An LLM task whose tools are workflows. A tool call creates a child process of th
 | `answer_on_budget` | bool | false | When the turns run out, drop that turn's tool calls and ask once with no tools for an answer instead of failing (#191) |
 | `max_parallel_tools` | int | 4 | Tool calls run per turn; extras get an error result |
 | `max_depth` | int | 3 | Run without tools at this `__agent_depth__` |
+| `response_format` | string | `text` | `json`: the final answer must be a JSON object/array (fences and prose tolerated). Otherwise it is asked for once more with no tools (`complete_json`'s JSON-only note, or 2× `max_tokens` + "be brief" when truncated); still unusable → the task fails with the cause and the reply's start, `output_key` unset (#216) |
 | `output_key` | string | `agent_response` | Where to store the final answer |
 
 **Output:** `{response, transcript: [{tool, workflow, arguments, process_id, success, result}], turns, tools}`. Declare the task `idempotent: true`. Missing `__workflow_library__` → plain LLM call, no tools.

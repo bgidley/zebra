@@ -20,8 +20,16 @@ from zebra.tasks.base import ExecutionContext, ParameterDef
 
 from zebra_tasks.agent.user_context import copy_user_properties
 from zebra_tasks.llm.action import LLMCallAction
-from zebra_tasks.llm.base import Message, MessageRole, ToolCall, ToolDefinition
+from zebra_tasks.llm.base import LLMResponse, Message, MessageRole, ToolCall, ToolDefinition
 from zebra_tasks.llm.client import get_llm, model_for
+from zebra_tasks.llm.structured import (
+    INVALID_RETRY_NOTE,
+    RAW_KEEP_CHARS,
+    TRUNCATED_FINISH_REASONS,
+    TRUNCATED_RETRY_NOTE,
+    LLMJSONError,
+    parse_llm_json,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +73,8 @@ DEFINE_INPUTS: dict[str, Any] = {
 # Caps on tool results: what the model sees, and what the transcript keeps.
 RESULT_CHARS = 12000
 TRANSCRIPT_CHARS = 500
+#: Start of an unusable JSON reply quoted in the task error, for diagnosis (#216).
+REPLY_PREVIEW_CHARS = 200
 
 
 def tool_slug(name: str) -> str:
@@ -98,6 +108,14 @@ def _goal_from(arguments: dict[str, Any]) -> str:
     if "goal" in arguments:
         return str(arguments["goal"])
     return "; ".join(f"{k}: {v}" for k, v in arguments.items())
+
+
+def _json_container(content: str | None) -> dict | list:
+    """An object or array from a JSON reply; a bare string or number is not an answer."""
+    value = parse_llm_json(content)
+    if not isinstance(value, dict | list):
+        raise ValueError(f"expected a JSON object, got {type(value).__name__}")
+    return value
 
 
 def _message_to_dict(message: Message) -> dict[str, Any]:
@@ -149,7 +167,9 @@ class LLMAgentAction(LLMCallAction):
         max_parallel_tools: Tool calls run per turn; extra calls get an error
             result asking the model to make them next turn (default: 4)
         max_depth: Run without tools at this tool-call depth (default: 3)
-        temperature, max_tokens, response_format, model: As for ``llm_call``
+        temperature, max_tokens, response_format, model: As for ``llm_call``; a
+            ``json`` answer that cannot be parsed is asked for once more without
+            tools, then fails the task (#216)
         output_key: Where to store the final answer (default: "agent_response")
 
     Declare the task ``idempotent: true`` so crash recovery re-runs an
@@ -322,7 +342,9 @@ class LLMAgentAction(LLMCallAction):
                 return TaskResult.fail(f"LLM call failed: {e}")
 
             if not response.tool_calls:
-                return self._finish(task, context, state, response.content or "")
+                return await self._finish(
+                    task, context, state, response, provider, temperature, max_tokens
+                )
 
             state["turns"] += 1
             if state["turns"] > max_turns:
@@ -632,19 +654,87 @@ class LLMAgentAction(LLMCallAction):
         except Exception as e:
             return TaskResult.fail(f"LLM call failed: {e}")
         logger.info("llm_agent: tool budget spent; answered without tools")
-        return self._finish(task, context, state, response.content or "")
+        return await self._finish(task, context, state, response, provider, temperature, max_tokens)
 
-    def _finish(
-        self, task: TaskInstance, context: ExecutionContext, state: dict[str, Any], text: str
+    async def _finish(
+        self,
+        task: TaskInstance,
+        context: ExecutionContext,
+        state: dict[str, Any],
+        response: LLMResponse,
+        provider: Any,
+        temperature: float,
+        max_tokens: int,
     ) -> TaskResult:
-        response = self._process_response(text, task)
-        context.set_process_property(task.properties.get("output_key", "agent_response"), response)
+        try:
+            answer = await self._final_answer(
+                task, state, response, provider, temperature, max_tokens
+            )
+        except LLMJSONError as e:
+            reply = e.failure["raw_response"][:REPLY_PREVIEW_CHARS]
+            return TaskResult.fail(f"Unusable JSON answer: {e}; reply: {reply!r}")
+        except Exception as e:
+            return TaskResult.fail(f"LLM call failed: {e}")
+        context.set_process_property(task.properties.get("output_key", "agent_response"), answer)
         task.properties.pop(STATE_KEY, None)
         return TaskResult.ok(
             output={
-                "response": response,
+                "response": answer,
                 "transcript": state["transcript"],
                 "turns": state["turns"],
                 "tools": sorted(state["tools"]),
             }
         )
+
+    @staticmethod
+    async def _final_answer(
+        task: TaskInstance,
+        state: dict[str, Any],
+        response: LLMResponse,
+        provider: Any,
+        temperature: float,
+        max_tokens: int,
+    ) -> Any:
+        """The answer to store: the reply text, or its JSON for ``response_format: json``.
+
+        An unusable JSON reply is asked for once more, without tools, as
+        ``complete_json`` does: twice ``max_tokens`` if it was cut off, else a
+        JSON-only note (#216).
+
+        Raises:
+            LLMJSONError: Neither reply could be parsed.
+        """
+        text = response.content or ""
+        if task.properties.get("response_format") != "json":
+            return text
+        try:
+            return _json_container(text)
+        except ValueError as e:
+            error = str(e)
+        truncated = response.finish_reason in TRUNCATED_FINISH_REASONS
+        logger.warning(
+            "llm_agent: unusable JSON answer (finish_reason=%s): %s; asking again",
+            response.finish_reason,
+            error,
+        )
+        note = TRUNCATED_RETRY_NOTE if truncated else INVALID_RETRY_NOTE.format(error=error)
+        state["messages"].append(_message_to_dict(Message.assistant(text)))
+        state["messages"].append(_message_to_dict(Message.user(note)))
+        retry = await provider.complete(
+            messages=[_message_from_dict(m) for m in state["messages"]],
+            tools=None,
+            temperature=temperature,
+            max_tokens=max_tokens * 2 if truncated else max_tokens,
+        )
+        try:
+            return _json_container(retry.content)
+        except ValueError as e:
+            raise LLMJSONError(
+                {
+                    "error": str(e),
+                    "finish_reason": retry.finish_reason,
+                    "truncated": retry.finish_reason in TRUNCATED_FINISH_REASONS,
+                    "attempts": 2,
+                    "raw_response": (retry.content or "")[:RAW_KEEP_CHARS],
+                }
+            ) from e

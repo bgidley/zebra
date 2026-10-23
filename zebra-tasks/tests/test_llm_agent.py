@@ -1,7 +1,7 @@
 """llm_agent: workflows as LLM tools, each call a suspended-on subflow (#146)."""
 
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pytest
@@ -48,6 +48,7 @@ from zebra_tasks.llm.client import set_llm_factory
 class Call:
     messages: list[Message]
     tools: list[ToolDefinition] | None
+    max_tokens: int | None = None
 
 
 Step = Callable[[Call], LLMResponse]
@@ -82,7 +83,7 @@ class ScriptedProvider(LLMProvider):
     calls: list[Call] = field(default_factory=list)
 
     async def complete(self, messages, tools=None, temperature=0.7, max_tokens=4096, **kw):
-        call = Call(list(messages), tools)
+        call = Call(list(messages), tools, max_tokens)
         self.calls.append(call)
         assert self.script, "provider called more times than scripted"
         return self.script.pop(0)(call)
@@ -458,6 +459,93 @@ async def test_answer_on_budget_answers_without_tools_instead_of_failing(engine,
     assert process.properties["answer"] == "Best answer from q0 and q1"
     # The over-budget turn's tool call was dropped, never run.
     assert len(await children_of(store, process.id)) == 2
+
+
+async def test_json_answer_is_parsed(engine, provider):
+    provider.script = [say('```json\n{"verdicts": []}\n```')]
+
+    process = await run_agent(engine, agent_definition(response_format="json"))
+
+    assert process.state == ProcessState.COMPLETE
+    assert process.properties["answer"] == {"verdicts": []}
+    assert len(provider.calls) == 1
+
+
+async def test_junk_json_answer_is_asked_for_again_without_tools(engine, provider):
+    def retry(call: Call) -> LLMResponse:
+        assert call.tools is None
+        assert call.messages[-2].content == " the"
+        assert "could not be parsed as JSON" in call.messages[-1].content
+        return say('{"verdicts": [{"id": "O1", "verdict": "met"}]}')(call)
+
+    provider.script = [say(" the"), retry]
+
+    process = await run_agent(
+        engine, agent_definition(tools=["Web Research"], response_format="json")
+    )
+
+    assert process.state == ProcessState.COMPLETE
+    assert process.properties["answer"] == {"verdicts": [{"id": "O1", "verdict": "met"}]}
+
+
+async def test_json_answer_that_stays_junk_fails_the_task(engine, provider):
+    provider.script = [say(" the"), say("Sorry, here are my thoughts.")]
+
+    process = await run_agent(engine, agent_definition(response_format="json"))
+
+    assert process.state == ProcessState.FAILED
+    error = process.properties["__error__"]
+    assert "Unusable JSON answer: invalid JSON" in error
+    assert "attempts: 2" in error
+    assert "reply: 'Sorry, here are my thoughts.'" in error
+    assert "answer" not in process.properties
+
+
+async def test_bare_json_string_is_not_an_answer(engine, provider):
+    provider.script = [say('"the"'), say('{"verdicts": []}')]
+
+    process = await run_agent(engine, agent_definition(response_format="json"))
+
+    assert process.properties["answer"] == {"verdicts": []}
+    assert "expected a JSON object, got str" in provider.calls[1].messages[-1].content
+
+
+async def test_json_answer_still_truncated_on_retry_fails(engine, provider):
+    def cut_off(call: Call) -> LLMResponse:
+        return replace(say('{"verdicts": [{"id": "O1", "evid')(call), finish_reason="length")
+
+    provider.script = [cut_off, cut_off]
+
+    process = await run_agent(engine, agent_definition(response_format="json"))
+
+    assert process.state == ProcessState.FAILED
+    assert "reply truncated at the token limit (attempts: 2)" in process.properties["__error__"]
+
+
+async def test_truncated_json_answer_gets_more_room(engine, provider):
+    def cut_off(call: Call) -> LLMResponse:
+        return replace(say('{"verdicts": [{"id": "O1", "evid')(call), finish_reason="length")
+
+    def retry(call: Call) -> LLMResponse:
+        assert call.max_tokens == 2000
+        assert "cut off at the length limit" in call.messages[-1].content
+        return say('{"verdicts": []}')(call)
+
+    provider.script = [cut_off, retry]
+
+    process = await run_agent(engine, agent_definition(response_format="json", max_tokens=1000))
+
+    assert process.state == ProcessState.COMPLETE
+    assert process.properties["answer"] == {"verdicts": []}
+
+
+async def test_text_answer_is_not_checked(engine, provider):
+    provider.script = [say(" the")]
+
+    process = await run_agent(engine, agent_definition())
+
+    assert process.properties["answer"] == " the"
+    assert len(provider.calls) == 1
 
 
 async def test_define_workflow_then_call_it(engine, store, provider, library):
