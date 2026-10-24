@@ -1,6 +1,6 @@
 # Zebra Commons — Design
 
-**GitLab issue**: #41 (epic), slices #228–#236 (S1–S8, S3b) below
+**GitLab issue**: #41 (epic), slices #228–#237 below
 **Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-009
 **Status**: Draft for review (concept; nothing implemented)
 
@@ -74,8 +74,14 @@ so reputation and market balance attach to the Zebra, not to a device.
   Zebra key, the human confirms, and that device publishes the `DEVICE_CERT`.
 - **`DEVICE_REVOKE`:** signed by the Zebra key. It covers a lost or retired device. Events signed by
   the device after the revoke's receipt are rejected, and the Zebra's reputation survives.
+- **Spheres.** Each device belongs to a **sphere** (`home`, `work`, or a name the human chooses),
+  set at pairing and carried in its `DEVICE_CERT`.
+  - A sphere can be marked **`observed`**: the device is managed by someone else, e.g. an
+    employer's laptop with monitoring, backups and IT access.
+  - Home and work are the same Zebra but different audiences, so what a workflow reveals depends on
+    which sphere sees it.
 - **`SystemStateModel`** gains `zebra_pubkey`, `zebra_display_name`, `device_pubkey`,
-  `device_label` and `sync_direction`. Public keys are not secrets.
+  `device_label`, `sphere`, `sphere_observed` and `sync_direction`. Public keys are not secrets.
 
 ### Workflow provenance (S2)
 The library gains provenance per workflow file, stored as YAML metadata so it survives the
@@ -88,7 +94,14 @@ commons:
   parent_sha256: "…"      # if derived from another workflow
   adopted_at: "2026-…"
   supervised: true        # imported workflows start supervised
+  sphere: work            # sphere where it was learnt
+  tainted_by: [work]      # spheres whose run data any LLM writer of this lineage was shown
+  share_with: [home]      # spheres (or "public") it may go to; default []
 ```
+
+`sphere`, `tainted_by` and `share_with` are set only by the library and by human approvals, never
+by an LLM: the block is stripped before LLM rewrites, see below. `tainted_by` only grows along a
+lineage. When the dream cycle on a work device changes a workflow learnt at home, `work` is added.
 
 **Canonical YAML** means:
 1. Load with a `SafeLoader` subclass with the timestamp resolver removed, so `2026-01-01` stays a
@@ -230,14 +243,32 @@ Example: you and your Zebra build a "Code review checklist" workflow at work, an
 there at home. Your home finances must never reach the work device, and work secrets must never
 reach home.
 
-1. **Send.** When a device saves a workflow, it sends a `SKILL` event to the private relay, encrypted
-   to each other certified device. The trigger is a new learnt workflow, an optimizer change, or a
-   human "share to my other devices". Before sending:
+0. **Default: Zebra suggests, you approve.** A newly learnt or changed workflow **stays in its
+   sphere**. Nothing is sent just because it was saved.
+   - After the dream cycle, or when a workflow reaches `MIN_RUNS_TO_SHARE`, Zebra considers sharing
+     it with each other sphere. It must pass:
+     - the **leak guard** (see below; it already ran at save time)
+     - the personal-data scan and the confidentiality scan
+     - the **sensitivity check**: a low-tier LLM asks "would this workflow's name, purpose or
+       content be sensitive if seen in sphere X?" It flags job searching, health, money, HR,
+       legal, relationships and similar topics, and fails closed.
+   - If all pass, Zebra raises a human task "Share *Code review checklist* with home?". The task
+     shows the workflow, its diff against the target sphere's copy (if any), and Zebra's reason in
+     its own voice.
+   - Approving adds the sphere to `share_with`.
+   - Anything sensitive is **never proposed** to an `observed` sphere. A human can still share it
+     from the workflow page, after an explicit "this will be visible on a managed device"
+     confirmation.
+   - Under an earned `sharing` trust level, Zebra may skip the approval for spheres that are not
+     `observed`. It never may for `observed` ones.
+1. **Send.** A device sends a `SKILL` event only for workflows whose `share_with` names the target
+   sphere. The event goes to the private relay, encrypted to each certified device of that sphere.
+   Before sending:
    - The device's `sync_direction` must allow sending.
-   - `commons_pii_scan` plus a **confidentiality scan** must pass. The confidentiality scan looks
-     for internal hostnames, project codenames, customer names, credentials and URLs, plus
-     per-device `SYNC_CONFIDENTIAL_PATTERNS`, and fails closed. On a work device this is the
-     data-security boundary.
+   - `commons_pii_scan` plus a **confidentiality scan** must pass again on the exact bytes being
+     sent. The confidentiality scan looks for internal hostnames, project codenames, customer
+     names, credentials and URLs, plus per-device `SYNC_CONFIDENTIAL_PATTERNS`, and fails closed.
+     On a work device this is the data-security boundary.
 2. **Receive.** A device whose direction allows receiving decrypts the event and verifies the cert
    chain. It then runs a short version of the import pipeline:
    - validation and registry check
@@ -252,6 +283,12 @@ reach home.
    - The same hash is already present: no-op.
    - The incoming workflow descends from the local one (its parent chain contains the local hash):
      fast-forward and replace.
+   - **Taint rule, applied on the send side before any of this:** a new version is not sent as a
+     fast-forward if its `tainted_by` holds a sphere the previous shared version didn't have.
+     Example: home's "Weekly planning" was shared with work, and work's dream cycle then improved
+     it using work runs, adding `work` to `tainted_by`. Sending that back to home becomes a fresh
+     share decision (step 0), with the diff shown. Being shared once doesn't carry over to later
+     changes made with another sphere's data.
    - The local one descends from the incoming one: ignore it (stale).
    - Neither descends from the other (forked at home and at work): keep both. The dream curator,
      which already retires duplicates, or a human picks.
@@ -261,6 +298,62 @@ reach home.
 5. **Public offers** can be made from any certified device. They are signed by the device and
    attributed to the Zebra through `DEVICE_CERT`. Attestations from all your devices count as one
    Zebra, which blocks self-attestation and counts once against report caps.
+   - A public offer requires `public` in `share_with`, set through the same suggest-and-approve
+     step.
+   - A workflow whose `tainted_by` includes an `observed` sphere always needs a human approval to go
+     public, whatever the trust level.
+
+### Leak guard (all LLM workflow writers; #237)
+Problem: the dream cycle's evaluator prompt includes raw **sample failed goals**
+(`zebra-tasks/zebra_tasks/agent/evaluator.py:316-319`). Its weaknesses and suggestions feed the
+optimizer prompt (`optimizer.py:479-502`). The optimizer, unlike the creator (`creator.py:26`) and
+variant creator (`variant_creator.py:123`), has **no** "don't copy run content" rule. So "update
+the Acme migration plan for Jane" can become a hard-coded "check Acme's SLA with Jane" step.
+
+Rather than guess what is confidential, use what we know: **exactly which untrusted texts the LLM
+was shown.**
+1. Every LLM workflow writer (creator, variant creator, optimizer, `define_workflow`) records its
+   **exposure set**: goal texts, sample goals, continuation comments, `prior_outputs`, previous-run
+   context and evaluator findings.
+2. **Before save**, the writer collects the string literals of the new YAML that are not in its
+   parent (prompts, defaults, descriptions, examples). It checks that *added* text against the
+   exposure set for:
+   - normalised word n-grams (≥ 4 tokens)
+   - capitalised or proper-noun tokens, emails, URLs and numbers that appear in the exposure set but
+     not in the parent or a small allow-list (template words, action names)
+3. **On a hit**, it regenerates once with "generalise: these specifics came from runs, replace them
+   with `{{goal}}` or task inputs: …". A second hit rejects the change and records it, like the
+   optimizer's `failed_changes`, with the hit list. The workflow is not saved.
+4. The optimizer prompt gains the "never copy goals, names or outputs into the YAML" rule.
+5. Whatever passes still marks the writer's sphere in `tainted_by`, because paraphrase can slip
+   through (see Risks).
+
+This works today, before any Commons code, and keeps every library generic. Customer and personal
+details stay in run data, where they belong.
+
+### Worked what-ifs
+
+**A. "At work I manage a project with an existing project-management workflow. The dream cycle
+improves it. Will it include customer details?"**
+- The optimizer sees sample goals mentioning "Acme" and "Jane" and proposes a step naming them.
+- The leak guard finds "Acme" and "Jane" in the exposure set, regenerates a generalised step that
+  reads the client name from the goal, and saves that.
+- The new version has `sphere: work, tainted_by: [work]`, `share_with: []`. It stays at work.
+- If Zebra later proposes sharing it with home, the confidentiality scan checks it again and you see
+  the diff before anything moves.
+- If the workflow came from home originally, the taint rule stops this version from fast-forwarding
+  home on its own.
+- **Result:** customer details stay out of the workflow, and the work version never goes home
+  without your approval.
+
+**B. "At home I plan applying for a new job, and Zebra creates workflows for it. Does that sync to
+my work machine?"**
+- The creator writes "Job application tracker" at home: `sphere: home`, `share_with: []`.
+- The leak guard keeps company names and CV details from your goals out of the YAML.
+- When Zebra considers sharing it with work, the sensitivity check flags job searching as sensitive
+  for an `observed` sphere. Zebra **never proposes it**, and no `SKILL` event is sent.
+- Only an explicit human share, past the "visible on a managed device" warning, could send it.
+- **Result:** it doesn't reach the work machine, not even its name.
 
 **Private relay:** a second strfry Quadlet on the prod host, separate from the public Commons relay.
 - NIP-42 authentication: only keys with a valid `DEVICE_CERT` may read or write.
@@ -333,6 +426,7 @@ reach home.
 | `SYNC_RELAY` | `ZEBRA_SYNC_RELAY` | — | The private relay for `SKILL` events. Unset means no device sync. |
 | `SYNC_DIRECTION` | `ZEBRA_SYNC_DIRECTION` | `both` | `send` / `receive` / `both` / `off`, set per device (e.g. a work device that may only receive) |
 | `SYNC_CONFIDENTIAL_PATTERNS` | `ZEBRA_SYNC_CONFIDENTIAL_PATTERNS` | — | Extra per-device regexes, such as codenames or domains, that block sending |
+| `MIN_RUNS_TO_SHARE` | — | 2 | Successful runs before Zebra suggests sharing a workflow with another sphere |
 | `MIN_RUNS_TO_OFFER` | — | 5 | Effectiveness evidence needed before offering |
 | `IMPORT_SCORE_THRESHOLD` | — | 0.5 | Minimum import score to try judging |
 | `SUPERVISED_RUNS` | — | 3 | Successful supervised runs before an import runs at the domain's level |
@@ -379,6 +473,13 @@ replay with different values compute different markets.
   - Under SUPERVISED, a human approves each skill sent from the work device.
   - Employers may forbid any sync. `SYNC_DIRECTION=off` (or `receive`) is the switch. Keys on work
     machines may also be subject to employer policy.
+- **Paraphrase beats the leak guard.** "The bank client's Q3 migration" has no literal overlap with
+  "Acme". The later layers are the confidentiality and sensitivity LLM checks, `tainted_by`, and a
+  human reviewing the diff before each share. A determined paraphrase still gets through to the
+  library *of the sphere that learnt it*, which is where that data already lives.
+- **Wrong sphere at pairing.** If a work laptop is paired as `home` (or not marked `observed`),
+  every protection based on spheres is wrong. Pairing therefore asks "who manages this device?",
+  and the sphere is shown on every share task. Changing it needs the Zebra key.
 - **Zebra key custody.** It sits on one device. If that device is lost with no backup, devices can't
   be added or revoked, and the Zebra must start a new identity. Its reputation is lost too. Backup
   is part of S1.
@@ -406,9 +507,10 @@ replay with different values compute different markets.
 | Slice | Delivers | Depends on |
 |---|---|---|
 | #228 S1 Zebra + device identity | Zebra key and device key in the credential store, pairing, `DEVICE_CERT`/`DEVICE_REVOKE`, public keys in the UI, Zebra key backup and restore | — |
-| #229 S2 Content-addressed provenance | Canonical hash, `commons` block in the library, signed offline export/import of a single workflow file | S1 |
+| #237 Leak guard | Exposure set per LLM writer, check on added literals before save, generalise-or-reject, optimizer prompt rule. Useful before any Commons work. | — |
+| #229 S2 Content-addressed provenance | Canonical hash, `commons` block (incl. `sphere` / `tainted_by` / `share_with`) owned by the library, signed offline export/import of a single workflow file | S1 |
 | #230 S3 Judged import pipeline | `commons_import.yaml`, personal-data scan, `sharing` trust domain, supervised adoption. Proven with S2 files, no network. | S2 |
-| #236 S3b Private skill sync between own devices | `CommonsClient`, private strfry relay (NIP-42), publishing `DEVICE_CERT`/`REVOKE`, encrypted `SKILL` events, confidentiality scan, lineage merge, `SYNC_DIRECTION` | S1–S3 |
+| #236 S3b Private skill sync between own devices | `CommonsClient`, private strfry relay (NIP-42), publishing `DEVICE_CERT`/`REVOKE`, spheres (`observed`), suggest-and-approve sharing, sensitivity check, encrypted `SKILL` events, confidentiality scan, lineage merge with taint rule, `SYNC_DIRECTION` | S1–S3, #237 |
 | #231 S4 Commons relay + publish | Public strfry Quadlet, `commons_offer.yaml`, receipts, mirroring (reuses `CommonsClient` from S3b) | S3b |
 | #232 S5 Attestations + subscribe | Subscription, `WorkflowOfferModel`, automatic attestations, `/commons/` page | S4 |
 | #233 S6 Web of trust | Trust edges, human vouching, transitive local trust, import score | S5 |

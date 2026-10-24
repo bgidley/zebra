@@ -821,6 +821,9 @@ This means the LLM context for any given task contains: the current task's worki
 - Sensitive categories (finance, health) require explicit workflow-level opt-in to include in prompts
 - The dream cycle consolidates raw execution history into progressively more abstract tiers, preventing unbounded context growth
 - The human can audit what data was sent to the LLM for any workflow execution
+- Workflows written or changed by the LLM never hard-code details from the runs it was shown
+  (names, customers, goal text, outputs). Such details stay in run data and reach tasks at runtime
+  through templates and inputs; a change that copies them is regenerated or rejected (#237)
 - No separate vector database or external embedding service is required — relevance uses the database's own embeddings where available (Oracle AI Database), otherwise keyword overlap, plus LLM-powered categorisation
 
 ### REQ-DATA-005: Data Deletion (P1)
@@ -1031,6 +1034,15 @@ data never does.
 - Before sending, a workflow is checked for personal data and for confidential information (e.g.
   work-internal names, hosts, credentials). A workflow that fails is not sent
 - Each device sets its direction (send, receive, both or off), so a work device can be restricted
+- Each device belongs to a sphere (e.g. home, work). A sphere can be marked as observed (managed by
+  someone else, such as an employer)
+- A new or changed workflow stays in the sphere that made it. Zebra suggests sharing it with another
+  sphere and the human approves, seeing the workflow and what changed. Once it has earned trust,
+  Zebra may share without asking, but never with an observed sphere
+- Zebra never suggests sharing a workflow whose name, purpose or content would be sensitive in the
+  other sphere (e.g. a job search, health, money, HR) with an observed sphere
+- A version changed using another sphere's data is a new sharing decision; approval of an earlier
+  version does not carry over
 - When the same workflow was changed on two devices, both versions are kept and the human or the
   dream cycle chooses; a version that simply builds on another replaces it
 
