@@ -13,6 +13,10 @@ dependencies = [
     "ujson>=5.12.0",
 ]
 
+[tool.uv]
+# uv < 0.13.4 trusts the distrusted eMudhra/emSign CA roots
+required-version = ">=0.13.4"
+
 [tool.uv.workspace]
 members = ["zebra-py", "zebra-tasks", "zebra-agent", "zebra-agent-web"]
 

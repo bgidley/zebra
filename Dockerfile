@@ -3,7 +3,8 @@
 # ============================================================================
 FROM python:3.14-slim AS builder
 
-RUN pip install uv
+# Pinned uv binary, not `pip install uv`: uv < 0.13.4 trusts the distrusted emSign CA roots
+COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
@@ -46,6 +47,12 @@ FROM python:3.14-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates \
  && rm -rf /var/lib/apt/lists/*
+
+# Distrust the eMudhra/emSign roots (bad CA keys, Oct 2026) until Debian ships the fix:
+# the system store is what Oracle (oracledb thin) and plain ssl use.
+RUN sed -i -E 's|^(mozilla/emSign_)|!\1|' /etc/ca-certificates.conf \
+ && update-ca-certificates --fresh >/dev/null \
+ && ! ls /etc/ssl/certs | grep -qi emsign
 
 WORKDIR /app
 
