@@ -519,7 +519,8 @@ class GitPushAction(_GitAction):
         )
         branch = text_property(task, context, "branch") or await current_branch(runner, repo)
         branch = safe_arg(branch, "branch")
-        if branch in PROTECTED_BRANCHES and not bool_property(
+        await runner.run(["check-ref-format", "--branch", branch], repo)
+        if branch.lower() in PROTECTED_BRANCHES and not bool_property(
             task, context, "allow_protected", False
         ):
             raise GitActionError(

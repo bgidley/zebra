@@ -2,8 +2,9 @@
 
 import pytest
 
-from vcs.helpers import make_task
+from vcs.helpers import make_task, sh_git
 from zebra_tasks.vcs.actions import (
+    GitBranchAction,
     GitCloneAction,
     GitCommitAction,
     GitPullAction,
@@ -219,3 +220,103 @@ class TestCredentials:
 
         assert not result.success
         assert "timed out" in result.error
+
+
+class TestLocalRemotes:
+    """#241: on local transport git runs the other repository's helpers without our hardening."""
+
+    @pytest.fixture
+    def evil_remote(self, workspace, remote):
+        """The seeded remote, armed to run a command on fetch and on push."""
+        marker = workspace.parent / "PWNED"
+        with open(remote / "config", "a") as f:
+            f.write(f'[core]\n\talternateRefsCommand = "env > {marker}; :"\n')
+        hook = remote / "hooks" / "pre-receive"
+        hook.write_text(f"#!/bin/sh\nenv > {marker}\n")
+        hook.chmod(0o755)
+        return remote, marker
+
+    def test_local_remote_refused_by_default(self, workspace, monkeypatch):
+        monkeypatch.delenv("ZEBRA_GIT_ALLOW_LOCAL_REMOTES")
+
+        with pytest.raises(GitActionError, match="Remote not allowed"):
+            check_remote(str(workspace / "remotes" / "origin.git"), workspace)
+
+    async def test_evil_local_remote_cannot_be_cloned(self, evil_remote, monkeypatch, mock_context):
+        remote, marker = evil_remote
+        monkeypatch.delenv("ZEBRA_GIT_ALLOW_LOCAL_REMOTES")
+
+        result = await GitCloneAction().run(make_task({"url": str(remote)}), mock_context)
+
+        assert not result.success
+        assert "Remote not allowed" in result.error
+        assert not marker.exists()
+
+    async def test_repo_pointing_at_local_path_cannot_push(
+        self, workspace, evil_remote, monkeypatch, mock_context
+    ):
+        remote, marker = evil_remote
+        path = await clone(workspace, remote, mock_context)  # allowed while the flag is on
+        marker.unlink(missing_ok=True)
+        await GitBranchAction().run(
+            make_task({"repo_path": path, "name": "feature", "create": True}), mock_context
+        )
+        monkeypatch.delenv("ZEBRA_GIT_ALLOW_LOCAL_REMOTES")
+
+        result = await GitPushAction().run(make_task({"repo_path": path}), mock_context)
+
+        assert not result.success
+        assert "Remote not allowed" in result.error
+        assert not marker.exists()
+        assert "feature" not in sh_git("branch", "--list", cwd=remote)
+
+
+class TestMinimalEnvironment:
+    def test_other_secrets_not_passed_to_git(self, tmp_path, monkeypatch):
+        for key in ("OPENROUTER_API_KEY", "ORACLE_PASSWORD", "ZEBRA_GITLAB_TOKEN", "KAGI_API_KEY"):
+            monkeypatch.setenv(key, "secret-value")
+        monkeypatch.setenv("GIT_ASKPASS", "echo")
+
+        env = GitRunner(workspace=tmp_path).env()
+
+        assert "secret-value" not in env.values()
+        assert "GIT_ASKPASS" not in env and "SSH_ASKPASS" not in env
+        assert env["GIT_TERMINAL_PROMPT"] == "0"
+        assert env["PATH"]
+
+    async def test_dot_git_symlink_refused(self, workspace, remote, tmp_path, mock_context):
+        path = await clone(workspace, remote, mock_context)
+        outside = tmp_path / "outside-repo"
+        sh_git("init", "-q", str(outside), cwd=tmp_path)
+        linked = workspace / "linked"
+        linked.mkdir()
+        (linked / ".git").symlink_to(outside / ".git")
+        assert path  # a normal clone still works
+
+        result = await GitStatusAction().run(make_task({"repo_path": str(linked)}), mock_context)
+
+        assert not result.success
+        assert "symlink" in result.error
+
+
+class TestPushNames:
+    @pytest.mark.parametrize("branch", ["MAIN", "Master"])
+    async def test_protected_check_ignores_case(self, branch, workspace, remote, mock_context):
+        path = await clone(workspace, remote, mock_context)
+
+        result = await GitPushAction().run(
+            make_task({"repo_path": path, "branch": branch}), mock_context
+        )
+
+        assert not result.success
+        assert "protected" in result.error
+
+    async def test_invalid_branch_name_refused(self, workspace, remote, mock_context):
+        path = await clone(workspace, remote, mock_context)
+
+        result = await GitPushAction().run(
+            make_task({"repo_path": path, "branch": "a..b"}), mock_context
+        )
+
+        assert not result.success
+        assert "check-ref-format" in result.error

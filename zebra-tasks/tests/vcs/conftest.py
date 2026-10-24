@@ -20,6 +20,8 @@ def workspace(tmp_path, monkeypatch) -> Path:
     ws = tmp_path / "ws"
     ws.mkdir()
     monkeypatch.setenv("ZEBRA_GIT_WORKSPACE", str(ws))
+    # The tests use bare repositories in the workspace as remotes (refused by default, #241).
+    monkeypatch.setenv("ZEBRA_GIT_ALLOW_LOCAL_REMOTES", "1")
     return ws
 
 

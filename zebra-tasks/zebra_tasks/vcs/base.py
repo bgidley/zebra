@@ -41,6 +41,29 @@ _ALLOWED_CONFIG = re.compile(
     r"|extensions\.objectformat)$"
 )
 _REMOTE_URL_KEY = re.compile(r"^remote\..+\.(url|pushurl)$")
+# Environment passed to git; everything else (API keys, DB credentials, tokens) is dropped.
+_ENV_ALLOWLIST = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "LANG",
+        "LANGUAGE",
+        "TZ",
+        "TMPDIR",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+    }
+)
+# Local-path remotes are only for tests and development: on local transport git runs the other
+# repository's upload-pack/receive-pack without our hardening, so that repository's own config and
+# hooks could run commands (#241).
+ALLOW_LOCAL_REMOTES_ENV = "ZEBRA_GIT_ALLOW_LOCAL_REMOTES"
 
 
 class GitActionError(Exception):
@@ -74,16 +97,21 @@ class GitRunner:
     secrets: list[str] = field(default_factory=list)
 
     def env(self) -> dict[str, str]:
-        """Return the subprocess environment for ``git``."""
+        """Return the subprocess environment for ``git``.
+
+        Only an allowlist of the process environment is passed on, so nothing git starts sees
+        Zebra's other secrets (API keys, database credentials). There is no askpass helper and
+        prompts are off, so an auth challenge fails at once.
+        """
         env = {
             key: value
             for key, value in os.environ.items()
-            if not key.startswith(("GIT_", DEFAULT_TOKEN_ENV))
+            if key in _ENV_ALLOWLIST or key.startswith("LC_")
         }
         env.update(
             {
                 "GIT_TERMINAL_PROMPT": "0",
-                "GIT_ASKPASS": "echo",
+                "GIT_SSH_COMMAND": "ssh -o BatchMode=yes",
                 "GIT_CONFIG_NOSYSTEM": "1",
                 "GIT_CONFIG_GLOBAL": os.devnull,
             }
@@ -227,8 +255,9 @@ def safe_arg(value: str, what: str) -> str:
 def check_remote(url: str, workspace: Path) -> str:
     """Return *url* if it is an allowed remote.
 
-    Allowed: ``https://``, ``ssh://``, scp-style ``user@host:path``, or a local path inside the
-    workspace. Everything else (``ext::``, ``file://``, ``http://``, outside paths) is refused.
+    Allowed: ``https://``, ``ssh://`` and scp-style ``user@host:path``. A local path inside the
+    workspace is allowed only when ``ZEBRA_GIT_ALLOW_LOCAL_REMOTES=1`` (tests, development; #241).
+    Everything else (``ext::``, ``file://``, ``http://``, outside paths) is refused.
 
     Raises:
         GitActionError: If the remote is not allowed.
@@ -238,6 +267,8 @@ def check_remote(url: str, workspace: Path) -> str:
     if lowered.startswith(("https://", "ssh://")) or _SCP_REMOTE.match(url):
         return url
     if "::" in url or "://" in url:
+        raise GitActionError(f"Remote not allowed (use https:// or ssh://): {url}")
+    if os.environ.get(ALLOW_LOCAL_REMOTES_ENV) != "1":
         raise GitActionError(f"Remote not allowed (use https:// or ssh://): {url}")
     path = Path(url)
     if not path.is_absolute():
@@ -286,7 +317,10 @@ async def open_repo(task: TaskInstance, context: ExecutionContext) -> tuple[GitR
     if not raw:
         raise GitActionError("No repo_path provided")
     path = in_workspace(str(raw).strip(), workspace)
-    if not (path / ".git").is_dir():
+    dot_git = path / ".git"
+    if dot_git.is_symlink():
+        raise GitActionError(f"Refusing repository whose .git is a symlink: {path}")
+    if not dot_git.is_dir():
         raise GitActionError(f"Not a Git repository: {path}")
     runner = make_runner(task, context, workspace)
     await check_repo_config(runner, path)
