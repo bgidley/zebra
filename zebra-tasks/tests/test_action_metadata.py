@@ -17,6 +17,7 @@ from zebra_tasks.filesystem.move import FileMoveAction
 from zebra_tasks.filesystem.read import FileReadAction
 from zebra_tasks.filesystem.search import FileSearchAction
 from zebra_tasks.filesystem.write import FileWriteAction
+from zebra_tasks.http.actions import HttpGetAction, HttpRequestAction
 
 # Import all actions from zebra-tasks
 from zebra_tasks.llm.action import LLMCallAction
@@ -44,6 +45,9 @@ ALL_ACTIONS = [
     DirectoryListAction,
     # Compute
     PythonExecAction,
+    # HTTP
+    HttpGetAction,
+    HttpRequestAction,
     # Agent
     MetricsAnalyzerAction,
     WorkflowEvaluatorAction,

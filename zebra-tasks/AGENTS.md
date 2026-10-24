@@ -64,6 +64,8 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/knowledge/add.py` | AddKnowledgeAction + `store_knowledge_entry()` — store with contradiction detection (shared core) |
 | `zebra_tasks/knowledge/extract.py` | ExtractKnowledgeAction - LLM personal-fact candidates from a run; `normalize_knowledge_key()`, `validate_candidates()` privacy/cap guardrails (F152) |
 | `zebra_tasks/knowledge/store_learned.py` | StoreLearnedKnowledgeAction - store candidates as `source=agent` (confidence ≤ `max_confidence`), start *Resolve Knowledge Contradiction* for conflicts (F152); `update_agent_entries: true` updates a conflicting agent entry in place (F155) |
+| `zebra_tasks/http/` | HTTP/REST client (F62): `guard.py` (`check_url()` public-address check + `ZEBRA_HTTP_ALLOWED_PRIVATE_HOSTS`; `load_credential()` host-bound `ZEBRA_HTTP_CRED_<NAME>`), `actions.py` (`http_get` reversible, `http_request` irreversible; manual redirects, capped body) |
+| `zebra_tasks/templating.py` | `resolve_templates()` — `{{templates}}` in every string of a nested dict/list (webhook, HTTP actions) |
 | `zebra_tasks/web/kagi_news.py` | KagiNewsFetchAction (`kagi_news_fetch`: news.kagi.com `kite.json` feed, no key) and KagiNewsReadAction (`kagi_news_read`: batch Kagi Extract of picked stories, falls back to Kagi News summaries; never fails on extraction) (F155) |
 | `zebra_tasks/llm/models.py` | `TIERS` (`low`, `medium`, `high`, `max`), `DEFAULT_TIER` (`medium`), `normalize_model()`: a tier, or a `vendor/model` slug as given; names stored before #205 (`haiku`, `sonnet`, `opus`, `claude-*`, `kimi*`) read as their tier |
 | `zebra_tasks/llm/client.py` | `get_llm(model, context)`: the one entry point; with a context every call records its usage on the process. `model_for(task, context, default)`: task `model` > process `__llm_model__` > default > `medium`. `set_llm_factory()`: test seam (the root `conftest.py` resets it) |
@@ -576,6 +578,17 @@ SMTP via stdlib `smtplib` in `asyncio.to_thread`. **Properties:** `to` (string o
 ### NotifyWebhookAction (`notify_webhook`)
 
 httpx POST/PUT. **Properties:** `url` (defaults to `ZEBRA_NOTIFY_WEBHOOK_URL`; http/https only), `payload` (JSON, templates resolved recursively) or `body` (raw text), `method` (`POST`/`PUT`), `headers`, `timeout` (15s). Non-2xx fails the task. **Output:** `{status_code, host}`.
+
+## HTTP Actions Reference (F62)
+
+Both live in `zebra_tasks/http/` and share properties: `url` (required, templated), `query`, `headers` (templated), `credential`, `timeout` (30s, max 120), `max_bytes` (1 MB, max 5 MB), `fail_on_status` (true). **Output:** `{status_code, host, url (no query/userinfo), content_type, headers (no set-cookie), body, json (parsed when JSON and not truncated, else null), truncated}`.
+
+- **`http_get`** — `method` `GET` (default) or `HEAD`. `always_reversible`.
+- **`http_request`** — `method` `POST`/`PUT`/`PATCH`/`DELETE` (required), `json` (templated) or `body` (text), not both. `always_irreversible`: trust gates route it to approval below AUTONOMOUS and the golden gym refuses workflows using it.
+
+**Safety:** `check_url()` resolves the host and refuses any non-global address (loopback, RFC 1918, link-local incl. `169.254.169.254`, CGNAT, ULA, multicast, IPv4-mapped) unless the host is in `ZEBRA_HTTP_ALLOWED_PRIVATE_HOSTS`. Redirects are followed by hand (max 5) and every hop is re-checked; 303 (and 301/302 after a write) becomes a body-less GET. `credential: <name>` loads `ZEBRA_HTTP_CRED_<NAME>` JSON (`host` + `type` `bearer`/`basic`/`header`), refuses a URL on another host, and leaves the auth off any redirect hop to another host; errors name the credential, never the secret. Known gap: DNS rebinding between the check and httpx's own lookup.
+
+**Tests:** `tests/http_client/` (not `tests/http/`: that would shadow the stdlib `http` package). Stub DNS by patching `zebra_tasks.http.guard._resolve`.
 
 ## Testing Task Actions
 

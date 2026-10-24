@@ -109,6 +109,9 @@ kagi_news_read = "zebra_tasks.web.kagi_news:KagiNewsReadAction"
 # Notifications (F65)
 notify_email = "zebra_tasks.notifications.smtp_email:NotifyEmailAction"
 notify_webhook = "zebra_tasks.notifications.webhook:NotifyWebhookAction"
+# HTTP/REST client (F62)
+http_get = "zebra_tasks.http.actions:HttpGetAction"
+http_request = "zebra_tasks.http.actions:HttpRequestAction"
 # Knowledge lifecycle (F32)
 decay_confidence = "zebra_tasks.knowledge.decay:DecayConfidenceAction"
 add_knowledge = "zebra_tasks.knowledge.add:AddKnowledgeAction"

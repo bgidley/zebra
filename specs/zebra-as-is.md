@@ -132,6 +132,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 | Web (F115, #145, F155) | `kagi_search`, `kagi_extract` — Kagi v1 API (`POST /api/v1/search`, `/extract`, Bearer `KAGI_API_KEY`); `kagi_summarize` removed (v1 has no summarizer). `kagi_news_fetch` (public news.kagi.com `kite.json` feed, no key) and `kagi_news_read` (one batch Kagi Extract call, falls back to Kagi News summaries) |
 | Builds (#98, #172) | `claude_code_build` (write a Claude Code build job to the host builder's spool), `publish_build` (ask for a draft MR of the reviewed patch, by sha256) — the builder runs Claude Code on the owner's subscription in a secret-free podman sandbox with enforced turn/minute budgets; workflow *Build Software*. See [claude-code-builder-design.md](claude-code-builder-design.md) |
 | Notifications (F65) | `notify_email` (SMTP, `ZEBRA_SMTP_*` env), `notify_webhook` (HTTP POST/PUT, `ZEBRA_NOTIFY_WEBHOOK_URL`) — both `always_irreversible` |
+| HTTP/REST (F62) | `http_get` (GET/HEAD, `always_reversible`) and `http_request` (POST/PUT/PATCH/DELETE, `always_irreversible`, listed in the creator's rule 10) — `zebra_tasks/http/`. Refuse hosts resolving to any non-public address (loopback, private, link-local incl. `169.254.169.254`, CGNAT, ULA, IPv4-mapped) unless in `ZEBRA_HTTP_ALLOWED_PRIVATE_HOSTS`; redirects followed by hand (max 5), each hop re-checked. `credential: <name>` reads host-bound JSON from `ZEBRA_HTTP_CRED_<NAME>` (`bearer` / `basic` / `header`), sent only to that host and never echoed. Body capped by `max_bytes` (1 MB, max 5 MB), timeout ≤ 120 s, non-2xx fails unless `fail_on_status: false`. Not protected against DNS rebinding between check and connect. See [http-client spec](../openspec/specs/http-client/spec.md) |
 
 ### LLM integration
 
@@ -559,7 +560,7 @@ until it is ruled. See [outcome-review-design.md](outcome-review-design.md).
 | Encryption at rest, cloud sync, unattended keys | **Missing** | REQ-DATA-002/006 |
 | Data export | **Implemented** (F9) — `DataExporter` service, `GET /api/export/`, `manage.py export_data` | REQ-DATA-003 |
 | Data deletion (soft + hard, API + CLI) | **Implemented** (F10) | REQ-DATA-005 |
-| Integration provider framework | **Missing** | REQ-INT-001/002/004 |
+| Integration provider framework | **Missing** — generic `http_get` / `http_request` actions with named credentials exist (F62); no provider interface, OAuth or health monitoring | REQ-INT-001/002/004 |
 | Domain coverage beyond Code | **Missing** | REQ-DOM-SCHED/RESEARCH/FIN/HEALTH/HOME/CREATIVE/SOCIAL |
 | Web authentication | **Implemented** (F5 — passkey/WebAuthn) | REQ-NFR-007 |
 | Kagi web search / page extraction (`kagi_search`, `kagi_extract`) | **Implemented** (F115; v1 API #145). See `openspec/specs/web-search/` | — |

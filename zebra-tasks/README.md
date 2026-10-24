@@ -129,6 +129,25 @@ Available actions:
 | `file_info` | `FileInfoAction` | Get file metadata (size, timestamps) |
 | `directory_list` | `DirectoryListAction` | List directory contents |
 
+### HTTP Actions (F62)
+
+| Action | Class | Purpose |
+|--------|-------|---------|
+| `http_get` | `HttpGetAction` | GET/HEAD a URL or REST API; returns status, headers, body and parsed JSON (reversible) |
+| `http_request` | `HttpRequestAction` | POST/PUT/PATCH/DELETE with a JSON or text body (irreversible: gate it) |
+
+Only public addresses are reachable (`ZEBRA_HTTP_ALLOWED_PRIVATE_HOSTS` allow-lists LAN hosts).
+Secrets go in `ZEBRA_HTTP_CRED_<NAME>` and are referenced by `credential: <name>`:
+
+```yaml
+fetch_repo:
+  name: "Fetch repo"
+  action: http_get
+  properties:
+    url: "https://api.github.com/repos/{{owner}}/{{repo}}"
+    credential: github   # ZEBRA_HTTP_CRED_GITHUB='{"host": "api.github.com", "type": "bearer", "token": "..."}'
+```
+
 ### Compute Actions
 
 | Action | Class | Purpose |
