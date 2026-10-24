@@ -149,16 +149,14 @@ class SubworkflowAction(TaskAction):
             if prop_key.startswith("__") and prop_key not in resolved_properties:
                 resolved_properties[prop_key] = context.process.properties[prop_key]
 
-        # Create sub-process
+        # Create the sub-process linked from its first save, so the daemon never
+        # takes it for a queued goal (#227)
         sub_process = await context.engine.create_process(
             workflow_def,
             properties=resolved_properties,
+            parent_process_id=context.process.id,
+            parent_task_id=task.id,
         )
-
-        # Link as child process
-        sub_process.parent_process_id = context.process.id
-        sub_process.parent_task_id = task.id
-        await context.store.save_process(sub_process)
 
         # Start sub-process; its inline run is bounded by timeout
         await start_child(context, sub_process.id, task.properties.get("timeout"))

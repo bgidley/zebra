@@ -167,14 +167,14 @@ class ParallelSubworkflowsAction(TaskAction):
                 if prop_key.startswith("__") and prop_key not in resolved_properties:
                     resolved_properties[prop_key] = context.process.properties[prop_key]
 
-            # Create and start sub-process; its inline run is bounded by timeout
+            # Create (linked from its first save, #227) and start the sub-process;
+            # its inline run is bounded by timeout
             sub_process = await context.engine.create_process(
                 workflow_def,
                 properties=resolved_properties,
+                parent_process_id=context.process.id,
+                parent_task_id=task.id,
             )
-            sub_process.parent_process_id = context.process.id
-            sub_process.parent_task_id = task.id
-            await context.store.save_process(sub_process)
             keys[sub_process.id] = key
             await start_child(context, sub_process.id, timeout)
 

@@ -113,7 +113,7 @@ async def test_executed_workflow_receives_previous_run_context():
     context = _context({"previous_run_context": PREVIOUS})
     captured = {}
 
-    async def create_process(definition, properties):
+    async def create_process(definition, properties, **links):
         captured.update(properties)
         raise RuntimeError("stop after capture")
 
@@ -133,7 +133,7 @@ async def test_executed_workflow_goal_unchanged_without_previous_run():
     context = _context({})
     captured = {}
 
-    async def create_process(definition, properties):
+    async def create_process(definition, properties, **links):
         captured.update(properties)
         raise RuntimeError("stop after capture")
 

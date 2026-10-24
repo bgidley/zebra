@@ -48,12 +48,16 @@ class MockEngine:
         self,
         definition: ProcessDefinition,
         properties: dict[str, Any] | None = None,
+        parent_process_id: str | None = None,
+        parent_task_id: str | None = None,
     ) -> ProcessInstance:
         process = ProcessInstance(
             id=f"proc_{len(self.created_processes)}",
             definition_id=definition.id,
             state=ProcessState.CREATED,
             properties=properties or {},
+            parent_process_id=parent_process_id,
+            parent_task_id=parent_task_id,
         )
         self.created_processes.append(process)
         self.store.processes[process.id] = process

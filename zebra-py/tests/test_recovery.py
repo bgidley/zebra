@@ -245,6 +245,43 @@ async def test_resume_all_processes_handles_errors_gracefully(engine, simple_def
 
 
 @pytest.mark.asyncio
+async def test_recovery_fails_process_whose_definition_is_gone(engine, simple_definition):
+    """#227: a run whose definition no longer exists is failed, not retried every restart."""
+    orphan_def = simple_definition.model_copy(update={"id": "deleted_workflow"})
+    orphan = await engine.start_process((await engine.create_process(orphan_def)).id)
+    healthy = await engine.start_process((await engine.create_process(simple_definition)).id)
+    await engine.store.delete_definition(orphan_def.id)
+
+    resumed = await engine.resume_all_processes()
+
+    assert [p.id for p in resumed] == [healthy.id]
+    orphan = await engine.store.load_process(orphan.id)
+    assert orphan.state == ProcessState.FAILED
+    assert "deleted_workflow" in orphan.properties["__error__"]
+    tasks = await engine.store.load_tasks_for_process(orphan.id)
+    assert all(t.state == TaskState.FAILED for t in tasks)
+
+    # The next restart no longer sees it.
+    assert [p.id for p in await engine.store.get_running_processes()] == [healthy.id]
+
+
+@pytest.mark.asyncio
+async def test_recovery_keeps_process_when_definition_is_unreadable(engine, simple_definition):
+    """#227: only a missing definition fails a run; a store error leaves it for next time."""
+    process = await engine.start_process((await engine.create_process(simple_definition)).id)
+
+    async def _store_down(definition_id):
+        raise ConnectionError("database unavailable")
+
+    engine.store.load_definition = _store_down
+
+    assert await engine.resume_all_processes() == []
+    process = await engine.store.load_process(process.id)
+    assert process.state == ProcessState.RUNNING
+    assert "__error__" not in process.properties
+
+
+@pytest.mark.asyncio
 async def test_recovery_parallel_split_interrupted(engine):
     """Test recovery when parallel split is interrupted mid-creation."""
     # Create a workflow with parallel execution

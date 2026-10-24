@@ -469,12 +469,14 @@ class ExecuteGoalWorkflowAction(TaskAction):
             sub_properties[PRIOR_OUTPUTS_KEY] = prior
             bind_prior_inputs(definition.properties.get("inputs"), prior, sub_properties)
 
-        sub_process = await context.engine.create_process(definition, properties=sub_properties)
-
-        # Link as child process
-        sub_process.parent_process_id = context.process.id
-        sub_process.parent_task_id = task.id
-        await context.store.save_process(sub_process)
+        # Linked from its first save: an unlinked CREATED process is a queued goal to
+        # the daemon, which would start it a second time (#227).
+        sub_process = await context.engine.create_process(
+            definition,
+            properties=sub_properties,
+            parent_process_id=context.process.id,
+            parent_task_id=task.id,
+        )
 
         # F129: record the child on the task *before* starting it, so a re-run
         # after an interruption re-attaches instead of spawning a duplicate.
