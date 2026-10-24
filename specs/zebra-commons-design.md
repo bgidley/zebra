@@ -1,6 +1,6 @@
 # Zebra Commons — Design
 
-**GitLab issue**: #41 (epic), slices S1–S8 below
+**GitLab issue**: #41 (epic), slices #228–#235 (S1–S8) below
 **Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-008
 **Status**: Draft for review (concept; nothing implemented)
 
@@ -318,11 +318,11 @@ replay with different values compute different markets.
 
 | Slice | Delivers | Depends on |
 |---|---|---|
-| S1 Instance identity | Keypair in the credential store, public key in the UI, backup and restore | — |
-| S2 Content-addressed provenance | Canonical hash, `commons` block in the library, signed offline export/import of a single workflow file | S1 |
-| S3 Judged import pipeline | `commons_import.yaml`, personal-data scan, `sharing` trust domain, supervised adoption. Proven with S2 files, no network. | S2 |
-| S4 Commons relay + publish | strfry Quadlet, `CommonsClient`, `commons_offer.yaml`, receipts, mirroring | S3 |
-| S5 Attestations + subscribe | Subscription, `WorkflowOfferModel`, automatic attestations, `/commons/` page | S4 |
-| S6 Web of trust | Trust edges, human vouching, transitive local trust, import score | S5 |
-| S7 Reputation market | Ledger replay, LMSR, `GRANT` / `TRADE` / `OUTCOME`, settlement, market UI | S6 |
-| S8 Dream-cycle integration | Zebra proposes offers, imports and trades; `sharing` promotion requests | S5 (S7 for trades) |
+| #228 S1 Instance identity | Keypair in the credential store, public key in the UI, backup and restore | — |
+| #229 S2 Content-addressed provenance | Canonical hash, `commons` block in the library, signed offline export/import of a single workflow file | S1 |
+| #230 S3 Judged import pipeline | `commons_import.yaml`, personal-data scan, `sharing` trust domain, supervised adoption. Proven with S2 files, no network. | S2 |
+| #231 S4 Commons relay + publish | strfry Quadlet, `CommonsClient`, `commons_offer.yaml`, receipts, mirroring | S3 |
+| #232 S5 Attestations + subscribe | Subscription, `WorkflowOfferModel`, automatic attestations, `/commons/` page | S4 |
+| #233 S6 Web of trust | Trust edges, human vouching, transitive local trust, import score | S5 |
+| #234 S7 Reputation market | Ledger replay, LMSR, `GRANT` / `TRADE` / `OUTCOME`, settlement, market UI | S6 |
+| #235 S8 Dream-cycle integration | Zebra proposes offers, imports and trades; `sharing` promotion requests | S5 (S7 for trades) |
