@@ -110,7 +110,7 @@ write_builder_env() {  # token from the CLAUDE_CODE_OAUTH_TOKEN CI variable (pro
 
 deploy_builder() {  # never fails the deploy: Zebra runs without builds
   local tag=$1
-  if podman build -t "$SANDBOX_IMAGE:$tag" "$REPO_ROOT/deploy/builder"; then
+  if podman build --pull=newer -t "$SANDBOX_IMAGE:$tag" "$REPO_ROOT/deploy/builder"; then
     podman tag "$SANDBOX_IMAGE:$tag" "$SANDBOX_IMAGE:prod"
     podman images "$SANDBOX_IMAGE" --format '{{.Tag}} {{.CreatedAt}}' \
       | grep -vE '^(prod|<none>) ' | sort -k2 -r | awk '{print $1}' | tail -n +3 \
@@ -173,7 +173,7 @@ main() {
   write_builder_env
 
   log "Building $IMAGE:$tag"
-  podman build -t "$IMAGE:$tag" "$REPO_ROOT"
+  podman build --pull=newer -t "$IMAGE:$tag" "$REPO_ROOT"
 
   install_units
   [ -n "$prev" ] && podman tag "$prev" "$IMAGE:previous"
