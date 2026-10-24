@@ -1806,6 +1806,19 @@ class WorkflowEngine:
                     f"Recovering process {process.id} (definition: {process.definition_id})"
                 )
 
+                # A run whose definition is gone can never resume: fail it once rather
+                # than retrying it on every restart (#227).
+                try:
+                    await self._load_definition(process.definition_id)
+                except DefinitionNotFoundError:
+                    reason = (
+                        f"Recovery failed this run: its workflow definition "
+                        f"{process.definition_id} no longer exists, so it cannot resume."
+                    )
+                    logger.warning("Failing process %s: %s", process.id, reason)
+                    await self.fail_process(process.id, reason)
+                    continue
+
                 # Reconcile FOEs first to ensure consistent parallel execution state
                 await self._reconcile_foes(process)
 
