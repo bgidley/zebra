@@ -66,7 +66,8 @@ write_env_file() {
     # podman --env-file takes values literally: no quotes, no shell expansion. Some CI
     # variables were copied from a bash-sourced .env with surrounding quotes (e.g. the
     # Oracle DSN) — strip one matching pair or oracledb sees a TNS alias (DPY-4027).
-    for v in "${SECRET_VARS[@]}"; do
+    # F62: named HTTP credentials (ZEBRA_HTTP_CRED_<NAME>) and the private-host allow-list.
+    for v in "${SECRET_VARS[@]}" $(compgen -v ZEBRA_HTTP_CRED_) ZEBRA_HTTP_ALLOWED_PRIVATE_HOSTS; do
       [ -n "${!v:-}" ] && printf '%s=%s\n' "$v" "$(unquote "${!v}")"
     done
     printf 'DJANGO_SECRET_KEY=%s\n' "$(cat "$SECRET_KEY_FILE")"

@@ -9,21 +9,12 @@ import httpx
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.templating import resolve_templates
+
 logger = logging.getLogger(__name__)
 
 _ALLOWED_METHODS = ("POST", "PUT")
 _ALLOWED_SCHEMES = ("http", "https")
-
-
-def _resolve_templates(value: Any, context: ExecutionContext) -> Any:
-    """Resolve {{templates}} in every string inside a nested dict/list."""
-    if isinstance(value, str):
-        return context.resolve_template(value)
-    if isinstance(value, dict):
-        return {k: _resolve_templates(v, context) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_resolve_templates(v, context) for v in value]
-    return value
 
 
 class NotifyWebhookAction(TaskAction):
@@ -119,7 +110,7 @@ class NotifyWebhookAction(TaskAction):
         request_kwargs: dict[str, Any] = {"headers": headers}
         payload = task.properties.get("payload")
         if payload is not None:
-            request_kwargs["json"] = _resolve_templates(payload, context)
+            request_kwargs["json"] = resolve_templates(payload, context)
         elif task.properties.get("body") is not None:
             request_kwargs["content"] = context.resolve_template(str(task.properties["body"]))
         else:

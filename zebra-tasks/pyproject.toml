@@ -113,6 +113,9 @@ notify_webhook = "zebra_tasks.notifications.webhook:NotifyWebhookAction"
 parse_csv = "zebra_tasks.data.csv_parse:ParseCsvAction"
 parse_xml = "zebra_tasks.data.xml_parse:ParseXmlAction"
 transform_json = "zebra_tasks.data.json_transform:TransformJsonAction"
+# HTTP/REST client (F62)
+http_get = "zebra_tasks.http.actions:HttpGetAction"
+http_request = "zebra_tasks.http.actions:HttpRequestAction"
 # Knowledge lifecycle (F32)
 decay_confidence = "zebra_tasks.knowledge.decay:DecayConfidenceAction"
 add_knowledge = "zebra_tasks.knowledge.add:AddKnowledgeAction"

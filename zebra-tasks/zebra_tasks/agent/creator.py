@@ -379,7 +379,7 @@ Later tasks read the answers with `{{followups.output}}`.
    what the UI displays as the workflow output — it should be a clear, readable
    string (markdown is fine), not a raw dict or intermediate value.
 10. Only use actions that change things outside the workflow (file_write,
-    file_move, file_copy, file_delete, python_exec, notifications) when the goal
+    file_move, file_copy, file_delete, python_exec, notifications, http_request) when the goal
     explicitly asks for that effect. Put a human review task before any step
     that deletes, overwrites or sends something.
 
