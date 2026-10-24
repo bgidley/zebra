@@ -42,6 +42,11 @@ RUN uv run python zebra-agent-web/manage.py collectstatic --noinput
 # ============================================================================
 FROM python:3.14-slim
 
+# git for the Git task actions (#64); https remotes only (no ssh client in the image)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy the entire venv from builder
@@ -71,10 +76,11 @@ COPY docker/entrypoint.sh /app/docker/entrypoint.sh
 # Ensure venv is on PATH
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    DJANGO_SETTINGS_MODULE=zebra_agent_web.settings
+    DJANGO_SETTINGS_MODULE=zebra_agent_web.settings \
+    ZEBRA_GIT_WORKSPACE=/app/workspace
 
-# Create log directory
-RUN mkdir -p /app/zebra-agent-web/tmp
+# Create log directory and the Git actions' scratch workspace (not persisted across deploys)
+RUN mkdir -p /app/zebra-agent-web/tmp /app/workspace
 
 EXPOSE 8000
 

@@ -43,6 +43,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/improvements.py` | ProposeZebraImprovementsAction (`propose_zebra_improvements`) - dream-cycle requests for changes to Zebra's own code, each a *Zebra Improvement Request* process with a human review task; `max_requests` (2), title dedupe across workflow versions, never fails the cycle (#189); FileImprovementIssueAction (`file_improvement_issue`) files an accepted request as a GitLab issue (`ZEBRA_GITLAB_TOKEN`/`_URL`/`_PROJECT`), adopts an existing issue by marker, neutralises quick actions and mentions, never fails (#194) |
 | `zebra_tasks/agent/queue_goal.py` | QueueGoalAction - queue a goal as CREATED process |
 | `zebra_tasks/builder/` | Claude Code builds via the host builder (#98, #172): `BuilderSpool` (spool client, `get_spool(extras)`: `__builder_spool__` else `ZEBRA_BUILDER_SPOOL`), `claude_code_build` (write a build job: repo, base branch, prompt, test command, `max_turns`/`minutes`; the builder enforces ceilings), `publish_build` (draft MR of the reviewed patch by `patch_sha256`; `always_irreversible`). The workflow then waits on an `auto: false` task with `external: builder`. See `specs/claude-code-builder-design.md` |
+| `zebra_tasks/vcs/` | Git actions (F64): `base.py` (`GitRunner`: async `git` subprocess, hardened env, scoped token header, redaction; `resolve_workspace`, `in_workspace`, `check_remote`, `check_repo_config` allowlist, `remote_name`), `actions.py` (`git_clone`, `git_status`, `git_diff`, `git_branch`, `git_commit`, `git_pull`, `git_push`). See *Git Actions Reference* below |
 | `zebra_tasks/agent/user_context.py` | `copy_user_properties()` - carry `__user_id__` + identity keys onto processes the loop creates (#151) |
 | `zebra_tasks/agent/ethics_gate.py` | EthicsGateAction - Kantian + values-informed ethics evaluation |
 | `zebra_tasks/agent/history.py` | AssessHistoryNeedAction, GetWorkflowHistoryAction, `parse_time()`, `with_workflow_history()` - workflow history lookup (F138) |
@@ -576,6 +577,49 @@ SMTP via stdlib `smtplib` in `asyncio.to_thread`. **Properties:** `to` (string o
 ### NotifyWebhookAction (`notify_webhook`)
 
 httpx POST/PUT. **Properties:** `url` (defaults to `ZEBRA_NOTIFY_WEBHOOK_URL`; http/https only), `payload` (JSON, templates resolved recursively) or `body` (raw text), `method` (`POST`/`PUT`), `headers`, `timeout` (15s). Non-2xx fails the task. **Output:** `{status_code, host}`.
+
+## Git Actions Reference (F64)
+
+Wrap an agent step in a repository: clone → branch → `llm_agent` / `file_write` → status/diff →
+commit → push. All live in `zebra_tasks/vcs/`, fail the task (never raise) on any error, and store
+their output under `output_key`.
+
+**Sandbox:** every path is inside the workspace (`workspace` property, else `ZEBRA_GIT_WORKSPACE`;
+`/app/workspace` in prod, wiped on deploy). Remotes: `https://`, `ssh://`, `user@host:path`, or a
+local path inside the workspace (no `ext::`, `file://`, `http://`, `-…`). Before acting on a repo its
+`.git/config` must only hold plain clone/branch keys and allowed remote URLs, so a step that edits it
+cannot add `core.fsmonitor`, filter drivers, `url.*.insteadOf`, includes, … Hooks, global and
+system config are off. `git_push` / `git_pull` take a configured remote *name*, never a URL.
+
+**Credentials:** `token_env` (default `ZEBRA_GIT_TOKEN`; must start with `ZEBRA_GIT_TOKEN`) names the
+token. It is sent as `Authorization: Basic <token_user>:<token>` (`token_user` default `oauth2`, for
+GitLab) only to hosts in `ZEBRA_GIT_TOKEN_HOSTS` (default `gitlab.com`), via `GIT_CONFIG_*` env vars,
+never argv. It is redacted (`***`) from outputs and errors.
+
+| Action | Key properties | Output | Route | Hint |
+|---|---|---|---|---|
+| `git_clone` | `url`, `dest` (default `<process id>/<repo>`), `branch`, `depth` | `{path, branch, head, url}` (default key `repo`) | — | reversible |
+| `git_status` | `repo_path` | `{branch, clean, files: [{path, status}], head}` | `clean` / `changed` | reversible |
+| `git_diff` | `repo_path`, `staged`, `base`, `include_untracked` (true), `max_chars` (20000) | `{diff, stat, truncated}` | — | reversible |
+| `git_branch` | `repo_path`, `name`, `create`, `start_point` | `{branch, created, head}` | — | reversible |
+| `git_commit` | `repo_path`, `message`, `paths` (default all), `author_name`/`author_email` (else `ZEBRA_GIT_AUTHOR_NAME`/`_EMAIL`, else `Zebra <zebra@localhost>`) | `{committed, sha, branch, files}` | `committed` / `nothing_to_commit` | reversible |
+| `git_pull` | `repo_path`, `remote` (`origin`), `branch` | `{branch, before, head, updated}` | — | reversible (ff-only) |
+| `git_push` | `repo_path`, `remote` (`origin`), `branch` (default current), `allow_protected` | `{remote, branch, head}` | — | **irreversible**; refuses `main`/`master` unless `allow_protected: true`; no force |
+
+All take `workspace` and `timeout` (60s local, 300s clone/pull/push). `file_write` into a clone needs
+`allow_absolute: true` (`{{repo.path}}` is absolute). Example (the workflow in
+`tests/vcs/test_vcs_workflow.py`):
+
+```yaml
+tasks:
+  clone:  {action: git_clone,  properties: {url: "https://gitlab.com/me/notes.git", output_key: repo}}
+  branch: {action: git_branch, properties: {repo_path: "{{repo.path}}", name: "zebra/{{topic}}", create: true}}
+  edit:   {action: llm_agent,  properties: {prompt: "Update the notes in {{repo.path}} about {{topic}}"}}
+  commit: {action: git_commit, properties: {repo_path: "{{repo.path}}", message: "Notes on {{topic}}"}}
+  push:   {action: git_push,   properties: {repo_path: "{{repo.path}}"}}
+routings:
+  - {from: commit, to: push, condition: route_name, name: committed}
+```
 
 ## Testing Task Actions
 
