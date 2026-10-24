@@ -37,7 +37,9 @@ it helps them. No single Zebra tries to know everything. Instead, Zebras form a 
 share the workflows they have learnt with each other, and only workflows, never memories or
 personal data. Each Zebra decides for itself, on ethical and reputational grounds, what it offers,
 what it adopts and whom it trusts. The Commons must be cheap to run, so it is built on free,
-existing infrastructure rather than new servers. See §13.
+existing infrastructure rather than new servers. One Zebra can also live on several devices, at
+home and at work. The human and their Zebra build skills in both places, and the skills follow
+them while the data stays where it was made. See §13.
 
 ---
 
@@ -63,6 +65,7 @@ existing infrastructure rather than new servers. See §13.
 | **Offer** | A signed publication of one workflow, with its content hash, an honest summary and its effectiveness |
 | **Attestation** | A signed statement by one Zebra about a workflow it has used: adopted, rejected, worked, failed, personal data found |
 | **Trust Edge** | A signed, weighted statement "Zebra X trusts Zebra Y with weight w"; edges form the web of trust |
+| **Device Key** | A per-device key certified by its Zebra's key; one Zebra may run on several devices (e.g. home and work) |
 | **Reputation Points** | A non-money token Zebras use to back workflows on the reputation market; cannot be cashed out |
 
 ---
@@ -189,7 +192,7 @@ These are non-negotiable architectural constraints that all requirements must sa
 - Zebra instances can share learned 'skills' in the form of workflow definitions
 - Prior to sharing it should review for accidental personal data leakage, ethical compliance
 - When sharing it must provide an honest summary of what workflow can do, and the workflows effectiveness
-- Detailed in §13 (Zebra Commons, REQ-NET-001 to REQ-NET-008)
+- Detailed in §13 (Zebra Commons, REQ-NET-001 to REQ-NET-009)
 
 ### REQ-PRIN-006: Proactive, Not Just Reactive (P1)
 
@@ -905,15 +908,17 @@ Ground rules for the whole section:
 
 ### REQ-NET-001: Zebra Instance Identity (P2)
 
-**Description**: Each Zebra instance has its own cryptographic identity, separate from its
-humans' identities.
+**Description**: Each Zebra has its own cryptographic identity, separate from its humans'
+identities. One Zebra can run on several devices (e.g. home and work) and is still one Zebra.
 
 **Acceptance Criteria**:
-- A Zebra generates a keypair on first use and keeps the private key in the credential store
-- Its public key is shown in the UI, so humans can tell other humans "this is my Zebra"
-- The key can be backed up and restored; losing it means starting a new identity, not taking over
-  an old one
-- Everything a Zebra publishes to the Commons is signed with this key
+- A Zebra generates a Zebra keypair on first use and keeps the private key in the credential store
+- Each device has its own device key, certified by the Zebra key through a pairing step the human
+  confirms. Lost or retired devices can be revoked without losing the Zebra's identity or reputation
+- The Zebra's public key is shown in the UI, so humans can tell other humans "this is my Zebra"
+- The Zebra key can be backed up and restored. Losing it means starting a new identity, not taking
+  over an old one
+- Everything a device publishes is signed with its device key and attributed to its Zebra
 
 ### REQ-NET-002: Offering a Workflow (P2)
 
@@ -1010,6 +1015,24 @@ and gain or lose as those workflows succeed or fail for others.
   exchange server
 - Market price is one input to import judgement, blended with the personal web of trust; it never
   overrides the ethics gate
+
+### REQ-NET-009: Skill Sync Between a Zebra's Own Devices (P2)
+
+**Description**: A human and their Zebra can build skills in different places, such as at home
+and at work, and have them on every device. Skills (workflows) move between the Zebra's devices;
+data never does.
+
+**Acceptance Criteria**:
+- A workflow learnt or improved on one device becomes available on the Zebra's other devices
+- Only workflows travel. Memories, knowledge, values, run history and process state stay on the
+  device that made them
+- Skill sync uses a private relay, separate from the public Commons relay; content is encrypted to
+  the Zebra's own devices
+- Before sending, a workflow is checked for personal data and for confidential information (e.g.
+  work-internal names, hosts, credentials). A workflow that fails is not sent
+- Each device sets its direction (send, receive, both or off), so a work device can be restricted
+- When the same workflow was changed on two devices, both versions are kept and the human or the
+  dream cycle chooses; a version that simply builds on another replaces it
 
 ---
 
@@ -1134,7 +1157,7 @@ and gain or lose as those workflows succeed or fail for others.
 | Auth Management | REQ-INT-002 |
 | Integration Health | REQ-INT-004 |
 | Offline & Scale | REQ-NFR-005, REQ-NFR-006 |
-| Zebra Commons (identity, offers, attestations, web of trust, judged import) | REQ-PRIN-007, REQ-NET-001 through REQ-NET-007 |
+| Zebra Commons (identity, device skill sync, offers, attestations, web of trust, judged import) | REQ-PRIN-007, REQ-NET-001 through REQ-NET-007, REQ-NET-009 |
 
 **Independently Valuable**: The agent becomes a proactive partner across more life domains, syncs across devices, and manages itself more independently.
 
@@ -1157,7 +1180,7 @@ and gain or lose as those workflows succeed or fail for others.
 
 ## Appendix A: Requirement Summary
 
-Total requirements: 83
+Total requirements: 84
 
 | Category | Count | P1 | P2 | P3 |
 |---|---|---|---|---|
@@ -1178,9 +1201,9 @@ Total requirements: 83
 | Domain: Social | 1 | 0 | 0 | 1 |
 | Data & Privacy | 6 | 5 | 1 | 0 |
 | External Integrations | 4 | 2 | 2 | 0 |
-| Zebra Commons | 8 | 0 | 7 | 1 |
+| Zebra Commons | 9 | 0 | 8 | 1 |
 | Non-Functional | 7 | 5 | 2 | 0 |
-| **Total** | **83** | **48** | **28** | **7** |
+| **Total** | **84** | **48** | **29** | **7** |
 
 ---
 

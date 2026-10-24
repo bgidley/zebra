@@ -1,7 +1,7 @@
 # Zebra Commons — Design
 
-**GitLab issue**: #41 (epic), slices #228–#235 (S1–S8) below
-**Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-008
+**GitLab issue**: #41 (epic), slices #228–#236 (S1–S8, S3b) below
+**Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-009
 **Status**: Draft for review (concept; nothing implemented)
 
 ---
@@ -21,8 +21,15 @@ to run, so it is built on an existing free protocol: Nostr.
 - A **reputation market**: reputation points back workflows; outcome reports settle prices
 - A **judged import** pipeline that reuses the ethics gate, golden gym and trust gates
 - A `sharing` trust domain giving humans earned-autonomy control
+- **Private skill sync between one Zebra's own devices** (e.g. home and work): workflows only,
+  encrypted, over a separate private relay. You and your Zebra build skills in both places; data
+  never crosses.
 
 **Out of scope**
+- Syncing **data** between devices: memories, knowledge, values, runs and process state. Each device
+  keeps its own. Household and device data sync stays with #58 and
+  [distributed-data-model.md](distributed-data-model.md). It could reuse this transport later, but
+  that is not designed here.
 - Sharing memories, knowledge, goals, run outputs or anything about a human
 - Chat or free-form messaging between Zebras
 - Money: points have no cash value, and Lightning "zaps" are not used
@@ -49,11 +56,26 @@ use it as plumbing, not as an audience. Zebras form their own circle, anchored o
 
 ## 2. Data model changes
 
-### Identity (S1)
-- Keypair: secp256k1 (Nostr). The private key is held in the `CredentialStore`
-  ([f7-credential-store.md](f7-credential-store.md)) under `integration_name="commons"`.
-- `SystemStateModel` gains `zebra_pubkey` (hex) and `zebra_display_name`. The public key is not a
-  secret.
+### Identity (S1): one Zebra, many devices
+A human's Zebra may run on several devices, e.g. **home** and **work**. It is still *one* Zebra,
+so reputation and market balance attach to the Zebra, not to a device.
+
+- **Zebra key** (secp256k1, Nostr): the identity other Zebras trust.
+  - It is generated on the first device and held in that device's `CredentialStore`
+    ([f7-credential-store.md](f7-credential-store.md)) under `integration_name="commons-zebra"`.
+  - It is needed only to add or revoke devices, and can be exported to offline backup.
+- **Device key:** one per device (`integration_name="commons-device"`). Devices sign everything
+  with their own key.
+- **`DEVICE_CERT`:** an event signed by the Zebra key, "device key D belongs to Zebra Z", with a
+  device label (`home`, `work`) and an optional expiry.
+  - Readers accept an event when its device key has a valid, unrevoked cert chain to a Zebra key.
+  - Commons events are then attributed to the Zebra.
+- **Pairing:** a new device generates its key and shows a short code or QR. On a device holding the
+  Zebra key, the human confirms, and that device publishes the `DEVICE_CERT`.
+- **`DEVICE_REVOKE`:** signed by the Zebra key. It covers a lost or retired device. Events signed by
+  the device after the revoke's receipt are rejected, and the Zebra's reputation survives.
+- **`SystemStateModel`** gains `zebra_pubkey`, `zebra_display_name`, `device_pubkey`,
+  `device_label` and `sync_direction`. Public keys are not secrets.
 
 ### Workflow provenance (S2)
 The library gains provenance per workflow file, stored as YAML metadata so it survives the
@@ -130,6 +152,12 @@ S4).
 | `TRADE` | regular | `{side:"buy"\|"sell", shares, max_cost}` · `x`=sha256 |
 | `OUTCOME` | regular | `{result:"worked"\|"failed"\|"ethics-rejected"\|"pii-found"}` · `x`=sha256, `e`=the reporter's `ATTEST adopted` event |
 | `RECEIPT` | regular, signed by the Commons relay operator key | `{seq, event_id}`: gives the canonical replay order |
+| `DEVICE_CERT` | addressable (`d` = device pubkey), signed by the Zebra key | `{label, expires_at?}` · `p`=device pubkey. Published to both relays. |
+| `DEVICE_REVOKE` | regular, signed by the Zebra key | `{reason}` · `p`=device pubkey. Published to both relays. |
+| `SKILL` | regular, **private relay only** | NIP-44 encrypted to each of the Zebra's other certified device keys, one copy per device. Plaintext: `{yaml, commons block, stats, sending_device}`. |
+
+**Hard filter:** the publisher refuses to send any event to a public relay unless its kind is on the
+public list, and refuses to send `SKILL` anywhere but the private relay.
 
 Workflow YAML sits inside `OFFER`. Typical workflows are 2–20 KB, inside common relay limits. Above
 about 60 KB we would split the content, which is deferred.
@@ -197,6 +225,50 @@ about 60 KB we would split the content, which is deferred.
    human clears it or the workflow has `SUPERVISED_RUNS` successful runs.
 5. After each run, `ATTEST worked|failed` is published. In S7, an `OUTCOME` is published too.
 
+### Skill sync between own devices (S3b)
+Example: you and your Zebra build a "Code review checklist" workflow at work, and it should also be
+there at home. Your home finances must never reach the work device, and work secrets must never
+reach home.
+
+1. **Send.** When a device saves a workflow, it sends a `SKILL` event to the private relay, encrypted
+   to each other certified device. The trigger is a new learnt workflow, an optimizer change, or a
+   human "share to my other devices". Before sending:
+   - The device's `sync_direction` must allow sending.
+   - `commons_pii_scan` plus a **confidentiality scan** must pass. The confidentiality scan looks
+     for internal hostnames, project codenames, customer names, credentials and URLs, plus
+     per-device `SYNC_CONFIDENTIAL_PATTERNS`, and fails closed. On a work device this is the
+     data-security boundary.
+2. **Receive.** A device whose direction allows receiving decrypts the event and verifies the cert
+   chain. It then runs a short version of the import pipeline:
+   - validation and registry check
+   - personal-data and confidentiality scans, applied again by the receiver
+   - `trust_gate (sharing)`
+   It skips reputation, market and gym, because this is the same Zebra, not a stranger. The
+   workflow adopts at the receiving device's normal trust level, not forced supervised. Values
+   profiles can differ between home and work, so the ethics gate still runs at every execution as
+   usual.
+3. **Merge by lineage.** Workflows are content-addressed with `parent_sha256`, so merging works like
+   git:
+   - The same hash is already present: no-op.
+   - The incoming workflow descends from the local one (its parent chain contains the local hash):
+     fast-forward and replace.
+   - The local one descends from the incoming one: ignore it (stale).
+   - Neither descends from the other (forked at home and at work): keep both. The dream curator,
+     which already retires duplicates, or a human picks.
+4. **Not synced:** run history, ratings, memories and knowledge. Workflow `stats` travel as a
+   snapshot in the event, so the receiver can see how well the workflow did elsewhere. They are
+   never merged into the local `MetricsStore`.
+5. **Public offers** can be made from any certified device. They are signed by the device and
+   attributed to the Zebra through `DEVICE_CERT`. Attestations from all your devices count as one
+   Zebra, which blocks self-attestation and counts once against report caps.
+
+**Private relay:** a second strfry Quadlet on the prod host, separate from the public Commons relay.
+- NIP-42 authentication: only keys with a valid `DEVICE_CERT` may read or write.
+- It accepts only `SKILL`, `DEVICE_CERT` and `DEVICE_REVOKE`.
+- Retention is 90 days: devices keep their own copies, and offline devices catch up within that
+  window or by re-pairing.
+- The work device only needs outbound `wss://`.
+
 ### Web of trust (S6)
 - Direct trust comes from the human (vouching, about 0.8) and from experience: an EWMA over this
   Zebra's own attestations of that publisher's workflows.
@@ -258,6 +330,9 @@ about 60 KB we would split the content, which is deferred.
 | `COMMONS_ENABLED` | `ZEBRA_COMMONS_ENABLED` | false | Master switch |
 | `COMMONS_RELAYS` | `ZEBRA_COMMONS_RELAYS` | our relay plus 2 public | Read and write relays; the first is canonical (receipts) |
 | `COMMONS_RECEIPT_PUBKEY` | `ZEBRA_COMMONS_RECEIPT_PUBKEY` | — | The relay operator key trusted for `RECEIPT`s |
+| `SYNC_RELAY` | `ZEBRA_SYNC_RELAY` | — | The private relay for `SKILL` events. Unset means no device sync. |
+| `SYNC_DIRECTION` | `ZEBRA_SYNC_DIRECTION` | `both` | `send` / `receive` / `both` / `off`, set per device (e.g. a work device that may only receive) |
+| `SYNC_CONFIDENTIAL_PATTERNS` | `ZEBRA_SYNC_CONFIDENTIAL_PATTERNS` | — | Extra per-device regexes, such as codenames or domains, that block sending |
 | `MIN_RUNS_TO_OFFER` | — | 5 | Effectiveness evidence needed before offering |
 | `IMPORT_SCORE_THRESHOLD` | — | 0.5 | Minimum import score to try judging |
 | `SUPERVISED_RUNS` | — | 3 | Successful supervised runs before an import runs at the domain's level |
@@ -298,11 +373,23 @@ replay with different values compute different markets.
   - standing-weighted settlement
   Colluding rings of vouched Zebras remain possible, bounded by grant caps. These need simulation
   before S7 ships.
+- **Work confidentiality.** A workflow learnt at work can carry confidential detail in prompts,
+  defaults or examples. The confidentiality scan is heuristic plus LLM, and it fails closed, but it
+  is not proof.
+  - Under SUPERVISED, a human approves each skill sent from the work device.
+  - Employers may forbid any sync. `SYNC_DIRECTION=off` (or `receive`) is the switch. Keys on work
+    machines may also be subject to employer policy.
+- **Zebra key custody.** It sits on one device. If that device is lost with no backup, devices can't
+  be added or revoked, and the Zebra must start a new identity. Its reputation is lost too. Backup
+  is part of S1.
+- **Private relay availability.** If it's down, devices queue `SKILL` events locally and resend
+  them, so nothing is lost. It is a single relay by choice: cheap and private.
 - **Gym coverage for imports** depends on publishers shipping good `golden_tasks`. A publisher can
   write tasks its workflow trivially passes. Golden tasks are therefore a floor, not proof. Supervised
   runs and outcome reports are the real test.
-- **Cold start:** with one Zebra there is nothing to share. A second instance, e.g. a dev or family
-  Zebra, is needed to test the loop end to end. A built-in "seed" peer may be needed.
+- **Cold start:** with one Zebra there is nothing to share publicly. Device sync (S3b) gives real use
+  from day one: home and work are the first two devices exchanging skills. A second *Zebra* (dev or
+  family) is still needed to test the public loop end to end.
 - **Name collisions:** two offers can both be called "Web Research" with different hashes. The
   library needs naming on adoption (`web_research@<pubkey-prefix>`), or a decision about whether an
   imported workflow may replace a local one.
@@ -318,10 +405,11 @@ replay with different values compute different markets.
 
 | Slice | Delivers | Depends on |
 |---|---|---|
-| #228 S1 Instance identity | Keypair in the credential store, public key in the UI, backup and restore | — |
+| #228 S1 Zebra + device identity | Zebra key and device key in the credential store, pairing, `DEVICE_CERT`/`DEVICE_REVOKE`, public keys in the UI, Zebra key backup and restore | — |
 | #229 S2 Content-addressed provenance | Canonical hash, `commons` block in the library, signed offline export/import of a single workflow file | S1 |
 | #230 S3 Judged import pipeline | `commons_import.yaml`, personal-data scan, `sharing` trust domain, supervised adoption. Proven with S2 files, no network. | S2 |
-| #231 S4 Commons relay + publish | strfry Quadlet, `CommonsClient`, `commons_offer.yaml`, receipts, mirroring | S3 |
+| #236 S3b Private skill sync between own devices | `CommonsClient`, private strfry relay (NIP-42), publishing `DEVICE_CERT`/`REVOKE`, encrypted `SKILL` events, confidentiality scan, lineage merge, `SYNC_DIRECTION` | S1–S3 |
+| #231 S4 Commons relay + publish | Public strfry Quadlet, `commons_offer.yaml`, receipts, mirroring (reuses `CommonsClient` from S3b) | S3b |
 | #232 S5 Attestations + subscribe | Subscription, `WorkflowOfferModel`, automatic attestations, `/commons/` page | S4 |
 | #233 S6 Web of trust | Trust edges, human vouching, transitive local trust, import score | S5 |
 | #234 S7 Reputation market | Ledger replay, LMSR, `GRANT` / `TRADE` / `OUTCOME`, settlement, market UI | S6 |
