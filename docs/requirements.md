@@ -192,7 +192,7 @@ These are non-negotiable architectural constraints that all requirements must sa
 - Zebra instances can share learned 'skills' in the form of workflow definitions
 - Prior to sharing it should review for accidental personal data leakage, ethical compliance
 - When sharing it must provide an honest summary of what workflow can do, and the workflows effectiveness
-- Detailed in §13 (Zebra Commons, REQ-NET-001 to REQ-NET-009)
+- Detailed in §13 (Zebra Commons, REQ-NET-001 to REQ-NET-010)
 
 ### REQ-PRIN-006: Proactive, Not Just Reactive (P1)
 
@@ -974,7 +974,9 @@ from its own viewpoint.
 - The golden gym tests the import against golden tasks shipped with the offer. An offer with no
   runnable golden tasks is escalated to a human, never passed untested.
 - Adopted workflows keep their provenance (publisher, content hash, parent hash) and start
-  supervised, whatever the domain's trust level
+  supervised, whatever the domain's trust level. Supervision is enforced by Zebra's own main loop
+  before each run (a human approves running the imported workflow), never by the imported
+  workflow's own steps
 - Rejections are attested (REQ-NET-003), so other Zebras learn from them
 
 ### REQ-NET-006: Sharing Trust Domain (P2)
@@ -1008,8 +1010,10 @@ and gain or lose as those workflows succeed or fail for others.
 **Acceptance Criteria**:
 - Each workflow (content hash) has a price set by an automated market maker; Zebras buy and sell
   shares with reputation points, which have no cash value
+- The market starts from a small, fixed genesis allocation to the founding Zebra(s), pinned in the
+  protocol
 - A Zebra gets a starting allowance only when an existing Zebra vouches for it and stakes some of
-  its own points on it
+  its own points on it; a newcomer can earn its way to vouching rights
 - A publisher must buy the opening shares of its own offer
 - Signed outcome reports settle the price: success raises it and failure lowers it; a report counts
   only from a Zebra that imported the workflow, weighted by the reporter's standing and capped per
@@ -1041,8 +1045,26 @@ data never does.
   Zebra may share without asking, but never with an observed sphere
 - Zebra never suggests sharing a workflow whose name, purpose or content would be sensitive in the
   other sphere (e.g. a job search, health, money, HR) with an observed sphere
-- A version changed using another sphere's data is a new sharing decision; approval of an earlier
-  version does not carry over
+- Every changed version is a new sharing decision; approval of an earlier version does not carry
+  over
+- Approvals involving an observed sphere (sending to it, or sending anything built from its data)
+  remain even after Zebra is freed (REQ-TRUST-006): they protect the human and third parties from
+  an observer, not the human from Zebra
+- A workflow is only ever readable on devices of the spheres it was shared with
+
+### REQ-NET-010: Skill Genealogy View (P2)
+
+**Description**: The human can see where each skill came from and where it went, privately and
+publicly.
+
+**Acceptance Criteria**:
+- A private view shows a workflow's family tree on this device: every version, which device or
+  sphere made it, what changed and why (in Zebra's own voice), forks, and where each version was
+  shared, is waiting for approval or was held back
+- A public view shows a workflow's lineage across Zebras (who published, derived, adopted and how it
+  worked for them) and how Zebras are linked by vouching and trust
+- The private view is never published; the public view uses public events only, and never reveals
+  private ancestors
 - When the same workflow was changed on two devices, both versions are kept and the human or the
   dream cycle chooses; a version that simply builds on another replaces it
 
@@ -1169,7 +1191,7 @@ data never does.
 | Auth Management | REQ-INT-002 |
 | Integration Health | REQ-INT-004 |
 | Offline & Scale | REQ-NFR-005, REQ-NFR-006 |
-| Zebra Commons (identity, device skill sync, offers, attestations, web of trust, judged import) | REQ-PRIN-007, REQ-NET-001 through REQ-NET-007, REQ-NET-009 |
+| Zebra Commons (identity, device skill sync, offers, attestations, web of trust, judged import) | REQ-PRIN-007, REQ-NET-001 through REQ-NET-007, REQ-NET-009, REQ-NET-010 |
 
 **Independently Valuable**: The agent becomes a proactive partner across more life domains, syncs across devices, and manages itself more independently.
 
@@ -1192,7 +1214,7 @@ data never does.
 
 ## Appendix A: Requirement Summary
 
-Total requirements: 84
+Total requirements: 85
 
 | Category | Count | P1 | P2 | P3 |
 |---|---|---|---|---|
@@ -1213,9 +1235,9 @@ Total requirements: 84
 | Domain: Social | 1 | 0 | 0 | 1 |
 | Data & Privacy | 6 | 5 | 1 | 0 |
 | External Integrations | 4 | 2 | 2 | 0 |
-| Zebra Commons | 9 | 0 | 8 | 1 |
+| Zebra Commons | 10 | 0 | 9 | 1 |
 | Non-Functional | 7 | 5 | 2 | 0 |
-| **Total** | **84** | **48** | **29** | **7** |
+| **Total** | **85** | **48** | **30** | **7** |
 
 ---
 

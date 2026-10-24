@@ -1,7 +1,7 @@
 # Zebra Commons — Design
 
-**GitLab issue**: #41 (epic), slices #228–#237 below
-**Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-009
+**GitLab issue**: #41 (epic), slices #228–#238 below
+**Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-010
 **Status**: Draft for review (concept; nothing implemented)
 
 ---
@@ -66,14 +66,18 @@ so reputation and market balance attach to the Zebra, not to a device.
   - It is needed only to add or revoke devices, and can be exported to offline backup.
 - **Device key:** one per device (`integration_name="commons-device"`). Devices sign everything
   with their own key.
-- **`DEVICE_CERT`:** an event signed by the Zebra key, "device key D belongs to Zebra Z", with a
-  device label (`home`, `work`) and an optional expiry.
+- **`DEVICE_CERT`:** an event signed by the Zebra key, "device key D belongs to Zebra Z", carrying
+  the device label, its sphere, the sphere's `observed` flag, and an optional expiry.
   - Readers accept an event when its device key has a valid, unrevoked cert chain to a Zebra key.
   - Commons events are then attributed to the Zebra.
 - **Pairing:** a new device generates its key and shows a short code or QR. On a device holding the
   Zebra key, the human confirms, and that device publishes the `DEVICE_CERT`.
-- **`DEVICE_REVOKE`:** signed by the Zebra key. It covers a lost or retired device. Events signed by
-  the device after the revoke's receipt are rejected, and the Zebra's reputation survives.
+- **`DEVICE_REVOKE`:** signed by the Zebra key. It covers a lost or retired device.
+  - Ordering uses **relay receipts**, never the signer's `created_at`, which a stolen device could
+    backdate. Both relays sign receipts (see Infrastructure).
+  - An event from the revoked device is accepted only if a receipt shows it was stored before the
+    revoke's receipt. Events with no receipt are rejected.
+  - The Zebra's reputation survives.
 - **Spheres.** Each device belongs to a **sphere** (`home`, `work`, or a name the human chooses),
   set at pairing and carried in its `DEVICE_CERT`.
   - A sphere can be marked **`observed`**: the device is managed by someone else, e.g. an
@@ -89,9 +93,11 @@ file-based library:
 
 ```yaml
 commons:
-  content_sha256: "…"     # hash of the canonical YAML, with this block removed
+  content_sha256: "…"     # hash of the canonical content (no commons block, no name)
   origin_pubkey: "…"      # publisher; absent for workflows learnt locally
   parent_sha256: "…"      # if derived from another workflow
+  ancestors: ["…", "…"]   # the last ANCESTOR_WINDOW (32) hashes of this lineage, newest first
+  fork_of: "…"            # set while two device forks of one lineage await a choice
   adopted_at: "2026-…"
   supervised: true        # imported workflows start supervised
   sphere: work            # sphere where it was learnt
@@ -102,11 +108,14 @@ commons:
 `sphere`, `tainted_by` and `share_with` are set only by the library and by human approvals, never
 by an LLM: the block is stripped before LLM rewrites, see below. `tainted_by` only grows along a
 lineage. When the dream cycle on a work device changes a workflow learnt at home, `work` is added.
+**Every content change resets `share_with` to `[]`**, so each new version needs its own share
+decision.
 
-**Canonical YAML** means:
+**Canonical content** means:
 1. Load with a `SafeLoader` subclass with the timestamp resolver removed, so `2026-01-01` stays a
    string. Plain `safe_load` returns `date` objects that `json.dumps` cannot serialise.
-2. Strip the `commons` block.
+2. Strip the `commons` block **and the top-level `name`**. The name is a local display label:
+   adoption and fork handling rename workflows, and a rename must not change the hash.
 3. `json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, then UTF-8, then sha256.
 
 A workflow whose YAML still holds a value with no JSON form (non-string keys, `!!binary`) is not
@@ -117,20 +126,32 @@ gets the same hash or none.
 collide: an adopted "Web Research" v1 gets the same id as the local one, and `save_definition`
 (`update_or_create`) would overwrite the definition that in-flight local processes resume from.
 So adoption does two things:
-- It renames the workflow to `<name> (from <publisher display name>)`.
-- The loader derives the id from `commons.content_sha256` (prefixed `c:`) whenever the block is
-  present.
+- It renames the workflow to `<name> (from <publisher display name>)`. The name is not hashed, so
+  `content_sha256` still equals the offered hash.
+- The loader derives the id from the content hash and the display name whenever the block is
+  present: `c:` + `sha256(content_sha256 + ":" + name)[:16]`.
 
-**The library owns the `commons` block.**
-- The optimizer (`optimizer.py:680`) and variant creator (`variant_creator.py:184`) send whole
-  workflow YAML to an LLM and save its reply. The LLM could copy the block onto changed content or
-  drop it.
-- So `WorkflowLibrary` strips the block before any YAML is handed to an LLM writer. On save it
-  re-attaches the block:
-  - it recomputes `content_sha256`
-  - it sets `parent_sha256` to the previous hash
-  - it clears `origin_pubkey` (the change is now local)
-  - it keeps `supervised` until a human clears it
+**The library owns the `commons` block, through one save path.**
+- Today there are several writers:
+  - `WorkflowLibrary.add_workflow` (creator, variant creator)
+  - `save_workflow_file` (`optimizer.py:735-758`), which the optimizer and the gym's `_complete`
+    (`gym.py:481`) call to write files directly with `write_text`
+- All of them are routed through one `WorkflowLibrary.save(yaml, *, writer, parent, exposure)`.
+  `save_workflow_file` becomes a thin delegate to it. A write that bypasses it would drop the block,
+  and with it `supervised`, `tainted_by` and the content-hash id.
+- `save()` strips the block before any YAML is handed to an LLM writer, runs the leak guard (#237),
+  and re-attaches the block:
+  - **Local change** (an LLM or human writer changed the content):
+    - recompute `content_sha256`
+    - set `parent_sha256` to the previous hash and push it onto `ancestors`
+    - clear `origin_pubkey` (the change is now local)
+    - add the writer's sphere to `tainted_by`
+    - reset `share_with` to `[]`
+    - keep `supervised` until a human clears it
+  - **Adoption or sync** (`commons_adopt`, `SKILL` receive): the received block is kept verbatim
+    after the hash is verified to equal the offered or sent hash. Only the local `name`, `sphere`
+    bookkeeping and `share_with: []` change. This is not a local change, so provenance and
+    attestability survive.
 - Attestations and outcome reports are only ever published for a workflow whose current hash equals
   the offered hash. Runs of a locally modified copy never count against the publisher.
 
@@ -165,9 +186,9 @@ S4).
 | `TRADE` | regular | `{side:"buy"\|"sell", shares, max_cost}` · `x`=sha256 |
 | `OUTCOME` | regular | `{result:"worked"\|"failed"\|"ethics-rejected"\|"pii-found"}` · `x`=sha256, `e`=the reporter's `ATTEST adopted` event |
 | `RECEIPT` | regular, signed by the Commons relay operator key | `{seq, event_id}`: gives the canonical replay order |
-| `DEVICE_CERT` | addressable (`d` = device pubkey), signed by the Zebra key | `{label, expires_at?}` · `p`=device pubkey. Published to both relays. |
+| `DEVICE_CERT` | addressable (`d` = device pubkey), signed by the Zebra key | `{label, sphere, observed, expires_at?}` · `p`=device pubkey. Published to both relays. |
 | `DEVICE_REVOKE` | regular, signed by the Zebra key | `{reason}` · `p`=device pubkey. Published to both relays. |
-| `SKILL` | regular, **private relay only** | NIP-44 encrypted to each of the Zebra's other certified device keys, one copy per device. Plaintext: `{yaml, commons block, stats, sending_device}`. |
+| `SKILL` | regular, **private relay only** | NIP-44 encrypted **only to the certified devices of the spheres listed in the workflow's `share_with`**, one copy per device. Devices in other spheres, e.g. an observed work laptop for a home-only workflow, never receive a decryptable copy. Plaintext: `{yaml, commons block incl. ancestors, stats, sending_device}`. |
 
 **Hard filter:** the publisher refuses to send any event to a public relay unless its kind is on the
 public list, and refuses to send `SKILL` anywhere but the private relay.
@@ -187,7 +208,7 @@ about 60 KB we would split the content, which is deferred.
 - `commons_pii_scan`: rule-based plus low-tier LLM scan for personal data in the YAML (prompts, defaults, examples). Fails closed.
 - `commons_publish`, `commons_attest`, `commons_trade`: build, sign and publish an event
 - `commons_judge_import`: validation and registry check, then reputation lookup, giving a `proceed` / `reject` / `escalate` route
-- `commons_adopt`: `WorkflowLibrary.add_workflow(...)` with the `commons` provenance block, `supervised: true`
+- `commons_adopt`: `WorkflowLibrary.save(..., writer="adopt")` keeps the received `commons` block verbatim (hash verified), sets `supervised: true` and renames for display
 
 ### Workflows (`zebra-agent/workflows/`, system)
 - `commons_offer.yaml`: prepare, then `commons_pii_scan`, then `ethics_gate` (plan_review), then `trust_gate` (domain `sharing`), then publish
@@ -210,6 +231,36 @@ about 60 KB we would split the content, which is deferred.
   - offers seen, adopted and rejected, with Zebra's reasons in its own voice
   - market prices and holdings (S7)
 - Human vouching: "I know this Zebra" on a peer, which sets `vouched_by_user` and publishes `TRUST`.
+
+### Genealogy view
+A family tree of skills, in two views built from data Zebra already keeps:
+- `commons.ancestors`, `parent_sha256` and `fork_of`
+- the writer recorded by `WorkflowLibrary.save()`
+- leak-guard results
+- `SKILL`, `OFFER`, `ATTEST` and `GRANT` events
+
+- **Private genealogy** (`/workflows/<name>/genealogy/`): visible only on this device and never
+  published. The lineage of one workflow as a DAG. Each version shows:
+  - hash, date, the device and sphere it was made on
+  - the writer: creator, variant, optimizer, human, adopted or synced
+  - what changed: a diff to its parent, with the reason in Zebra's own voice ("I added a review
+    step after three failed runs at work")
+  - leak-guard hits that were generalised or rejected, and `tainted_by`
+  - per sphere: shared, waiting for approval, never proposed (sensitive) or blocked
+  - forks waiting for a choice, and retired versions
+  Versions that exist only in another sphere appear only if they were shared here. A device can't
+  see what it was never sent.
+- **Public genealogy** (`/commons/genealogy/`): built only from public events.
+  - **Workflow lineage across Zebras:** offers linked by `parent`, who published each, how many
+    Zebras adopted it, attestations (worked, failed, rejected and why), and the market price over
+    time (S7).
+  - **Zebra lineage:** who vouched for whom (`GRANT` events), and this Zebra's trust paths ("I trust
+    B through A: 0.8 × 0.6").
+- **Privacy rule:** an `OFFER` names a `parent` only if that parent was itself publicly offered.
+  Private ancestors are never referenced publicly, not even by hash. So the public tree starts at
+  the first public version.
+- **Rendering:** server-rendered (Django templates + inline SVG, layered DAG layout) using the
+  tokens and voice rules in [web-ui-design.md](web-ui-design.md). No new JS framework.
 
 ### Infrastructure
 - `strfry` relay as a Quadlet unit on the prod host, rootless Podman, a few MB of RAM, behind the
@@ -234,8 +285,17 @@ about 60 KB we would split the content, which is deferred.
    `score = α·local_trust(publisher) + β·norm(market_price) + γ·attestation_signal`,
    where `attestation_signal` is the trust-weighted mean of `worked` minus `failed` reports.
 3. `commons_import` runs. Any gate rejecting publishes an `ATTEST rejected-*`. Adoption publishes `ATTEST adopted`.
-4. Supervised use: the adopted workflow runs with the `sharing` gate forced to SUPERVISED until a
-   human clears it or the workflow has `SUPERVISED_RUNS` successful runs.
+4. **Supervised use**, enforced *outside* the workflow. `trust_gate` is a task inside workflow YAML,
+   and an imported workflow's YAML is the publisher's, so it can't be relied on to gate itself.
+   - `execute_goal_workflow` (`zebra-tasks/zebra_tasks/agent/execute_workflow.py`), part of the
+     trusted main loop, checks `commons.supervised` on the selected workflow **before** starting the
+     child process.
+   - If it is set, it raises a human task: "Run imported workflow X for this goal?", listing the
+     actions it uses and flagging irreversible ones (via `reversibility_hint`).
+   - Rejecting fails the goal over to the next selector choice.
+   - The flag clears after `SUPERVISED_RUNS` approved, successful runs, or when a human clears it.
+   - The same check applies to every entry point that runs a library workflow (`loop.py`,
+     `direct_run.py`).
 5. After each run, `ATTEST worked|failed` is published. In S7, an `OUTCOME` is published too.
 
 ### Skill sync between own devices (S3b)
@@ -259,10 +319,16 @@ reach home.
    - Anything sensitive is **never proposed** to an `observed` sphere. A human can still share it
      from the workflow page, after an explicit "this will be visible on a managed device"
      confirmation.
-   - Under an earned `sharing` trust level, Zebra may skip the approval for spheres that are not
-     `observed`. It never may for `observed` ones.
+   - Under an earned `sharing` trust level, Zebra may skip the approval only when the target sphere
+     is not `observed` **and** `tainted_by` holds no `observed` sphere. So work data never leaves
+     work, and nothing reaches the work laptop, without a human approving.
+   - These observed-sphere approvals are a dedicated human task (`observed_share_approval`), **not**
+     `trust_gate`. Freeing Zebra (REQ-TRUST-006) makes every trust gate pass through
+     (`trust_gate.py:153-163`), but these approvals protect third parties and the human's privacy
+     from an observer, not oversight of Zebra. Freeing does not remove them.
 1. **Send.** A device sends a `SKILL` event only for workflows whose `share_with` names the target
-   sphere. The event goes to the private relay, encrypted to each certified device of that sphere.
+   sphere. The event goes to the private relay, encrypted only to the certified devices of the
+   spheres in `share_with`.
    Before sending:
    - The device's `sync_direction` must allow sending.
    - `commons_pii_scan` plus a **confidentiality scan** must pass again on the exact bytes being
@@ -278,20 +344,25 @@ reach home.
    workflow adopts at the receiving device's normal trust level, not forced supervised. Values
    profiles can differ between home and work, so the ethics gate still runs at every execution as
    usual.
-3. **Merge by lineage.** Workflows are content-addressed with `parent_sha256`, so merging works like
-   git:
+3. **Merge by lineage.** Workflows are content-addressed, and each version carries its last
+   `ANCESTOR_WINDOW` (32) ancestor hashes in `commons.ancestors`. So a receiver can place a version
+   even if it never saw the intermediate saves, and merging works like git:
    - The same hash is already present: no-op.
-   - The incoming workflow descends from the local one (its parent chain contains the local hash):
-     fast-forward and replace.
-   - **Taint rule, applied on the send side before any of this:** a new version is not sent as a
-     fast-forward if its `tainted_by` holds a sphere the previous shared version didn't have.
-     Example: home's "Weekly planning" was shared with work, and work's dream cycle then improved
-     it using work runs, adding `work` to `tainted_by`. Sending that back to home becomes a fresh
-     share decision (step 0), with the diff shown. Being shared once doesn't carry over to later
-     changes made with another sphere's data.
+   - The incoming workflow descends from the local one (the local hash is in the incoming
+     `ancestors`): fast-forward and replace.
    - The local one descends from the incoming one: ignore it (stale).
-   - Neither descends from the other (forked at home and at work): keep both. The dream curator,
-     which already retires duplicates, or a human picks.
+   - Neither descends from the other (forked at home and at work, or the lineage is longer than the
+     window): a **fork**.
+     - The incoming version is saved under a distinct name, `<name> (from <sphere>)`, with
+       `commons.fork_of` set on both copies.
+     - A human task asks which to keep, showing the diff.
+     - The library's "newest file wins" lookup (`library.py:417-425`) and the curator's
+       `SUPERSEDED_COPY` rule (`curator.py:259-272`) resolve by lineage, and skip workflows with
+       `fork_of` set. A fork is never retired automatically.
+   - **Re-approval rule** (send side): every content change resets `share_with` (see the provenance
+     section), so no new version reaches another sphere on an earlier approval. Example: a work
+     workflow approved for home, later re-optimised at work with fresh work runs, is a new share
+     decision with the diff shown. That holds even though `tainted_by` was already `[work]`.
 4. **Not synced:** run history, ratings, memories and knowledge. Workflow `stats` travel as a
    snapshot in the event, so the receiver can see how well the workflow did elsewhere. They are
    never merged into the local `MetricsStore`.
@@ -341,8 +412,11 @@ improves it. Will it include customer details?"**
 - The new version has `sphere: work, tainted_by: [work]`, `share_with: []`. It stays at work.
 - If Zebra later proposes sharing it with home, the confidentiality scan checks it again and you see
   the diff before anything moves.
-- If the workflow came from home originally, the taint rule stops this version from fast-forwarding
-  home on its own.
+- Every later dream-cycle change resets `share_with`, so an earlier "share with home" approval
+  never carries a new version home. This holds even when the workflow originally came from home.
+- Work is `observed`, so neither earned `sharing` autonomy nor freeing Zebra removes that approval.
+- The optimizer saves through `WorkflowLibrary.save()`, so the leak guard and the `commons` block
+  can't be bypassed.
 - **Result:** customer details stay out of the workflow, and the work version never goes home
   without your approval.
 
@@ -353,11 +427,20 @@ my work machine?"**
 - When Zebra considers sharing it with work, the sensitivity check flags job searching as sensitive
   for an `observed` sphere. Zebra **never proposes it**, and no `SKILL` event is sent.
 - Only an explicit human share, past the "visible on a managed device" warning, could send it.
+  Freeing Zebra doesn't remove that step.
+- Workflows shared only with other spheres are never encrypted to work devices. So even a
+  home-to-home share isn't decryptable on the work laptop.
 - **Result:** it doesn't reach the work machine, not even its name.
 
 **Private relay:** a second strfry Quadlet on the prod host, separate from the public Commons relay.
-- NIP-42 authentication: only keys with a valid `DEVICE_CERT` may read or write.
+- NIP-42 authentication. Keys that may read or write:
+  - **Zebra keys** on the relay's allow-list, registered when the human enables sync (the operator
+    controls who may use the relay). This lets the first `DEVICE_CERT` and every `DEVICE_REVOKE` be
+    published.
+  - Device keys with a valid, unrevoked `DEVICE_CERT` from an allow-listed Zebra key.
 - It accepts only `SKILL`, `DEVICE_CERT` and `DEVICE_REVOKE`.
+- Its own operator key (`SYNC_RECEIPT_PUBKEY`) signs a `RECEIPT {seq, event_id}` for every stored
+  event. Revocation ordering uses these receipts, not `created_at`.
 - Retention is 90 days: devices keep their own copies, and offline devices catch up within that
   window or by re-pairing.
 - The work device only needs outbound `wss://`.
@@ -385,12 +468,18 @@ my work machine?"**
 - **Pricing:** an LMSR (logarithmic market scoring rule) market maker per workflow hash, with
   liquidity `b` (config). Price is in 0..1, read as "the market's belief that this workflow works for
   the Zebras that adopt it". There is always someone to trade with.
-- **Points supply.** Exactly two rules create points and three destroy them. Nothing else changes
+- **Points supply.** Exactly three rules create points and three destroy them. Nothing else changes
   total supply, so every implementation computes the same balances.
+  - *Mint: genesis.* Protocol v1 pins a `GENESIS` list of (Zebra pubkey, balance), e.g. the founding
+    Zebra(s) at 1000 points. It is applied before the first receipt, so the market can start. Adding
+    a genesis entry is a protocol version change, not a local setting.
   - *Mint: `GRANT`.* A voucher locks `GRANT_STAKE` (50) of its own balance and mints
     `GRANT_AMOUNT` (100) for the newcomer.
     - A voucher may make at most `GRANT_MAX_PER_30D` grants (2).
-    - It must have a balance of at least `GRANT_MIN_BALANCE`.
+    - It must have a balance of at least `GRANT_MIN_BALANCE` (150) and be at least
+      `GRANT_MIN_AGE_DAYS` (30) old.
+    - So a newcomer (100) can reach vouching rights by earning 50 or more from backing workflows
+      that work. A fresh grantee can't vouch at once, which keeps Sybil chains slow.
     - A Zebra cannot grant itself or a key it was granted by.
     - The stake is released after `GRANT_LOCK_DAYS` if the newcomer was not delisted for fraud.
   - *Mint: worked settlement.* A valid `OUTCOME worked` mints `SETTLE_MINT × standing(reporter)`
@@ -427,16 +516,19 @@ my work machine?"**
 | `SYNC_DIRECTION` | `ZEBRA_SYNC_DIRECTION` | `both` | `send` / `receive` / `both` / `off`, set per device (e.g. a work device that may only receive) |
 | `SYNC_CONFIDENTIAL_PATTERNS` | `ZEBRA_SYNC_CONFIDENTIAL_PATTERNS` | — | Extra per-device regexes, such as codenames or domains, that block sending |
 | `MIN_RUNS_TO_SHARE` | — | 2 | Successful runs before Zebra suggests sharing a workflow with another sphere |
+| `ANCESTOR_WINDOW` | — | 32 | Ancestor hashes carried per version for lineage merges |
+| `SYNC_RECEIPT_PUBKEY` | `ZEBRA_SYNC_RECEIPT_PUBKEY` | — | Private-relay operator key trusted for sync receipts |
+| `SUPERVISED_RUNS` | — | 3 | Approved successful runs before an imported workflow runs without the pre-run approval |
 | `MIN_RUNS_TO_OFFER` | — | 5 | Effectiveness evidence needed before offering |
 | `IMPORT_SCORE_THRESHOLD` | — | 0.5 | Minimum import score to try judging |
-| `SUPERVISED_RUNS` | — | 3 | Successful supervised runs before an import runs at the domain's level |
 | `MARKET_LIQUIDITY_B` | — | 100 | LMSR liquidity |
 | `GRANT_STAKE` / `GRANT_AMOUNT` | — | 50 / 100 | Vouching economics |
-| `GRANT_MAX_PER_30D` / `GRANT_MIN_BALANCE` / `GRANT_LOCK_DAYS` | — | 2 / 200 / 90 | Caps on point creation through vouching |
+| `GENESIS` | — | founding Zebra(s), 1000 each | Initial balances pinned in the v1 ledger protocol |
+| `GRANT_MAX_PER_30D` / `GRANT_MIN_BALANCE` / `GRANT_MIN_AGE_DAYS` / `GRANT_LOCK_DAYS` | — | 2 / 150 / 30 / 90 | Caps on point creation through vouching |
 | `SETTLE_MINT` | — | 10 | Points minted per standing-weighted `worked` outcome |
 | `DELIST_QUORUM` / `DELIST_MIN_STANDING` | — | 3 / 50 | Independent rejection attestations needed to delist |
 
-Market parameters (`MARKET_*`, `GRANT_*`, `SETTLE_*`, `DELIST_*`) are part of the ledger protocol,
+Market parameters (`GENESIS`, `MARKET_*`, `GRANT_*`, `SETTLE_*`, `DELIST_*`) are part of the ledger protocol,
 not local preferences. They are pinned per protocol version (`["v","1"]`), because Zebras that
 replay with different values compute different markets.
 
@@ -515,4 +607,5 @@ replay with different values compute different markets.
 | #232 S5 Attestations + subscribe | Subscription, `WorkflowOfferModel`, automatic attestations, `/commons/` page | S4 |
 | #233 S6 Web of trust | Trust edges, human vouching, transitive local trust, import score | S5 |
 | #234 S7 Reputation market | Ledger replay, LMSR, `GRANT` / `TRADE` / `OUTCOME`, settlement, market UI | S6 |
+| #238 Skill genealogy UI | Private family tree per workflow (versions, spheres, diffs with reasons, share status, forks) and public Commons lineage (offers, adoptions, attestations, vouching, trust paths) | S2 (private); S3b, S5–S7 (full) |
 | #235 S8 Dream-cycle integration | Zebra proposes offers, imports and trades; `sharing` promotion requests | S5 (S7 for trades) |
