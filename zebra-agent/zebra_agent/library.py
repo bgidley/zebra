@@ -167,6 +167,15 @@ def _recover_name(raw: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _yaml_version(path: Path) -> int:
+    """Return a workflow file's ``version`` (1 if missing or unreadable)."""
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+        return int(data.get("version", 1))
+    except Exception:
+        return 1
+
+
 def _free_path(directory: Path, filename: str) -> Path:
     """Return ``directory/filename``, adding ``_N`` to the stem if it is taken."""
     dest = directory / filename
@@ -617,18 +626,24 @@ class WorkflowLibrary:
         """
         Copy built-in workflows to the library, overwriting if the built-in version is newer.
 
-        A workflow is overwritten when:
-        - The destination file doesn't exist yet, OR
-        - The built-in YAML has a higher ``version`` number than the installed copy.
+        A workflow is copied when:
+        - The destination file doesn't exist yet and the built-in was never retired, OR
+        - The built-in YAML has a higher ``version`` number than the installed copy, OR
+        - It has a higher ``version`` than its retired copy (#224). The retired file is
+          renamed ``<stem>.builtin-v<N>.yaml`` so it no longer blocks the built-in.
+
+        A built-in retired at the same or a higher version stays retired (#148); if
+        another file with its name runs in its place, a warning is logged. Installing a
+        newer version retires every other active file with the workflow's name: those
+        are dream-cycle copies of the older built-in (#224).
 
         Args:
             builtin_path: Path to directory containing built-in workflows
 
         Returns:
             Tuple of (count_copied_or_updated, list_of_upgraded_workflow_names).
-            Upgraded names are workflows that already existed but were replaced with a
-            newer version — callers should evict any stale cached definitions for those
-            names.
+            Upgraded names are workflows that already existed (active or retired) and
+            were replaced with a newer version.
         """
         self.ensure_initialized()
 
@@ -638,35 +653,62 @@ class WorkflowLibrary:
         copied = 0
         upgraded_names: list[str] = []
         for yaml_file in builtin_path.glob("*.yaml"):
+            try:
+                data = yaml.safe_load(yaml_file.read_text()) or {}
+            except Exception:
+                data = {}
+            name = data.get("name") if isinstance(data, dict) else None
+            version = _yaml_version(yaml_file)
             dest = self.library_path / yaml_file.name
-            if (self.retired_path / yaml_file.name).exists():
-                continue  # retired by the curator or a user; don't bring it back (#148)
-            if not dest.exists():
-                shutil.copy(yaml_file, dest)
-                try:
-                    data = yaml.safe_load(yaml_file.read_text())
-                    name = data.get("name") if data else None
-                    if name and name in self._cache:
-                        del self._cache[name]
-                except Exception:
-                    pass
-                copied += 1
-            else:
-                # Overwrite if built-in has a higher version number
-                try:
-                    builtin_data = yaml.safe_load(yaml_file.read_text())
-                    dest_data = yaml.safe_load(dest.read_text())
-                    builtin_version = (builtin_data or {}).get("version", 1)
-                    dest_version = (dest_data or {}).get("version", 1)
-                    if builtin_version > dest_version:
-                        shutil.copy(yaml_file, dest)
-                        name = (builtin_data or {}).get("name")
-                        if name:
-                            if name in self._cache:
-                                del self._cache[name]
-                            upgraded_names.append(name)
-                        copied += 1
-                except Exception:
-                    pass
+            retired = self.retired_path / yaml_file.name
+
+            upgrade = False
+            if retired.exists():
+                retired_version = _yaml_version(retired)
+                if version <= retired_version:
+                    # Retired by the curator or a user; don't bring it back (#148)
+                    self._warn_if_shadowed(name, version)
+                    continue
+                stale = f"{yaml_file.stem}.builtin-v{retired_version}.yaml"
+                retired.rename(_free_path(self.retired_path, stale))
+                upgrade = True
+            elif dest.exists():
+                if version <= _yaml_version(dest):
+                    continue
+                upgrade = True
+
+            shutil.copy(yaml_file, dest)
+            copied += 1
+            if name:
+                self._cache.pop(name, None)
+                if upgrade:
+                    upgraded_names.append(name)
+                    self._retire_stale_copies(name, dest, version)
 
         return copied, upgraded_names
+
+    def _retire_stale_copies(self, name: str, builtin: Path, version: int) -> None:
+        """Retire active files named *name* other than the just-installed built-in (#224)."""
+        for path in self._files_named(name):
+            if path.resolve() == builtin.resolve():
+                continue
+            dest = self.retire(
+                name,
+                f"based on an older built-in; built-in v{version} shipped (#224)",
+                superseded_by=name,
+                path=path,
+            )
+            logger.info("Retired %s → %s: built-in %r v%s shipped", path, dest, name, version)
+
+    def _warn_if_shadowed(self, name: str | None, version: int) -> None:
+        """Log when a retired built-in is replaced by another active file (#224)."""
+        active = self._files_named(name) if name else []
+        if active:
+            logger.warning(
+                "Built-in workflow %r v%s is retired and shadowed by %s (v%s); "
+                "ship a higher built-in version to replace it (#224)",
+                name,
+                version,
+                active[0].name,
+                _yaml_version(active[0]),
+            )
