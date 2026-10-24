@@ -604,11 +604,16 @@ commit → push. All live in `zebra_tasks/vcs/`, fail the task (never raise) on 
 their output under `output_key`.
 
 **Sandbox:** every path is inside the workspace (`workspace` property, else `ZEBRA_GIT_WORKSPACE`;
-`/app/workspace` in prod, wiped on deploy). Remotes: `https://`, `ssh://`, `user@host:path`, or a
-local path inside the workspace (no `ext::`, `file://`, `http://`, `-…`). Before acting on a repo its
-`.git/config` must only hold plain clone/branch keys and allowed remote URLs, so a step that edits it
-cannot add `core.fsmonitor`, filter drivers, `url.*.insteadOf`, includes, … Hooks, global and
-system config are off. `git_push` / `git_pull` take a configured remote *name*, never a URL.
+`/app/workspace` in prod, wiped on deploy; a `workspace` property can only narrow it). Remotes:
+`https://`, `ssh://`, `user@host:path` (no `ext::`, `file://`, `http://`, `-…`). A local path inside
+the workspace is accepted only with `ZEBRA_GIT_ALLOW_LOCAL_REMOTES=1` — tests and development only,
+never prod: on local transport git runs the other repository's helpers without this hardening, so its
+config or hooks could run commands (#241). Before acting on a repo its `.git/config` must only hold
+plain clone/branch keys and allowed remote URLs, so a step that edits it cannot add
+`core.fsmonitor`, filter drivers, `url.*.insteadOf`, includes, …; a `.git` symlink is refused.
+Hooks, global and system config are off. Git gets only an allowlisted environment (path, home,
+locale, CA, proxy), so it never sees Zebra's other secrets, and has no askpass (auth challenges fail
+fast). `git_push` / `git_pull` take a configured remote *name*, never a URL.
 
 **Credentials:** `token_env` (default `ZEBRA_GIT_TOKEN`; must start with `ZEBRA_GIT_TOKEN`) names the
 token. It is sent as `Authorization: Basic <token_user>:<token>` (`token_user` default `oauth2`, for
