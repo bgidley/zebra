@@ -3,7 +3,8 @@
 # ============================================================================
 FROM python:3.14-slim AS builder
 
-RUN pip install uv
+# Pinned uv binary, not `pip install uv`: uv < 0.13.4 trusts the distrusted emSign CA roots
+COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
@@ -41,6 +42,12 @@ RUN uv run python zebra-agent-web/manage.py collectstatic --noinput
 # Stage 2: Runtime — slim image with only what's needed
 # ============================================================================
 FROM python:3.14-slim
+
+# Distrust the eMudhra/emSign roots (bad CA keys, Oct 2026) until Debian ships the fix:
+# the system store is what Oracle (oracledb thin) and plain ssl use.
+RUN sed -i -E 's|^(mozilla/emSign_)|!\1|' /etc/ca-certificates.conf \
+ && update-ca-certificates --fresh >/dev/null \
+ && ! ls /etc/ssl/certs | grep -qi emsign
 
 WORKDIR /app
 
