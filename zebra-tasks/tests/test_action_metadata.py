@@ -23,6 +23,15 @@ from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.subtasks.parallel import ParallelSubworkflowsAction
 from zebra_tasks.subtasks.spawn import SubworkflowAction
 from zebra_tasks.subtasks.wait import WaitForSubworkflowAction
+from zebra_tasks.vcs.actions import (
+    GitBranchAction,
+    GitCloneAction,
+    GitCommitAction,
+    GitDiffAction,
+    GitPullAction,
+    GitPushAction,
+    GitStatusAction,
+)
 
 # All actions to test
 ALL_ACTIONS = [
@@ -44,6 +53,14 @@ ALL_ACTIONS = [
     DirectoryListAction,
     # Compute
     PythonExecAction,
+    # Git (F64)
+    GitCloneAction,
+    GitStatusAction,
+    GitDiffAction,
+    GitBranchAction,
+    GitCommitAction,
+    GitPullAction,
+    GitPushAction,
     # Agent
     MetricsAnalyzerAction,
     WorkflowEvaluatorAction,

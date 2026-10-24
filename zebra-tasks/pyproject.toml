@@ -122,6 +122,14 @@ apply_verification_result = "zebra_tasks.knowledge.apply_verification_result:App
 # Knowledge learning (F152)
 extract_knowledge = "zebra_tasks.knowledge.extract:ExtractKnowledgeAction"
 store_learned_knowledge = "zebra_tasks.knowledge.store_learned:StoreLearnedKnowledgeAction"
+# Git around agent work (F64)
+git_clone = "zebra_tasks.vcs.actions:GitCloneAction"
+git_status = "zebra_tasks.vcs.actions:GitStatusAction"
+git_diff = "zebra_tasks.vcs.actions:GitDiffAction"
+git_branch = "zebra_tasks.vcs.actions:GitBranchAction"
+git_commit = "zebra_tasks.vcs.actions:GitCommitAction"
+git_pull = "zebra_tasks.vcs.actions:GitPullAction"
+git_push = "zebra_tasks.vcs.actions:GitPushAction"
 # Claude Code builds via the host builder (#98, #172)
 claude_code_build = "zebra_tasks.builder.actions:ClaudeCodeBuildAction"
 publish_build = "zebra_tasks.builder.actions:PublishBuildAction"
