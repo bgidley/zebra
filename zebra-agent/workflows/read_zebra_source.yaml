@@ -2,7 +2,9 @@ name: "Read Zebra Source"
 description: "Read a file from Zebra's own deployed source code, with line numbers. A missing path with one clear match reads that file and says so on the first line; otherwise it fails with the nearest existing paths. Use List Zebra Source to see what exists."
 tags: ["code", "source", "read"]
 use_when: "You need to see the code of a specific file in Zebra's own codebase."
-version: 3
+# v5 (#224): no change to the steps. The bump replaces the broken dream copy v4 on prod
+# (v4 skipped: the dream copy's definition id already uses it).
+version: 5
 first_task: read
 result_key: source
 # Requires a path, so it is a tool for llm_agent and never selected for a goal (#190).

@@ -935,6 +935,122 @@ class TestRetireRestore:
         assert files[0].modified_at >= files[1].modified_at
 
 
+def _versioned_yaml(version: int, description: str) -> str:
+    return _named_yaml("Flow", description=description).replace("version: 1", f"version: {version}")
+
+
+class TestBuiltinShadowing:
+    """Shipped built-ins replace stale dream-cycle copies (#224)."""
+
+    @pytest.fixture
+    def builtin(self, temp_dir):
+        path = temp_dir / "builtin"
+        path.mkdir()
+        return path
+
+    def _dream_copy(self, library, version: int, suffix: int = 1) -> Path:
+        """Write a dream copy ``flow_<suffix>.yaml`` newer than the installed built-in."""
+        import os
+        import time
+
+        path = library.library_path / f"flow_{suffix}.yaml"
+        path.write_text(_versioned_yaml(version, "dream"))
+        later = time.time() + 10 * suffix
+        os.utime(path, (later, later))
+        return path
+
+    def _shadowed(self, library, builtin):
+        """Built-in Flow v2 retired in favour of dream copy v3, as the curator does."""
+        (builtin / "flow.yaml").write_text(_versioned_yaml(2, "builtin v2"))
+        library.copy_builtin_workflows(builtin)
+        self._dream_copy(library, 3)
+        library.retire(
+            "Flow", "superseded_copy", superseded_by="Flow", path=library.library_path / "flow.yaml"
+        )
+
+    def test_newer_builtin_replaces_retired_builtin_and_dream_copy(self, library, builtin):
+        self._shadowed(library, builtin)
+        assert "dream" in library.get_workflow_yaml("Flow")
+
+        (builtin / "flow.yaml").write_text(_versioned_yaml(3, "builtin v3"))
+        copied, upgraded = library.copy_builtin_workflows(builtin)
+
+        assert (copied, upgraded) == (1, ["Flow"])
+        assert "builtin v3" in library.get_workflow_yaml("Flow")
+        assert library.get_workflow("Flow").version == 3
+        assert not (library.library_path / "flow_1.yaml").exists()
+        dream = yaml.safe_load((library.retired_path / "flow_1.yaml").read_text())
+        assert dream["retired"]["superseded_by"] == "Flow"
+        assert "#224" in dream["retired"]["reason"]
+        assert not (library.retired_path / "flow.yaml").exists()
+        assert "builtin v2" in (library.retired_path / "flow.builtin-v2.yaml").read_text()
+
+    def test_second_copy_after_upgrade_is_noop(self, library, builtin):
+        self._shadowed(library, builtin)
+        (builtin / "flow.yaml").write_text(_versioned_yaml(3, "builtin v3"))
+        library.copy_builtin_workflows(builtin)
+        retired_before = sorted(p.name for p in library.retired_path.iterdir())
+
+        assert library.copy_builtin_workflows(builtin) == (0, [])
+        assert sorted(p.name for p in library.retired_path.iterdir()) == retired_before
+        assert [p.name for p in library._files_named("Flow")] == ["flow.yaml"]
+
+    def test_retired_at_same_version_stays_retired(self, library, builtin):
+        (builtin / "flow.yaml").write_text(_versioned_yaml(3, "builtin v3"))
+        library.copy_builtin_workflows(builtin)
+        library.retire("Flow", "failing")
+
+        assert library.copy_builtin_workflows(builtin) == (0, [])
+        assert not (library.library_path / "flow.yaml").exists()
+
+    def test_active_builtin_upgrade_retires_dream_copy(self, library, builtin):
+        (builtin / "flow.yaml").write_text(_versioned_yaml(2, "builtin v2"))
+        library.copy_builtin_workflows(builtin)
+        self._dream_copy(library, 3)
+        self._dream_copy(library, 4, suffix=2)  # a dream version above the shipped one
+
+        (builtin / "flow.yaml").write_text(_versioned_yaml(3, "builtin v3"))
+        copied, upgraded = library.copy_builtin_workflows(builtin)
+
+        assert (copied, upgraded) == (1, ["Flow"])
+        assert "builtin v3" in (library.library_path / "flow.yaml").read_text()
+        assert [p.name for p in library._files_named("Flow")] == ["flow.yaml"]
+        assert (library.retired_path / "flow_1.yaml").exists()
+        assert (library.retired_path / "flow_2.yaml").exists()
+        assert "builtin v3" in library.get_workflow_yaml("Flow")
+
+    @pytest.fixture
+    def log(self, monkeypatch):
+        """The library's logger (Django test settings stop it reaching caplog)."""
+        mock = MagicMock()
+        monkeypatch.setattr("zebra_agent.library.logger", mock)
+        return mock
+
+    @staticmethod
+    def _shadow_warnings(log) -> list[str]:
+        messages = [c.args[0] % c.args[1:] for c in log.warning.call_args_list]
+        return [m for m in messages if "shadowed" in m]
+
+    def test_shadowed_builtin_is_logged(self, library, builtin, log):
+        self._shadowed(library, builtin)
+
+        assert library.copy_builtin_workflows(builtin) == (0, [])
+
+        shadow = self._shadow_warnings(log)
+        assert len(shadow) == 1
+        assert "'Flow' v2" in shadow[0]
+        assert "flow_1.yaml (v3)" in shadow[0]
+
+    def test_retired_builtin_without_copy_is_not_logged(self, library, builtin, log):
+        (builtin / "flow.yaml").write_text(_versioned_yaml(2, "builtin v2"))
+        library.copy_builtin_workflows(builtin)
+        library.retire("Flow", "failing")
+
+        library.copy_builtin_workflows(builtin)
+
+        assert self._shadow_warnings(log) == []
+
+
 class TestLlmDefinedTag:
     """Provenance tagging of LLM-written workflows (#148)."""
 
