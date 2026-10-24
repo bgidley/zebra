@@ -29,8 +29,8 @@ other secret in the environment. Closes #241.
 
 | # | Outcome | How we'll know |
 |---|---------|----------------|
-| O1 | A local repository cannot be used to run commands through the Git actions in prod | Regression tests: a bare repo armed with `core.alternateRefsCommand` and a `pre-receive` hook is refused as a clone source and as a push target (via `remote.origin.url`) without the opt-in, and its command never runs; prod has no `ZEBRA_GIT_ALLOW_LOCAL_REMOTES` |
-| O2 | Nothing Git starts can see Zebra's other secrets | Test: with `OPENROUTER_API_KEY`, `ORACLE_PASSWORD`, `ZEBRA_GITLAB_TOKEN`, `KAGI_API_KEY` set, none appears in the Git environment; no askpass variables |
+| O1 | A local repository cannot be used to run commands through the Git actions in prod | Regression tests: a bare repo armed with `core.alternateRefsCommand` (positive control: with the opt-in, pushing to it runs the command) and a `pre-receive` hook is refused without the opt-in as a clone source in every local form (absolute, `file://`, relative, `./`, `~`, `..`, symlink into the workspace) and as a push target via `remote.origin.url`, and its sentinel file is never created; prod has no `ZEBRA_GIT_ALLOW_LOCAL_REMOTES` |
+| O2 | Nothing Git starts can see Zebra's other secrets | Tests: the Git environment's keys are exactly the stated allowlist plus Git's own settings; `OPENROUTER_API_KEY`, `ORACLE_PASSWORD`, `ZEBRA_GITLAB_TOKEN`, `KAGI_API_KEY`, an arbitrary secret, `GIT_DIR`, `GIT_EXEC_PATH`, `GIT_CONFIG_PARAMETERS` and askpass variables from the parent never appear |
 | O3 | Remaining repository tricks are refused | Tests: `.git` symlink refused; `git_push` refuses `a..b`, `MAIN` and `Master` |
 | O4 | Normal https use in prod still works | After deploy, inside `zebra-web`: the actions clone a public https repo, branch and commit; a local-path clone is refused |
 

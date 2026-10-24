@@ -11,7 +11,7 @@ from zebra_tasks.vcs.actions import (
     GitPushAction,
     GitStatusAction,
 )
-from zebra_tasks.vcs.base import GitActionError, GitRunner, check_remote
+from zebra_tasks.vcs.base import _ENV_ALLOWLIST, GitActionError, GitRunner, check_remote
 
 
 async def clone(workspace, remote, mock_context) -> str:
@@ -320,3 +320,82 @@ class TestPushNames:
 
         assert not result.success
         assert "check-ref-format" in result.error
+
+
+class TestLocalRemoteForms:
+    """#241: without the opt-in no local form is a remote, so an armed repo is never touched."""
+
+    @pytest.fixture
+    def armed(self, workspace, remote, seed):
+        """The remote armed the way the reviewer's probe did: runs a command when pushed to."""
+        marker = workspace.parent / "PWNED"
+        with open(remote / "config", "a") as f:
+            f.write(f'[core]\n\talternateRefsCommand = "touch {marker}; :"\n')
+        (remote / "objects" / "info" / "alternates").write_text(f"{seed / '.git' / 'objects'}\n")
+        (workspace / "link.git").symlink_to(remote)
+        return remote, marker
+
+    async def test_armed_remote_really_fires_with_opt_in(self, armed, workspace, mock_context):
+        remote, marker = armed  # the opt-in is on in the workspace fixture
+        path = await clone(workspace, remote, mock_context)
+        await GitBranchAction().run(
+            make_task({"repo_path": path, "name": "feature", "create": True}), mock_context
+        )
+
+        await GitPushAction().run(make_task({"repo_path": path}), mock_context)
+
+        assert marker.exists()  # so the refusals below are what keeps it from running
+
+    @pytest.mark.parametrize(
+        "form",
+        [
+            "{remote}",
+            "file://{remote}",
+            "{ws}/link.git",
+            "remotes/origin.git",
+            "./remotes/origin.git",
+            "~/origin.git",
+            "{ws}/remotes/../remotes/origin.git",
+        ],
+    )
+    async def test_every_local_form_refused(
+        self, form, armed, workspace, monkeypatch, mock_context
+    ):
+        remote, marker = armed
+        monkeypatch.delenv("ZEBRA_GIT_ALLOW_LOCAL_REMOTES")
+        url = form.format(remote=remote, ws=workspace)
+
+        result = await GitCloneAction().run(make_task({"url": url}), mock_context)
+
+        assert not result.success
+        assert "Remote not allowed" in result.error
+        assert not marker.exists()
+
+
+def test_git_env_is_exactly_the_allowlist(tmp_path, monkeypatch):
+    blocked = {
+        "GIT_DIR": "/elsewhere",
+        "GIT_EXEC_PATH": "/evil",
+        "GIT_ASKPASS": "echo",
+        "SSH_ASKPASS": "echo",
+        "GIT_CONFIG_PARAMETERS": "'core.fsmonitor=x'",
+        "SOME_RANDOM_SECRET": "x",
+    }
+    for key, value in {**blocked, "LC_ALL": "C.UTF-8"}.items():
+        monkeypatch.setenv(key, value)
+
+    env = GitRunner(workspace=tmp_path, token="t", token_hosts=["gitlab.com"]).env()
+
+    count = int(env["GIT_CONFIG_COUNT"])
+    own = {
+        "GIT_TERMINAL_PROMPT",
+        "GIT_SSH_COMMAND",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_COUNT",
+    } | {f"GIT_CONFIG_{kind}_{i}" for kind in ("KEY", "VALUE") for i in range(count)}
+    passed_through = {k for k in env if k in _ENV_ALLOWLIST or k.startswith("LC_")}
+    assert set(env) - own - passed_through == set()
+    assert not set(blocked) & set(env)
+    assert env["GIT_SSH_COMMAND"] == "ssh -o BatchMode=yes"
+    assert env["LC_ALL"] == "C.UTF-8"

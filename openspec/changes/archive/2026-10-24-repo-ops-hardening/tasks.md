@@ -14,4 +14,4 @@
 ## 3. Docs & delivery
 
 - [x] 3.1 `zebra-tasks/AGENTS.md`, `specs/zebra-as-is.md`
-- [ ] 3.2 Zebra outcome feedback; pipeline; merge; prod check; archive; outcome review
+- [x] 3.2 Zebra outcome feedback; pipeline; merge; prod check; archive; outcome review
