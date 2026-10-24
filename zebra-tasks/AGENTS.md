@@ -64,6 +64,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/knowledge/add.py` | AddKnowledgeAction + `store_knowledge_entry()` — store with contradiction detection (shared core) |
 | `zebra_tasks/knowledge/extract.py` | ExtractKnowledgeAction - LLM personal-fact candidates from a run; `normalize_knowledge_key()`, `validate_candidates()` privacy/cap guardrails (F152) |
 | `zebra_tasks/knowledge/store_learned.py` | StoreLearnedKnowledgeAction - store candidates as `source=agent` (confidence ≤ `max_confidence`), start *Resolve Knowledge Contradiction* for conflicts (F152); `update_agent_entries: true` updates a conflicting agent entry in place (F155) |
+| `zebra_tasks/data/` | Deterministic data transforms (F66): `parse_csv` (`csv_parse.py`, `unique_columns()`), `parse_xml` (`xml_parse.py`, `element_to_value()`, refuses DOCTYPE/ENTITY), `transform_json` (`json_transform.py`, `parse_path()` / `get_path()` / `transform()`); `_common.py` `input_value()` / `input_text()` (`resolve_raw` + `MAX_INPUT_CHARS`). All `always_reversible` |
 | `zebra_tasks/web/kagi_news.py` | KagiNewsFetchAction (`kagi_news_fetch`: news.kagi.com `kite.json` feed, no key) and KagiNewsReadAction (`kagi_news_read`: batch Kagi Extract of picked stories, falls back to Kagi News summaries; never fails on extraction) (F155) |
 | `zebra_tasks/llm/models.py` | `TIERS` (`low`, `medium`, `high`, `max`), `DEFAULT_TIER` (`medium`), `normalize_model()`: a tier, or a `vendor/model` slug as given; names stored before #205 (`haiku`, `sonnet`, `opus`, `claude-*`, `kimi*`) read as their tier |
 | `zebra_tasks/llm/client.py` | `get_llm(model, context)`: the one entry point; with a context every call records its usage on the process. `model_for(task, context, default)`: task `model` > process `__llm_model__` > default > `medium`. `set_llm_factory()`: test seam (the root `conftest.py` resets it) |
@@ -576,6 +577,22 @@ SMTP via stdlib `smtplib` in `asyncio.to_thread`. **Properties:** `to` (string o
 ### NotifyWebhookAction (`notify_webhook`)
 
 httpx POST/PUT. **Properties:** `url` (defaults to `ZEBRA_NOTIFY_WEBHOOK_URL`; http/https only), `payload` (JSON, templates resolved recursively) or `body` (raw text), `method` (`POST`/`PUT`), `headers`, `timeout` (15s). Non-2xx fails the task. **Output:** `{status_code, host}`.
+
+## Data Transform Actions Reference (F66)
+
+All live in `zebra_tasks/data/`, are pure (`always_reversible`), take `data` (a literal, or a pure `{{a.b}}` template that keeps lists/dicts intact), store their result under `output_key` and return it as the task output. Text over 2,000,000 chars, missing/empty/wrong-typed `data` and bad options fail the task. Compose with `file_read` / `kagi_extract` / `llm_call` for input; never read files directly.
+
+### ParseCsvAction (`parse_csv`)
+
+**Properties:** `has_header` (true), `delimiter` (`,`, one char), `max_rows` (1000, cap 10,000), `output_key` (`csv_rows`). **Output:** `{rows, columns, count, truncated}`. Header rows → dicts (short rows padded with `""`, extra cells dropped); headerless → lists. BOM dropped; blank headers → `column_N`, repeats → `name_2`. Values stay strings.
+
+### ParseXmlAction (`parse_xml`)
+
+**Properties:** `output_key` (`xml_data`). **Output:** `{data: {root_tag: value}, root}`. Leaf without attributes → its text (`null` if empty); otherwise `@attr` keys, child tags (list when repeated) and `#text`. Namespaces dropped to local names (colliding names merge into a list). Any `<!DOCTYPE` / `<!ENTITY` is refused before parsing (no entity expansion).
+
+### TransformJsonAction (`transform_json`)
+
+**Properties:** `path`, `where` (mapping of path → value; equality, compared as text when types differ), `sort_by` (path; numeric when every value is a number, nulls last, stable), `descending`, `limit`, `pick` (path or list of paths; result keys are the path strings), `output_key` (`json_result`). Steps run in that fixed order: `path` → `where` → `sort_by` → `limit` → `pick`. Paths: `a.b[0].c`, `[-1]`, `items[*].name` (`*` over a non-list treats it as one item). A missing key/index gives `null`. A string `data` is parsed with `parse_llm_json` (fences, prose). **Output:** `{result, count?}` (`count` when the result is a list). To index after filtering, chain a second `transform_json` with `path: "[0].field"`.
 
 ## Testing Task Actions
 
