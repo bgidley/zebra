@@ -188,7 +188,12 @@
                         <ul class="space-y-1 text-gray-300">
                             {% for ch in c.failed_changes %}
                             <li><span class="font-medium">{{ ch.workflow }}</span>
-                                <span class="text-gray-500">: {{ ch.reason|truncatechars:200 }}</span></li>
+                                <span class="text-gray-500">: {{ ch.reason|truncatechars:200 }}</span>
+                                {% if ch.leak_hits %}
+                                <div class="text-xs text-gray-500">Copied from runs:
+                                    {% for h in ch.leak_hits %}<span class="px-1.5 rounded bg-fail/15 text-fail">{{ h.text|truncatechars:60 }}</span> <span class="text-gray-600">{{ h.kind }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}
+                                </div>
+                                {% endif %}</li>
                             {% endfor %}
                         </ul>
                     </div>

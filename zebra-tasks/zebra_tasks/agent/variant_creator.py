@@ -3,8 +3,9 @@
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.agent.creator import generate_workflow
+from zebra_tasks.agent.creator import generate_guarded_workflow, goal_exposure
 from zebra_tasks.agent.followup import with_previous_run
+from zebra_tasks.agent.leak_guard import LeakGuard
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.client import get_llm
 
@@ -120,8 +121,9 @@ class WorkflowVariantCreatorAction(TaskAction):
         "   default model tier. Available values: 'low' (cheapest), 'medium' (balanced,\n"
         "   default), 'high' (more capable), 'max' (best). Only set model when a task has\n"
         "   clearly different needs — most tasks should omit it.\n"
-        "9. Do not copy the previous run's content into the YAML — tasks receive it at\n"
-        "   runtime via {{goal}}. Keep prompts concise.\n"
+        "9. Never copy names, companies, emails, numbers or text from the goal or a\n"
+        "   previous run into the YAML — tasks receive them at runtime via {{goal}}.\n"
+        "   Keep prompts concise.\n"
         "\n"
         "The available task actions are the same as in the source workflow."
     )
@@ -162,18 +164,28 @@ class WorkflowVariantCreatorAction(TaskAction):
                 "creating_variant", {"source": source_name, "suggested_name": suggested_name}
             )
 
-        prompt = f"New goal: {with_previous_run(goal, context.process.properties)}\n"
+        goal_text = with_previous_run(goal, context.process.properties)
+        prompt = f"New goal: {goal_text}\n"
         if suggested_name:
             prompt += f"Suggested variant name: {suggested_name}\n"
         if reasoning:
             prompt += f"Why the source doesn't quite fit: {reasoning}\n"
         prompt += f"\nSource workflow YAML:\n{source_yaml}"
 
+        run_texts, goal_texts = goal_exposure(goal, goal_text)
+        guard = LeakGuard(
+            run_texts=run_texts,
+            goal_texts=goal_texts + [suggested_name, reasoning],
+            parent_yaml=source_yaml,
+            allow_text=self.SYSTEM_PROMPT,
+        )
+
         try:
-            yaml_content, definition, problem = await generate_workflow(
+            yaml_content, definition, problem, leak = await generate_guarded_workflow(
                 provider,
                 [Message.system(self.SYSTEM_PROMPT), Message.user(prompt)],
                 temperature=0.5,
+                guard=guard,
             )
             if problem:
                 return TaskResult.fail(f"Generated invalid variant: {problem}")
@@ -201,6 +213,8 @@ class WorkflowVariantCreatorAction(TaskAction):
                 "definition_id": definition.id,
                 "source_workflow_name": source_name,
             }
+            if leak:
+                output_data["leak_guard"] = leak
             context.set_process_property(output_key, output_data)
             context.set_process_property("workflow_name", definition.name)
             context.set_process_property("created_new", True)

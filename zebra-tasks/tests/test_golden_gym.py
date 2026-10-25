@@ -470,7 +470,7 @@ class TestOptimizerStaging:
         results["continuation_changes"] = []
 
         async def fake_modify(*args, **kwargs):
-            return DEGRADED, None
+            return DEGRADED, None, None
 
         monkeypatch.setattr(optimizer, "_modify_workflow", fake_modify)
         made = await optimizer._apply_priority(
@@ -509,7 +509,7 @@ class TestOptimizerStaging:
         }
 
         async def fake_modify(*args, **kwargs):
-            return DEGRADED, None
+            return DEGRADED, None, None
 
         monkeypatch.setattr(optimizer, "_modify_workflow", fake_modify)
         await optimizer._apply_priority(

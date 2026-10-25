@@ -7,6 +7,7 @@ from typing import Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.leak_guard import run_texts_from_metrics
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.client import get_llm, model_for
 from zebra_tasks.llm.structured import LLMJSONError, complete_json, describe_failure
@@ -226,6 +227,8 @@ Respond with JSON only:
             self._merge_continuation_proposals(
                 evaluation, metrics_analysis, workflow_definitions or {}
             )
+            # The run texts this prompt showed, for the optimizer's leak guard (#237)
+            evaluation["run_exposure"] = run_texts_from_metrics(metrics_analysis)
 
             # Store result
             context.set_process_property(output_key, evaluation)
