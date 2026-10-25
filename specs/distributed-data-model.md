@@ -1,9 +1,10 @@
 # Multi-Device and Multi-User Data Model (server + Oracle)
 
 **Status**: Draft (revised 2026-10-25; supersedes the 2026-04-16 local-first CRDT draft)
-**Issues**: #57, #58, #59, #60, #61 (Strand B of `phase::11-distributed`)
+**Issues**: #57, #58, #59, #60, #61 (`phase::18-multi-user`)
 **Relates to**: REQ-USR-001..005, REQ-DATA-001/002, REQ-PRIN-005, REQ-NFR-005, REQ-NFR-007
 **Decision (owner, 2026-10)**: Zebra stays a server backed by Oracle. SQLite is not a target.
+A local database may come later, so use only features common to Oracle and PostgreSQL.
 
 ---
 
@@ -14,11 +15,11 @@ Zebra is a server: one deployment (today a single OCI host running `zebra-web` a
 backed by one Oracle ADB schema through the Django ORM stores. This doc says what
 "multi-device" and "multi-user" mean on that model.
 
-- **One Zebra = one deployment = one Oracle schema = one household (or small team).**
+- **One Zebra = one deployment = one Oracle schema = one household.** No teams for now.
   The server is the only source of truth. There is no per-device database and nothing to merge.
 - **Multi-device** (#57): a device is a *client* (browser, phone, tablet, CLI, API caller) of that
   one Zebra. Each device has its own passkey or API token, which can be listed and revoked.
-- **Multi-user** (#59, #61): several Django users on the same schema. Each record has an owner
+- **Multi-user** (#59): several Django users on the same schema. Each record has an owner
   and a scope (`private` or a shared domain). Scoping is enforced in the store layer and fails closed.
 - **Conflict mediation** (#60) is a workflow problem: Zebra notices that two people want
   incompatible things and runs a mediation workflow with human tasks for each party. Concurrent
@@ -33,6 +34,8 @@ backed by one Oracle ADB schema through the Django ORM stores. This doc says wha
 - Several households in one deployment (multi-tenancy). Another household runs its own Zebra.
 - Client-side end-to-end encryption. The server must read data to act on it.
 - Multi-host or HA Zebra. There is one daemon per deployment (kill switch in `SystemStateModel`).
+- Team / organisation support (#61, REQ-USR-004): deferred by the owner.
+- Database-specific row security (Oracle VPD) and any other Oracle-only feature in core paths.
 
 ### What the April 2026 draft said that is now superseded
 
@@ -79,7 +82,7 @@ data classes split into private and shared.
 
 - The first user is `owner`. Only an owner can invite members, change roles or deactivate members.
 - `guest` sees only domains it is explicitly given and cannot raise trust levels.
-- Teams (#61) reuse this table and add roles as named sets of domain grants (§3.3). No new hierarchy.
+- No extra guardrails for children or guests beyond the `guest` role for now.
 
 ### 3.2 Domains and scope
 
@@ -108,12 +111,12 @@ Visibility rule, the only one: a viewer sees a row iff `row.user_id == viewer` *
 | Episodic / conceptual memory, postmortems | goal owner | follows the run | `clear_conceptual_memories` must scope by user (F6 latent bug). |
 | Personal knowledge | user | `private` | A user may move an entry into a shared domain. Agent-learned entries (F152) start private. |
 | Values profile, values tags | user | **always private** | Never shareable. Each person's ethics context is their own (REQ-USR-003). |
-| Trust levels, suggestions, freeing | user | per (user, domain) | Shared-domain actions use the **most restrictive** level among the domain's write members, raised to any org policy floor (#61). |
+| Trust levels, suggestions, freeing | user | per (user, domain) | Shared-domain actions use the **most restrictive** level among the domain's write members (decided). |
 | Ethics audit | goal owner | follows the run | |
-| Credentials | user, or household (`user_id NULL`) | per user | A household credential (e.g. the shared calendar) is owner-managed and usable only by goals in its domain. Needs a durable backend (§6, Q4). |
+| Credentials | user, or household (`user_id NULL`) | per user | A household credential (e.g. the shared calendar) is owner-managed and usable only by goals in its domain. Stored in a new `DjangoCredentialStore` table (decided); at rest it relies on Oracle TDE. |
 | Workflow library | the Zebra | shared by all | Skills belong to the Zebra, not a person. The leak guard (#237) keeps run content out of them. |
 | LLM spend ledger | goal owner | — | Add `user_id`, taken from the root process's `__user_id__`. |
-| Kill switch, budget settings, routines | the Zebra | — | Owner-managed. Halting is open to every member (Q5). |
+| Kill switch, budget settings, routines | the Zebra | — | Owner-managed. Any member can halt; only the owner resumes (assumed, Q1). |
 
 ### 3.4 Migration
 
@@ -121,7 +124,7 @@ Visibility rule, the only one: a viewer sees a row iff `row.user_id == viewer` *
   remaining stores. Backfill existing `NULL` `user_id` to the owner (as migration 0011 did).
 - Move `SystemStateModel.user_display_name/user_identity_id` into a `HouseholdMember` row for the
   owner, and keep reading the old fields for one release.
-- Oracle: plain columns and composite indexes `(user_id, scope)`. No VPD in v1 (§6, Q2).
+- Plain columns and composite indexes `(user_id, scope)`, portable to PostgreSQL. No VPD (decided).
 
 ---
 
@@ -203,7 +206,9 @@ Also the Cloudflare Access policy must list every member. That is deploy config,
   (#236), whose private relay carries only workflows. Data replication between deployments is deferred.
 - **#59** becomes members, roles, domain shares and fail-closed scoping (§3, §4).
 - **#60** becomes the mediation workflow plus assigned human tasks (§4, §5.2).
-- **#61** becomes roles as grant sets plus org policy floors on trust levels, after #59.
+- **#61** is deferred: no teams for now (REQ-USR-004 deferred).
+- **New B0**: fail-closed per-user scoping in every store, before #59.
+- **New B4**: fair share and per-member spend under one budget, after #59.
 
 Commons (#41) is unaffected. Its Zebra key belongs to the deployment, so in a household it is the
 household's Zebra that holds reputation. A Commons "device" (home, work) is a separate Zebra
@@ -211,27 +216,25 @@ household's Zebra that holds reputation. A Commons "device" (home, work) is a se
 
 ---
 
-## 8. Open questions / risks
+## 8. Decisions (owner, 2026-10-25)
 
-1. **Requirements now misaligned** (not edited here; owner to decide):
-   - REQ-DATA-001 / REQ-PRIN-005: "stored locally on the human's device", "no external database
-     required", "functions fully offline". Prod is Oracle ADB in the cloud.
-   - REQ-DATA-002: "encrypted client-side ... passphrase never stored remotely" for sync. The server
-     needs plaintext, and cross-device access needs no sync.
-   - REQ-NFR-005 (offline capability): no offline mode is planned. At most a read-only PWA cache.
-   - REQ-NFR-007 / REQ-DATA-006: "local data storage supports encryption at rest". ADB encrypts at
-     rest (TDE) by default. Is that enough, or should sensitive classes (values, health knowledge,
-     credentials) get application-level column encryption with a host-held key?
-2. **Oracle VPD** (`DBMS_RLS`) as a second line of defence. Is it worth the cost? The app uses one
-   DB user and pooled, thread-hopping connections (`sync_to_async`), so a per-request
-   `CLIENT_IDENTIFIER` is fragile. Proposal: app-level only in v1, and revisit if a scoping bug escapes.
-3. **Shared-domain trust**: is the most restrictive member's level right, or should a shared domain
-   have its own level that all write members agree on?
-4. **Credentials in prod** use a file backend inside the container. Per-member credentials need a
-   durable, encrypted backend. Should that be an Oracle table encrypted with a host key, or a
-   mounted volume?
-5. **Kill switch and freeing in a household**: can any member halt (proposed: yes) and who can resume
-   (proposed: owner)? Is freeing (F17) per member, and is it allowed at all in shared domains?
-6. **Is team/org (#61) wanted?** Zebra is pitched as a small AI with 1..n humans. A team may be
-   better served by one Zebra per person plus the Commons.
-7. **Children / guests**: does the household need age-appropriate guardrails beyond `guest`?
+| Question | Decision |
+|---|---|
+| Requirements written for local-first | Reworded: data lives in the deployment's own database (cloud Oracle now, maybe local later). REQ-PRIN-005, REQ-DATA-001/002 rewritten; REQ-NFR-005 offline deferred. |
+| Encryption at rest | Oracle TDE is enough. No application-level column encryption. |
+| Oracle VPD as second line of defence | No. App-level scoping only, and avoid Oracle features PostgreSQL lacks. |
+| Shared-domain trust | Most restrictive level among the domain's write members. |
+| Per-member credentials backend | A database table (`DjangoCredentialStore`). |
+| Team / organisation (#61) | No teams for now. |
+| Children / guest guardrails | Nothing beyond the `guest` role for now. |
+| Commons "device" | Home and work are separate deployments, not clients. |
+
+### Open questions / risks
+
+1. **Kill switch and freeing** (not yet decided; assumed): any member can halt, only the owner
+   resumes, and freeing (F17) is per member and not allowed in shared domains.
+2. **Known Oracle-only feature**: in-database embeddings (`zebra-agent-web/zebra_agent_web/embeddings.py`)
+   must stay behind the memory store interface, with pgvector plus an external embedding model as
+   the PostgreSQL path.
+3. **Scoping bugs** are the main risk once a second person joins. B0 makes every read fail closed
+   and adds a two-user leak test over every endpoint.

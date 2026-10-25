@@ -66,6 +66,7 @@ them while the data stays where it was made. See §13.
 | **Attestation** | A signed statement by one Zebra about a workflow it has used: adopted, rejected, worked, failed, personal data found |
 | **Trust Edge** | A signed, weighted statement "Zebra X trusts Zebra Y with weight w"; edges form the web of trust |
 | **Device Key** | A per-device key certified by its Zebra's key; one Zebra may run on several devices (e.g. home and work) |
+| **Device (Commons)** | A separate Zebra deployment with its own database (e.g. home, work). Phones and browsers are not devices here; they are clients of one deployment |
 | **Reputation Points** | A non-money token Zebras use to back workflows on the reputation market; cannot be cashed out |
 
 ---
@@ -118,9 +119,12 @@ them while the data stays where it was made. See §13.
 - Conflict resolution history is recorded in episodic memory to improve future negotiations and learn household compromise patterns
 - Users can escalate unresolved conflicts to a structured mediation workflow with defined stages
 
-### REQ-USR-004: Team / Organisation (P3)
+### REQ-USR-004: Team / Organisation (Deferred)
 
 **Description**: The system can be extended to support team or organisational use.
+
+> **Deferred (2026-10-25)**: no team support for now. Zebra is a small AI for 1..n humans in a
+> household; a team is better served by one Zebra per person plus the Zebra Commons.
 
 **Acceptance Criteria**:
 - Role-based access control can restrict domain visibility and trust levels
@@ -177,15 +181,17 @@ These are non-negotiable architectural constraints that all requirements must sa
 - When values conflict, the agent escalates to the human with a reasoned analysis
 - The human can aid the agent in resolving ethical conflicts
 
-### REQ-PRIN-005: Local-First Data (P1)
+### REQ-PRIN-005: Owned, Portable Data (P1)
 
-**Description**: Personal knowledge and memory stay on the human's local device by default. Cloud sync is opt-in and encrypted.
+**Description**: Personal knowledge and memory live in the Zebra deployment's own database, which
+the human controls. Today that is a cloud Oracle schema; a local database may follow later, so the
+data layer stays portable.
 
 **Acceptance Criteria**:
-- The default installation stores all data locally on the human's device
-- No data leaves the device without explicit opt-in configuration
-- The agent functions fully offline (except for LLM API calls and external integrations)
-- Data at rest is encryptable via user-provided key
+- All personal data is stored in the deployment's own database schema, not in a third-party service
+- No data leaves the deployment without explicit opt-in configuration (LLM calls and configured integrations excepted)
+- The data layer uses only features available in both Oracle and PostgreSQL, so the database can be swapped (see REQ-DATA-001)
+- Data at rest is encrypted (database-native encryption, e.g. Oracle TDE, is sufficient)
 
 ### REQ-PRIN-007: Workflow Sharing (P2)
 
@@ -355,7 +361,7 @@ This is the culmination of the trust journey: the human has seen enough evidence
 - A `ValuesProfile` data model exists with fields for: core values (ranked list), ethical positions (structured), priorities (ordered domains), deal-breakers (absolute constraints)
 - The human can create, view, and edit their values profile via any interface
 - The values profile is versioned — changes create a new version, old versions are retained
-- The values profile is stored locally by default (respects REQ-PRIN-005)
+- The values profile is stored in the deployment's own database and is private to its owner (respects REQ-PRIN-005)
 
 ### REQ-ETH-003: Values-Informed Ethics Reasoning (P1)
 
@@ -758,26 +764,27 @@ This is the culmination of the trust journey: the human has seen enough evidence
 
 ## 11. Data Model & Privacy
 
-### REQ-DATA-001: Local-First Storage (P1)
+### REQ-DATA-001: Owned, Portable Storage (P1)
 
-**Description**: All personal data is stored locally by default on the human's device.
+**Description**: All personal data is stored in one database owned by the Zebra deployment. The
+current deployment uses cloud Oracle (Autonomous Database); a local database may be supported later.
 
 **Acceptance Criteria**:
-- A fresh installation requires no network connectivity for data storage
-- All structured data is persisted locally
+- All structured data is persisted in the deployment's own database schema
 - The storage layer is abstracted — implementations can be swapped without affecting task actions
-- No external database or cloud service is required for a single-user deployment
+- Store code uses only features common to Oracle and PostgreSQL. No Oracle-only features (VPD / `DBMS_RLS`, Oracle Text, PL/SQL) in core paths; an unavoidable one (e.g. in-database embeddings) sits behind a store interface with a documented PostgreSQL equivalent
+- Access control is enforced in the application, not by database-specific row security
 
-### REQ-DATA-002: Encrypted Cloud Sync (P2)
+### REQ-DATA-002: Cross-Device Access (P2)
 
-**Description**: The human can opt in to encrypted cloud sync for cross-device access.
+**Description**: The human reaches their one Zebra from any device. Zebra is a server, so devices
+are clients and no data is synced to them.
 
 **Acceptance Criteria**:
-- Cloud sync is disabled by default and requires explicit opt-in
-- All synced data is encrypted client-side before upload
-- The encryption key is derived from a user-provided passphrase (never stored remotely)
-- Sync supports: memory, knowledge, preferences, workflow history (not credentials)
-- The human can selectively sync specific domains or data categories
+- Every supported interface (web, phone, tablet, CLI, API) works against the same deployment over TLS
+- Each device has its own credential (passkey or API token) that the human can list, rename and revoke
+- Devices hold no data copies beyond normal browser caching
+- Separate deployments (e.g. a home Zebra and a work Zebra) share workflows only via the Zebra Commons private skill sync (REQ-NET); data is never copied between deployments
 
 ### REQ-DATA-003: Data Export (P1)
 
@@ -1114,9 +1121,12 @@ publicly.
 - Memory system metrics: entries by category, query latency, storage size
 - All metrics are accessible via the dashboard and CLI
 
-### REQ-NFR-005: Offline Capability (P2)
+### REQ-NFR-005: Offline Capability (Deferred)
 
 **Description**: The agent provides useful functionality without network connectivity.
+
+> **Deferred (2026-10-25)**: Zebra runs as a server on cloud Oracle, so offline use is not planned.
+> Revisit if a local-database deployment is added.
 
 **Acceptance Criteria**:
 - Local knowledge queries work offline
@@ -1142,7 +1152,7 @@ publicly.
 **Acceptance Criteria**:
 - All credentials are encrypted at rest
 - API communications are encrypted in transit
-- Local data storage supports encryption at rest
+- Data storage is encrypted at rest (database-native encryption such as Oracle TDE is sufficient)
 - No default passwords or keys ship with the system
 - The human can audit all external API calls made by the agent
 
@@ -1170,7 +1180,7 @@ publicly.
 | User Namespace | REQ-USR-001, REQ-USR-002 |
 | Non-Functional Foundations | REQ-NFR-001 through REQ-NFR-004, REQ-NFR-007 |
 
-**Independently Valuable**: A single user has a trusted, values-aligned AI partner that helps with code, scheduling, and research, with full local data control and observable behaviour.
+**Independently Valuable**: A single user has a trusted, values-aligned AI partner that helps with code, scheduling, and research, with full control of its own data and observable behaviour.
 
 ### Phase 2 — Expansion (P2 Requirements)
 
@@ -1187,13 +1197,13 @@ publicly.
 | Research Monitoring | REQ-DOM-RESEARCH-002 |
 | Finance Domain | REQ-DOM-FIN-001, REQ-DOM-FIN-002 |
 | Health Domain | REQ-DOM-HEALTH-001, REQ-DOM-HEALTH-002 |
-| Cloud Sync | REQ-DATA-002 |
+| Cross-Device Access | REQ-DATA-002 |
 | Auth Management | REQ-INT-002 |
 | Integration Health | REQ-INT-004 |
-| Offline & Scale | REQ-NFR-005, REQ-NFR-006 |
+| Scale | REQ-NFR-006 |
 | Zebra Commons (identity, device skill sync, offers, attestations, web of trust, judged import) | REQ-PRIN-007, REQ-NET-001 through REQ-NET-007, REQ-NET-009, REQ-NET-010 |
 
-**Independently Valuable**: The agent becomes a proactive partner across more life domains, syncs across devices, and manages itself more independently.
+**Independently Valuable**: The agent becomes a proactive partner across more life domains, is reachable from any device, and manages itself more independently.
 
 ### Phase 3 — Full Vision (P3 Requirements)
 
@@ -1202,11 +1212,12 @@ publicly.
 | Deliverable | Requirements |
 |---|---|
 | Family / Household Support | REQ-USR-003, REQ-USR-005 |
-| Team / Organisation Support | REQ-USR-004 |
 | Home Domain | REQ-DOM-HOME-001 |
 | Creative Domain | REQ-DOM-CREATIVE-001 |
 | Social Domain | REQ-DOM-SOCIAL-001 |
 | Reputation Market | REQ-NET-008 |
+
+**Deferred**: Team / Organisation support (REQ-USR-004) and offline capability (REQ-NFR-005).
 
 **Independently Valuable**: Zebra becomes a household-level AI partner that supports the full breadth of life activities, with extensibility for community-contributed domains.
 

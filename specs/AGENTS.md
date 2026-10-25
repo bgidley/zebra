@@ -8,7 +8,7 @@ This directory contains requirements and design specifications for Zebra.
 |------|---------|--------|
 | [zebra-as-is.md](zebra-as-is.md) | Snapshot of the current implementation: architectural layers, per-package capabilities, strengths, weaknesses, gaps vs. requirements | Current |
 | [zebra-to-be.md](zebra-to-be.md) | High-level technical design for the target system: subsystems, interfaces, migration path, risks | Draft |
-| [distributed-data-model.md](distributed-data-model.md) | #57–#61: multi-device and multi-user on one server + Oracle schema: devices are clients, members/roles, `private` vs `shared:<domain>` row scope enforced fail-closed in the stores, fair-share budget, conflict mediation as a workflow; supersedes the April 2026 local-first cr-sqlite/CRDT draft | Draft |
+| [distributed-data-model.md](distributed-data-model.md) | #57–#61: multi-device and multi-user on one server + Oracle schema (PostgreSQL-portable, no Oracle-only features, no teams for now): devices are clients, members/roles, `private` vs `shared:<domain>` row scope enforced fail-closed in the stores, fair-share budget, conflict mediation as a workflow; supersedes the April 2026 local-first cr-sqlite/CRDT draft | Draft |
 | [testing-strategy.md](testing-strategy.md) | Testing philosophy: E2E black-box through the web UX as primary layer, narrow units only for stable contracts | Draft |
 | [f2-kill-switch.md](f2-kill-switch.md) | F2: Kill switch — `SystemStateModel`, daemon halted flag, web endpoint, management command | Implemented |
 | [f3-observability.md](f3-observability.md) | F3: Observability — structlog JSON logging, Prometheus `/metrics`, `/health` endpoint, partial correlation ID | Implemented |
