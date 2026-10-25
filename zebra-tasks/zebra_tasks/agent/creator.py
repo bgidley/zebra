@@ -9,6 +9,7 @@ from zebra.forms import SCHEMA_REF
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.followup import with_previous_run
+from zebra_tasks.agent.leak_guard import LeakGuard, apply_guard
 from zebra_tasks.llm.base import LLMResponse, Message
 from zebra_tasks.llm.client import get_llm
 
@@ -84,6 +85,52 @@ async def generate_workflow(
         ]
     yaml_content, definition, problem, _ = await _generate_once(provider, messages, temperature)
     return yaml_content, definition, problem
+
+
+def goal_exposure(goal: str, goal_text: str) -> tuple[list[str], list[str]]:
+    """Split a writer's goal prompt into leak-guard (run_texts, goal_texts) (#237).
+
+    ``goal_text`` is ``with_previous_run(goal, ...)``: anything after the goal is the
+    previous run's context (comment, outputs, earlier goals), which is run content.
+    """
+    previous = goal_text[len(goal) :] if goal_text.startswith(goal) else goal_text
+    return ([previous] if previous.strip() else []), [goal]
+
+
+async def generate_guarded_workflow(
+    provider,
+    messages: list[Message],
+    temperature: float,
+    guard: LeakGuard | None,
+) -> tuple[str, ProcessDefinition | None, str | None, dict | None]:
+    """``generate_workflow``, then the leak guard (#237).
+
+    On a hit the LLM rewrites the workflow once with the specifics listed. Hits that
+    remain are kept and recorded, not rejected: this is the user's own goal, and a
+    goal must not fail over its own words.
+
+    Returns:
+        (yaml, definition, problem, leak_record) — ``leak_record`` is None without hits.
+    """
+    yaml_content, definition, problem = await generate_workflow(provider, messages, temperature)
+    if problem:
+        return yaml_content, definition, problem, None
+    rewritten: dict[str, ProcessDefinition] = {}
+
+    async def regenerate(instruction: str) -> tuple[str | None, str | None]:
+        retry = messages + [Message.assistant(yaml_content), Message.user(instruction)]
+        new_yaml, new_definition, new_problem = await generate_workflow(
+            provider, retry, temperature
+        )
+        if new_problem:
+            return None, new_problem
+        rewritten[new_yaml] = new_definition
+        return new_yaml, None
+
+    final_yaml, problem, record = await apply_guard(guard, yaml_content, regenerate, reject=False)
+    if problem:
+        return yaml_content, None, problem, record
+    return final_yaml, rewritten.get(final_yaml, definition), None, record
 
 
 def check_generated_workflow(response: LLMResponse, definition: ProcessDefinition) -> str | None:
@@ -382,6 +429,9 @@ Later tasks read the answers with `{{followups.output}}`.
     file_move, file_copy, file_delete, python_exec, notifications, http_request) when the goal
     explicitly asks for that effect. Put a human review task before any step
     that deletes, overwrites or sends something.
+11. Never copy names, companies, emails, numbers or text from the goal or a
+    previous run into the YAML. Write a reusable workflow: tasks receive the
+    specifics at runtime via {{goal}} or an earlier task's output.
 
 ## Output
 
@@ -438,23 +488,31 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
         if suggested_name:
             prompt += f"\nSuggested workflow name: {suggested_name}\n"
 
+        library_section = ""
         if existing_workflows:
-            prompt += "\nExisting workflows for reference (use similar patterns):\n"
+            library_section = "\nExisting workflows for reference (use similar patterns):\n"
             for w in existing_workflows[:5]:  # Limit to 5 examples
                 if isinstance(w, dict):
                     name = w.get("name", "Unknown")
                     desc = w.get("description", "")
-                    prompt += f"- {name}: {desc}\n"
+                    library_section += f"- {name}: {desc}\n"
                 else:
-                    prompt += f"- {w}\n"
+                    library_section += f"- {w}\n"
+        prompt += library_section
 
         try:
             actions_section = context.engine.actions.format_for_prompt(user_facing_only=True)
             system_prompt = self._PROMPT_HEADER + actions_section + self._PROMPT_FOOTER
             messages = [Message.system(system_prompt), Message.user(prompt)]
+            run_texts, goal_texts = goal_exposure(goal, goal_text)
+            guard = LeakGuard(
+                run_texts=run_texts,
+                goal_texts=goal_texts + [suggested_name or ""],
+                allow_text=system_prompt + library_section,
+            )
             # Structured output; creativity lives in the workflow's own tasks
-            yaml_content, definition, problem = await generate_workflow(
-                provider, messages, temperature=0.3
+            yaml_content, definition, problem, leak = await generate_guarded_workflow(
+                provider, messages, temperature=0.3, guard=guard
             )
             if problem:
                 return TaskResult.fail(f"Generated invalid workflow: {problem}")
@@ -486,6 +544,8 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
                 "name": definition.name,
                 "definition_id": definition.id,
             }
+            if leak:
+                output_data["leak_guard"] = leak
             context.set_process_property(output_key, output_data)
 
             # Set workflow_name for the execute step

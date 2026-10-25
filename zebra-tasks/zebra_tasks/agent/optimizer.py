@@ -16,6 +16,7 @@ from zebra_tasks.agent.creator import (
     TRUNCATED_FINISH_REASONS,
     check_generated_workflow,
 )
+from zebra_tasks.agent.leak_guard import LeakGuard, apply_guard
 from zebra_tasks.llm.base import LLMResponse, Message
 from zebra_tasks.llm.client import get_llm, model_for
 
@@ -77,7 +78,8 @@ class WorkflowOptimizerAction(TaskAction):
         - modified_workflows: Existing workflows that were modified
         - skipped: Changes that were skipped and why
         - failed_changes: Changes rejected because the generated YAML was
-          truncated or invalid (never saved, never listed in changes_made)
+          truncated or invalid, or still copied run specifics after one
+          rewrite (``leak_hits``, #237); never saved, never listed in changes_made
         - continuation_changes: Outcome of continuation-driven priorities
           (``source: continuation``), which are applied before other changes
 
@@ -243,6 +245,9 @@ routings:
 8. When the user continues an earlier run, {{prior_outputs.<output_key>}} is that run's
    value of <output_key> (empty otherwise): reuse it instead of redoing work. An input can
    bind to it with `from_prior`, e.g. `prior_brief: {type: string, from_prior: research_brief}`
+9. Never copy goals, names, companies, emails, numbers or outputs from runs, evaluation
+   findings or user comments into the YAML. They describe past runs; the workflow must
+   work for any similar goal and receive specifics at runtime via {{goal}} or inputs.
 
 Output ONLY valid YAML, no explanations or markdown code blocks."""
 
@@ -293,6 +298,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
 
             changes_count = 0
             apply_args = (provider, evaluation, existing_workflows, system_prompt, context)
+            run_texts = evaluation.get("run_exposure") or []
 
             for priority in continuation_priorities:
                 if changes_count >= max_changes:
@@ -321,11 +327,16 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                     )
                     continue
 
-                workflow_yaml, error = await self._create_new_workflow(
-                    provider, suggestion, existing_workflows, system_prompt, context
+                workflow_yaml, error, leak = await self._create_new_workflow(
+                    provider,
+                    suggestion,
+                    existing_workflows,
+                    system_prompt,
+                    context,
+                    guard=LeakGuard(run_texts=run_texts, allow_text=system_prompt),
                 )
                 if error:
-                    self._record_failure(results, "create", name, error)
+                    self._record_failure(results, "create", name, error, leak)
                     continue
 
                 results["new_workflows"].append(
@@ -337,13 +348,14 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                 )
                 if not dry_run and library_path:
                     self._save_workflow(library_path, name, workflow_yaml)
-                results["changes_made"].append(
-                    {
-                        "type": "create",
-                        "workflow": name,
-                        "description": suggestion.get("description", ""),
-                    }
-                )
+                change = {
+                    "type": "create",
+                    "workflow": name,
+                    "description": suggestion.get("description", ""),
+                }
+                if leak:
+                    change["leak_guard"] = leak
+                results["changes_made"].append(change)
                 changes_count += 1
 
             # Then the remaining improvements
@@ -409,7 +421,8 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
         existing_workflows: dict[str, str],
         system_prompt: str,
         context: ExecutionContext,
-    ) -> tuple[str | None, str | None]:
+        guard: LeakGuard | None = None,
+    ) -> tuple[str | None, str | None, dict | None]:
         """Create a new workflow based on a suggestion."""
         prompt = f"""Create a new workflow with the following requirements:
 
@@ -427,7 +440,7 @@ Rationale: {suggestion.get("rationale", "")}
         prompt += "\nCreate a complete, valid YAML workflow definition."
 
         return await self._generate_workflow_yaml(
-            provider, system_prompt, prompt, temperature=0.7, context=context
+            provider, system_prompt, prompt, temperature=0.7, context=context, guard=guard
         )
 
     async def _create_workflow_from_priority(
@@ -437,7 +450,8 @@ Rationale: {suggestion.get("rationale", "")}
         existing_workflows: dict[str, str],
         system_prompt: str,
         context: ExecutionContext,
-    ) -> tuple[str | None, str | None]:
+        guard: LeakGuard | None = None,
+    ) -> tuple[str | None, str | None, dict | None]:
         """Create a workflow based on an improvement priority."""
         prompt = f"""Create a new workflow to address this improvement priority:
 
@@ -455,7 +469,7 @@ Rationale: {priority.get("rationale", "")}
         prompt += "\nCreate a complete, valid YAML workflow definition."
 
         return await self._generate_workflow_yaml(
-            provider, system_prompt, prompt, temperature=0.7, context=context
+            provider, system_prompt, prompt, temperature=0.7, context=context, guard=guard
         )
 
     async def _modify_workflow(
@@ -467,7 +481,8 @@ Rationale: {priority.get("rationale", "")}
         evaluations: list[dict],
         system_prompt: str,
         context: ExecutionContext,
-    ) -> tuple[str | None, str | None]:
+        guard: LeakGuard | None = None,
+    ) -> tuple[str | None, str | None, dict | None]:
         """Modify an existing workflow based on evaluation."""
         # Find the specific evaluation for this workflow
         workflow_eval = None
@@ -502,7 +517,7 @@ Provide the complete modified YAML workflow. Keep what works, fix what doesn't.
 Maintain the same name and general purpose, but improve the implementation."""
 
         return await self._generate_workflow_yaml(
-            provider, system_prompt, prompt, temperature=0.5, context=context
+            provider, system_prompt, prompt, temperature=0.5, context=context, guard=guard
         )
 
     def _clean_yaml_response(self, content: str | None) -> str | None:
@@ -532,6 +547,34 @@ Maintain the same name and general purpose, but improve the implementation."""
         prompt: str,
         temperature: float,
         context: ExecutionContext,
+        guard: LeakGuard | None = None,
+    ) -> tuple[str | None, str | None, dict | None]:
+        """Ask the LLM for a workflow, validate it and run the leak guard (#237).
+
+        On a leak-guard hit the LLM rewrites the workflow once with the specifics
+        listed; if run specifics remain the change is rejected. Returns
+        ``(yaml, None, leak_record)`` on success or ``(None, reason, leak_record)``
+        when the output must not be saved (``leak_record`` is None without hits).
+        """
+        messages = [Message.system(system_prompt), Message.user(prompt)]
+        yaml_content, error = await self._complete_and_validate(
+            provider, messages, temperature, context
+        )
+        if error:
+            return None, error, None
+
+        async def regenerate(instruction: str) -> tuple[str | None, str | None]:
+            retry = messages + [Message.assistant(yaml_content), Message.user(instruction)]
+            return await self._complete_and_validate(provider, retry, temperature, context)
+
+        return await apply_guard(guard, yaml_content, regenerate, reject=True)
+
+    async def _complete_and_validate(
+        self,
+        provider,
+        messages: list[Message],
+        temperature: float,
+        context: ExecutionContext,
     ) -> tuple[str | None, str | None]:
         """Ask the LLM for a workflow and validate it.
 
@@ -539,7 +582,6 @@ Maintain the same name and general purpose, but improve the implementation."""
         truncated. Returns ``(yaml, None)`` on success or ``(None, reason)``
         when the output must not be saved.
         """
-        messages = [Message.system(system_prompt), Message.user(prompt)]
         max_tokens = GENERATED_WORKFLOW_MAX_TOKENS
         response = None
         for attempt in range(1 + TRUNCATION_RETRIES):
@@ -617,13 +659,19 @@ Maintain the same name and general purpose, but improve the implementation."""
         Returns True when a change was made (counts toward ``max_changes``).
         """
         ptype = priority.get("type")
+        run_texts = evaluation.get("run_exposure") or []
         if ptype == "create":
             name = priority.get("target", "new_workflow")
-            workflow_yaml, error = await self._create_workflow_from_priority(
-                provider, priority, existing_workflows, system_prompt, context
+            workflow_yaml, error, leak = await self._create_workflow_from_priority(
+                provider,
+                priority,
+                existing_workflows,
+                system_prompt,
+                context,
+                guard=LeakGuard(run_texts=run_texts, allow_text=system_prompt),
             )
             if error:
-                self._record_failure(results, "create", name, error)
+                self._record_failure(results, "create", name, error, leak)
                 self._track_continuation(results, priority, "failed", error)
                 return False
             results["new_workflows"].append(
@@ -631,7 +679,7 @@ Maintain the same name and general purpose, but improve the implementation."""
             )
             if not dry_run and library_path:
                 self._save_workflow(library_path, name, workflow_yaml)
-            self._record_change(results, priority, "create", name)
+            self._record_change(results, priority, "create", name, leak)
             return True
 
         if ptype in ("fix", "enhance"):
@@ -639,7 +687,7 @@ Maintain the same name and general purpose, but improve the implementation."""
             if target not in existing_workflows:
                 self._skip_priority(results, priority, "workflow not found in existing_workflows")
                 return False
-            modified_yaml, error = await self._modify_workflow(
+            modified_yaml, error, leak = await self._modify_workflow(
                 provider,
                 target,
                 existing_workflows[target],
@@ -647,9 +695,14 @@ Maintain the same name and general purpose, but improve the implementation."""
                 evaluation.get("workflow_evaluations", []),
                 system_prompt,
                 context,
+                guard=LeakGuard(
+                    run_texts=run_texts,
+                    parent_yaml=existing_workflows[target],
+                    allow_text=system_prompt,
+                ),
             )
             if error:
-                self._record_failure(results, "modify", target, error)
+                self._record_failure(results, "modify", target, error, leak)
                 self._track_continuation(results, priority, "failed", error)
                 return False
             # A modified workflow keeps its provenance: hand-written stays hand-written.
@@ -663,7 +716,7 @@ Maintain the same name and general purpose, but improve the implementation."""
                         "modified_yaml": modified_yaml,
                         "llm_defined": llm_defined,
                         "reason": priority.get("rationale", ""),
-                        "change": self._change(priority, "modify", target),
+                        "change": self._change(priority, "modify", target, leak),
                     }
                 )
                 self._track_continuation(results, priority, "pending_gym")
@@ -678,22 +731,31 @@ Maintain the same name and general purpose, but improve the implementation."""
             )
             if not dry_run and library_path:
                 self._save_workflow(library_path, target, modified_yaml, llm_defined=llm_defined)
-            self._record_change(results, priority, "modify", target)
+            self._record_change(results, priority, "modify", target, leak)
             return True
 
         return False
 
     def _record_change(
-        self, results: dict[str, Any], priority: dict[str, Any], change_type: str, name: str
+        self,
+        results: dict[str, Any],
+        priority: dict[str, Any],
+        change_type: str,
+        name: str,
+        leak: dict | None = None,
     ) -> None:
-        results["changes_made"].append(self._change(priority, change_type, name))
+        results["changes_made"].append(self._change(priority, change_type, name, leak))
         self._track_continuation(results, priority, "made")
 
     @staticmethod
-    def _change(priority: dict[str, Any], change_type: str, name: str) -> dict[str, Any]:
+    def _change(
+        priority: dict[str, Any], change_type: str, name: str, leak: dict | None = None
+    ) -> dict[str, Any]:
         change = {"type": change_type, "workflow": name, "action": priority.get("action", "")}
         if priority.get("source"):
             change["source"] = priority["source"]
+        if leak:
+            change["leak_guard"] = leak
         return change
 
     def _skip_priority(self, results: dict[str, Any], priority: dict[str, Any], reason: str):
@@ -720,10 +782,19 @@ Maintain the same name and general purpose, but improve the implementation."""
         )
 
     @staticmethod
-    def _record_failure(results: dict[str, Any], change_type: str, name: str, reason: str):
+    def _record_failure(
+        results: dict[str, Any],
+        change_type: str,
+        name: str,
+        reason: str,
+        leak: dict | None = None,
+    ):
         """Record a rejected change so it is reported but never claimed as made."""
         logger.warning("workflow_optimizer rejected %s of %r: %s", change_type, name, reason)
-        results["failed_changes"].append({"type": change_type, "workflow": name, "reason": reason})
+        failure = {"type": change_type, "workflow": name, "reason": reason}
+        if leak:
+            failure["leak_hits"] = leak["hits"]
+        results["failed_changes"].append(failure)
 
     def _save_workflow(
         self, library_path: str, name: str, yaml_content: str, llm_defined: bool = True

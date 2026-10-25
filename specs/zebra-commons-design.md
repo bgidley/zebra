@@ -399,6 +399,17 @@ was shown.**
 5. Whatever passes still marks the writer's sphere in `tainted_by`, because paraphrase can slip
    through (see Risks).
 
+**Shipped (#237)**, with these refinements (details in `specs/zebra-as-is.md`, Dream cycle):
+- The exposure set is the raw run texts, not the evaluator's findings: the evaluator records what it
+  was shown (`run_exposure`), so implementing a suggestion verbatim is not a hit, while a specific
+  the findings copied from a run still is.
+- The writer's own goal counts only 8-token copies as phrases (a workflow describes its purpose);
+  all-caps acronyms (SLA, API) are not names.
+- The second hit rejects in the dream-cycle optimizer only. The creator and variant creator keep
+  the rewrite and record the hits (`leak_guard.status: kept`), so a user's goal never fails over its
+  own words; that data already lives in the sphere's runs. S3b's scans must treat `kept` as tainted.
+- Step 5 (`tainted_by`) waits for the `commons` block (S2, #229).
+
 This works today, before any Commons code, and keeps every library generic. Customer and personal
 details stay in run data, where they belong.
 

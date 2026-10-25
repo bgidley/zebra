@@ -143,6 +143,30 @@ def test_page_renders_cycles_and_schedule(authenticated_client, completed_setup)
     assert "2026-10-10 03:00" in html
 
 
+def test_page_shows_leak_guard_rejection(authenticated_client, completed_setup):
+    """A change the leak guard rejected lists what it copied from runs (#237)."""
+    props = json.loads(json.dumps(FULL_PROPS))
+    props["optimization_results"]["failed_changes"] = [
+        {
+            "type": "modify",
+            "workflow": "Project Update",
+            "reason": "Leak guard: workflow still copies run specifics after regenerating",
+            "leak_hits": [
+                {"kind": "name", "text": "Acme", "where": "tasks.check.name", "source": "run"},
+                {"kind": "email", "text": "jane@acme.com", "where": "x", "source": "run"},
+            ],
+        }
+    ]
+    _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v5")
+    _process("p1", "dream-v5", "complete", props, T0)
+
+    html = authenticated_client.get("/dreams/").content.decode()
+
+    assert "Leak guard: workflow still copies run specifics" in html
+    assert "Copied from runs:" in html
+    assert "Acme" in html and "jane@acme.com" in html
+
+
 @pytest.mark.django_db
 def test_page_empty_state(authenticated_client, completed_setup):
     response = authenticated_client.get("/dreams/")
