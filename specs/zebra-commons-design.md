@@ -4,6 +4,10 @@
 **Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-010
 **Status**: Draft for review (concept; nothing implemented)
 
+> **Terminology (owner, 2026-10-25)**: in this design a **device** (e.g. home, work) is a separate
+> Zebra **deployment** with its own database, not a phone or browser. Phones and browsers are
+> clients of one deployment (see [distributed-data-model.md](distributed-data-model.md)).
+
 ---
 
 ## 1. Goal & scope
