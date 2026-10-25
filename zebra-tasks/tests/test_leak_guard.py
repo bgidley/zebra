@@ -219,6 +219,15 @@ class TestApplyGuard:
         kept = await apply_guard(guard, COPYING, regenerate, reject=False)
         assert kept[0] == COPYING and kept[2]["status"] == "kept"
 
+    async def test_raising_rewrite_falls_back_to_the_first_hits(self):
+        """An LLM error in the guard-only rewrite never loses a valid workflow (#244)."""
+        regenerate = AsyncMock(side_effect=TimeoutError("LLM timed out"))
+        guard = LeakGuard(run_texts=[RUN_TEXT])
+        kept = await apply_guard(guard, COPYING, regenerate, reject=False)
+        assert kept[:2] == (COPYING, None) and kept[2]["status"] == "kept"
+        rejected = await apply_guard(guard, COPYING, regenerate, reject=True)
+        assert rejected[0] is None and rejected[2]["status"] == "rejected"
+
     async def test_guard_error_fails_closed_when_reject(self):
         guard = MagicMock()
         guard.check = MagicMock(side_effect=RuntimeError("boom"))
@@ -377,6 +386,37 @@ class TestOptimizer:
         assert list(tmp_path.iterdir()) == []
         assert result.output["failed_changes"][0]["type"] == "create"
 
+    async def test_suggested_new_workflow_is_guarded(self, context, tmp_path):
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        evaluation = _evaluation()
+        evaluation["improvement_priorities"] = []
+        evaluation["new_workflow_suggestions"] = [{"name": "SLA Checker", "description": "x"}]
+        _provider(ACME_JANE, ACME_JANE)
+        result = await WorkflowOptimizerAction().run(_optimizer_task(tmp_path, evaluation), context)
+        assert list(tmp_path.iterdir()) == []
+        assert result.output["new_workflows"] == []
+        (failed,) = result.output["failed_changes"]
+        assert failed["type"] == "create" and failed["leak_hits"]
+
+    async def test_crashing_check_rejects_through_the_optimizer(
+        self, context, tmp_path, monkeypatch
+    ):
+        from zebra_tasks.agent.leak_guard import LeakGuard
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        def boom(self, yaml_text):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(LeakGuard, "check", boom)
+        _provider(GENERALISED)
+        result = await WorkflowOptimizerAction().run(
+            _optimizer_task(tmp_path, _evaluation(), gym_gate=True), context
+        )
+        assert list(tmp_path.iterdir()) == []
+        assert result.output["pending_gym"] == []
+        assert "check failed" in result.output["failed_changes"][0]["reason"]
+
     async def test_clean_change_uses_one_call(self, context, tmp_path):
         from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
 
@@ -467,6 +507,26 @@ class TestCreator:
         hit = result.output["leak_guard"]["hits"][0]
         assert (hit["text"], hit["source"]) == ("Initech", RUN)
 
+    async def test_failing_rewrite_keeps_the_first_workflow(self, context):
+        """An LLM error in the guard's rewrite never fails the user's goal (#244)."""
+        from zebra_tasks.agent.creator import WorkflowCreatorAction
+
+        library = MagicMock()
+        context.extras["__workflow_library__"] = library
+        first = _workflow("Write a cover letter for Globex Industries: {{goal}}")
+        provider = MagicMock()
+        provider.complete = AsyncMock(
+            side_effect=[_response(first), RuntimeError("provider unavailable")]
+        )
+        set_llm_factory(lambda model: provider)
+
+        result = await WorkflowCreatorAction().run(
+            self._task("Write a cover letter for Globex Industries"), context
+        )
+        assert result.success
+        assert library.add_workflow.call_args.args[0] == first.strip()
+        assert result.output["leak_guard"]["status"] == "kept"
+
     def test_prompt_states_the_rule(self):
         from zebra_tasks.agent.creator import WorkflowCreatorAction
 
@@ -512,6 +572,21 @@ class TestVariantCreator:
         assert provider.complete.await_count == 2
         assert "Globex" not in library.add_workflow.call_args.args[0]
         assert result.output["leak_guard"]["status"] == "generalised"
+
+    async def test_remaining_goal_specifics_are_kept_not_failed(self, context):
+        from zebra_tasks.agent.variant_creator import WorkflowVariantCreatorAction
+
+        library = MagicMock()
+        library.get_workflow_yaml = MagicMock(return_value=ORIGINAL)
+        context.extras["__workflow_library__"] = library
+        copy = _workflow("Update Globex's plan: {{goal}}", name="Globex Update")
+        _provider(copy, copy)
+        result = await WorkflowVariantCreatorAction().run(
+            self._task("Update the plan for Globex"), context
+        )
+        assert result.success
+        library.add_workflow.assert_called_once()
+        assert result.output["leak_guard"]["status"] == "kept"
 
     def test_prompt_states_the_rule(self):
         from zebra_tasks.agent.variant_creator import WorkflowVariantCreatorAction
