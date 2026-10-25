@@ -27,9 +27,9 @@ to run, so it is built on an existing free protocol: Nostr.
 
 **Out of scope**
 - Syncing **data** between devices: memories, knowledge, values, runs and process state. Each device
-  keeps its own. Household and device data sync stays with #58 and
-  [distributed-data-model.md](distributed-data-model.md). It could reuse this transport later, but
-  that is not designed here.
+  keeps its own. Multi-user and multi-device data live on one server (one Oracle schema), see
+  [distributed-data-model.md](distributed-data-model.md). Replicating data between two Zebra
+  deployments is deferred there; it could reuse this transport later, but is not designed.
 - Sharing memories, knowledge, goals, run outputs or anything about a human
 - Chat or free-form messaging between Zebras
 - Money: points have no cash value, and Lightning "zaps" are not used

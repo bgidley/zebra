@@ -1,302 +1,237 @@
-# Distributed Data Model for Multi-User Zebra
+# Multi-Device and Multi-User Data Model (server + Oracle)
 
-**Status**: Draft
-**Date**: 2026-04-16
-**Relates to**: REQ-DATA-001, REQ-DATA-002, REQ-PRIN-005, REQ-USR-003, REQ-USR-004
-
----
-
-## 1. Problem Statement
-
-Zebra's core architecture is local-first: all data lives on the user's device, the system works offline, and no central server is required (REQ-DATA-001, REQ-PRIN-005). Phase 2 adds encrypted cloud sync for cross-device access for a single user (REQ-DATA-002).
-
-Phase 3 introduces multi-user scenarios that fundamentally require shared mutable state:
-
-- **Family/Household (REQ-USR-003)**: Shared domains (Home, Finance) with collaborative goal-setting, private domains visible only to their owner
-- **Team/Organisation (REQ-USR-004)**: RBAC restricting domain visibility, team goals assigned across humans, organisational policy overrides
-
-The traditional solution — a centralised database with server-enforced RBAC — directly violates local-first principles. We need a model that supports shared state, access control, and conflict resolution without requiring a central authority.
+**Status**: Draft (revised 2026-10-25; supersedes the 2026-04-16 local-first CRDT draft)
+**Issues**: #57, #58, #59, #60, #61 (Strand B of `phase::11-distributed`)
+**Relates to**: REQ-USR-001..005, REQ-DATA-001/002, REQ-PRIN-005, REQ-NFR-005, REQ-NFR-007
+**Decision (owner, 2026-10)**: Zebra stays a server backed by Oracle. SQLite is not a target.
 
 ---
 
-## 2. Design Constraints
+## 1. Goal & scope
 
-From the existing requirements:
+Zebra is a server: one deployment (today a single OCI host running `zebra-web` and one
+`zebra-daemon` under rootless Podman, see [podman-single-host-design.md](podman-single-host-design.md))
+backed by one Oracle ADB schema through the Django ORM stores. This doc says what
+"multi-device" and "multi-user" mean on that model.
 
-1. **Local-first**: Each device is the primary store for its user's data. No mandatory server.
-2. **Offline-capable**: Users can work without connectivity. Sync catches up when online.
-3. **Encrypted**: Data in transit and at rest must be encryptable with user-controlled keys.
-4. **Privacy boundaries**: Private domains must be invisible to other users, not just read-protected.
-5. **Eventually consistent**: Multi-user shared state need not be strongly consistent — causal consistency is sufficient for Zebra's use cases (goal tracking, shared calendars, household tasks).
-6. **No global consensus required**: We don't need total ordering of all events across all users. Causal ordering within shared domains is enough.
+- **One Zebra = one deployment = one Oracle schema = one household (or small team).**
+  The server is the only source of truth. There is no per-device database and nothing to merge.
+- **Multi-device** (#57): a device is a *client* (browser, phone, tablet, CLI, API caller) of that
+  one Zebra. Each device has its own passkey or API token, which can be listed and revoked.
+- **Multi-user** (#59, #61): several Django users on the same schema. Each record has an owner
+  and a scope (`private` or a shared domain). Scoping is enforced in the store layer and fails closed.
+- **Conflict mediation** (#60) is a workflow problem: Zebra notices that two people want
+  incompatible things and runs a mediation workflow with human tasks for each party. Concurrent
+  edits to one row are handled by optimistic concurrency, not CRDTs.
 
----
+**Out of scope / deferred**
 
-## 3. Architectural Approach: CRDTs + Signed Capabilities
+- True local-first or offline operation, and any per-device replica (cr-sqlite, CRDTs).
+  An offline read-only cache is a client concern and may come later as a PWA.
+- Replicating *data* between two Zebra deployments (e.g. a home Zebra and a work Zebra).
+  *Workflows* move between deployments only through Commons S3b (#236). Data stays put.
+- Several households in one deployment (multi-tenancy). Another household runs its own Zebra.
+- Client-side end-to-end encryption. The server must read data to act on it.
+- Multi-host or HA Zebra. There is one daemon per deployment (kill switch in `SystemStateModel`).
 
-### 3.1 Why Not...
+### What the April 2026 draft said that is now superseded
 
-| Approach | Why not |
-|----------|---------|
-| **Centralised DB + server RBAC** | Violates local-first. Requires always-on server. Single point of failure. |
-| **Blockchain / full DLT** | Overkill. Global consensus is unnecessary — we only need agreement within shared domains. Expensive compute for what's a small-group collaboration problem. |
-| **Matrix Protocol** | Designed for chat, not structured data replication. Heavy homeserver dependency. Would need significant adaptation. However, worth revisiting as a transport layer. |
-| **Simple file sync (Dropbox-style)** | No conflict resolution. Last-write-wins destroys concurrent edits. No access control model. |
+| April draft | Now |
+|---|---|
+| Local SQLite on every device, cr-sqlite CRDT tables, vector clocks, merge semantics per type (§4) | Dropped. Oracle is the single store, and writes are serialised by the DB. |
+| Signed capability tokens, keypair trust chain and revocation lists for *data access* (§5) | Dropped. Access control is server-side: Django users, roles and domain membership. Keys stay only where Commons needs them (#228). |
+| LAN mDNS peer sync, WebSocket peer protocol, encrypted relay for data changesets (§6) | Dropped. Devices talk HTTPS to the one server. No data relay (#58 closes, see §7). |
+| Phase 2 cloud sync = Phase 3 multi-user transport (§8) | Phase 2 "cross-device" is already met by the web UI. Multi-user is a schema/scoping change. |
+| "Centralised DB + server RBAC" rejected (§3.1) | Adopted. It matches how Zebra is deployed. |
 
-### 3.2 Core Architecture
-
-```
-+------------------+        +------------------+
-|   Device A       |        |   Device B       |
-|                  |        |                  |
-|  Local SQLite    |        |  Local SQLite    |
-|  (CRDT-aware)    |  sync  |  (CRDT-aware)    |
-|                  |<------>|                  |
-|  Capability      |        |  Capability      |
-|  Keyring         |        |  Keyring         |
-+------------------+        +------------------+
-         |                           |
-         |    (optional relay)       |
-         +---------> Relay <---------+
-                   Server
-```
-
-Three layers:
-
-1. **CRDT Storage Layer** — conflict-free data replication
-2. **Capability Layer** — cryptographic access control
-3. **Sync Transport Layer** — how changes move between devices
+Two ideas carry over: private data is *invisible* to other users, not just read-protected, and the
+data classes split into private and shared.
 
 ---
 
-## 4. Layer 1: CRDT Storage
+## 2. What exists today (baseline)
 
-### 4.1 What Are CRDTs
-
-Conflict-free Replicated Data Types are data structures where concurrent edits by different users always merge deterministically without coordination. There's no "conflict" — the merge function is mathematically guaranteed to converge.
-
-### 4.2 Choice: cr-sqlite
-
-[cr-sqlite](https://vlcn.io/docs/cr-sqlite) extends SQLite with CRDT semantics. Each table can be marked as a "CRDT table" where:
-
-- Rows have vector clocks tracking causal history
-- Concurrent inserts of the same primary key merge (last-writer-wins per column, or custom merge)
-- Deletes are causal (a delete only removes versions it has "seen")
-- The merge is performed at the SQLite level — the application sees normal SQL
-
-This is ideal for Zebra because:
-- We already use SQLite as the local store
-- Existing queries and models work unchanged
-- Sync is "push your changes, pull theirs, let cr-sqlite merge"
-- Proven technology with active development
-
-### 4.3 CRDT Table Design
-
-Not all data needs to be shared. Tables are categorised:
-
-| Category | Shared? | CRDT? | Examples |
-|----------|---------|-------|----------|
-| **Private user data** | Never | No | Values profile, health data, private knowledge |
-| **User-scoped shared** | Per-domain opt-in | Yes | Shared goals, household tasks, team projects |
-| **Domain config** | Within domain members | Yes | Shared domain settings, trust policies |
-| **Sync metadata** | Between syncing peers | Yes | Vector clocks, peer identities |
-
-### 4.4 Conflict Semantics
-
-For Zebra's data types:
-
-| Data type | Merge strategy | Rationale |
-|-----------|---------------|-----------|
-| **Goal/task state** | Last-writer-wins per field | State transitions are monotonic (CREATED→RUNNING→COMPLETE) — LWW is safe |
-| **Knowledge entries** | Last-writer-wins with tombstone | Owner's edits win; deletions propagate |
-| **Process properties** | Last-writer-wins per key | Each task writes distinct keys — true conflicts are rare |
-| **Episodic memory** | Append-only set | Observations are additive — no conflicts |
-| **RBAC grants** | Add-wins set | Adding a permission should not be undone by a concurrent removal race |
-| **Budget/cost counters** | PN-Counter (positive-negative counter) | Allows concurrent increment/decrement and converges to correct total |
+- **Identity**: Django users with passkeys (F4/F5). Single-user identity (display name, identity
+  UUID) lives on the singleton `SystemStateModel`. Cloudflare Access admits only the owner.
+- **Namespacing (F6)**: `user_id` on processes, tasks, runs, task executions, workflow/conceptual
+  memory and postmortems. Knowledge, values profile, trust, ethics audit are already keyed per user.
+  `CurrentUserMiddleware` puts the request user in a `ContextVar`. Django stores filter by it
+  **only when it is set**, so code with no request (daemon, routines, management commands) sees
+  every user's rows (*fail-open*).
+- **Goal submitter (#151)**: every goal entry point stamps `__user_id__` and identity keys on the
+  process, and child workflows copy them. Routine goals run as the owner (`resolve_routine_user`).
+- **Not per user**: the LLM spend ledger (`zebra_llm_spend`), the workflow library (a shared volume),
+  the kill switch and the daily budget.
+- **Credentials (F7)**: `CredentialStore` keyed by `(user_id, integration, type)`. In the
+  container it falls back to `FileCredentialStore`. Deploy-time secrets come from `prod.env`.
+- **Loose end**: any signed-in user can register a passkey under a *new* username, which creates
+  a new Django user. There is no invite or role model.
 
 ---
 
-## 5. Layer 2: Capability-Based Access Control
+## 3. Data model
 
-### 5.1 Why Not Server RBAC
+### 3.1 Members and roles
 
-Traditional RBAC has a central authority that checks "is user X allowed to do Y". In a local-first system there is no central authority. We need access control that:
+`HouseholdMember` (one row per Django user; replaces the identity fields on `SystemStateModel`):
+`user_id` (PK, FK `auth_user`), `display_name`, `identity_id` (UUID), `role`
+(`owner` | `member` | `guest`), `joined_at`, `active`.
 
-- Works offline (the device can evaluate permissions locally)
-- Is decentralised (no single point of authority)
-- Is cryptographically verifiable (you can't forge a permission)
+- The first user is `owner`. Only an owner can invite members, change roles or deactivate members.
+- `guest` sees only domains it is explicitly given and cannot raise trust levels.
+- Teams (#61) reuse this table and add roles as named sets of domain grants (§3.3). No new hierarchy.
 
-### 5.2 Signed Capability Tokens
+### 3.2 Domains and scope
 
-A **capability** is a signed token granting a specific permission:
+The shared/private unit is the **trust domain** (the existing eight-domain registry in
+`zebra_agent/storage/trust.py`, e.g. `finance`, `home`, `health`). Scoping reuses that list.
 
-```
-Capability {
-    id: uuid
-    issuer: public_key          # Who granted this
-    subject: public_key         # Who receives this
-    scope: {
-        domain: "finance"       # Which domain
-        access: "read_write"    # What level
-        resources: ["goals", "budgets"]  # Which data types
-    }
-    constraints: {
-        expires: "2027-01-01"   # Optional expiry
-        delegatable: false      # Can subject re-grant?
-    }
-    signature: ed25519_sig      # Issuer's signature
-}
-```
+`DomainShareModel`: `domain`, `user_id`, `access` (`read` | `write`). A domain with no rows is
+private to each user. A user who is a member of a shared domain sees all rows scoped to it.
 
-### 5.3 Capability Chain
+Every user-data row gets two columns:
 
-- **Household creator** generates a root keypair. This is the trust anchor.
-- Creator issues capabilities to family members' public keys.
-- Each device stores its user's private key in the OS keychain.
-- When syncing, each change carries the capability chain proving the author is authorised.
-- Devices validate the chain locally — no server needed.
+| Column | Meaning |
+|---|---|
+| `user_id` | Owner (author/submitter). Already present on most tables. `NULL` only for system rows. |
+| `scope` | `private` (default) or `shared:<domain>`. |
 
-For **team/org** (REQ-USR-004):
-- The org admin's key is the root.
-- Org policies are signed documents: "finance domain is always SUPERVISED" — signed by the admin key.
-- Devices enforce policies locally by checking the signed policy document.
+Visibility rule, the only one: a viewer sees a row iff `row.user_id == viewer` **or**
+(`row.scope == shared:D` and viewer has a `DomainShareModel` grant on `D`). System rows
+(`user_id IS NULL`, e.g. built-in workflow memories) are visible to all members.
 
-### 5.4 Revocation
+### 3.3 Scoping by data class
 
-Revocation in decentralised systems is hard (the "negative credential" problem). Options:
+| Data | Owner | Default scope | Notes |
+|---|---|---|---|
+| Goals, processes, tasks, runs, task executions | submitter | `private`; `shared:D` when the goal is filed in a shared domain | Children inherit the root's owner and scope. |
+| Episodic / conceptual memory, postmortems | goal owner | follows the run | `clear_conceptual_memories` must scope by user (F6 latent bug). |
+| Personal knowledge | user | `private` | A user may move an entry into a shared domain. Agent-learned entries (F152) start private. |
+| Values profile, values tags | user | **always private** | Never shareable. Each person's ethics context is their own (REQ-USR-003). |
+| Trust levels, suggestions, freeing | user | per (user, domain) | Shared-domain actions use the **most restrictive** level among the domain's write members, raised to any org policy floor (#61). |
+| Ethics audit | goal owner | follows the run | |
+| Credentials | user, or household (`user_id NULL`) | per user | A household credential (e.g. the shared calendar) is owner-managed and usable only by goals in its domain. Needs a durable backend (§6, Q4). |
+| Workflow library | the Zebra | shared by all | Skills belong to the Zebra, not a person. The leak guard (#237) keeps run content out of them. |
+| LLM spend ledger | goal owner | — | Add `user_id`, taken from the root process's `__user_id__`. |
+| Kill switch, budget settings, routines | the Zebra | — | Owner-managed. Halting is open to every member (Q5). |
 
-1. **Short-lived capabilities with renewal**: Capabilities expire every N days. Non-renewal = revocation. Requires periodic online check-in.
-2. **Revocation list**: The issuer publishes a signed revocation list. Devices fetch it when online and cache locally.
-3. **Epoch-based rotation**: The household rotates the shared domain encryption key periodically. Revoked users don't get the new key.
+### 3.4 Migration
 
-**Recommendation**: Combine (1) and (2). Short-lived capabilities (e.g., 30-day expiry) with a lightweight revocation list for immediate revocation. This balances offline capability with timely access removal.
-
-### 5.5 Privacy Boundaries
-
-Private domains are not just access-controlled — they're **invisible**:
-
-- Private domain data is encrypted with the user's personal key
-- The CRDT sync layer never replicates private domain data
-- There's no "encrypted blob you can see but can't read" — the data simply isn't in the shared sync scope
-- The sync scope is configured per-domain: `sync: none | private | shared`
+- Add `scope` (default `private`) to the tables above, `user_id` to `zebra_llm_spend` and the
+  remaining stores. Backfill existing `NULL` `user_id` to the owner (as migration 0011 did).
+- Move `SystemStateModel.user_display_name/user_identity_id` into a `HouseholdMember` row for the
+  owner, and keep reading the old fields for one release.
+- Oracle: plain columns and composite indexes `(user_id, scope)`. No VPD in v1 (§6, Q2).
 
 ---
 
-## 6. Layer 3: Sync Transport
+## 4. API / interface changes
 
-### 6.1 Peer-to-Peer (LAN)
-
-For household devices on the same network:
-- mDNS discovery of Zebra peers
-- Direct WebSocket connection for low-latency sync
-- No external server needed
-
-### 6.2 Relay Server (WAN)
-
-For devices not on the same network:
-- A lightweight relay server that stores-and-forwards encrypted CRDT change packets
-- The relay sees only encrypted blobs — it cannot read the data
-- Can be self-hosted or provided as a service
-- This extends the existing REQ-DATA-002 cloud sync infrastructure
-
-### 6.3 Sync Protocol
-
-```
-1. Device connects to peer (or relay)
-2. Exchange vector clocks to determine what each side is missing
-3. Push missing changesets (each changeset is signed by author's capability)
-4. Receiver validates capability chain
-5. If valid: apply changes via cr-sqlite merge
-6. If invalid: reject and log (potential security event)
-```
+- **Store layer**: one helper, `visible_to(qs, viewer)`, in `zebra-agent-web`, applied by every
+  Django store read. Abstract store ABCs take an explicit `viewer: int | None` where they don't
+  already take `user_id` (closes the "Partial" REQ-USR-002 gap in the as-is).
+- **Fail closed**: a read with no viewer and no explicit `system=True` raises. Daemon code, routines
+  and task actions pass the process's `__user_id__` as the viewer. The ContextVar stays as the
+  request default.
+- **Members**: `/settings/members/` (owner): invite (one-time link, the invitee registers a passkey),
+  role, deactivate. `begin_register` only accepts a new username with a valid invite.
+  Cloudflare Access must also admit the member's email (deploy config, not code).
+- **Devices** (#57): `/settings/devices/` lists the user's passkeys and API tokens (label, created,
+  last used) with rename and revoke. Per-device API tokens serve the CLI and other API clients.
+- **Goals**: the goal form and `POST /api/goals/` take an optional `domain`. A domain the user
+  shares sets `scope = shared:<domain>`.
+- **Assigned human tasks**: a task definition may set `properties.assignee` (a user id, a template
+  such as `{{__user_id__}}`, or `members:<domain>`). Human-task lists show a user only the tasks
+  assigned to them, plus unassigned tasks on processes they can see. This is the primitive #60 needs.
+- **Optimistic concurrency** on shared editable rows (knowledge, shared settings): a `version`
+  column, and an update with a stale version returns `409` with the current row. No merging.
 
 ---
 
-## 7. How This Maps to Requirements
+## 5. Control flow
 
-### REQ-USR-003 (Family/Household)
+### 5.1 One daemon, many humans
 
-- Each family member has a keypair and a local Zebra instance
-- Household creator issues capabilities for shared domains
-- Shared domains (Home, Finance) sync via CRDTs
-- Private domains (Health, Creative) stay local — not even in the sync scope
-- The agent distinguishes context via the user's keypair identity
+The single daemon and the single **daily budget** (the Zebra's wallet) stay. Additions:
 
-### REQ-USR-004 (Team/Organisation)
+- **Attribution**: each ledger row carries the goal owner, so the dashboard shows spend per member.
+- **Fair share**: `GoalScheduler.score_process` subtracts a term for the submitter's spend today
+  and goals already started today, so one member's queue can't starve another's. Priority and age
+  still apply. With one user this is a no-op.
+- **Optional per-member cap**: `MEMBER_DAILY_BUDGET_USD` (default unset = only the global cap).
+  A goal over its owner's cap waits in the queue with a reason, as the global cap does now.
+- Goals parked on human tasks are handed off as now (#141), so a slow member doesn't block the queue.
 
-- Org admin keypair is the trust root
-- RBAC is expressed as capability grants: role → set of capabilities
-- Org policies are signed documents enforced locally
-- "Finance always supervised" = a signed policy that overrides per-user trust level
-- Team goals sync across members with write access to the relevant domain
+### 5.2 Conflict mediation (#60)
 
-### REQ-DATA-001 (Local-First)
+Mediation is a workflow, `household_mediation.yaml`, not a storage feature:
 
-- Fully preserved. The local SQLite database remains the primary store.
-- CRDT extensions add sync capability but don't require it.
-- A device with no peers functions identically to today.
+1. **Detect**: when a goal is filed in a shared domain, a low-tier `detect_conflict` step compares
+   it with other members' active goals and shared-domain knowledge in that domain. It routes
+   `no_conflict` (carry on) or `conflict`.
+2. **Hold**: the contested goal waits (REQ-USR-005 "patient for consensus"). Nothing irreversible
+   runs on a contested decision.
+3. **Propose**: Zebra writes a compromise with its reasoning and the trade-offs, using each
+   party's values profile only to reason privately. It shows each party only what that party may see.
+4. **Consult**: one human task per party (`assignee` = that member). Each can agree, object
+   with a reason or counter-propose. The task loops until all agree or a deadlock rule fires.
+5. **Deadlock**: an ethics gate proposes a safe default (energy saving, least waste, safer option)
+   that harms no party. It is still shown to all parties before it applies.
+6. **Record**: the outcome goes to episodic memory scoped `shared:<domain>`, and later
+   detections use it.
 
-### REQ-DATA-002 (Cloud Sync)
-
-- The relay server is the Phase 2 cloud sync mechanism.
-- Phase 3 extends it from single-user multi-device to multi-user multi-device.
-- Same encryption, same client-side key management.
-
----
-
-## 8. Migration Path
-
-### Phase 1 (No change)
-- Local SQLite, single user, no sync
-
-### Phase 2 (Cloud Sync)
-- Add cr-sqlite extension to SQLite
-- Add CRDT metadata columns to synced tables
-- Implement relay server for encrypted changeset forwarding
-- Single user, but the sync infrastructure is reusable for Phase 3
-
-### Phase 3 (Multi-User)
-- Add keypair generation and capability token model
-- Add capability validation to the sync protocol
-- Add domain-level sync scope configuration (none/private/shared)
-- Add org policy document model
-- LAN peer discovery (mDNS)
-
-The key insight: **Phase 2 cloud sync and Phase 3 multi-user use the same CRDT sync mechanism**. Phase 3 adds the capability layer on top, not a different architecture.
+No member outranks another, including the owner. Owner powers are admin powers, not a casting vote.
 
 ---
 
-## 9. Technology Candidates
+## 6. Configuration
 
-| Component | Candidates | Notes |
-|-----------|-----------|-------|
-| CRDT storage | [cr-sqlite](https://vlcn.io/docs/cr-sqlite), [Electric SQL](https://electric-sql.com/) | cr-sqlite is lighter, Electric SQL has more features |
-| Capability signing | Ed25519 via [PyNaCl](https://pynacl.readthedocs.io/) | Fast, small signatures, well-supported |
-| Key storage | OS keychain (via [keyring](https://pypi.org/project/keyring/)) | Platform-native secure storage |
-| LAN discovery | [zeroconf](https://pypi.org/project/zeroconf/) (Python mDNS) | Mature, cross-platform |
-| Relay server | Lightweight WebSocket relay (custom, minimal) | Stores-and-forwards encrypted blobs only |
-| Encryption | XChaCha20-Poly1305 (via PyNaCl) | Fast authenticated encryption |
+| Setting | Env var | Default | Purpose |
+|---|---|---|---|
+| `MEMBER_DAILY_BUDGET_USD` | `ZEBRA_MEMBER_DAILY_BUDGET_USD` | unset | Optional per-member daily cap under the global budget |
+| `FAIR_SHARE_WEIGHT` | `ZEBRA_FAIR_SHARE_WEIGHT` | 1.0 | Weight of the submitter's spend/starts in goal scoring; 0 disables |
+| `MEMBER_INVITE_TTL_HOURS` | `ZEBRA_MEMBER_INVITE_TTL_HOURS` | 48 | Lifetime of a member invite link |
 
----
-
-## 10. Open Questions
-
-1. **Capability UX**: How do household members exchange public keys and capabilities? QR code? Shared secret? This needs to be simple enough for non-technical family members.
-
-2. **Agent identity**: In multi-user, is there one agent instance per user, or one shared agent? The requirements suggest separate relationship contexts (REQ-USR-004), which implies per-user agent instances that share data, not a single shared agent.
-
-3. **Conflict notification**: When CRDTs auto-merge concurrent edits, should the agent notify users? "Your partner also edited the grocery budget — here's what merged."
-
-4. **cr-sqlite maturity**: cr-sqlite is relatively new. We should evaluate its stability and whether we need a fallback strategy (e.g., application-level CRDTs over plain SQLite).
-
-5. **Org policy enforcement**: With local enforcement of signed policies, a malicious device could ignore the policy. Is this acceptable (trust the device), or do we need the relay to also enforce?
+Also the Cloudflare Access policy must list every member. That is deploy config, outside the repo.
 
 ---
 
-## 11. References
+## 7. What happens to the old issues
 
-- [Local-First Software](https://www.inkandswitch.com/local-first/) — Ink & Switch (foundational paper)
-- [CRDTs: The Hard Parts](https://martin.kleppmann.com/2020/07/06/crdt-hard-parts-hydra.html) — Martin Kleppmann
-- [cr-sqlite](https://vlcn.io/docs/cr-sqlite) — CRDT-native SQLite extension
-- [Object Capabilities](https://en.wikipedia.org/wiki/Object-capability_model) — Capability-based security model
-- [Matrix Spec](https://spec.matrix.org/) — For reference on decentralised auth and federation
+- **#57** becomes device and session management for the one server (§4 Devices). Offline is deferred.
+- **#58** closes: there is no data to relay. Moving workflows between deployments is Commons S3b
+  (#236), whose private relay carries only workflows. Data replication between deployments is deferred.
+- **#59** becomes members, roles, domain shares and fail-closed scoping (§3, §4).
+- **#60** becomes the mediation workflow plus assigned human tasks (§4, §5.2).
+- **#61** becomes roles as grant sets plus org policy floors on trust levels, after #59.
+
+Commons (#41) is unaffected. Its Zebra key belongs to the deployment, so in a household it is the
+household's Zebra that holds reputation. A Commons "device" (home, work) is a separate Zebra
+*deployment*, not a phone or browser.
+
+---
+
+## 8. Open questions / risks
+
+1. **Requirements now misaligned** (not edited here; owner to decide):
+   - REQ-DATA-001 / REQ-PRIN-005: "stored locally on the human's device", "no external database
+     required", "functions fully offline". Prod is Oracle ADB in the cloud.
+   - REQ-DATA-002: "encrypted client-side ... passphrase never stored remotely" for sync. The server
+     needs plaintext, and cross-device access needs no sync.
+   - REQ-NFR-005 (offline capability): no offline mode is planned. At most a read-only PWA cache.
+   - REQ-NFR-007 / REQ-DATA-006: "local data storage supports encryption at rest". ADB encrypts at
+     rest (TDE) by default. Is that enough, or should sensitive classes (values, health knowledge,
+     credentials) get application-level column encryption with a host-held key?
+2. **Oracle VPD** (`DBMS_RLS`) as a second line of defence. Is it worth the cost? The app uses one
+   DB user and pooled, thread-hopping connections (`sync_to_async`), so a per-request
+   `CLIENT_IDENTIFIER` is fragile. Proposal: app-level only in v1, and revisit if a scoping bug escapes.
+3. **Shared-domain trust**: is the most restrictive member's level right, or should a shared domain
+   have its own level that all write members agree on?
+4. **Credentials in prod** use a file backend inside the container. Per-member credentials need a
+   durable, encrypted backend. Should that be an Oracle table encrypted with a host key, or a
+   mounted volume?
+5. **Kill switch and freeing in a household**: can any member halt (proposed: yes) and who can resume
+   (proposed: owner)? Is freeing (F17) per member, and is it allowed at all in shared domains?
+6. **Is team/org (#61) wanted?** Zebra is pitched as a small AI with 1..n humans. A team may be
+   better served by one Zebra per person plus the Commons.
+7. **Children / guests**: does the household need age-appropriate guardrails beyond `guest`?

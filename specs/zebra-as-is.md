@@ -557,9 +557,9 @@ until it is ruled. See [outcome-review-design.md](outcome-review-design.md).
 | Event-driven trigger bus | **Missing** (closed as deferred — see [f28-event-bus.md](f28-event-bus.md)) | REQ-PRIN-009 |
 | Notification system | **Partial** — outbound `notify_email` / `notify_webhook` actions (F65); no channel routing, quiet hours or retries (F30) | REQ-UI-004 |
 | Chat interface | **Missing** | REQ-UI-002 |
-| Multi-user / household support | **Missing** | REQ-USR-003/005 |
+| Multi-user / household support | **Missing** — design: one server + Oracle schema, row owner + `private`/`shared:<domain>` scope, fail-closed store scoping, mediation as a workflow ([distributed-data-model.md](distributed-data-model.md)). Today any signed-in user can create another user by registering a passkey; stores fail open with no request user | REQ-USR-003/004/005 |
 | Workflow sharing between Zebras (Commons: identity, device skill sync, offers, attestations, web of trust, reputation market) | **Missing** — concept in [zebra-commons-design.md](zebra-commons-design.md); only the user-data ZIP export exists | REQ-PRIN-007, REQ-NET-001–010 |
-| Encryption at rest, cloud sync, unattended keys | **Missing** | REQ-DATA-002/006 |
+| Encryption at rest, cloud sync, unattended keys | **Partial** — Oracle ADB encrypts at rest (TDE); no app-level encryption. Cross-device access is the web UI on one server; no data sync or relay is planned (local-first/offline deferred, see [distributed-data-model.md](distributed-data-model.md)) | REQ-DATA-002/006 |
 | Data export | **Implemented** (F9) — `DataExporter` service, `GET /api/export/`, `manage.py export_data` | REQ-DATA-003 |
 | Data deletion (soft + hard, API + CLI) | **Implemented** (F10) | REQ-DATA-005 |
 | Integration provider framework | **Missing** — generic `http_get` / `http_request` actions with named credentials exist (F62); no provider interface, OAuth or health monitoring | REQ-INT-001/002/004 |
