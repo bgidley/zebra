@@ -1,7 +1,7 @@
 # Multi-Device and Multi-User Data Model (server + Oracle)
 
 **Status**: Draft (revised 2026-10-25; supersedes the 2026-04-16 local-first CRDT draft)
-**Issues**: #57, #58, #59, #60, #61 (`phase::18-multi-user`)
+**Issues**: #57, #58 (closed), #59, #60, #61 (deferred), #242, #243 (`phase::18-multi-user`)
 **Relates to**: REQ-USR-001..005, REQ-DATA-001/002, REQ-PRIN-005, REQ-NFR-005, REQ-NFR-007
 **Decision (owner, 2026-10)**: Zebra stays a server backed by Oracle. SQLite is not a target.
 A local database may come later, so use only features common to Oracle and PostgreSQL.
@@ -207,8 +207,8 @@ Also the Cloudflare Access policy must list every member. That is deploy config,
 - **#59** becomes members, roles, domain shares and fail-closed scoping (§3, §4).
 - **#60** becomes the mediation workflow plus assigned human tasks (§4, §5.2).
 - **#61** is deferred: no teams for now (REQ-USR-004 deferred).
-- **New B0**: fail-closed per-user scoping in every store, before #59.
-- **New B4**: fair share and per-member spend under one budget, after #59.
+- **#242 (B0)**: fail-closed per-user scoping in every store, before #59.
+- **#243 (B4)**: fair share and per-member spend under one budget, after #59.
 
 Commons (#41) is unaffected. Its Zebra key belongs to the deployment, so in a household it is the
 household's Zebra that holds reputation. A Commons "device" (home, work) is a separate Zebra
@@ -236,5 +236,5 @@ household's Zebra that holds reputation. A Commons "device" (home, work) is a se
 2. **Known Oracle-only feature**: in-database embeddings (`zebra-agent-web/zebra_agent_web/embeddings.py`)
    must stay behind the memory store interface, with pgvector plus an external embedding model as
    the PostgreSQL path.
-3. **Scoping bugs** are the main risk once a second person joins. B0 makes every read fail closed
+3. **Scoping bugs** are the main risk once a second person joins. #242 makes every read fail closed
    and adds a two-user leak test over every endpoint.
