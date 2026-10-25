@@ -313,7 +313,8 @@ async def apply_guard(
         guard: The writer's guard; None skips the check
         yaml_content: The valid workflow the writer generated
         regenerate: Called once with ``generalise_prompt(hits)``; returns
-            ``(yaml, None)`` for a valid rewrite or ``(None, problem)``
+            ``(yaml, None)`` for a valid rewrite or ``(None, problem)``. If it
+            raises, the rewrite counts as unusable (#244)
         reject: Reject the change when hits remain (dream cycle) instead of
             keeping the rewrite and recording them (a user's goal)
 
@@ -330,7 +331,10 @@ async def apply_guard(
     if not hits:
         return yaml_content, None, None
     logger.warning("Leak guard: %d hit(s), regenerating: %s", len(hits), describe_hits(hits))
-    rewrite, problem = await regenerate(generalise_prompt(hits))
+    try:
+        rewrite, problem = await regenerate(generalise_prompt(hits))
+    except Exception as e:  # e.g. an LLM error: the guard-only call must not lose a valid workflow
+        rewrite, problem = None, f"rewrite failed: {e}"
     if problem or not rewrite:
         # An unusable rewrite: the first version stands or falls on its own hits.
         logger.warning("Leak guard: rewrite unusable: %s", problem)
