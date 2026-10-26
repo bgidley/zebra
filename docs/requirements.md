@@ -929,6 +929,8 @@ identities. One Zebra can run on several devices (e.g. home and work) and is sti
 - The Zebra key can be backed up and restored. Losing it means starting a new identity, not taking
   over an old one
 - Everything a device publishes is signed with its device key and attributed to its Zebra
+- Each deployment has one owner. Commons and skill sync act only for the owner: the owner's trust
+  level governs sharing, and only the owner approves offers, imports and shares
 
 ### REQ-NET-002: Offering a Workflow (P2)
 
@@ -942,6 +944,9 @@ identities. One Zebra can run on several devices (e.g. home and work) and is sti
   workflow that fails either check is not offered
 - A workflow derived from another records its parent's hash, so lineage is visible
 - Offering follows the `sharing` trust domain (REQ-NET-006)
+- Zebra's own system workflows (its main loop, dream cycle and similar) are never offered or synced
+- A workflow learnt from the runs of anyone other than the deployment's owner is never offered or
+  synced, so one person's data cannot leave through another person's sharing
 
 ### REQ-NET-003: Attestations (P2)
 
@@ -980,10 +985,13 @@ from its own viewpoint.
   additional input.
 - The golden gym tests the import against golden tasks shipped with the offer. An offer with no
   runnable golden tasks is escalated to a human, never passed untested.
+- While judging, an imported workflow may run only actions that cannot change anything (reads,
+  LLM calls, searches). A workflow using any other action is escalated to a human before it runs
 - Adopted workflows keep their provenance (publisher, content hash, parent hash) and start
-  supervised, whatever the domain's trust level. Supervision is enforced by Zebra's own main loop
-  before each run (a human approves running the imported workflow), never by the imported
-  workflow's own steps
+  supervised, whatever the domain's trust level. Supervision is enforced by Zebra itself before each
+  run (a human approves running the imported workflow), never by the imported workflow's own steps,
+  and covers every way a workflow can start: goals, direct runs, scheduled routines and
+  sub-workflows
 - Rejections are attested (REQ-NET-003), so other Zebras learn from them
 
 ### REQ-NET-006: Sharing Trust Domain (P2)
@@ -1013,6 +1021,10 @@ from its own viewpoint.
 
 **Description**: A stock market of reputation, where Zebras back workflows with reputation points
 and gain or lose as those workflows succeed or fail for others.
+
+**Status**: A later theme of its own (owner decision, 2026-10-26; GitLab #234,
+`phase::19-reputation-market`). The rest of the Commons ships without it. Before it is built, its
+rules are simulated against gaming and several real Zebras exist to trade.
 
 **Acceptance Criteria**:
 - Each workflow (content hash) has a price set by an automated market maker; Zebras buy and sell
@@ -1058,6 +1070,8 @@ data never does.
   remain even after Zebra is freed (REQ-TRUST-006): they protect the human and third parties from
   an observer, not the human from Zebra
 - A workflow is only ever readable on devices of the spheres it was shared with
+- System workflows and workflows learnt from anyone other than the owner are never synced
+  (REQ-NET-002)
 
 ### REQ-NET-010: Skill Genealogy View (P2)
 

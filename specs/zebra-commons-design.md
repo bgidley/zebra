@@ -1,8 +1,19 @@
 # Zebra Commons — Design
 
-**GitLab issue**: #41 (epic), slices #228–#238 below
+**GitLab issue**: #41 (epic), slices below
 **Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-010
-**Status**: Draft for review (concept; nothing implemented)
+**Status**: Reviewed 2026-10-26; delivery planned in waves (see the end). Only the leak guard (#237)
+is implemented. The reputation market (S7) is parked as its own later theme.
+
+> **Owner decisions (2026-10-26)**
+> - **a. One owner per deployment.** Commons and sync act only for the deployment's owner, and
+>   workflows learnt from anyone else's runs never leave it (`foreign_users`, below).
+> - **b. The reputation market is parked** (#234, `phase::19-reputation-market`). Its design stays
+>   here for later; nothing else waits for it.
+> - **c.** The `sharing` trust domain, the personal-data scan and adoption move into S2, so S3 and
+>   S3b-1 can be built side by side.
+> - **d.** S3b is split: S3b-1 sync logic (#236) and S3b-2 relay and transport (#246).
+> - **e.** The genealogy UI is split: private (#238) and public (#247).
 
 > **Terminology (owner, 2026-10-25)**: in this design a **device** (e.g. home, work) is a separate
 > Zebra **deployment** with its own database, not a phone or browser. Phones and browsers are
@@ -23,6 +34,7 @@ to run, so it is built on an existing free protocol: Nostr.
 - Signed **attestations** about workflows a Zebra has judged or used
 - A weighted **web of trust**, computed locally by each Zebra
 - A **reputation market**: reputation points back workflows; outcome reports settle prices
+  (*parked*: a later theme, see decision b)
 - A **judged import** pipeline that reuses the ethics gate, golden gym and trust gates
 - A `sharing` trust domain giving humans earned-autonomy control
 - **Private skill sync between one Zebra's own devices** (e.g. home and work): workflows only,
@@ -81,7 +93,12 @@ so reputation and market balance attach to the Zebra, not to a device.
     backdate. Both relays sign receipts (see Infrastructure).
   - An event from the revoked device is accepted only if a receipt shows it was stored before the
     revoke's receipt. Events with no receipt are rejected.
+  - Until the relays exist (S3b-2), there are no receipts: a revoked device's signatures are
+    rejected outright.
   - The Zebra's reputation survives.
+- **Owner.** Each deployment has one owner user (`commons_owner_user_id`, defaulting to its first
+  user). Commons and sync act only for the owner: the owner's `sharing` trust level governs, and
+  only the owner approves offers, imports and shares (decision a).
 - **Spheres.** Each device belongs to a **sphere** (`home`, `work`, or a name the human chooses),
   set at pairing and carried in its `DEVICE_CERT`.
   - A sphere can be marked **`observed`**: the device is managed by someone else, e.g. an
@@ -89,7 +106,8 @@ so reputation and market balance attach to the Zebra, not to a device.
   - Home and work are the same Zebra but different audiences, so what a workflow reveals depends on
     which sphere sees it.
 - **`SystemStateModel`** gains `zebra_pubkey`, `zebra_display_name`, `device_pubkey`,
-  `device_label`, `sphere`, `sphere_observed` and `sync_direction`. Public keys are not secrets.
+  `device_label`, `sphere`, `sphere_observed`, `sync_direction` and `commons_owner_user_id`. Public
+  keys are not secrets.
 
 ### Workflow provenance (S2)
 The library gains provenance per workflow file, stored as YAML metadata so it survives the
@@ -107,10 +125,19 @@ commons:
   sphere: work            # sphere where it was learnt
   tainted_by: [work]      # spheres whose run data any LLM writer of this lineage was shown
   share_with: [home]      # spheres (or "public") it may go to; default []
+  foreign_users: false    # true once any LLM writer of this lineage saw a non-owner's runs
 ```
 
-`sphere`, `tainted_by` and `share_with` are set only by the library and by human approvals, never
-by an LLM: the block is stripped before LLM rewrites, see below. `tainted_by` only grows along a
+`sphere`, `tainted_by`, `share_with` and `foreign_users` are set only by the library and by human
+approvals, never by an LLM: the block is stripped before LLM rewrites, see below. `foreign_users`
+only grows along a lineage, and a workflow with it set is never offered, exported or synced
+(decision a).
+
+**Never leaves the deployment** (`commons_exportable()`, S0 #245): protected workflows
+(`curator.py:364` `_is_protected`: the `system` tag or `SYSTEM_WORKFLOW_NAMES`, e.g. the main loop
+and dream cycle), and workflows with `foreign_users` set. The optimizer can rewrite system
+workflows, and sync adopts at normal trust, so syncing them would let a change to Zebra's trusted
+main loop skip supervision. `tainted_by` only grows along a
 lineage. When the dream cycle on a work device changes a workflow learnt at home, `work` is added.
 **Every content change resets `share_with` to `[]`**, so each new version needs its own share
 decision.
@@ -118,8 +145,10 @@ decision.
 **Canonical content** means:
 1. Load with a `SafeLoader` subclass with the timestamp resolver removed, so `2026-01-01` stays a
    string. Plain `safe_load` returns `date` objects that `json.dumps` cannot serialise.
-2. Strip the `commons` block **and the top-level `name`**. The name is a local display label:
-   adoption and fork handling rename workflows, and a rename must not change the hash.
+2. Strip the `commons` block, **the top-level `name`** and **local bookkeeping tags** (`llm-defined`,
+   `system`). The name is a local display label: adoption and fork handling rename workflows, and a
+   rename must not change the hash. `save_workflow_file` adds `llm-defined` on every save
+   (`library.py:115-121`), so hashing tags would break the hash on adoption.
 3. `json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, then UTF-8, then sha256.
 
 A workflow whose YAML still holds a value with no JSON form (non-string keys, `!!binary`) is not
@@ -138,8 +167,9 @@ So adoption does two things:
 **The library owns the `commons` block, through one save path.**
 - Today there are several writers:
   - `WorkflowLibrary.add_workflow` (creator, variant creator)
-  - `save_workflow_file` (`optimizer.py:735-758`), which the optimizer and the gym's `_complete`
-    (`gym.py:481`) call to write files directly with `write_text`
+  - `save_workflow_file` (`optimizer.py:806-829`), which the optimizer and the gym's `_complete`
+    (`gym.py:481`) call to write files directly with `write_text`. It never overwrites: a taken name
+    gets a `_N.yaml` copy, and the library picks the newest file by mtime.
 - All of them are routed through one `WorkflowLibrary.save(yaml, *, writer, parent, exposure)`.
   `save_workflow_file` becomes a thin delegate to it. A write that bypasses it would drop the block,
   and with it `supervised`, `tainted_by` and the content-hash id.
@@ -150,12 +180,16 @@ So adoption does two things:
     - set `parent_sha256` to the previous hash and push it onto `ancestors`
     - clear `origin_pubkey` (the change is now local)
     - add the writer's sphere to `tainted_by`
+    - set `foreign_users` if the writer's exposure set holds runs of any user but the owner
     - reset `share_with` to `[]`
     - keep `supervised` until a human clears it
   - **Adoption or sync** (`commons_adopt`, `SKILL` receive): the received block is kept verbatim
     after the hash is verified to equal the offered or sent hash. Only the local `name`, `sphere`
-    bookkeeping and `share_with: []` change. This is not a local change, so provenance and
-    attestability survive.
+    bookkeeping and `share_with: []` change, and no `llm-defined` tag is added. This is not a local
+    change, so provenance and attestability survive.
+- **Migration:** existing workflows gain the block on their next save, and their definition id
+  moves to the `c:` form. Metrics key on workflow name, so history is kept, and old definitions stay
+  in the store, so in-flight processes resume.
 - Attestations and outcome reports are only ever published for a workflow whose current hash equals
   the offered hash. Runs of a locally modified copy never count against the publisher.
 
@@ -226,7 +260,12 @@ about 60 KB we would split the content, which is deferred.
     scores against their pass criteria, not as a regression against a same-named local workflow.
   - It **fails closed**: an offer with no runnable golden tasks is never "ungated". It skips the gym
     and escalates to a human, who can still adopt it as supervised. The usual gate mode marks such a
-    candidate PROMOTED (`gym.py:264`) and must not be reused as-is.
+    candidate PROMOTED (`gym.py:265`) and must not be reused as-is.
+  - It runs **only `always_reversible` actions** (strict `unsafe_reason`, S0 #245). Today's gym
+    blocks only `always_irreversible`, and actions with no hint default to `context_dependent`, so
+    `file_delete`, `file_write`, `python_exec`, `subworkflow`, `queue_goal` and memory or values
+    writers would run on the publisher's own golden goals before any human saw the workflow. An
+    import using any other action skips the gym and escalates to a human.
 
 ### Web UI
 - `/commons/` lists:
@@ -288,6 +327,7 @@ A family tree of skills, in two views built from data Zebra already keeps:
    or a continuation reported `new_workflow`) and whose **import score** clears the threshold:
    `score = α·local_trust(publisher) + β·norm(market_price) + γ·attestation_signal`,
    where `attestation_signal` is the trust-weighted mean of `worked` minus `failed` reports.
+   While the market is parked, β = 0.
 3. `commons_import` runs. Any gate rejecting publishes an `ATTEST rejected-*`. Adoption publishes `ATTEST adopted`.
 4. **Supervised use**, enforced *outside* the workflow. `trust_gate` is a task inside workflow YAML,
    and an imported workflow's YAML is the publisher's, so it can't be relied on to gate itself.
@@ -298,8 +338,10 @@ A family tree of skills, in two views built from data Zebra already keeps:
      actions it uses and flagging irreversible ones (via `reversibility_hint`).
    - Rejecting fails the goal over to the next selector choice.
    - The flag clears after `SUPERVISED_RUNS` approved, successful runs, or when a human clears it.
-   - The same check applies to every entry point that runs a library workflow (`loop.py`,
-     `direct_run.py`).
+   - The check lives in **one launch choke point** (S0 #245) that every start of a library workflow
+     goes through: goals (`execute_workflow.py`), `loop.py`, `direct_run.py`, scheduled routines
+     (`scheduler/loop.py:162-176`) and `subworkflow` / `parallel_subworkflows` children. A test
+     proves nothing starts a library workflow around it.
 5. After each run, `ATTEST worked|failed` is published. In S7, an `OUTCOME` is published too.
 
 ### Skill sync between own devices (S3b)
@@ -360,8 +402,8 @@ reach home.
      - The incoming version is saved under a distinct name, `<name> (from <sphere>)`, with
        `commons.fork_of` set on both copies.
      - A human task asks which to keep, showing the diff.
-     - The library's "newest file wins" lookup (`library.py:417-425`) and the curator's
-       `SUPERSEDED_COPY` rule (`curator.py:259-272`) resolve by lineage, and skip workflows with
+     - The library's "newest file wins" lookup (`library.py:413-430`) and the curator's
+       `SUPERSEDED_COPY` rule (`curator.py:259-274`) resolve by lineage, and skip workflows with
        `fork_of` set. A fork is never retired automatically.
    - **Re-approval rule** (send side): every content change resets `share_with` (see the provenance
      section), so no new version reaches another sphere on an earlier approval. Example: a work
@@ -467,7 +509,11 @@ my work machine?"**
   per hop, and negative edges not propagated past one hop. It is recomputed after new edges arrive.
 - Sybil limit: Zebras with no path from a human-vouched seed have trust 0, whatever they publish.
 
-### Reputation market (S7)
+### Reputation market (S7, parked)
+> Parked as its own later theme (decision b; #234, `phase::19-reputation-market`). Until then the
+> import score is `α·local_trust + γ·attestation_signal`, with no market term, and the dream cycle
+> proposes no trades. Kept here as the starting design for that theme.
+
 - **Ledger replay:** apply events in `RECEIPT.seq` order. Each event is validated against the
   replayed state only, never against anything local to one Zebra such as `local_trust`. Invalid
   events are skipped. The result is deterministic, so every Zebra computes identical prices. An
@@ -560,8 +606,12 @@ replay with different values compute different markets.
   fails closed, supervised offers, `pii-found` attestations, and delisting. Workflows that learnt
   from a user's runs (variants) are the highest risk.
 - **Malicious workflows** can only call registered actions. Ethics and trust gates still apply at
-  every run, and imports start supervised. Still open: should some actions (shell, code builder,
-  outbound email) be banned from imported workflows outright?
+  every run, and imports start supervised. Judging runs only `always_reversible` actions; anything
+  else waits for a human before it ever runs. Whether some actions (shell, code builder, outbound
+  email) should be banned from imports even after approval stays open.
+- **Several humans on one deployment.** Taint is per sphere, not per person, so decision a limits
+  the Commons to the owner and blocks anything learnt from other users' runs. Per-user taint
+  (`tainted_by_users` with each person's consent) is the upgrade path if households need it.
 - **Market gaming:**
   - wash trading
   - self-dealing (a publisher reporting on its own workflow)
@@ -611,16 +661,23 @@ replay with different values compute different markets.
 
 ## Delivery slices (GitLab issues, each `Refs #41`)
 
-| Slice | Delivers | Depends on |
-|---|---|---|
-| #228 S1 Zebra + device identity | Zebra key and device key in the credential store, pairing, `DEVICE_CERT`/`DEVICE_REVOKE`, public keys in the UI, Zebra key backup and restore | — |
-| #237 Leak guard | Exposure set per LLM writer, check on added literals before save, generalise-or-reject, optimizer prompt rule. Useful before any Commons work. | — |
-| #229 S2 Content-addressed provenance | Canonical hash, `commons` block (incl. `sphere` / `tainted_by` / `share_with`) owned by the library, signed offline export/import of a single workflow file | S1 |
-| #230 S3 Judged import pipeline | `commons_import.yaml`, personal-data scan, `sharing` trust domain, supervised adoption. Proven with S2 files, no network. | S2 |
-| #236 S3b Private skill sync between own devices | `CommonsClient`, private strfry relay (NIP-42), publishing `DEVICE_CERT`/`REVOKE`, spheres (`observed`), suggest-and-approve sharing, sensitivity check, encrypted `SKILL` events, confidentiality scan, lineage merge with taint rule, `SYNC_DIRECTION` | S1–S3, #237 |
-| #231 S4 Commons relay + publish | Public strfry Quadlet, `commons_offer.yaml`, receipts, mirroring (reuses `CommonsClient` from S3b) | S3b |
-| #232 S5 Attestations + subscribe | Subscription, `WorkflowOfferModel`, automatic attestations, `/commons/` page | S4 |
-| #233 S6 Web of trust | Trust edges, human vouching, transitive local trust, import score | S5 |
-| #234 S7 Reputation market | Ledger replay, LMSR, `GRANT` / `TRADE` / `OUTCOME`, settlement, market UI | S6 |
-| #238 Skill genealogy UI | Private family tree per workflow (versions, spheres, diffs with reasons, share status, forks) and public Commons lineage (offers, adoptions, attestations, vouching, trust paths) | S2 (private); S3b, S5–S7 (full) |
-| #235 S8 Dream-cycle integration | Zebra proposes offers, imports and trades; `sharing` promotion requests | S5 (S7 for trades) |
+Planned 2026-10-26 in waves. Slices in one wave are built in parallel, each in its own worktree,
+then merged to master one at a time.
+
+| Wave | Slice | Delivers | Depends on |
+|---|---|---|---|
+| done | #237 Leak guard | Exposure set per LLM writer, check on added literals before save, generalise-or-reject, optimizer prompt rule | — |
+| 1 | #245 S0 Safety prerequisites | One launch choke point for library workflows (goals, direct runs, routines, subworkflows); honest reversibility hints; strict gym mode (`always_reversible` only); `commons_exportable()` keeps protected workflows home | — |
+| 1 | #228 S1 Zebra + device identity | Zebra key and device keys in the credential store, pairing with sphere and `observed`, local `DEVICE_CERT`/`DEVICE_REVOKE`, deployment owner, keys in the UI, Zebra key backup and restore | — |
+| 1 | #229 S2a Provenance | `WorkflowLibrary.save()` as the one save path, canonical hash, `commons` block (incl. `sphere` / `tainted_by` / `share_with` / `foreign_users`) | S0 |
+| 2 | #229 S2b Export + shared pieces | Signed single-workflow export/import, `c:` definition ids, `sharing` trust domain, `commons_pii_scan`, `save(writer="adopt")` | S1, S2a |
+| 2 | #238 Private genealogy | Family tree per workflow on this deployment: versions, writers, diffs with reasons, leak-guard hits; sphere and share status once S3b-1 lands | S2a |
+| 3 | #230 S3 Judged import | `commons_import.yaml`, gym import mode (strict), supervised pre-run approval at the choke point | S0, S2b |
+| 3 | #236 S3b-1 Sync logic | `CommonsClient` ABC + in-memory client, spheres, suggest-and-approve, sensitivity and confidentiality scans, `observed_share_approval`, `SKILL` events, lineage merge and forks, `SYNC_DIRECTION` | S1, S2b, #237 |
+| 4 | #246 S3b-2 Private relay | `nostr-sdk` client, private strfry Quadlet (NIP-42), publishing certs and revokes, receipts, encryption, offline queue. Human gate: keys, CI vars, proxy | S3b-1 |
+| 5 | #231 S4 Commons relay + publish | Public strfry Quadlet, `commons_offer.yaml`, receipts, mirroring. Human gate: relay key | S3, S3b-2 |
+| 5 | #232 S5 Attestations + subscribe | Subscription, `WorkflowOfferModel`, automatic attestations, `/commons/` page. Needs a second Zebra instance for its E2E test | S4 |
+| 6 | #233 S6 Web of trust | Trust edges, human vouching, transitive local trust, import score (no market term) | S5 |
+| 6 | #235 S8 Dream-cycle integration | Zebra proposes offers and imports; `sharing` promotion requests; no trades | S5, S6 |
+| 6 | #247 Public genealogy | Commons lineage, adoptions, attestations, vouching tree, trust paths; no price history | S5, #238 |
+| parked | #234 S7 Reputation market | Ledger replay, LMSR, `GRANT` / `TRADE` / `OUTCOME`, settlement, market UI, dream-cycle trades, price history. Its own later theme (`phase::19-reputation-market`); simulate first | S6 |
