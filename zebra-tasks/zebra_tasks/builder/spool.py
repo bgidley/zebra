@@ -50,24 +50,34 @@ class BuilderSpool:
         max_turns: int,
         minutes: int,
         process_id: str,
+        stage: str = "patch",
+        branch: str | None = None,
+        issue: int | None = None,
+        approval: dict[str, str] | None = None,
     ) -> str:
-        """Write a build job and return its id. The builder validates it."""
+        """Write a build job and return its id. The builder validates it.
+
+        A delivery *stage* other than ``patch`` (#251) also names the feature *branch*, the
+        *issue*, and for ``merge`` the human *approval* ``{ship_job_id, head_sha}``.
+        """
         job_id = uuid.uuid4().hex
         job_dir = self.root / job_id
         job_dir.mkdir()
-        self._write(
-            job_dir / "job.json",
-            {
-                "kind": "build",
-                "repo": repo,
-                "base_branch": base_branch,
-                "title": title,
-                "prompt": prompt,
-                "test_command": test_command,
-                "budget": {"max_turns": max_turns, "minutes": minutes},
-                "process_id": process_id,
-            },
-        )
+        job: dict[str, Any] = {
+            "kind": "build",
+            "repo": repo,
+            "base_branch": base_branch,
+            "title": title,
+            "prompt": prompt,
+            "test_command": test_command,
+            "budget": {"max_turns": max_turns, "minutes": minutes},
+            "process_id": process_id,
+        }
+        if stage != "patch":
+            job.update(stage=stage, branch=branch, issue=issue)
+            if approval is not None:
+                job["approval"] = approval
+        self._write(job_dir / "job.json", job)
         return job_id
 
     def request_publish(

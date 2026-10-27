@@ -38,11 +38,22 @@ class FakeRunner:
         self.container_state: dict[str, str] = {}  # name -> "running 0" / "exited 0"; absent = gone
         self.fail: set[str] = set()  # labels: "clone", "push", ...
         self.mr_url = "https://gitlab.com/gidley/zebra/-/merge_requests/42"
+        self.heads: dict[str, str] = {}  # branch -> sha on the remote (git ls-remote)
+        self.api: dict[str, object] = {}  # path fragment -> JSON answer (glab api)
 
     def __call__(self, args, *, cwd=None, env=None, timeout=None):
         args = list(args)
         self.calls.append((args, dict(env or {})))
         ok = subprocess.CompletedProcess(args, 0, "", "")
+        if args[:2] == ["git", "ls-remote"]:
+            branch = args[-1].removeprefix("refs/heads/")
+            sha = self.heads.get(branch)
+            return subprocess.CompletedProcess(args, 0, f"{sha}\t{args[-1]}\n" if sha else "", "")
+        if args[:2] == ["glab", "api"]:
+            for fragment, answer in self.api.items():
+                if fragment in args[2]:
+                    return subprocess.CompletedProcess(args, 0, json.dumps(answer), "")
+            return subprocess.CompletedProcess(args, 1, "", "404 Not Found")
         if args[:2] == ["git", "clone"]:
             if "clone" in self.fail:
                 return subprocess.CompletedProcess(args, 128, "", "fatal: no such repo")
@@ -640,3 +651,389 @@ def test_config_from_env(zb):
     assert config.max_turns == 80
     assert config.max_minutes == 90
     assert config.token == "t"
+
+
+# --------------------------------------------------------------------------- delivery stages
+
+GITLAB_DEV = "glpat-dev-token-123456"
+GITLAB_MERGE = "glpat-merge-token-654321"
+GITHUB = "github_pat_test_token_abcdef"
+HEAD_SHA = "b" * 40
+MERGE_SHA = "c" * 40
+
+
+@pytest.fixture
+def stage_config(zb, tmp_path):
+    return zb.Config(
+        spool=tmp_path / "builds",
+        token=TOKEN,
+        gitlab_token=GITLAB_DEV,
+        gitlab_merge_token=GITLAB_MERGE,
+        github_token=GITHUB,
+    )
+
+
+@pytest.fixture
+def stage_builder(zb, stage_config, runner):
+    stage_config.spool.mkdir()
+    return zb.Builder(stage_config, runner)
+
+
+def make_stage_job(config, stage: str, **overrides) -> Path:
+    fields = {"stage": stage, "branch": "f251/builder-stages", "issue": 251, "test_command": ""}
+    fields.update(overrides)
+    return make_job(config, **fields)
+
+
+def stage_job_dict(**overrides) -> dict:
+    job = {
+        "kind": "build", "repo": "gidley/zebra", "base_branch": "master", "title": "t",
+        "prompt": "p", "budget": {"max_turns": 5, "minutes": 5}, "stage": "ship",
+        "branch": "f1/x", "issue": 1,
+    }  # fmt: skip
+    job.update(overrides)
+    return job
+
+
+def env_args(cmd: list[str]) -> list[str]:
+    return [cmd[i + 1] for i, a in enumerate(cmd) if a == "-e"]
+
+
+def finish_stage(job_dir: Path, runner: FakeRunner, report: dict | str | None = None) -> None:
+    """Simulate a stage sandbox that ran to the end and wrote its report."""
+    finish_sandbox(job_dir, runner, patch=None)
+    if report is not None:
+        text = report if isinstance(report, str) else json.dumps(report)
+        (job_dir / "sandbox" / "report.json").write_text(text)
+
+
+def shipped_job(builder, config, runner) -> Path:
+    """A finished ship job whose result recorded HEAD_SHA."""
+    job_dir = make_stage_job(config, "ship")
+    builder.tick()
+    runner.heads["f251/builder-stages"] = HEAD_SHA
+    runner.api["repository/compare"] = {"diffs": [{"new_path": "x.py", "diff": "+x"}]}
+    finish_stage(job_dir, runner, {"pr_url": "https://github.com/bgidley/zebra/pull/9"})
+    builder.tick()
+    assert read(job_dir, "result.json")["head_sha"] == HEAD_SHA
+    runner.calls.clear()
+    return job_dir
+
+
+class TestStageValidation:
+    @pytest.mark.parametrize("stage", ["propose", "ship", "review"])
+    def test_valid_stage_jobs(self, zb, stage_config, stage):
+        assert zb.validate_job(stage_job_dict(stage=stage), stage_config) == (None, [])
+
+    @pytest.mark.parametrize(
+        ("overrides", "expected"),
+        [
+            ({"stage": "deploy"}, "stage must be"),
+            ({"issue": 0}, "issue"),
+            ({"issue": "251"}, "issue"),
+            ({"issue": True}, "issue"),
+            ({"branch": "master"}, "branch"),
+            ({"branch": "../x"}, "branch"),
+            ({"branch": None}, "branch"),
+        ],
+    )
+    def test_bad_stage_fields_are_errors(self, zb, stage_config, overrides, expected):
+        error, _ = zb.validate_job(stage_job_dict(**overrides), stage_config)
+        assert error and expected in error
+
+    @pytest.mark.parametrize(
+        "approval",
+        [None, {"ship_job_id": "x", "head_sha": HEAD_SHA}, {"ship_job_id": "a" * 32}],
+    )
+    def test_merge_needs_a_well_formed_approval(self, zb, stage_config, approval):
+        error, _ = zb.validate_job(stage_job_dict(stage="merge", approval=approval), stage_config)
+        assert "approval" in error
+
+    def test_stages_only_run_on_the_self_repo(self, zb, stage_config):
+        config = zb.Config(spool=stage_config.spool, repos=("gidley/zebra", "gidley/other"))
+        _, violations = zb.validate_job(stage_job_dict(repo="gidley/other"), config)
+        assert [v["limit"] for v in violations] == ["stage_repo"]
+
+    def test_jobs_without_a_stage_are_patch_builds(self, zb):
+        assert zb.job_stage({"kind": "build"}) == "patch"
+
+
+class TestStageStart:
+    @pytest.mark.parametrize(
+        ("stage", "expected"),
+        [
+            ("propose", {"GITLAB_TOKEN": GITLAB_DEV}),
+            ("ship", {"GITLAB_TOKEN": GITLAB_DEV, "GH_TOKEN": GITHUB}),
+            ("review", {"GITLAB_TOKEN": GITLAB_DEV}),
+        ],
+    )
+    def test_each_stage_gets_only_its_credentials_by_name(
+        self, stage_builder, stage_config, runner, stage, expected
+    ):
+        job_dir = make_stage_job(stage_config, stage)
+        stage_builder.tick()
+
+        [(cmd, env)] = runner.podman_runs()
+        assert cmd[cmd.index("--name") + 1] == f"zebra-build-{job_dir.name[:12]}"
+        names = {e.split("=", 1)[0] for e in env_args(cmd)}
+        assert names & {"GITLAB_TOKEN", "GH_TOKEN"} == set(expected)
+        assert {"STAGE", "BRANCH", "ISSUE", "GITHUB_REPO", "GITLAB_HOST"} <= names
+        for name, value in expected.items():
+            assert name in env_args(cmd)  # by name only
+            assert env[name] == value
+        for secret in (GITLAB_DEV, GITLAB_MERGE, GITHUB):
+            assert not any(secret in a for a in cmd)  # never in argv
+        assert GITLAB_MERGE not in env.values()
+
+    def test_missing_stage_credential_fails_without_cloning(self, zb, config, runner):
+        config.spool.mkdir()
+        builder = zb.Builder(zb.Config(spool=config.spool, token=TOKEN, gitlab_token="x"), runner)
+        job_dir = make_stage_job(config, "ship")
+        builder.tick()
+        result = read(job_dir, "result.json")
+        assert result["state"] == "failed"
+        assert "ZEBRA_BUILDER_GITHUB_TOKEN" in result["error"]
+        assert runner.commands("git") == []
+
+    def test_propose_creates_the_branch_before_the_sandbox_runs(
+        self, stage_builder, stage_config, runner
+    ):
+        job_dir = make_stage_job(stage_config, "propose")
+        stage_builder.tick()
+        calls = [a for a, _ in runner.calls]
+        [clone] = [a for a in calls if a[:2] == ["git", "clone"]]
+        assert clone[clone.index("--branch") + 1] == "master"
+        assert "--single-branch" not in clone
+        [checkout] = [a for a in calls if "checkout" in a]
+        assert checkout[-1] == "f251/builder-stages"
+        assert calls.index(checkout) < calls.index(runner.podman_runs()[0][0])
+        prompt = (job_dir / "sandbox" / "prompt.md").read_text()
+        assert "stage `propose`" in prompt and "issue #251" in prompt
+        assert "glab issue view 251" in prompt and "no credentials" not in prompt
+
+    def test_ship_resumes_an_existing_branch(self, stage_builder, stage_config, runner):
+        runner.heads["f251/builder-stages"] = HEAD_SHA
+        make_stage_job(stage_config, "ship")
+        stage_builder.tick()
+        [clone] = [a for a, _ in runner.calls if a[:2] == ["git", "clone"]]
+        assert clone[clone.index("--branch") + 1] == "f251/builder-stages"
+        assert not any("checkout" in a for a, _ in runner.calls)
+
+
+class TestMergeApproval:
+    def merge_job(self, config, ship_dir, head=HEAD_SHA, **overrides):
+        return make_stage_job(
+            config,
+            "merge",
+            approval={"ship_job_id": ship_dir.name, "head_sha": head},
+            **overrides,
+        )
+
+    def test_approved_head_starts_the_merge_with_the_merge_token(
+        self, stage_builder, stage_config, runner
+    ):
+        ship_dir = shipped_job(stage_builder, stage_config, runner)
+        job_dir = self.merge_job(stage_config, ship_dir)
+        stage_builder.tick()
+        [(_, env)] = runner.podman_runs()
+        assert env["GITLAB_TOKEN"] == GITLAB_MERGE and env["GH_TOKEN"] == GITHUB
+        prompt = (job_dir / "sandbox" / "prompt.md").read_text()
+        assert f"git merge --no-ff {HEAD_SHA}" in prompt
+        approved = audit_events(stage_config)[-1]  # provenance: what was approved, for whom
+        assert approved["event"] == "merge_approved"
+        assert approved["ship_job_id"] == ship_dir.name and approved["head_sha"] == HEAD_SHA
+        assert (approved["issue"], approved["process_id"]) == (251, "proc-1")
+
+    @pytest.mark.parametrize("change", ["head", "moved", "other_branch"])
+    def test_mismatched_approval_is_rejected_without_cloning(
+        self, stage_builder, stage_config, runner, change
+    ):
+        ship_dir = shipped_job(stage_builder, stage_config, runner)
+        if change == "head":
+            job_dir = self.merge_job(stage_config, ship_dir, head="d" * 40)
+        elif change == "moved":
+            runner.heads["f251/builder-stages"] = "e" * 40  # pushed after the approval
+            job_dir = self.merge_job(stage_config, ship_dir)
+        else:
+            job_dir = self.merge_job(stage_config, ship_dir, branch="f9/other")
+        stage_builder.tick()
+        assert read(job_dir, "result.json")["state"] == "rejected"
+        assert runner.podman_runs() == []
+        assert not any(a[:2] == ["git", "clone"] for a, _ in runner.calls)
+        assert audit_events(stage_config)[-1]["event"] == "rejected"
+
+    def test_a_ship_that_failed_cannot_be_merged(self, stage_builder, stage_config, runner):
+        ship_dir = make_stage_job(stage_config, "ship")
+        stage_builder.tick()
+        finish_stage(ship_dir, runner)  # pushed nothing
+        stage_builder.tick()
+        assert read(ship_dir, "result.json")["state"] == "failed"
+        job_dir = self.merge_job(stage_config, ship_dir)
+        stage_builder.tick()
+        assert read(job_dir, "result.json")["state"] == "rejected"
+
+
+class TestStageCollect:
+    def test_ship_records_facts_from_the_remote(self, stage_builder, stage_config, runner):
+        job_dir = make_stage_job(stage_config, "ship")
+        stage_builder.tick()
+        runner.heads["f251/builder-stages"] = HEAD_SHA
+        runner.api["repository/compare"] = {
+            "diffs": [{"new_path": "scripts/x.sh", "diff": "+a"}, {"new_path": "a.py"}]
+        }
+        runner.api["pipelines?sha="] = [{"id": 7, "status": "success", "web_url": "u", "x": 1}]
+        finish_stage(job_dir, runner, {"pr_url": "https://github.com/bgidley/zebra/pull/9"})
+        stage_builder.tick()
+
+        result = read(job_dir, "result.json")
+        assert result["state"] == "done" and result["stage"] == "ship"
+        assert result["head_sha"] == HEAD_SHA
+        assert result["changed_files"] == ["a.py", "scripts/x.sh"]
+        assert result["sensitive_files"] == ["scripts/x.sh"]
+        assert result["pipeline"] == {"id": 7, "status": "success", "web_url": "u"}
+        assert result["report"]["pr_url"].endswith("/pull/9")
+        assert "patch_sha256" not in result
+        assert not (job_dir / "workspace").exists()
+
+    def test_a_stage_that_pushed_nothing_fails(self, stage_builder, stage_config, runner):
+        job_dir = make_stage_job(stage_config, "propose")
+        stage_builder.tick()
+        finish_stage(job_dir, runner, {"change": "x"})
+        stage_builder.tick()
+        result = read(job_dir, "result.json")
+        assert result["state"] == "failed" and "did not push" in result["error"]
+
+    def test_a_pushed_credential_fails_the_stage(self, stage_builder, stage_config, runner):
+        job_dir = make_stage_job(stage_config, "ship")
+        stage_builder.tick()
+        runner.heads["f251/builder-stages"] = HEAD_SHA
+        runner.api["repository/compare"] = {"diffs": [{"new_path": "a", "diff": f"+{GITHUB}"}]}
+        finish_stage(job_dir, runner, {})
+        stage_builder.tick()
+        result = read(job_dir, "result.json")
+        assert result["state"] == "failed" and "credential" in result["error"]
+        assert audit_events(stage_config)[-1]["event"] == "secret_pushed"
+
+    def test_credentials_are_redacted_from_the_report_and_summary(
+        self, stage_builder, stage_config, runner
+    ):
+        job_dir = make_stage_job(stage_config, "review")
+        stage_builder.tick()
+        claude = {"subtype": "success", "is_error": False, "num_turns": 3,
+                  "result": f"used {GITLAB_DEV}"}  # fmt: skip
+        finish_sandbox(job_dir, runner, claude=claude, patch=None)
+        (job_dir / "sandbox" / "report.json").write_text(
+            json.dumps({"verdicts": [{"id": "O1", "verdict": "met", "evidence": GITHUB}]})
+        )
+        stage_builder.tick()
+        text = (job_dir / "result.json").read_text()
+        assert GITLAB_DEV not in text and GITHUB not in text
+        assert read(job_dir, "result.json")["state"] == "done"
+
+    def test_review_without_verdicts_fails(self, stage_builder, stage_config, runner):
+        job_dir = make_stage_job(stage_config, "review")
+        stage_builder.tick()
+        finish_stage(job_dir, runner, "not json")
+        stage_builder.tick()
+        assert "verdicts" in read(job_dir, "result.json")["error"]
+
+    def test_claude_failure_still_records_remote_facts(self, stage_builder, stage_config, runner):
+        job_dir = make_stage_job(stage_config, "ship")
+        stage_builder.tick()
+        runner.heads["f251/builder-stages"] = HEAD_SHA
+        finish_sandbox(
+            job_dir, runner, claude={"subtype": "error_max_turns", "num_turns": 9}, patch=None
+        )
+        stage_builder.tick()
+        result = read(job_dir, "result.json")
+        assert result["state"] == "over_budget" and result["head_sha"] == HEAD_SHA
+
+
+class TestMergeCollect:
+    def start_merge(self, builder, config, runner) -> Path:
+        ship_dir = shipped_job(builder, config, runner)
+        runner.heads["master"] = BASE_SHA
+        job_dir = make_stage_job(
+            config, "merge", approval={"ship_job_id": ship_dir.name, "head_sha": HEAD_SHA}
+        )
+        builder.tick()
+        assert read(job_dir, "status.json")["base_head"] == BASE_SHA
+        return job_dir
+
+    def merged(self, builder, config, runner, parents) -> Path:
+        job_dir = self.start_merge(builder, config, runner)
+        runner.heads["master"] = MERGE_SHA
+        runner.api["repository/commits/"] = {"parent_ids": parents}
+        runner.api["pipelines?sha="] = [{"id": 8, "status": "running", "web_url": "m"}]
+        finish_stage(job_dir, runner, {"merge_sha": MERGE_SHA})
+        builder.tick()
+        return job_dir
+
+    def test_merge_of_the_approved_commit(self, stage_builder, stage_config, runner):
+        job_dir = self.merged(stage_builder, stage_config, runner, [BASE_SHA, HEAD_SHA])
+        result = read(job_dir, "result.json")
+        assert result["state"] == "done"
+        assert result["merge_sha"] == MERGE_SHA
+        assert result["pipeline"]["status"] == "running"
+
+    def test_merge_of_something_else_fails_loudly(self, stage_builder, stage_config, runner):
+        job_dir = self.merged(stage_builder, stage_config, runner, [BASE_SHA, "f" * 40])
+        result = read(job_dir, "result.json")
+        assert result["state"] == "failed" and "approved commit" in result["error"]
+        assert audit_events(stage_config)[-1]["event"] == "merge_mismatch"
+
+    def test_master_that_did_not_move_fails(self, stage_builder, stage_config, runner):
+        job_dir = self.start_merge(stage_builder, stage_config, runner)
+        finish_stage(job_dir, runner, {})
+        stage_builder.tick()
+        assert "did not move" in read(job_dir, "result.json")["error"]
+
+
+def test_stage_jobs_are_never_published(stage_builder, stage_config, runner):
+    job_dir = shipped_job(stage_builder, stage_config, runner)
+    (job_dir / "publish.json").write_text(json.dumps({"patch_sha256": "0" * 64}))
+    stage_builder.tick()
+    assert "only patch builds" in read(job_dir, "published.json")["error"]
+    assert not any("push" in a for a, _ in runner.calls)
+
+
+class TestCheckProbeStages:
+    def report(self, zb, *extra_env, **fields):
+        return {
+            "uid": 1000, "cap_eff": "0", "no_new_privs": "1", "token_seen": zb.PROBE_TOKEN,
+            "env_names": ["PATH", "STAGE", "BRANCH", "ISSUE", "GITLAB_HOST", "GITHUB_REPO",
+                          *extra_env],
+            "host_mounts": [], "host_paths_visible": [], "writable_outside": [],
+            "podman_socket": False, "workspace_writable": True, **fields,
+        }  # fmt: skip
+
+    def test_ship_with_both_credentials_authenticated_passes(self, zb):
+        report = self.report(zb, "GITLAB_TOKEN", "GH_TOKEN", gitlab_user="z", github_user="b")
+        assert zb.check_probe(report, "ship") == []
+
+    def test_credential_that_does_not_authenticate_fails(self, zb):
+        report = self.report(zb, "GITLAB_TOKEN", "GH_TOKEN", gitlab_user="", github_user="b")
+        assert zb.check_probe(report, "ship") == ["the GitLab token did not authenticate"]
+
+    def test_credential_a_stage_should_not_have_fails(self, zb):
+        report = self.report(zb, "GITLAB_TOKEN", "GH_TOKEN", gitlab_user="z", github_user="b")
+        [failure] = zb.check_probe(report, "propose")
+        assert "GH_TOKEN" in failure
+
+    def test_patch_builds_get_no_stage_variables(self, zb):
+        [failure] = zb.check_probe(self.report(zb), "patch")
+        assert "STAGE" in failure
+
+
+def test_config_reads_stage_credentials(zb):
+    config = zb.Config.from_env(
+        {
+            "ZEBRA_BUILDER_GITLAB_TOKEN": "a",
+            "ZEBRA_BUILDER_GITLAB_MERGE_TOKEN": "b",
+            "ZEBRA_BUILDER_GITHUB_TOKEN": "c",
+            "CLAUDE_CODE_OAUTH_TOKEN": "t",
+        }
+    )
+    assert (config.gitlab_token, config.gitlab_merge_token, config.github_token) == ("a", "b", "c")
+    assert config.self_repo == "gidley/zebra" and config.github_repo == "bgidley/zebra"
+    assert config.secrets() == ["t", "a", "b", "c"]

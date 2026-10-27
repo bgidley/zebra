@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_REPO = "gidley/zebra"
 DEFAULT_MAX_TURNS = 100
 DEFAULT_MINUTES = 60
+# Delivery stages (#251); "patch" is the original staged build that publish_build publishes.
+STAGES = ("patch", "propose", "ship", "merge", "review")
 _NOT_CONFIGURED = (
     "The Claude Code builder is not configured: ZEBRA_BUILDER_SPOOL is unset or missing"
 )
@@ -60,6 +62,12 @@ class ClaudeCodeBuildAction(TaskAction):
     Writes a build job (repo, base branch, prompt, test command and capability budget) and returns
     ``{job_id, ...}``. The builder validates the budget against its own ceilings and repo
     allowlist; this action never decides what is allowed.
+
+    With a delivery ``stage`` (#251) the sandbox runs one step of the CLAUDE.md process on a
+    feature ``branch`` for an ``issue``: ``propose``, ``ship``, ``review``, or ``merge``. A merge
+    sends the approval as the ship job's id and the head commit its result recorded, read from
+    the process properties named by ``approval_job_key`` / ``approval_result_key``; run it only on
+    a human approval route.
     """
 
     description = (
@@ -119,6 +127,39 @@ class ClaudeCodeBuildAction(TaskAction):
             required=False,
             default="build_job",
         ),
+        ParameterDef(
+            name="stage",
+            type="string",
+            description="patch (default), or a delivery stage: propose, ship, review, merge",
+            required=False,
+            default="patch",
+        ),
+        ParameterDef(
+            name="branch",
+            type="string",
+            description="Feature branch a delivery stage works on",
+            required=False,
+        ),
+        ParameterDef(
+            name="issue",
+            type="number",
+            description="GitLab issue a delivery stage delivers",
+            required=False,
+        ),
+        ParameterDef(
+            name="approval_job_key",
+            type="string",
+            description="merge: process property holding the approved ship job record",
+            required=False,
+            default="ship_job",
+        ),
+        ParameterDef(
+            name="approval_result_key",
+            type="string",
+            description="merge: process property holding the approved ship result",
+            required=False,
+            default="ship_result",
+        ),
     ]
     outputs = [
         ParameterDef(name="job_id", type="string", description="Builder job id", required=True),
@@ -137,6 +178,21 @@ class ClaudeCodeBuildAction(TaskAction):
         minutes = _positive_int(_text(task, context, "minutes"), DEFAULT_MINUTES)
         if max_turns is None or minutes is None:
             return TaskResult.fail("max_turns and minutes must be positive whole numbers")
+        stage = _text(task, context, "stage", "patch") or "patch"
+        if stage not in STAGES:
+            return TaskResult.fail(f"stage must be one of {', '.join(STAGES)}")
+        delivery: dict = {}
+        if stage != "patch":
+            branch = _text(task, context, "branch")
+            issue = _positive_int(_text(task, context, "issue"), 0)
+            if not branch or not issue:
+                return TaskResult.fail(f"stage {stage} needs a branch and an issue number")
+            delivery = {"stage": stage, "branch": branch, "issue": issue}
+            if stage == "merge":
+                approval = self._approval(task, context)
+                if approval is None:
+                    return TaskResult.fail("There is no approved ship to merge")
+                delivery["approval"] = approval
 
         job = {
             "repo": _text(task, context, "repo", DEFAULT_REPO) or DEFAULT_REPO,
@@ -148,14 +204,36 @@ class ClaudeCodeBuildAction(TaskAction):
             "minutes": minutes,
         }
         try:
-            job_id = spool.submit_build(**job, process_id=context.process.id)
+            job_id = spool.submit_build(**job, **delivery, process_id=context.process.id)
         except OSError as exc:
             return TaskResult.fail(f"Could not write the build job: {exc}")
 
-        record = {"job_id": job_id, **{k: v for k, v in job.items() if k != "prompt"}}
+        record = {
+            "job_id": job_id,
+            **{k: v for k, v in job.items() if k != "prompt"},
+            **{k: v for k, v in delivery.items() if k != "approval"},
+        }
         context.set_process_property(task.properties.get("output_key", "build_job"), record)
-        logger.info("Build job %s submitted for process %s", job_id[:12], context.process.id[:12])
+        logger.info(
+            "Build job %s (%s) submitted for process %s",
+            job_id[:12],
+            stage,
+            context.process.id[:12],
+        )
         return TaskResult.ok(output=record)
+
+    @staticmethod
+    def _approval(task: TaskInstance, context: ExecutionContext) -> dict[str, str] | None:
+        """``{ship_job_id, head_sha}`` from the approved ship job's record and result."""
+        props = context.process.properties
+        job = props.get(task.properties.get("approval_job_key", "ship_job")) or {}
+        result = props.get(task.properties.get("approval_result_key", "ship_result")) or {}
+        if not isinstance(job, dict) or not isinstance(result, dict):
+            return None
+        job_id, head_sha = job.get("job_id"), result.get("head_sha")
+        if not job_id or not head_sha or result.get("state") != "done":
+            return None
+        return {"ship_job_id": job_id, "head_sha": head_sha}
 
 
 class PublishBuildAction(TaskAction):

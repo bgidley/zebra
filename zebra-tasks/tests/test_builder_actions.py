@@ -171,3 +171,66 @@ class TestSpool:
         secret.write_text('{"password": "x"}')
         (spool.root / job_id / "result.json").symlink_to(secret)
         assert spool.result(job_id) is None
+
+
+class TestDeliveryStages:
+    """claude_code_build with a delivery stage (#251)."""
+
+    async def test_patch_build_job_is_unchanged(self, spool):
+        ctx = Context({"__builder_spool__": spool})
+        await ClaudeCodeBuildAction().run(task(title="t", prompt="p", stage="patch"), ctx)
+        [job] = job_files(spool)
+        assert not {"stage", "branch", "issue", "approval"} & job.keys()
+
+    async def test_stage_job_names_branch_and_issue(self, spool):
+        ctx = Context({"__builder_spool__": spool}, {"n": "251"})
+        result = await ClaudeCodeBuildAction().run(
+            task(title="t", prompt="p", stage="ship", branch="f251/x", issue="{{n}}"), ctx
+        )
+        assert result.success
+        [job] = job_files(spool)
+        assert (job["stage"], job["branch"], job["issue"]) == ("ship", "f251/x", 251)
+        assert "approval" not in job
+        assert result.output["stage"] == "ship" and result.output["issue"] == 251
+
+    @pytest.mark.parametrize(
+        "props",
+        [
+            {"stage": "deploy"},
+            {"stage": "ship", "issue": 251},
+            {"stage": "ship", "branch": "f251/x"},
+            {"stage": "ship", "branch": "f251/x", "issue": "lots"},
+        ],
+    )
+    async def test_bad_stage_requests_write_nothing(self, spool, props):
+        ctx = Context({"__builder_spool__": spool})
+        result = await ClaudeCodeBuildAction().run(task(title="t", prompt="p", **props), ctx)
+        assert not result.success
+        assert job_files(spool) == []
+
+    async def test_merge_sends_the_approved_ship_head(self, spool):
+        props = {
+            "ship_job": {"job_id": "a" * 32, "stage": "ship"},
+            "ship_result": {"state": "done", "head_sha": "b" * 40},
+        }
+        ctx = Context({"__builder_spool__": spool}, props)
+        result = await ClaudeCodeBuildAction().run(
+            task(title="t", prompt="p", stage="merge", branch="f251/x", issue=251), ctx
+        )
+        assert result.success
+        [job] = job_files(spool)
+        assert job["approval"] == {"ship_job_id": "a" * 32, "head_sha": "b" * 40}
+        assert "approval" not in result.output
+
+    @pytest.mark.parametrize(
+        "ship_result",
+        [None, {"state": "failed", "head_sha": "b" * 40}, {"state": "done"}],
+    )
+    async def test_merge_without_a_finished_ship_is_refused(self, spool, ship_result):
+        props = {"ship_job": {"job_id": "a" * 32}, "ship_result": ship_result}
+        ctx = Context({"__builder_spool__": spool}, props)
+        result = await ClaudeCodeBuildAction().run(
+            task(title="t", prompt="p", stage="merge", branch="f251/x", issue=251), ctx
+        )
+        assert not result.success and "approved ship" in result.error
+        assert job_files(spool) == []
