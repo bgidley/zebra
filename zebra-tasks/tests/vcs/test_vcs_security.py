@@ -1,5 +1,7 @@
 """Leak-vector matrix for the Git task actions (#64): sandbox, remotes, config, credentials."""
 
+import asyncio
+
 import pytest
 
 from vcs.helpers import make_task, sh_git
@@ -220,6 +222,29 @@ class TestCredentials:
 
         assert not result.success
         assert "timed out" in result.error
+
+    async def test_timeout_when_git_already_exited(self, tmp_path, monkeypatch):
+        """A process that exits as the timeout fires still reports a timeout, not a crash."""
+
+        class _Exited:
+            returncode = 0
+
+            async def communicate(self, data=None):
+                await asyncio.sleep(1)
+
+            def kill(self):
+                raise ProcessLookupError
+
+            async def wait(self):
+                return 0
+
+        async def _spawn(*args, **kwargs):
+            return _Exited()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _spawn)
+
+        with pytest.raises(GitActionError, match="timed out"):
+            await GitRunner(workspace=tmp_path).run(["status"], cwd=tmp_path, timeout=0.01)
 
 
 class TestLocalRemotes:
