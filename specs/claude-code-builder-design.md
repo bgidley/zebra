@@ -3,7 +3,7 @@
 Issues: #98 (Zebra changes code through Claude Code), #172 (declared, enforced limits and staging
 for what Zebra builds), #251 (delivery stages: Zebra delivers its own changes). OpenSpec:
 `openspec/specs/claude-code-builder/spec.md` (changes archived as
-`openspec/changes/archive/2026-10-20-claude-code-builder/` and `…-builder-stages/`).
+`openspec/changes/archive/2026-10-20-claude-code-builder/` and `…/2026-10-29-builder-stages/`).
 
 ## 1. Goal & scope
 
