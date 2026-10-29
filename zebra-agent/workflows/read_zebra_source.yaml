@@ -4,7 +4,10 @@ tags: ["code", "source", "read"]
 use_when: "You need to see the code of a specific file in Zebra's own codebase."
 # v5 (#224): no change to the steps. The bump replaces the broken dream copy v4 on prod
 # (v4 skipped: the dream copy's definition id already uses it).
-version: 5
+# v9 (#249): no change to the steps again. Dream copies v6 (sub-workflow "Source Path
+# Resolver", not runnable as a tool), v7 and v8 (python_exec `import os`, refused by the
+# sandbox) broke every read; zebra_source already resolves a missing path itself.
+version: 9
 first_task: read
 result_key: source
 # Requires a path, so it is a tool for llm_agent and never selected for a goal (#190).
