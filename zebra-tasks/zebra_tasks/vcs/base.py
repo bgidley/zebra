@@ -172,7 +172,10 @@ class GitRunner:
         try:
             out, err = await asyncio.wait_for(proc.communicate(data), timeout=timeout)
         except TimeoutError as e:
-            proc.kill()
+            try:
+                proc.kill()
+            except ProcessLookupError:  # it exited just as the timeout fired
+                pass
             await proc.wait()
             raise GitActionError(f"git {args[0]} timed out after {timeout:g}s") from e
         result = GitResult(
