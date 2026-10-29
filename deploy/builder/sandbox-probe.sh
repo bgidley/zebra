@@ -43,6 +43,23 @@ def can_write(directory):
 report["writable_outside"] = [d for d in ["/", "/usr", "/etc", "/usr/local/bin"] if can_write(d)]
 report["workspace_writable"] = can_write("/workspace")
 
+
+def whoami(cmd, key):
+    """Run a read-only 'who am I' API call; the login name, or '' if it fails."""
+    import subprocess
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        return str(json.loads(done.stdout).get(key) or "") if done.returncode == 0 else ""
+    except (OSError, subprocess.TimeoutExpired, ValueError, AttributeError):
+        return ""
+
+
+# Delivery stages (#251): do the stage's credentials authenticate? Only names are reported.
+if os.environ.get("GITLAB_TOKEN"):
+    report["gitlab_user"] = whoami(["glab", "api", "user"], "username")
+if os.environ.get("GH_TOKEN"):
+    report["github_user"] = whoami(["gh", "api", "user"], "login")
+
 with open("/out/probe.json", "w") as fh:
     json.dump(report, fh)
 PY

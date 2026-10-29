@@ -6,6 +6,13 @@ containers; this service validates each job against the capability ceilings, run
 Claude Code in a throwaway sandbox container, and writes the result back. After a human approves
 the result, it pushes the patch to a ``zebra-build/<id>`` branch and opens a draft merge request.
 
+Delivery stages (#251) let Zebra take its own repo through the CLAUDE.md process: ``propose``,
+``ship`` and ``review`` run with a Developer GitLab token (cannot push the protected master);
+``merge`` gets the Maintainer token only for a head commit a human approved, which must match
+the head the builder recorded for the ``ship`` job. After each stage the builder checks what
+happened from the host (branch heads, changed files, pipeline status) rather than trusting the
+sandbox's own report.
+
 The sandbox is untrusted. The host never runs git (or anything else) in a workspace a sandbox
 has written to, and reads sandbox outputs only as plain files: no symlinks, size-capped.
 
@@ -41,6 +48,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 logger = logging.getLogger("zebra_builder")
 
@@ -77,6 +85,102 @@ You are Claude Code, working for Zebra on a build job.
 ## Job: {title}
 
 """
+
+# Delivery stages (#251). "patch" is the original build: no credentials, the host publishes.
+STAGES = ("patch", "propose", "ship", "merge", "review")
+# Which credentials each stage's sandbox gets, by config attribute.
+STAGE_TOKENS: dict[str, tuple[str, ...]] = {
+    "patch": (),
+    "propose": ("gitlab_token",),
+    "ship": ("gitlab_token", "github_token"),
+    "review": ("gitlab_token",),
+    "merge": ("gitlab_merge_token", "github_token"),
+}
+TOKEN_ENV_NAMES = {
+    "gitlab_token": "ZEBRA_BUILDER_GITLAB_TOKEN",
+    "gitlab_merge_token": "ZEBRA_BUILDER_GITLAB_MERGE_TOKEN",
+    "github_token": "ZEBRA_BUILDER_GITHUB_TOKEN",
+}
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+REPORT_CAP_BYTES = 100_000
+PROTECTED_BRANCHES = {"master", "main"}
+
+STAGE_PREAMBLE = """\
+You are Claude Code, working for Zebra on stage `{stage}` of delivering issue #{issue} in {repo}.
+/workspace is a clone of {repo}; {position}
+
+This repo's CLAUDE.md describes the development process. Follow it, with these differences,
+because you run in a disposable sandbox rather than on the prod host, and Zebra runs the rest of
+the process (outcome feedback, human review, outcome review) itself:
+
+- There is no podman, prod host, port 8000 or worktree here. Skip every step that needs them:
+  scripts/zebra-feedback.sh, scripts/zebra-outcome-review.sh, worktree cleanup, updating the main
+  checkout, and the final "I'm done please delete me" line.
+- Do only this stage's steps, listed below, then stop. Never force-push. Never push to
+  {base_branch} unless this stage says so.
+- `git push` to `origin` (GitLab){github_remote} works through a credential helper, and
+  {clis} authenticated through the environment. Never print the credentials or write them to a
+  file, a commit, an issue or a PR.
+- When you are done, write /out/report.json as described below, then finish with a short
+  summary of what you did and anything left undone.
+
+## Stage `{stage}`
+
+{steps}
+
+## Job: {title}
+
+"""
+
+STAGE_STEPS = {
+    "propose": """\
+1. Read the issue: `glab issue view {issue} --repo {repo} --comments`.
+2. Write an OpenSpec change for it, as CLAUDE.md's OpenSpec section describes: proposal.md with
+   a `## Outcomes` table of 3-5 observable outcomes, design.md, specs and tasks.md.
+3. `openspec validate <change> --strict` must pass.
+4. Commit (`docs: propose <change>` with `Part of #{issue}`) and `git push -u origin {branch}`.
+5. Post the outcomes table on the issue: write it to a file, then
+   `glab issue note {issue} --repo {repo} -m "$(cat <file>)"`.
+Do not implement anything yet.
+
+/out/report.json: {{"change": "<change name>", "outcomes_markdown": "<the outcomes table>"}}""",
+    "ship": """\
+1. Implement the OpenSpec change on this branch against its tasks.md, with tests, ticking tasks
+   as you go. The job below may carry reviewer feedback from an earlier round: address it.
+2. Run `uv run ruff check --fix .`, `uv run ruff format .` and the unit tests the CI `unit` job
+   runs.
+3. Commit with `Part of #{issue}` (`Closes #{issue}` on the final commit) and push to origin.
+4. Watch the branch pipeline (`glab ci list --repo {repo} --ref {branch}`, `glab ci view`,
+   `glab ci trace`). Fix failures, at most 3 fix attempts.
+5. Once it is green, archive the OpenSpec change and sync specs/zebra-as-is.md as CLAUDE.md
+   describes, commit, push, and wait for green again.
+6. `git push github {branch}`, then open a PR, or update the existing one:
+   `gh pr create --repo {github_repo} --base {base_branch} --head {branch} ...`.
+Do not merge.
+
+/out/report.json: {{"pr_url": "...", "pipeline_url": "...", "pipeline_status": "...",
+"notes": "anything the reviewer should know"}}""",
+    "merge": """\
+A human approved the PR for `{branch}` at commit {approved_sha}. Merge exactly that commit as
+CLAUDE.md's "Merging from a worktree" describes:
+1. `git fetch origin {base_branch} {branch}`, then `git checkout --detach origin/{base_branch}`.
+2. `git merge --no-ff {approved_sha} -m "Merge {branch} — Closes #{issue}"`.
+3. If {base_branch} moved since the branch was built, run ruff and the unit tests on the merged
+   tree first.
+4. `git push origin HEAD:{base_branch}`, `git push github HEAD:{base_branch}`, then delete
+   `{branch}` on both remotes.
+5. Watch the {base_branch} pipeline for the merge commit until it finishes (deploy and smoke).
+If the merge conflicts or the tests fail, stop without pushing and say why. Do not change code.
+
+/out/report.json: {{"merge_sha": "...", "pipeline_url": "...", "pipeline_status": "..."}}""",
+    "review": """\
+You are an independent reviewer with no other context. Do not modify, commit or push anything.
+The job below gives the outcomes and the commits to review. Read the change (`git diff`) and the
+code around it, and decide for each outcome whether the shipped change meets it.
+
+/out/report.json: {{"verdicts": [{{"id": "O1", "verdict": "met|partial|missed",
+"evidence": "file:line, test, pipeline"}}]}}""",
+}
 
 Runner = Callable[..., subprocess.CompletedProcess]
 
@@ -123,6 +227,17 @@ class Config:
     git_host: str = "gitlab.com"
     prune_days: int = 7
     token: str = ""
+    # Delivery stages (#251): only for self_repo, mirrored to github_repo.
+    self_repo: str = "gidley/zebra"
+    github_repo: str = "bgidley/zebra"
+    gitlab_token: str = ""  # Developer: cannot push the protected master
+    gitlab_merge_token: str = ""  # Maintainer: merge stage only
+    github_token: str = ""
+
+    def secrets(self) -> list[str]:
+        """Every credential the builder holds, for redaction."""
+        values = [self.token, self.gitlab_token, self.gitlab_merge_token, self.github_token]
+        return [v for v in values if v]
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> Config:
@@ -144,6 +259,9 @@ class Config:
             git_host=env.get("ZEBRA_BUILDER_GIT_HOST", "gitlab.com"),
             prune_days=int(env.get("ZEBRA_BUILDER_PRUNE_DAYS", "7")),
             token=env.get("CLAUDE_CODE_OAUTH_TOKEN", ""),
+            self_repo=env.get("ZEBRA_BUILDER_SELF_REPO", "gidley/zebra"),
+            github_repo=env.get("ZEBRA_BUILDER_GITHUB_REPO", "bgidley/zebra"),
+            **{attr: env.get(name, "") for attr, name in TOKEN_ENV_NAMES.items()},
         )
 
 
@@ -197,6 +315,16 @@ def read_output(path: Path, cap: int) -> str | None:
         return data.decode("utf-8", errors="replace")
     finally:
         os.close(fd)
+
+
+def read_claude(out: Path) -> dict:
+    """Claude Code's JSON result from a sandbox's output directory; {} if missing or invalid."""
+    text = read_output(out / "claude.json", TEXT_CAP_BYTES)
+    try:
+        claude = json.loads(text) if text else {}
+    except json.JSONDecodeError:
+        return {}
+    return claude if isinstance(claude, dict) else {}
 
 
 def submitted_at(job_dir: Path) -> float:
@@ -257,10 +385,15 @@ def validate_job(job: dict, config: Config) -> tuple[str | None, list[dict]]:
     budget = job.get("budget")
     if not isinstance(budget, dict):
         return "budget must be an object with max_turns and minutes", []
+    stage_error = validate_stage(job)
+    if stage_error:
+        return stage_error, []
 
     violations: list[dict] = []
     if repo not in config.repos:
         violations.append({"limit": "repo", "requested": repo, "allowed": list(config.repos)})
+    if job_stage(job) != "patch" and repo != config.self_repo:
+        violations.append({"limit": "stage_repo", "requested": repo, "allowed": [config.self_repo]})
     for key, ceiling in (("max_turns", config.max_turns), ("minutes", config.max_minutes)):
         value = budget.get(key)
         if not isinstance(value, int) or isinstance(value, bool) or value < 1:
@@ -268,6 +401,43 @@ def validate_job(job: dict, config: Config) -> tuple[str | None, list[dict]]:
         if value > ceiling:
             violations.append({"limit": key, "requested": value, "allowed": ceiling})
     return None, violations
+
+
+def job_stage(job: dict) -> str:
+    """The job's delivery stage; jobs from before #251 have none and are ``patch`` builds."""
+    return job.get("stage") or "patch"
+
+
+def validate_stage(job: dict) -> str | None:
+    """Check the delivery-stage fields of a job; return an error or None."""
+    stage = job_stage(job)
+    if stage not in STAGES:
+        return f"stage must be one of {', '.join(STAGES)}"
+    if stage == "patch":
+        return None
+    issue = job.get("issue")
+    if not isinstance(issue, int) or isinstance(issue, bool) or issue < 1:
+        return "issue must be a positive integer"
+    branch = job.get("branch")
+    if (
+        not isinstance(branch, str)
+        or not BRANCH_RE.match(branch)
+        or ".." in branch
+        or branch in PROTECTED_BRANCHES
+        or branch == job.get("base_branch")
+    ):
+        return "branch must be a valid feature branch name, not the base branch"
+    if stage == "merge":
+        approval = job.get("approval")
+        if (
+            not isinstance(approval, dict)
+            or not isinstance(approval.get("ship_job_id"), str)
+            or not JOB_ID_RE.match(approval["ship_job_id"])
+            or not isinstance(approval.get("head_sha"), str)
+            or not SHA_RE.match(approval["head_sha"])
+        ):
+            return "a merge needs approval {ship_job_id, head_sha}"
+    return None
 
 
 # --------------------------------------------------------------------------- builder
@@ -381,6 +551,29 @@ class Builder:
             )
             self.audit(job_id, "failed", error="no token")
             return False
+        stage = job_stage(job)
+        missing = [
+            TOKEN_ENV_NAMES[attr] for attr in STAGE_TOKENS[stage] if not getattr(self.config, attr)
+        ]
+        if missing:
+            error = f"stage {stage} needs {', '.join(missing)}"
+            self.finish(job_dir, {"state": "failed", "error": error})
+            self.audit(job_id, "failed", error=error)
+            return False
+        if stage == "merge":
+            error = self.check_approval(job)
+            if error:
+                self.finish(job_dir, {"state": "rejected", "error": error})
+                self.audit(job_id, "rejected", error=error)
+                return False
+            self.audit(
+                job_id,
+                "merge_approved",
+                **job["approval"],
+                branch=job["branch"],
+                issue=job["issue"],
+                process_id=job.get("process_id"),
+            )
 
         workspace = job_dir / "workspace"
         out = job_dir / "sandbox"
@@ -388,14 +581,26 @@ class Builder:
         shutil.rmtree(out, ignore_errors=True)
         out.mkdir()
 
+        # Facts from before the sandbox runs, so collect can tell what it changed.
+        facts: dict = {}
+        clone_branch = job["base_branch"]
+        new_branch = None
+        if stage != "patch":
+            facts["base_head"] = self.remote_head(job["repo"], job["base_branch"])
+            facts["branch_head"] = self.remote_head(job["repo"], job["branch"])
+            if stage in ("propose", "ship"):
+                if facts["branch_head"]:
+                    clone_branch = job["branch"]
+                else:
+                    new_branch = job["branch"]
         clone = self.run(
             [
                 "git",
                 "clone",
                 "--quiet",
                 "--branch",
-                job["base_branch"],
-                "--single-branch",
+                clone_branch,
+                *(["--single-branch"] if stage == "patch" else []),
                 self.clone_url(job["repo"]),
                 str(workspace),
             ],
@@ -408,20 +613,27 @@ class Builder:
             return False
         head = self.run(["git", "-C", str(workspace), "rev-parse", "HEAD"], timeout=30)
         base_sha = head.stdout.strip()
-        if head.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", base_sha):
+        if head.returncode != 0 or not SHA_RE.fullmatch(base_sha):
             self.finish(job_dir, {"state": "failed", "error": "could not read base commit"})
             return False
+        if new_branch:  # before the sandbox runs: the host never runs git in it afterwards
+            checkout = self.run(
+                ["git", "-C", str(workspace), "checkout", "--quiet", "-b", new_branch], timeout=30
+            )
+            if checkout.returncode != 0:
+                self.finish(job_dir, {"state": "failed", "error": "could not create the branch"})
+                return False
 
-        prompt = (
-            PREAMBLE.format(repo=job["repo"], base_branch=job["base_branch"], title=job["title"])
-            + job["prompt"]
-        )
-        (out / "prompt.md").write_text(prompt)
+        (out / "prompt.md").write_text(self.prompt(job) + job["prompt"])
 
         name = self.container_name(job_id)
         self.run(["podman", "rm", "-f", name], timeout=60)
         cmd = self.sandbox_command(job_id, job, name, workspace, out, base_sha)
-        env = {**os.environ, "CLAUDE_CODE_OAUTH_TOKEN": self.config.token}
+        env = {
+            **os.environ,
+            "CLAUDE_CODE_OAUTH_TOKEN": self.config.token,
+            **self.stage_credentials(stage),
+        }
         started = self.run(cmd, env=env, timeout=120)
         if started.returncode != 0:
             self.finish(
@@ -431,10 +643,108 @@ class Builder:
             return False
         write_json(
             job_dir / "status.json",
-            {"state": "running", "started_at": _now(), "container": name, "base_sha": base_sha},
+            {
+                "state": "running",
+                "started_at": _now(),
+                "container": name,
+                "base_sha": base_sha,
+                **facts,
+            },
         )
-        logger.info("job %s started in %s", job_id[:12], name)
+        logger.info("job %s (%s) started in %s", job_id[:12], stage, name)
         return True
+
+    def prompt(self, job: dict) -> str:
+        """The preamble for a job's prompt: the original build's, or its delivery stage's."""
+        stage = job_stage(job)
+        if stage == "patch":
+            return PREAMBLE.format(
+                repo=job["repo"], base_branch=job["base_branch"], title=job["title"]
+            )
+        if stage in ("propose", "ship"):
+            position = f"you are on branch `{job['branch']}`."
+        else:
+            position = f"you are on `{job['base_branch']}`; the work is on `{job['branch']}`."
+        has_github = "github_token" in STAGE_TOKENS[stage]
+        fields = {
+            "stage": stage,
+            "issue": job["issue"],
+            "repo": job["repo"],
+            "base_branch": job["base_branch"],
+            "branch": job["branch"],
+            "github_repo": self.config.github_repo,
+            "approved_sha": (job.get("approval") or {}).get("head_sha", ""),
+            "title": job["title"],
+        }
+        return STAGE_PREAMBLE.format(
+            position=position,
+            github_remote=f" and `github` ({self.config.github_repo})" if has_github else "",
+            clis="glab and gh are" if has_github else "glab is",
+            steps=STAGE_STEPS[stage].format(**fields),
+            **fields,
+        )
+
+    def stage_credentials(self, stage: str) -> dict[str, str]:
+        """The credentials a stage's sandbox gets, under the names glab and gh read."""
+        creds = {}
+        for attr in STAGE_TOKENS[stage]:
+            name = "GH_TOKEN" if attr == "github_token" else "GITLAB_TOKEN"
+            creds[name] = getattr(self.config, attr)
+        return creds
+
+    def check_approval(self, job: dict) -> str | None:
+        """A merge must name the ship job a human approved, at the head that job recorded.
+
+        The ship job's result is the builder's own record of the head it saw pushed, and the
+        branch must still be at that commit, so nothing pushed after the approval gets merged.
+        """
+        approval = job["approval"]
+        ship_dir = self.config.spool / approval["ship_job_id"]
+        ship_job = read_json(ship_dir / "job.json") or {}
+        ship_result = read_json(ship_dir / "result.json") or {}
+        if (
+            job_stage(ship_job) != "ship"
+            or ship_job.get("repo") != job["repo"]
+            or ship_job.get("branch") != job["branch"]
+            or ship_job.get("issue") != job["issue"]
+        ):
+            return "the approval does not name a ship job for this branch"
+        if (
+            ship_result.get("state") != "done"
+            or ship_result.get("head_sha") != approval["head_sha"]
+        ):
+            return "the approved commit is not the head the ship stage built"
+        if self.remote_head(job["repo"], job["branch"]) != approval["head_sha"]:
+            return "the branch has moved since it was approved"
+        return None
+
+    # ---- host-side facts (never from the sandbox)
+
+    def remote_head(self, repo: str, branch: str) -> str | None:
+        """The commit a branch points at on the remote, or None if it does not exist."""
+        done = self.run(
+            ["git", "ls-remote", self.clone_url(repo), f"refs/heads/{branch}"], timeout=120
+        )
+        sha = done.stdout.split()[0] if done.returncode == 0 and done.stdout.strip() else ""
+        return sha if SHA_RE.fullmatch(sha) else None
+
+    def gitlab_api(self, repo: str, path: str):
+        """GET a project API path with the host's glab login; None on any failure."""
+        project = quote(repo, safe="")
+        done = self.run(["glab", "api", f"projects/{project}/{path}"], timeout=120)
+        if done.returncode != 0:
+            return None
+        try:
+            return json.loads(done.stdout)
+        except json.JSONDecodeError:
+            return None
+
+    def pipeline(self, repo: str, sha: str) -> dict | None:
+        """The latest pipeline for a commit: ``{id, status, web_url}``."""
+        pipelines = self.gitlab_api(repo, f"pipelines?sha={sha}&per_page=1")
+        if not isinstance(pipelines, list) or not pipelines or not isinstance(pipelines[0], dict):
+            return None
+        return {k: pipelines[0].get(k) for k in ("id", "status", "web_url")}
 
     def sandbox_command(
         self,
@@ -448,12 +758,25 @@ class Builder:
     ) -> list[str]:
         """The ``podman run`` command for a build sandbox.
 
-        Only the Claude token and the job's own parameters go into the environment; the token is
-        passed by name so it never appears in the process list. The host delegates only the memory
-        and pids cgroup controllers to rootless podman, so CPU is bounded by priority (``nice``)
-        unless ``ZEBRA_BUILDER_CPUS`` is set on a host that delegates ``cpu`` too.
+        Only the Claude token, the stage's own credentials (``STAGE_TOKENS``) and the job's own
+        parameters go into the environment; credentials are passed by name so they never appear
+        in the process list. The host delegates only the memory and pids cgroup controllers to
+        rootless podman, so CPU is bounded by priority (``nice``) unless ``ZEBRA_BUILDER_CPUS`` is
+        set on a host that delegates ``cpu`` too.
         """
         uid, gid = os.getuid(), os.getgid()
+        stage = job_stage(job)
+        stage_env = []  # a patch build's environment is exactly what it was before #251
+        if stage != "patch":
+            stage_env += [
+                "-e", f"STAGE={stage}",
+                "-e", f"BRANCH={job['branch']}",
+                "-e", f"ISSUE={job['issue']}",
+                "-e", f"GITLAB_HOST={self.config.git_host}",
+                "-e", f"GITHUB_REPO={self.config.github_repo}",
+            ]  # fmt: skip
+        for credential in self.stage_credentials(stage):  # by name only: values stay off argv
+            stage_env += ["-e", credential]
         return [
             "nice", "-n", "10", "podman", "run", "--detach", "--name", name,
             "--label", f"zebra.build={job_id}",
@@ -470,6 +793,7 @@ class Builder:
             "-e", f"BASE_SHA={base_sha}",
             "-e", f"BUILD_TITLE={job['title']}",
             "-e", f"TEST_COMMAND={job.get('test_command') or ''}",
+            *stage_env,
             *(["--entrypoint", entrypoint] if entrypoint else []),
             self.config.image,
         ]  # fmt: skip
@@ -528,13 +852,9 @@ class Builder:
         """Read a finished sandbox's outputs into a result, and keep a host copy of the patch."""
         out = job_dir / "sandbox"
         job = read_json(job_dir / "job.json") or {}
-        claude_text = read_output(out / "claude.json", TEXT_CAP_BYTES)
-        try:
-            claude = json.loads(claude_text) if claude_text else {}
-        except json.JSONDecodeError:
-            claude = {}
-        if not isinstance(claude, dict):
-            claude = {}
+        if job_stage(job) != "patch":
+            return self.collect_stage(job_dir, job, status, exit_code)
+        claude = read_claude(out)
         patch = read_output(out / "changes.patch", PATCH_CAP_BYTES) or ""
         diffstat = read_output(out / "diffstat.txt", TEXT_CAP_BYTES) or ""
         test_rc_text = (read_output(out / "test.rc", 100) or "").strip()
@@ -570,35 +890,138 @@ class Builder:
             "exit_code": exit_code,
             "violations": [],
         }
+        if self.judge_claude(result, job, claude, claude_err):
+            return result
+        if not patch:
+            result.update(state="failed", error="Claude Code made no changes")
+        elif self.contains_secret(patch):
+            result.update(
+                state="failed", error="the patch contains a credential; refusing to keep it"
+            )
+            result["patch_excerpt"] = ""
+            (job_dir / "changes.patch").unlink(missing_ok=True)
+        return result
+
+    def judge_claude(self, result: dict, job: dict, claude: dict, claude_err: str | None) -> bool:
+        """Mark *result* over budget or failed if Claude Code did not finish cleanly.
+
+        Returns True if it did either.
+        """
         max_turns = (job.get("budget") or {}).get("max_turns")
         if claude.get("subtype") == "error_max_turns":
             result.update(state="over_budget", error=f"stopped after {max_turns} turns")
             result["violations"].append(
                 {"limit": "max_turns", "used": claude.get("num_turns"), "allowed": max_turns}
             )
-        elif not claude or claude.get("is_error"):
+            return True
+        if not claude or claude.get("is_error"):
             result.update(
                 state="failed",
                 error="Claude Code did not finish cleanly: "
                 + (
-                    redact(tail(str(claude.get("result") or ""), 500))
-                    or redact(tail(claude_err, 500))
+                    self.redact(tail(str(claude.get("result") or ""), 500))
+                    or self.redact(tail(claude_err, 500))
                     or "no result"
                 ),
             )
-        elif not patch:
-            result.update(state="failed", error="Claude Code made no changes")
-        elif self.config.token and self.config.token in patch:
-            result.update(
-                state="failed", error="the patch contains the Claude token; refusing to keep it"
-            )
-            result["patch_excerpt"] = ""
-            (job_dir / "changes.patch").unlink(missing_ok=True)
+            return True
+        return False
+
+    def collect_stage(self, job_dir: Path, job: dict, status: dict, exit_code: str | None) -> dict:
+        """Read a delivery stage's outputs, then check on the host what it actually did.
+
+        The sandbox's ``report.json`` is passed on as the stage's own account; branch heads,
+        changed files and pipeline status come from the remote, never from the sandbox.
+        """
+        out = job_dir / "sandbox"
+        stage, repo, branch = job_stage(job), job.get("repo"), job.get("branch")
+        claude = read_claude(out)
+        claude_err = read_output(out / "claude.err", TEXT_CAP_BYTES)
+        report_text = read_output(out / "report.json", REPORT_CAP_BYTES)
+        try:
+            report = json.loads(self.redact(report_text)) if report_text else {}
+        except json.JSONDecodeError:
+            report = {}
+        self.remove_workspace(job_dir)
+
+        result: dict = {
+            "state": "done",
+            "stage": stage,
+            "repo": repo,
+            "base_branch": job.get("base_branch"),
+            "branch": branch,
+            "issue": job.get("issue"),
+            "title": job.get("title"),
+            "summary": self.redact(tail(str(claude.get("result") or ""), SUMMARY_CHARS)),
+            "report": report if isinstance(report, dict) else {},
+            "turns": claude.get("num_turns"),
+            "notional_cost_usd": claude.get("total_cost_usd"),
+            "duration_s": round(_now() - float(status.get("started_at", _now()))),
+            "exit_code": exit_code,
+            "violations": [],
+        }
+        self.judge_claude(result, job, claude, claude_err)
+        if stage in ("propose", "ship"):
+            self.branch_facts(job_dir.name, result)
+        elif stage == "merge":
+            self.merge_facts(job_dir.name, job, status, result)
+        elif result["state"] == "done" and not isinstance(result["report"].get("verdicts"), list):
+            result.update(state="failed", error="the review wrote no verdicts to report.json")
         return result
 
+    def branch_facts(self, job_id: str, result: dict) -> None:
+        """Record what a propose / ship stage pushed: head, changed files and its pipeline."""
+        repo, branch = result["repo"], result["branch"]
+        head = self.remote_head(repo, branch)
+        result["head_sha"] = head
+        if not head:
+            if result["state"] == "done":
+                result.update(state="failed", error=f"the stage did not push {branch}")
+            return
+        compare = self.gitlab_api(
+            repo, f"repository/compare?from={quote(result['base_branch'])}&to={head}"
+        )
+        diffs = compare.get("diffs") if isinstance(compare, dict) else None
+        if isinstance(diffs, list):
+            files = sorted(
+                {d.get("new_path") or d.get("old_path") for d in diffs if isinstance(d, dict)}
+                - {None}
+            )
+            result["changed_files"] = files
+            result["sensitive_files"] = [f for f in files if f.startswith(SENSITIVE_PATHS)]
+            if self.contains_secret(json.dumps(diffs)):
+                result.update(state="failed", error=f"a credential was pushed to {branch}")
+                self.audit(job_id, "secret_pushed", branch=branch)
+        result["pipeline"] = self.pipeline(repo, head)
+
+    def merge_facts(self, job_id: str, job: dict, status: dict, result: dict) -> None:
+        """Check that the base branch now holds a merge of exactly the approved commit."""
+        repo, base_branch = job["repo"], job["base_branch"]
+        approved = job["approval"]["head_sha"]
+        merge_sha = self.remote_head(repo, base_branch)
+        result["merge_sha"] = merge_sha
+        if not merge_sha or merge_sha == status.get("base_head"):
+            if result["state"] == "done":
+                result.update(state="failed", error=f"{base_branch} did not move")
+            return
+        commit = self.gitlab_api(repo, f"repository/commits/{merge_sha}")
+        parents = commit.get("parent_ids") if isinstance(commit, dict) else None
+        if not isinstance(parents, list) or approved not in parents:
+            result.update(
+                state="failed",
+                error=f"{base_branch} moved, but not to a merge of the approved commit",
+            )
+            self.audit(job_id, "merge_mismatch", merge_sha=merge_sha, approved=approved)
+        result["pipeline"] = self.pipeline(repo, merge_sha)
+
+    def contains_secret(self, text: str) -> bool:
+        return any(secret in text for secret in self.config.secrets())
+
     def redact(self, text: str) -> str:
-        """Remove the Claude token from text the sandbox produced before it leaves the host."""
-        return text.replace(self.config.token, "[REDACTED]") if self.config.token else text
+        """Remove every credential from text the sandbox produced before it leaves the host."""
+        for secret in self.config.secrets():
+            text = text.replace(secret, "[REDACTED]")
+        return text
 
     def cleanup_container(self, job_id: str) -> None:
         self.run(["podman", "rm", "-f", "-t", "10", self.container_name(job_id)], timeout=120)
@@ -628,6 +1051,8 @@ class Builder:
         error, _ = validate_job(job, self.config)
         if error or repo not in self.config.repos:
             return fail(f"job is not publishable: {error or 'repo not allowlisted'}")
+        if job_stage(job) != "patch":
+            return fail("delivery stages push their own work; only patch builds are published")
         if not re.fullmatch(r"[0-9a-f]{40}", base_sha):
             return fail("result has no base commit")
         patch = job_dir / "changes.patch"
@@ -672,12 +1097,13 @@ class Builder:
 
     # ---- probe
 
-    def probe(self) -> dict:
+    def probe(self, stage: str = "patch") -> dict:
         """Run the real sandbox command with an escape probe instead of Claude Code.
 
         The probe (``deploy/builder/sandbox-probe.sh`` in the image) reports what the sandbox can
         see and do; this checks it against what the sandbox is allowed. A dummy token stands in
-        for the real one.
+        for the Claude token. For a delivery *stage* the stage's real credentials are passed, and
+        the probe checks they authenticate (read-only API calls).
         """
         job_id = uuid.uuid4().hex
         job_dir = self.config.spool / f"probe-{job_id[:12]}"
@@ -685,18 +1111,31 @@ class Builder:
         workspace.mkdir(parents=True)
         out.mkdir()
         name = f"zebra-probe-{job_id[:12]}"
-        job = {"title": "probe", "budget": {"max_turns": 1}}
+        job = {
+            "title": "probe",
+            "budget": {"max_turns": 1},
+            "stage": stage,
+            "branch": "probe",
+            "issue": 1,
+        }
         cmd = self.sandbox_command(
             job_id, job, name, workspace, out, "0" * 40, entrypoint="/usr/local/bin/sandbox-probe"
         )
         cmd.remove("--detach")
         try:
-            env = {**os.environ, "CLAUDE_CODE_OAUTH_TOKEN": PROBE_TOKEN}
+            env = {
+                **os.environ,
+                "CLAUDE_CODE_OAUTH_TOKEN": PROBE_TOKEN,
+                **self.stage_credentials(stage),
+            }
             done = self.run(cmd, env=env, timeout=300)
             report = read_json(out / "probe.json")
             if report is None:
                 return {"ok": False, "failures": [f"no probe report: {tail(done.stderr, 500)}"]}
-            failures = check_probe(report)
+            failures = check_probe(report, stage)
+            if self.contains_secret(json.dumps(report)):
+                failures.append("the probe report contains a credential")
+                report = {}
             return {"ok": not failures, "failures": failures, "report": report}
         finally:
             self.run(["podman", "rm", "-f", name], timeout=60)
@@ -720,8 +1159,11 @@ PROBE_ALLOWED_ENV = {
     "UV_PYTHON_INSTALL_DIR", "UV_TOOL_BIN_DIR", "PWD", "SHLVL", "_",
     "LC_CTYPE",  # set by Python's own locale coercion (PEP 538) in the probe
     "DISABLE_AUTOUPDATER", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",  # image ENV
+    "GLAB_CHECK_UPDATE", "GH_NO_UPDATE_NOTIFIER", "OPENSPEC_TELEMETRY",  # image ENV (#251)
     "CLAUDE_CODE_OAUTH_TOKEN", "MAX_TURNS", "BASE_SHA", "BUILD_TITLE", "TEST_COMMAND",
 }  # fmt: skip
+# Delivery stages (#251) also get these, plus their credentials (STAGE_TOKENS).
+PROBE_STAGE_ENV = {"STAGE", "BRANCH", "ISSUE", "GITLAB_HOST", "GITHUB_REPO"}
 # Host-filesystem mounts podman itself adds to every container.
 PROBE_ALLOWED_MOUNTS = {
     "/workspace", "/out", "/etc/hosts", "/etc/resolv.conf", "/etc/hostname",
@@ -729,7 +1171,7 @@ PROBE_ALLOWED_MOUNTS = {
 }  # fmt: skip
 
 
-def check_probe(report: dict) -> list[str]:
+def check_probe(report: dict, stage: str = "patch") -> list[str]:
     """Compare a sandbox probe report with what the sandbox is allowed; return the failures."""
     failures = []
     if report.get("uid") in (0, None):
@@ -738,9 +1180,19 @@ def check_probe(report: dict) -> list[str]:
         failures.append(f"has effective capabilities {report.get('cap_eff')}")
     if str(report.get("no_new_privs")) != "1":
         failures.append("no_new_privs is not set")
-    extra_env = sorted(set(report.get("env_names", [])) - PROBE_ALLOWED_ENV)
+    credentials = {
+        "GH_TOKEN" if attr == "github_token" else "GITLAB_TOKEN" for attr in STAGE_TOKENS[stage]
+    }
+    allowed_env = PROBE_ALLOWED_ENV | credentials
+    if stage != "patch":
+        allowed_env |= PROBE_STAGE_ENV
+    extra_env = sorted(set(report.get("env_names", [])) - allowed_env)
     if extra_env:
         failures.append(f"unexpected environment variables: {', '.join(extra_env)}")
+    if "GITLAB_TOKEN" in credentials and not report.get("gitlab_user"):
+        failures.append("the GitLab token did not authenticate")
+    if "GH_TOKEN" in credentials and not report.get("github_user"):
+        failures.append("the GitHub token did not authenticate")
     if report.get("token_seen") != PROBE_TOKEN:
         failures.append("the Claude token was not passed through")
     extra_mounts = sorted(set(report.get("host_mounts", [])) - PROBE_ALLOWED_MOUNTS)
@@ -764,6 +1216,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--probe", action="store_true", help="run the sandbox escape probe, print the report"
     )
+    parser.add_argument(
+        "--stage",
+        choices=STAGES,
+        default="patch",
+        help="with --probe: run with this stage's credentials and check they authenticate",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -771,13 +1229,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     config.spool.mkdir(parents=True, exist_ok=True)
     builder = Builder(config)
     if args.probe:
-        outcome = builder.probe()
+        outcome = builder.probe(args.stage)
         print(json.dumps(outcome, indent=2))
         return 0 if outcome["ok"] else 1
     logger.info(
-        "builder started: spool=%s repos=%s ceilings=%d turns/%d min token=%s",
+        "builder started: spool=%s repos=%s ceilings=%d turns/%d min token=%s stage tokens=%s",
         config.spool, ",".join(config.repos), config.max_turns, config.max_minutes,
         "set" if config.token else "MISSING",
+        ",".join(n for a, n in TOKEN_ENV_NAMES.items() if getattr(config, a)) or "none",
     )  # fmt: skip
 
     stopping = False

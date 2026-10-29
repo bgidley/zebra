@@ -1,7 +1,9 @@
 # claude-code-builder Specification
 
 ## Purpose
-TBD - created by archiving change claude-code-builder. Update Purpose after archive.
+Run Claude Code for Zebra in a disposable, secret-free podman sandbox on the host, within enforced
+budgets: staged patch builds that a human publishes as draft MRs (#98, #172), and delivery stages
+that take Zebra's own repo through its development process with scoped credentials (#251).
 
 ## Requirements
 
@@ -9,8 +11,9 @@ TBD - created by archiving change claude-code-builder. Update Purpose after arch
 The host builder SHALL run each build's Claude Code session in a new podman container from the
 sandbox image, as a non-root user mapped to the host user (`--userns=keep-id`), with memory and
 pids limits, lowered CPU priority, `no-new-privileges`, all capabilities dropped, and only the job's workspace and
-output directory mounted. The container environment SHALL contain the Claude Code OAuth token
-and the job's own parameters, and no other credential.
+output directory mounted. The container environment SHALL contain the Claude Code OAuth token,
+the job's own parameters, and only the credentials its delivery stage is given, and no other
+credential. Credentials SHALL be passed by name only, never as command-line values.
 
 #### Scenario: Escape probe passes
 - **WHEN** `zebra_builder.py --probe` runs the sandbox command with the probe entrypoint
@@ -27,8 +30,8 @@ and the job's own parameters, and no other credential.
 ### Requirement: The host treats sandbox output as untrusted data
 The builder SHALL NOT run git or any other program inside a workspace after a sandbox has run in
 it. It SHALL read sandbox outputs only as regular files opened without following symlinks, and
-SHALL ignore any output larger than its size cap. It SHALL redact the Claude token from all text
-it returns, and SHALL refuse a patch that contains the token.
+SHALL ignore any output larger than its size cap. It SHALL redact every credential it holds from
+all text it returns, and SHALL refuse a patch that contains one.
 
 #### Scenario: Symlinked output is refused
 - **WHEN** a sandbox leaves `changes.patch` as a symlink to a host file
@@ -99,3 +102,52 @@ SHALL resume supervising any running sandbox that still exists and fail jobs who
 #### Scenario: Builder restarts mid-build
 - **WHEN** the builder starts and a job is `running` with its container still present
 - **THEN** it resumes waiting on that container instead of failing the job
+
+### Requirement: Delivery stages get only their own credentials
+A build job MAY name a delivery `stage` (`propose`, `ship`, `review`, `merge`) with a feature
+`branch` and an `issue`; a job without one is a `patch` build and SHALL run exactly as before.
+Stages SHALL run only on the builder's own repo (`ZEBRA_BUILDER_SELF_REPO`). The builder SHALL
+give `propose`, `ship` and `review` the Developer GitLab token, `ship` and `merge` the GitHub
+token, and only `merge` the Maintainer GitLab token. A stage whose credential is not configured
+SHALL fail before cloning. Each stage's prompt SHALL say which CLAUDE.md steps to do and where to
+stop.
+
+#### Scenario: Ship gets its two credentials by name
+- **WHEN** a `ship` job starts
+- **THEN** the sandbox environment has `GITLAB_TOKEN` (Developer) and `GH_TOKEN`, passed by name,
+  and no Maintainer token
+
+#### Scenario: Stage credentials authenticate
+- **WHEN** `zebra_builder.py --probe --stage ship` runs on the host
+- **THEN** the probe reports the GitLab and GitHub login names and no unexpected variables
+
+#### Scenario: Patch build environment unchanged
+- **WHEN** a job without `stage` starts
+- **THEN** no stage variable or stage credential is in the sandbox environment
+
+### Requirement: A merge runs only for the approved head
+A `merge` job SHALL carry `approval {ship_job_id, head_sha}`. The builder SHALL start it only if
+that job is a `ship` for the same repo, branch and issue, its result is `done` with that
+`head_sha`, and the remote branch is still at that commit. Otherwise the job SHALL be rejected
+before cloning and audited.
+
+#### Scenario: Branch moved after approval
+- **WHEN** the branch head on the remote differs from the approved `head_sha`
+- **THEN** the merge is `rejected`, nothing is cloned and the audit log records it
+
+### Requirement: Stage results are checked on the host
+After a stage the builder SHALL record, from the remote rather than the sandbox, the branch head
+(`propose`, `ship`), changed and sensitive files, and the latest pipeline for that commit. A stage
+that pushed nothing SHALL fail. A pushed diff containing a builder credential SHALL fail the
+stage and be audited. A `merge` SHALL fail unless the base branch moved to a commit whose parents
+include the approved head. A `review` SHALL fail without a `verdicts` list. Stage jobs SHALL NOT
+be published.
+
+#### Scenario: Ship result from the remote
+- **WHEN** a ship sandbox finishes after pushing its branch
+- **THEN** the result has `head_sha` from `git ls-remote`, `changed_files` and `sensitive_files`
+  from the compare API, and `pipeline` for that commit
+
+#### Scenario: Merge of the wrong commit
+- **WHEN** master moves to a commit whose parents do not include the approved head
+- **THEN** the merge result is `failed` and the audit log records `merge_mismatch`

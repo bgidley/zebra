@@ -1,8 +1,9 @@
 # Claude Code builder: sandboxed builds with capability budgets
 
 Issues: #98 (Zebra changes code through Claude Code), #172 (declared, enforced limits and staging
-for what Zebra builds). OpenSpec: `openspec/specs/claude-code-builder/spec.md` (change archived as
-`openspec/changes/archive/2026-10-20-claude-code-builder/`).
+for what Zebra builds), #251 (delivery stages: Zebra delivers its own changes). OpenSpec:
+`openspec/specs/claude-code-builder/spec.md` (changes archived as
+`openspec/changes/archive/2026-10-20-claude-code-builder/` and `…/2026-10-29-builder-stages/`).
 
 ## 1. Goal & scope
 
@@ -11,8 +12,10 @@ and deliver it as a **draft merge request**, but only after a human approves the
 
 - Claude Code runs headless (`claude -p`) on the owner's **Claude subscription**
   (`CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`), not on OpenRouter.
-- Not in scope: merging or deploying (humans merge), sandbox network egress filtering, parallel
-  builds, a builds page in the UI.
+- **Delivery stages** (#251, §7) let the sandbox run steps of the CLAUDE.md process on Zebra's
+  own repo with scoped credentials: `propose`, `ship`, `review`, and `merge` (only for a
+  human-approved head). The *Improve Zebra* workflow that drives them is slice B of #251.
+- Not in scope: sandbox network egress filtering, parallel builds, a builds page in the UI.
 
 ## 2. Architecture
 
@@ -102,6 +105,10 @@ next goal. A deploy restarts the builder, which picks running sandboxes back up 
 | `ZEBRA_BUILDER_MEMORY` / `_PIDS` / `_CPUS` | builder-site.env | `3g` / 512 / off |
 | `ZEBRA_BUILDER_IMAGE` | builder-site.env | `localhost/zebra-builder-sandbox:prod` |
 | `ZEBRA_BUILDER_SPOOL` | builder host default `~/.local/share/zebra/builds`; containers `/builds` (Quadlet) | |
+| `ZEBRA_BUILDER_GITLAB_TOKEN` | CI variable (protected, masked) → builder.env | none: `propose`/`ship`/`review` fail. `zebra.gidley`, Developer on `gidley/zebra` (cannot push master) |
+| `ZEBRA_BUILDER_GITLAB_MERGE_TOKEN` | CI variable → builder.env | none: `merge` fails. Owner's token, Maintainer+ |
+| `ZEBRA_BUILDER_GITHUB_TOKEN` | CI variable → builder.env | none: `ship`/`merge` fail. Fine-grained, `bgidley/zebra`; **expires 2026-11-26** |
+| `ZEBRA_BUILDER_SELF_REPO` / `_GITHUB_REPO` | builder-site.env | `gidley/zebra` / `bgidley/zebra` |
 
 Deploy (`scripts/deploy-podman.sh`) installs `zebra_builder.py` to `~/.local/share/zebra/builder/`
 and `zebra-builder.service` to `~/.config/systemd/user/`, creates the spool before web restarts,
@@ -120,3 +127,42 @@ builds the sandbox image (a failure only warns), and restarts the builder (`Kill
   are the real checks.
 - **Notional cost**: `total_cost_usd` is recorded, not added to `__total_cost__`, so
   `DAILY_BUDGET_USD` measures OpenRouter spend only.
+
+## 7. Delivery stages (#251)
+
+A job may name a `stage`; without one it is a `patch` build (everything above, unchanged). Stages
+run only on `ZEBRA_BUILDER_SELF_REPO` and take `branch` + `issue`; `merge` also takes
+`approval {ship_job_id, head_sha}`. Each gets a stage preamble (`STAGE_PREAMBLE` + `STAGE_STEPS`)
+that tells Claude Code which CLAUDE.md steps to do in the sandbox (no podman, prod or worktree
+steps; Zebra runs feedback, review and outcome review) and to write `/out/report.json`.
+
+| Stage | Sandbox does | Credentials (`STAGE_TOKENS`) | Builder records |
+|---|---|---|---|
+| `propose` | read the issue, OpenSpec change with Outcomes, validate, push branch, post outcomes | Developer GitLab | `head_sha`, changed / sensitive files, pipeline |
+| `ship` | implement, lint, test, push, watch branch CI and fix (≤3), archive, push GitHub, open PR | Developer GitLab, GitHub | same |
+| `review` | independent outcome verdicts in `report.json`; no changes | Developer GitLab | `report.verdicts` required |
+| `merge` | detached merge of `head_sha`, push both remotes, delete branch, watch master pipeline | **Maintainer** GitLab, GitHub | `merge_sha`, parents include `head_sha`, pipeline |
+
+- Credentials reach the sandbox as `GITLAB_TOKEN` / `GH_TOKEN` (what glab and gh read), by name;
+  `sandbox-run.sh` adds git credential helpers that read them at push time and a `github` remote.
+- `propose`/`ship` clone the branch if it exists, else the base plus `checkout -b` on the host
+  before the sandbox runs. The other stages clone the base. Stages clone all branches.
+- Approval check before cloning: the ship job is a `ship` for the same repo, branch and issue,
+  its result is `done` with `head_sha`, and `git ls-remote` still shows that head. Else
+  `rejected` + audit; if it passes, a `merge_approved` audit line records the ship job, head,
+  branch, issue and process.
+- Host facts: `git ls-remote` (host credentials), `glab api` compare / commits / pipelines. A
+  stage that pushed nothing, a merge that did not move master or did not merge `head_sha`
+  (`merge_mismatch`), a review without verdicts, or any builder credential in a pushed diff
+  (`secret_pushed`) fails the stage. `report.json` is capped (100 kB) and redacted. Stage jobs
+  are never published.
+- `--probe --stage <s>` runs the probe with that stage's real credentials; the probe makes
+  read-only `glab api user` / `gh api user` calls and `check_probe` requires the logins and
+  allows only that stage's variables.
+- Image: glab 1.119.0 and gh 2.103.2 (release checksums pinned), openspec 1.13.2.
+
+Risks: the sandbox's open network now holds push credentials (Developer scope, protected master,
+redaction and the pushed-secret check limit this; egress filtering is still a follow-up). The
+GitHub token is the owner's and could push the mirror's master (GitHub is not the deploy source).
+A compromised Zebra could write its own approval: the human gate is in the workflow, as for
+publish.
