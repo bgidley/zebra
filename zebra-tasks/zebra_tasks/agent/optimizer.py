@@ -100,6 +100,9 @@ class WorkflowOptimizerAction(TaskAction):
         ```
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Create new workflows or optimize existing ones based on evaluation results."
 
     inputs = [

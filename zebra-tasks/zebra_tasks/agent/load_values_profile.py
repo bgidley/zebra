@@ -30,6 +30,9 @@ class LoadValuesProfileAction(TaskAction):
         - mode: "edit" if found, "capture" otherwise
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Load a user's current values-profile version into process properties."
 
     inputs = [

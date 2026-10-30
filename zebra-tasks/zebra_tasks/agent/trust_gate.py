@@ -66,6 +66,9 @@ class TrustGateAction(TaskAction):
     as the task output.
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Trust gate — pause for human approval when domain trust is insufficient."
 
     inputs = [

@@ -28,6 +28,9 @@ class RecordDilemmaResolutionAction(TaskAction):
     honoured regardless of whether recording succeeds.
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Record the human's ethics-dilemma resolution and route accordingly."
 
     inputs = [

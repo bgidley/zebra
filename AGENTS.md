@@ -653,7 +653,7 @@ When adding a new task action, follow this end-to-end checklist:
 
 1. Create the action class in `zebra-tasks/zebra_tasks/` (appropriate subdirectory), inheriting from `TaskAction`
 2. Implement `async def run(self, task, context) -> TaskResult`
-3. Add a `description` class attribute and define `inputs`/`outputs` using `ParameterDef` from `zebra.tasks.base`; set `reversibility_hint` (`always_reversible` / `always_irreversible`) when the action's reversibility is unconditional — the default `context_dependent` means trust gates assess it at runtime (REQ-TRUST-002)
+3. Add a `description` class attribute and define `inputs`/`outputs` using `ParameterDef` from `zebra.tasks.base`; **always** set `reversibility_hint` on the class (#245; `zebra-tasks/tests/test_launch.py` fails otherwise): `always_reversible` only if its effects stay in the run (reads, LLM calls, pure transforms, gates, audit appends), `always_irreversible` if it unconditionally reaches the outside world, else `context_dependent` (anything writing files, stores, the library or goal queue, running code or starting child workflows) — trust gates assess that at runtime (REQ-TRUST-002) and strict gym mode refuses it
 4. **Register as entry point** in `zebra-tasks/pyproject.toml`:
    ```toml
    [project.entry-points."zebra.tasks"]
@@ -665,6 +665,8 @@ When adding a new task action, follow this end-to-end checklist:
 The `IoCActionRegistry` (in `zebra-agent/ioc/`) auto-discovers entry points at startup — manual `registry.register_action()` is only needed for non-entry-point actions or tests.
 
 For conditional routing, return `TaskResult.ok(output=..., next_route="route_name")` where `next_route` matches a routing's `name` field in the YAML definition.
+
+**Starting a library workflow** from code (an action or an entry point) goes through `zebra_tasks.launch.create_library_process(engine, definition, entry=..., ...)`, never `engine.create_process` directly: it calls the `check_launch` hook that S3 of the Commons extends (#245). A source-scan test allowlists the few direct calls (built-in system workflows, the gym) with reasons.
 
 ## Human Tasks (Convention-Based Pattern)
 

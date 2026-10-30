@@ -57,6 +57,9 @@ class WorkflowEvaluatorAction(TaskAction):
         ```
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Use LLM to evaluate workflow effectiveness and identify improvements."
 
     inputs = [

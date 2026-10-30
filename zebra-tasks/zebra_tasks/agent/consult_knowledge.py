@@ -43,6 +43,9 @@ class ConsultKnowledgeAction(TaskAction):
               output_key: knowledge_context
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Read personal knowledge store entries for LLM planning context."
 
     inputs = [

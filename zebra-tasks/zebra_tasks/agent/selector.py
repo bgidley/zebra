@@ -114,6 +114,9 @@ class WorkflowSelectorAction(TaskAction):
         ```
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     _logger = None
 
     @classmethod

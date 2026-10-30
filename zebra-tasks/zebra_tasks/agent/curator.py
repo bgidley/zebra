@@ -257,7 +257,7 @@ class WorkflowCuratorAction(TaskAction):
         }
         seen: set[str] = set()
         for wf in files:  # newest first, so the first file per name is current
-            if _is_protected(wf):
+            if is_protected_workflow(wf):
                 continue
             ws = stats.get(wf.name)
             if wf.name in seen:
@@ -313,7 +313,11 @@ class WorkflowCuratorAction(TaskAction):
         decided_names = {d["workflow"] for d in decided if d["rule"] != SUPERSEDED_COPY}
         current: dict[str, Any] = {}
         for wf in files:
-            if wf.name not in current and wf.name not in decided_names and not _is_protected(wf):
+            if (
+                wf.name not in current
+                and wf.name not in decided_names
+                and not is_protected_workflow(wf)
+            ):
                 current[wf.name] = wf
         if not any(LLM_DEFINED_TAG in wf.tags for wf in current.values()) or len(current) < 2:
             return []
@@ -361,7 +365,11 @@ class WorkflowCuratorAction(TaskAction):
         return decisions
 
 
-def _is_protected(wf: Any) -> bool:
+def is_protected_workflow(wf: Any) -> bool:
+    """True for Zebra's own workflows: tagged ``system`` or in ``SYSTEM_WORKFLOW_NAMES``.
+
+    The curator never retires them, and the Commons never exports them (#245).
+    """
     return SYSTEM_TAG in wf.tags or wf.name in SYSTEM_WORKFLOW_NAMES
 
 

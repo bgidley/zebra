@@ -308,6 +308,9 @@ class EthicsGateAction(TaskAction):
     "escalate" is never emitted and behaviour is unchanged.
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Kantian ethics gate — evaluate whether an action is ethically permissible."
 
     inputs = [

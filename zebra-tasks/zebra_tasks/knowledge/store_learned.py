@@ -45,6 +45,9 @@ class StoreLearnedKnowledgeAction(TaskAction):
     fails the workflow.
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Store agent-learned knowledge; start contradiction resolution for conflicts."
 
     inputs = [

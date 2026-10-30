@@ -22,6 +22,9 @@ class ApplyVerificationResultAction(TaskAction):
     Degrades gracefully when the store is absent.
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Apply the user's verification choices to knowledge entries."
 
     inputs: list[ParameterDef] = []

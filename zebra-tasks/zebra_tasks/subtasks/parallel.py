@@ -6,10 +6,13 @@ from zebra.core.models import ProcessDefinition, ProcessState, TaskInstance, Tas
 from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.launch import LaunchRefused, create_library_process
 from zebra_tasks.subtasks.common import child_result, start_child
 
 #: Task property mapping each child process id to its workflow key (#181).
 SUBFLOW_KEYS_KEY = "__subflow_keys__"
+#: Task property holding the failed results of children the launch check refused (#245).
+SUBFLOW_REFUSED_KEY = "__subflow_refused__"
 
 
 class ParallelSubworkflowsAction(TaskAction):
@@ -52,6 +55,9 @@ class ParallelSubworkflowsAction(TaskAction):
               output_key: analysis_results
         ```
     """
+
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
 
     description = "Spawn multiple sub-workflows in parallel and wait for all to complete."
 
@@ -129,6 +135,7 @@ class ParallelSubworkflowsAction(TaskAction):
                 keys.get(entry["process_id"], entry["process_id"]): child_result(entry)
                 for entry in context.subflow_results
             }
+            results.update(task.properties.get(SUBFLOW_REFUSED_KEY, {}))
             return self._finish(task, context, results)
 
         workflows = task.properties.get("workflows", [])
@@ -140,6 +147,7 @@ class ParallelSubworkflowsAction(TaskAction):
 
         # Spawn the workflows; with fail_fast, stop once one has failed
         keys: dict[str, str] = {}  # process_id -> key
+        refused: dict[str, dict[str, Any]] = {}  # key -> failed result (#245)
         for i, wf_config in enumerate(workflows):
             key = wf_config.get("key", f"workflow_{i}")
             workflow_def = await self._get_workflow_definition(wf_config, context)
@@ -169,12 +177,20 @@ class ParallelSubworkflowsAction(TaskAction):
 
             # Create (linked from its first save, #227) and start the sub-process;
             # its inline run is bounded by timeout
-            sub_process = await context.engine.create_process(
-                workflow_def,
-                properties=resolved_properties,
-                parent_process_id=context.process.id,
-                parent_task_id=task.id,
-            )
+            try:
+                sub_process = await create_library_process(
+                    context.engine,
+                    workflow_def,
+                    entry="parallel_subworkflows",
+                    properties=resolved_properties,
+                    parent_process_id=context.process.id,
+                    parent_task_id=task.id,
+                )
+            except LaunchRefused as e:
+                refused[key] = {"success": False, "process_id": None, "error": str(e)}
+                if fail_fast:
+                    break
+                continue
             keys[sub_process.id] = key
             await start_child(context, sub_process.id, timeout)
 
@@ -184,10 +200,12 @@ class ParallelSubworkflowsAction(TaskAction):
                     break
 
         if not keys:
-            return self._finish(task, context, {})
+            return self._finish(task, context, refused)
 
         # The engine re-runs this action with subflow_results once all are terminal.
         task.properties[SUBFLOW_KEYS_KEY] = keys
+        if refused:
+            task.properties[SUBFLOW_REFUSED_KEY] = refused
         return TaskResult.suspend(list(keys))
 
     def _finish(

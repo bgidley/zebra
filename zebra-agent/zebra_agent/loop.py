@@ -21,6 +21,7 @@ from typing import Any
 
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState, TaskState
+from zebra_tasks.launch import create_library_process
 
 from zebra_agent.human_tasks import find_pending_human_task
 from zebra_agent.library import WorkflowLibrary, list_goal_workflows
@@ -241,8 +242,10 @@ class AgentLoop:
         Returns:
             Dict with execution_result and metadata from process properties.
         """
-        # Create and run the main loop workflow
-        process = await self.engine.create_process(definition, properties=properties)
+        # Create and run the main loop workflow, through the launch choke point (#245)
+        process = await create_library_process(
+            self.engine, definition, entry="agent_loop", properties=properties
+        )
         # start_process runs auto tasks inline, so bound it here; a slow chain is
         # failed at the deadline and surfaces through the FAILED branch below (#142).
         await self.engine.start_process_with_timeout(process.id, self.goal_timeout)
@@ -586,7 +589,9 @@ class AgentLoop:
             self.engine.extras["__progress_callback__"] = progress_callback
 
         try:
-            process = await self.engine.create_process(definition, properties=properties)
+            process = await create_library_process(
+                self.engine, definition, entry="dream_cycle", properties=properties
+            )
             await self.engine.start_process_with_timeout(process.id, DREAM_CYCLE_TIMEOUT)
 
             # Dream cycles may take longer than regular goals

@@ -54,6 +54,9 @@ class LoadWorkflowDefinitionsAction(TaskAction):
         ```
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Load workflow definitions from the WorkflowLibrary."
 
     inputs = [

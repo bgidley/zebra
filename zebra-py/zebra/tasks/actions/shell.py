@@ -33,6 +33,9 @@ class ShellTaskAction(TaskAction):
               timeout: 600
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         command = task.properties.get("command")
         if not command:

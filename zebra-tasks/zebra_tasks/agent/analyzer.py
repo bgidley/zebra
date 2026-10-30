@@ -62,6 +62,9 @@ class MetricsAnalyzerAction(TaskAction):
         ```
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Analyze workflow performance metrics via the MetricsStore interface."
 
     inputs = [

@@ -42,6 +42,9 @@ class CompactMemoryAction(TaskAction):
     Reads ``__memory_store__`` from context.extras. Degrades gracefully if absent.
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Enforce hot/warm/cold tiered retention on agent memory entries."
 
     inputs = [

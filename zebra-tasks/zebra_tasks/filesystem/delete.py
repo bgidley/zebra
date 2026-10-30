@@ -45,6 +45,9 @@ class FileDeleteAction(TaskAction):
         - output.type: "file" or "directory" (null if didn't exist)
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Delete a file or directory."
 
     inputs = [
