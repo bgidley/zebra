@@ -402,7 +402,9 @@ class ZebraSourceAction(TaskAction):
         directory = root if raw in ("", ".", "./") else resolve_source_path(root, raw)
         label = raw or "the source root"
         if directory.is_file():
-            raise SourceAccessError(f"'{raw}' is a file; read it with read_zebra_source")
+            # A file is a normal answer, not a miss: its own entry (#255).
+            rel = directory.relative_to(root).as_posix()
+            return f"{rel} ({_size(directory.stat().st_size)})"
         if not directory.is_dir():
             raise SourceAccessError(missing_path_message(root, raw, directory))
         max_results = _as_int(props.get("max_results"), 200)
