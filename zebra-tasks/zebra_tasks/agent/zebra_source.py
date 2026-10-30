@@ -43,10 +43,26 @@ MAX_SUGGESTIONS = 5
 CONFIDENT_RATIO = 0.9
 CONFIDENT_NAME_RATIO = 0.85
 RECOVERY_HINT = "Use list_zebra_source to see what exists, or search_zebra_source to find a name."
+# How the messages below for a path that is not there, or not that kind of entry, read: a
+# normal answer for the agent, not a failure of the tool (#256). Keep in step with them.
+EXPECTED_MISS_MARKERS = (
+    "' does not exist",
+    "' is not deployed:",
+    "' is a directory, not a file",
+    "' is a file; read it with",
+)
 
 
 class SourceAccessError(Exception):
     """Raised when a path is outside what Zebra may read."""
+
+
+def is_expected_miss(error: str | None) -> bool:
+    """Whether a zebra_source failure is an expected miss rather than a real failure.
+
+    Refusals (secret, outside the tree, not source), bad input and crashes are not.
+    """
+    return bool(error) and any(marker in error for marker in EXPECTED_MISS_MARKERS)
 
 
 def source_root() -> Path:

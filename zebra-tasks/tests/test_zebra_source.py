@@ -7,7 +7,12 @@ import pytest
 from zebra.core.models import ProcessDefinition, ProcessInstance, TaskDefinition, TaskInstance
 from zebra.tasks.base import ExecutionContext
 
-from zebra_tasks.agent.zebra_source import RECOVERY_HINT, ZebraSourceAction, source_root
+from zebra_tasks.agent.zebra_source import (
+    RECOVERY_HINT,
+    ZebraSourceAction,
+    is_expected_miss,
+    source_root,
+)
 
 
 @pytest.fixture
@@ -439,3 +444,58 @@ async def test_unknown_entry_without_a_match_names_the_tree(root, context):
         "the source tree has no 'zebra_qqqq'. It has README.md, zebra-agent-web/, zebra-tasks/."
         in result.error
     )
+
+
+# --- expected misses (#256) ---
+
+
+@pytest.mark.parametrize(
+    "props",
+    [
+        {"path": "zebra-tasks/zebra_tasks/qqqq_nothing_like_it.py"},
+        {"path": "zebra_qqqq/zzzzzz.yaml"},
+        {"path": "specs/zebra-as-is.md"},
+        {"path": "zebra-tasks"},
+        {"operation": "list", "path": "zebra-tasks/zebra_tasks/thing.py"},
+        {"operation": "list", "path": "zebra-tasks/nope"},
+    ],
+    ids=["missing", "no-such-top", "not-deployed", "dir-to-read", "file-to-list", "missing-dir"],
+)
+async def test_miss_errors_are_expected_misses(root, context, props):
+    result = await ZebraSourceAction().run(_task(**props), context)
+
+    assert not result.success
+    assert is_expected_miss(result.error), result.error
+
+
+@pytest.mark.parametrize(
+    "props",
+    [
+        {"path": ""},
+        {"path": "../outside.py"},
+        {"path": ".env"},
+        {"path": "zebra-agent-web/db.sqlite3"},
+        {"operation": "search", "pattern": "("},
+        {"operation": "search", "pattern": "x", "glob": "../*"},
+    ],
+    ids=["no-path", "outside", "secret", "database", "bad-regex", "bad-glob"],
+)
+async def test_refusals_and_bad_input_are_not_misses(root, context, props):
+    result = await ZebraSourceAction().run(_task(**props), context)
+
+    assert not result.success
+    assert not is_expected_miss(result.error), result.error
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        None,
+        "",
+        "Task read_source failed: FileNotFoundError: [Errno 2] No such file or directory",
+        "Child process not found",
+        "Goal timed out after 600 seconds",
+    ],
+)
+def test_crashes_and_unknown_errors_are_not_misses(error):
+    assert not is_expected_miss(error)

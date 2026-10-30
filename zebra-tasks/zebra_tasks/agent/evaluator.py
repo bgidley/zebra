@@ -282,11 +282,17 @@ Respond with JSON only:
             f"Analysis period: {metrics_analysis.get('analysis_period_days', 'N/A')} days"
         )
         prompt_parts.append(f"Total runs: {metrics_analysis.get('total_runs_analyzed', 0)}")
+        counts = metrics_analysis.get("run_counts")
+        if counts:
+            prompt_parts.append(
+                f"Goal runs: {counts.get('goal', 0)}, tool calls by agents: "
+                f"{counts.get('tool', 0)}, system runs: {counts.get('system', 0)}"
+            )
         prompt_parts.append(f"Unique workflows: {metrics_analysis.get('unique_workflows', 0)}")
         prompt_parts.append("")
 
         # Add workflow stats
-        prompt_parts.append("### Workflow Statistics")
+        prompt_parts.append("### Workflow Statistics (goal runs)")
         for ws in metrics_analysis.get("workflow_stats", []):
             prompt_parts.append(
                 f"- {ws['workflow_name']}: {ws['total_runs']} runs, "
@@ -308,19 +314,10 @@ Respond with JSON only:
                 )
             prompt_parts.append("")
 
-        # Add failure patterns
-        failure_patterns = metrics_analysis.get("failure_patterns", [])
-        if failure_patterns:
-            prompt_parts.append("### Failure Patterns")
-            for fp in failure_patterns:
-                prompt_parts.append(f"- {fp['workflow_name']}: {fp['failure_count']} failures")
-                for error, count in fp.get("error_types", {}).items():
-                    prompt_parts.append(f"  - {error}: {count} times")
-                if fp.get("sample_goals"):
-                    prompt_parts.append("  Sample failed goals:")
-                    for goal in fp["sample_goals"]:
-                        prompt_parts.append(f"    - {goal}")
-            prompt_parts.append("")
+        prompt_parts.extend(
+            self._failure_section("Failure Patterns", metrics_analysis.get("failure_patterns"))
+        )
+        prompt_parts.extend(self._tool_section(metrics_analysis))
 
         # Add recommendations from metrics
         recommendations = metrics_analysis.get("recommendations", [])
@@ -349,6 +346,50 @@ Respond with JSON only:
         )
 
         return "\n".join(prompt_parts)
+
+    @staticmethod
+    def _failure_section(title: str, patterns: list[dict] | None) -> list[str]:
+        """Render failure patterns (errors and sample goals) under ``title``."""
+        if not patterns:
+            return []
+        parts = [f"### {title}"]
+        for fp in patterns:
+            parts.append(f"- {fp['workflow_name']}: {fp['failure_count']} failures")
+            for error, count in fp.get("error_types", {}).items():
+                parts.append(f"  - {error}: {count} times")
+            if fp.get("sample_goals"):
+                parts.append("  Sample failed goals:")
+                for goal in fp["sample_goals"]:
+                    parts.append(f"    - {goal}")
+        parts.append("")
+        return parts
+
+    @classmethod
+    def _tool_section(cls, metrics_analysis: dict[str, Any]) -> list[str]:
+        """Render tool workflows, expected misses apart from real failures (#256)."""
+        stats = metrics_analysis.get("tool_workflow_stats") or []
+        if not stats:
+            return []
+        parts = [
+            "### Tool Workflows (called by agents as tools, not goals)",
+            "An expected miss is a normal answer (the path does not exist or is not "
+            "deployed); it is not a failure.",
+        ]
+        for ts in stats:
+            rate = ts.get("success_rate")
+            rate_text = "n/a" if rate is None else f"{rate * 100:.0f}%"
+            parts.append(
+                f"- {ts['workflow_name']}: {ts['total_runs']} calls, "
+                f"{ts.get('expected_misses', 0)} expected misses, "
+                f"{ts.get('failures', 0)} failures, {rate_text} success excluding misses"
+            )
+        parts.append("")
+        parts.extend(
+            cls._failure_section(
+                "Tool Failure Patterns", metrics_analysis.get("tool_failure_patterns")
+            )
+        )
+        return parts
 
     @staticmethod
     def _continuation_section(metrics_analysis: dict[str, Any]) -> list[str]:
