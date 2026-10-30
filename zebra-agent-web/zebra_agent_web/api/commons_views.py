@@ -1,0 +1,144 @@
+"""Web views for the Zebra Commons identity page (`/commons/`, #228).
+
+GET shows the Zebra npub, the owner, this device and the device list. Every POST is
+owner-only (403 otherwise) and returns 404 while ``COMMONS_ENABLED`` is off.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime
+from functools import wraps
+from urllib.parse import urlencode
+
+from django.http import Http404, HttpResponseForbidden
+from django.shortcuts import redirect, render
+from django.views.decorators.http import require_POST
+
+from zebra_agent_web.api import commons_identity as ci
+from zebra_agent_web.api.identity import goal_identity
+
+logger = logging.getLogger(__name__)
+
+
+def _redirect(message: str = "", error: str = ""):
+    params = {k: v for k, v in (("message", message), ("error", error)) if v}
+    return redirect("/commons/" + (f"?{urlencode(params)}" if params else ""))
+
+
+def _owner_action(view):
+    """POST-only, Commons on, owner only."""
+
+    @require_POST
+    @wraps(view)
+    async def wrapper(request, *args, **kwargs):
+        if not ci.commons_enabled():
+            raise Http404("Commons is off")
+        user = await request.auser()
+        if not await ci.is_owner(user):
+            return HttpResponseForbidden("Only the Commons owner can do this.")
+        try:
+            return await view(request, *args, **kwargs)
+        except ci.CommonsError as exc:
+            return _redirect(error=str(exc))
+
+    return wrapper
+
+
+def _observed(request) -> bool:
+    """'Who manages this device?' — anyone but me means the sphere is observed."""
+    return request.POST.get("managed_by", "me") != "me"
+
+
+def _sphere(request) -> str:
+    sphere = request.POST.get("sphere", "").strip()
+    if sphere == "other":
+        sphere = request.POST.get("sphere_other", "").strip()
+    return sphere
+
+
+def _expiry(request) -> int | None:
+    raw = request.POST.get("expires_on", "").strip()
+    if not raw:
+        return None
+    try:
+        day = datetime.strptime(raw, "%Y-%m-%d").replace(tzinfo=UTC)
+    except ValueError as exc:
+        raise ci.CommonsError("The expiry date is not valid.") from exc
+    return int(day.timestamp())
+
+
+async def _page(request, extra: dict | None = None, status: int = 200):
+    user = await request.auser()
+    data = await ci.overview()
+    context = {
+        **await goal_identity(),
+        **data,
+        "is_owner": await ci.is_owner(user),
+        "message": request.GET.get("message", ""),
+        "error": request.GET.get("error", ""),
+        "prefill_code": request.GET.get("code", ""),
+        **(extra or {}),
+    }
+    response = render(request, "pages/commons.html", context, status=status)
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+async def commons_page(request):
+    """The Commons identity page."""
+    return await _page(request)
+
+
+@_owner_action
+async def commons_start(request):
+    npub = await ci.start_zebra(
+        display_name=request.POST.get("display_name", ""),
+        label=request.POST.get("label", ""),
+        sphere=_sphere(request),
+        observed=_observed(request),
+    )
+    return _redirect(message=f"Your Zebra is {npub}")
+
+
+@_owner_action
+async def commons_pair(request):
+    result = await ci.pair_device(
+        code=request.POST.get("code", ""),
+        label=request.POST.get("label", ""),
+        sphere=_sphere(request),
+        observed=_observed(request),
+        expires_at=_expiry(request),
+    )
+    return await _page(
+        request,
+        {
+            "cert_code": result["cert_code"],
+            "paired_fingerprint": result["fingerprint"],
+            "message": "Device certified. Paste the certificate code on that device.",
+        },
+    )
+
+
+@_owner_action
+async def commons_import(request):
+    npub = await ci.import_cert(request.POST.get("cert_code", ""))
+    return _redirect(message=f"This device now belongs to {npub}")
+
+
+@_owner_action
+async def commons_revoke(request, device_pubkey: str):
+    await ci.revoke_device(device_pubkey, request.POST.get("reason", ""))
+    return _redirect(message="Device revoked. Its signatures are no longer accepted.")
+
+
+@_owner_action
+async def commons_backup(request):
+    nsec = await ci.export_backup()
+    return await _page(request, {"backup_nsec": nsec})
+
+
+@_owner_action
+async def commons_restore(request):
+    npub = await ci.restore_backup(request.POST.get("nsec", ""))
+    return _redirect(message=f"Zebra key restored: {npub}")

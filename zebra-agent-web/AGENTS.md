@@ -46,6 +46,7 @@ This file provides coding agent guidelines specific to the `zebra-agent-web` pac
 | `zebra_agent_web/api/run_trace.py` | Step trace (#184): build the parent/subflow tree from the engine step journal + live tasks, "where it is now", property snapshots (`properties_at`). Templates `pages/run_trace.html`, `partials/run_trace_tree.html` (live refresh), `partials/trace_process.html` (recursive), `partials/trace_properties.html` |
 | `zebra_agent_web/api/bug_reports.py` | Bug reports (#186): validate the dialog's fields, parse the browser's `client_context`, add server context + linked process/task/run state, render the reviewer markdown, list reports for `/bugs/`. UI: `partials/bug_report_dialog.html` (in `base.html`), `static/js/bug-report.js` (buffers JS/HTMX errors from `<head>`). See `specs/bug-report-design.md` |
 | `zebra_agent_web/api/thoughts.py` | Voice layer read model (#161): `thoughts_for_process(props)` (ordered recorded reasoning, voice line preferred) and `recent_thoughts()` (per-user feed for the dashboard). Rendered by `components/thought.html`, `partials/thought_trail.html`, `partials/on_my_mind.html` |
+| `zebra_agent_web/api/commons_identity.py` / `commons_views.py` | Zebra Commons identity (#228): service over `zebra_agent.commons` + `SystemStateModel` Commons fields + `CommonsDeviceModel` (signed certs/revokes); `/commons/` page and owner-only POSTs (404 while `COMMONS_ENABLED` is off). Template `pages/commons.html`, `partials/commons_device_fields.html`; nav link via `api/context_processors.commons` |
 | `zebra_agent_web/api/manual_review.py` | Find / retry / fail tasks flagged `__requires_manual_review__` by recovery (#130) |
 | `zebra_agent_web/api/inbox.py` | Tasks inbox read model (#217): `inbox_items(store)`: READY human tasks on unfinished processes plus review-flagged tasks, oldest first, with goal / run / workflow from the root process. Feeds `/tasks/` (`pages/tasks_inbox.html`), the nav badge and the dashboard Needs-you strip |
 | `zebra_agent_web/api/management/commands/run_workflow.py` | `manage.py run_workflow <name> --input-file -` runs a named workflow directly (default tier medium); `--status <process_id>` reports on it; JSON out, exit 1 on failure. Used by `scripts/zebra-outcome-review.sh` (#190) |
@@ -266,6 +267,7 @@ Key settings in `settings.py`:
 | `ZEBRA_AGENT_SETTINGS.RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | Daemon-startup recovery fails a process once one of its tasks has been interrupted this many times, instead of flagging it for manual review again (default: 3, #130) |
 | `ZEBRA_AGENT_SETTINGS.MEMORY_VECTOR_SEARCH` / `MEMORY_VECTOR_MAX_DISTANCE` | Oracle vector memory search on/off (default on) and cosine cut-off (default 0.8) (#169) |
 | `ZEBRA_AGENT_SETTINGS.EMBEDDING_MODEL_NAME` / `_URI` / `_CREDENTIAL` | In-database model name (`ZEBRA_EMBED_V1`), its `zebra-models` Object Storage URI, and the DBMS_CLOUD credential (`OCI$RESOURCE_PRINCIPAL`) (#169) |
+| `ZEBRA_AGENT_SETTINGS.COMMONS_ENABLED` / `COMMONS_KEY_DIR` | Commons master switch (default off) and the secret-key directory (`~/.zebra-agent/commons-keys`) (#228) |
 | `ZEBRA_AGENT_SETTINGS.VALUES_TAG_PROMOTION_THRESHOLD` | Usage count at which a candidate values tag is suggested for promotion (default: 3) |
 
 ## Async Views and DRF
@@ -643,6 +645,7 @@ POST /api/tasks/<task_id>/complete/
 | `/dreams/` | `dream_cycles` | Recent Dream Cycle runs: health, changes, retirements, summary; Zebra improvement requests with Review links (#189) and filed GitLab issue or filing error (#194) (`api/dream_history.py`) |
 | `/bugs/` | `bug_reports_page` | Recent bug reports: severity, review state / verdict, Review link, expandable report (#186) |
 | `/bugs/report/` | `bug_report_submit` | Record a report from the dialog: starts a *Bug Report* process (POST, HTMX, #186) |
+| `/commons/` | `commons_page` | Commons identity: Zebra npub, owner, this device, devices; owner-only `start/`, `pair/`, `import/`, `devices/<pubkey>/revoke/`, `backup/` (no-store), `restore/` (POST, #228) |
 | `/trust/` | `trust_page` | Trust management page (levels, suggestions, history) |
 | `/trust/<domain>/set/` | `trust_set_level_form` | Set domain trust level (POST, human-only) |
 | `/trust/suggestions/<id>/resolve/` | `trust_suggestion_resolve_form` | Approve/reject suggestion (POST) |

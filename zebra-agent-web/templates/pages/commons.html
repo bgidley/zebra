@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Commons - Zebra Agent{% endblock %}
+{% block page_title %}Commons{% endblock %}
+
+{% block content %}
+{% comment %}
+Zebra Commons identity (#228): the Zebra npub, the owner, this device and the devices
+certified by the Zebra key. Actions are owner-only. Nothing here is published yet (#246).
+{% endcomment %}
+<div class="space-y-6 max-w-5xl" data-testid="commons-page">
+    <div class="min-w-0">
+        <h1 class="text-xl font-semibold text-ink">Commons identity</h1>
+        <p class="text-muted mt-1 max-w-[65ch]">Your Zebra has its own key, separate from yours. Each deployment it runs on (home, work…) has a device key certified by it. Nothing here is published yet.</p>
+    </div>
+
+    {% if message %}
+    <div class="rounded-md border border-ok/40 bg-ok/10 text-ok px-4 py-3 text-sm break-all" role="status">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+    <div class="rounded-md border border-fail/40 bg-fail/10 text-fail px-4 py-3 text-sm" role="alert" data-testid="commons-error">{{ error }}</div>
+    {% endif %}
+
+    {% if not enabled %}
+    <section class="panel px-6 py-5" data-testid="commons-off">
+        <p class="text-ink font-medium">Commons is off.</p>
+        <p class="text-muted text-sm mt-1">Set <span class="font-mono">ZEBRA_COMMONS_ENABLED=1</span> to give this Zebra an identity. No keys are created while it is off.</p>
+    </section>
+    {% else %}
+
+    <section class="panel" aria-labelledby="identity-title" data-testid="commons-identity">
+        <div class="px-6 py-4 border-b border-line">
+            <h2 id="identity-title" class="text-base font-semibold text-ink">Zebra</h2>
+        </div>
+        <dl class="px-6 py-4 grid grid-cols-1 md:grid-cols-[10rem_1fr] gap-x-4 gap-y-3 text-sm">
+            <dt class="text-faint">Zebra key</dt>
+            <dd class="min-w-0">
+                {% if has_identity %}
+                <span class="font-mono text-ink break-all" data-testid="zebra-npub">{{ zebra_npub }}</span>
+                <span class="ml-2 font-mono text-xs text-faint">{{ zebra_fingerprint }}</span>
+                {% if zebra_display_name %}<span class="block text-muted mt-0.5">{{ zebra_display_name }}</span>{% endif %}
+                {% else %}
+                <span class="text-muted" data-testid="no-identity">No identity yet.</span>
+                {% endif %}
+            </dd>
+            <dt class="text-faint">Owner</dt>
+            <dd class="text-ink" data-testid="commons-owner">{{ owner_name|default:"—" }}</dd>
+            <dt class="text-faint">Holds Zebra key</dt>
+            <dd class="text-ink">{% if holds_zebra_key %}Yes, this device can pair and revoke devices{% else %}No{% endif %}</dd>
+            <dt class="text-faint">This device</dt>
+            <dd class="min-w-0 text-ink">
+                {% if device.label %}{{ device.label }} · {{ device.sphere }}{% if device.observed %} (observed){% endif %} · {% endif %}<span class="text-muted">{{ device.status }}</span>
+                <span class="block font-mono text-xs text-faint break-all mt-0.5">{{ device.pairing_code }} · {{ device.fingerprint }}</span>
+            </dd>
+            <dt class="text-faint">Sync direction</dt>
+            <dd class="text-ink">{{ sync_direction }}</dd>
+        </dl>
+    </section>
+
+    {% if has_identity %}
+    <section class="panel" aria-labelledby="devices-title" data-testid="commons-devices">
+        <div class="px-6 py-4 border-b border-line">
+            <h2 id="devices-title" class="text-base font-semibold text-ink">Devices</h2>
+        </div>
+        <div class="divide-y divide-line">
+            {% for d in devices %}
+            <div class="px-6 py-3 flex flex-wrap items-center justify-between gap-3" data-device="{{ d.pubkey }}" data-status="{{ d.status }}">
+                <div class="min-w-0">
+                    <p class="font-medium text-ink">{{ d.label }}{% if d.is_local %} <span class="text-xs text-faint">(this device)</span>{% endif %}</p>
+                    <p class="text-sm text-muted">
+                        <span data-testid="device-sphere">{{ d.sphere }}</span>{% if d.observed %} · <span class="text-needs">observed: managed by someone else</span>{% endif %}
+                        · <span class="{% if d.status == 'verified' %}text-ok{% else %}text-fail{% endif %}">{{ d.status }}</span>
+                        {% if d.expires_at %} · expires {{ d.expires_at|date:"Y-m-d" }}{% endif %}
+                    </p>
+                    <p class="font-mono text-xs text-faint break-all">{{ d.npub }} · {{ d.fingerprint }}</p>
+                </div>
+                {% if is_owner and holds_zebra_key and not d.is_local and d.status != 'revoked' %}
+                <form method="post" action="/commons/devices/{{ d.pubkey }}/revoke/" class="flex gap-2 shrink-0"
+                      onsubmit="return confirm('Revoke {{ d.label|escapejs }}? Its signatures will no longer be accepted. This cannot be undone.');">
+                    {% csrf_token %}
+                    <input type="text" name="reason" placeholder="Reason (lost, retired…)"
+                           class="bg-ground border border-line text-ink text-sm rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-needs">
+                    <button class="btn btn-danger btn-sm">Revoke</button>
+                </form>
+                {% endif %}
+            </div>
+            {% empty %}
+            <p class="px-6 py-4 text-muted text-sm">No devices.</p>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if not is_owner %}
+    <p class="text-muted text-sm" data-testid="not-owner">Only the Commons owner ({{ owner_name }}) can change the Zebra identity.</p>
+    {% else %}
+
+    {% if cert_code %}
+    <section class="panel border-needs/50 px-6 py-5 space-y-2" data-testid="cert-code-panel">
+        <h2 class="text-base font-semibold text-ink">Certificate for {{ paired_fingerprint }}</h2>
+        <p class="text-sm text-muted">Check the fingerprint matches the one on the new device, then paste this code there under “Join this Zebra”.</p>
+        <textarea readonly rows="4" data-testid="cert-code"
+                  class="block w-full font-mono text-xs bg-ground border border-line text-ink rounded-md px-3 py-2">{{ cert_code }}</textarea>
+    </section>
+    {% endif %}
+
+    {% if backup_nsec %}
+    <section class="panel border-fail/50 px-6 py-5 space-y-2" data-testid="backup-panel">
+        <h2 class="text-base font-semibold text-ink">Zebra key backup</h2>
+        <p class="text-sm text-muted">Anyone with this key <em>is</em> your Zebra. Store it offline (a password manager or paper) and never share it. It is not shown again.</p>
+        <textarea readonly rows="2" data-testid="backup-nsec"
+                  class="block w-full font-mono text-xs bg-ground border border-line text-ink rounded-md px-3 py-2">{{ backup_nsec }}</textarea>
+    </section>
+    {% endif %}
+
+    {% if not has_identity %}
+    <section class="panel px-6 py-5 space-y-4" aria-labelledby="start-title" data-testid="start-form">
+        <h2 id="start-title" class="text-base font-semibold text-ink">Start a new Zebra</h2>
+        <p class="text-sm text-muted">Creates the Zebra key on this device and certifies this device. If your Zebra already exists elsewhere, join it or restore its backup instead.</p>
+        <form method="post" action="/commons/start/" class="space-y-3">
+            {% csrf_token %}
+            {% include "partials/commons_device_fields.html" with default_label="Home server" %}
+            <label class="block text-sm">
+                <span class="block text-xs text-faint mb-1">Zebra's name (optional)</span>
+                <input type="text" name="display_name" maxlength="255"
+                       class="bg-ground border border-line text-ink text-sm rounded-md px-3 py-2 w-full max-w-sm focus:outline-none focus:ring-2 focus:ring-needs">
+            </label>
+            <button class="btn btn-primary" data-testid="start-zebra">Start a new Zebra</button>
+        </form>
+    </section>
+    {% endif %}
+
+    {% if holds_zebra_key %}
+    <section class="panel px-6 py-5 space-y-4" aria-labelledby="pair-title" data-testid="pair-form">
+        <h2 id="pair-title" class="text-base font-semibold text-ink">Pair a device</h2>
+        <p class="text-sm text-muted">On the new device, open Commons and copy its pairing code. Pairing an existing device again changes its label or sphere.</p>
+        <form method="post" action="/commons/pair/" class="space-y-3">
+            {% csrf_token %}
+            <label class="block text-sm">
+                <span class="block text-xs text-faint mb-1">Pairing code (npub1…)</span>
+                <input type="text" name="code" required value="{{ prefill_code }}"
+                       class="bg-ground border border-line text-ink font-mono text-sm rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-needs">
+            </label>
+            {% include "partials/commons_device_fields.html" with default_label="" %}
+            <label class="block text-sm">
+                <span class="block text-xs text-faint mb-1">Certificate expires (optional)</span>
+                <input type="date" name="expires_on"
+                       class="bg-ground border border-line text-ink text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-needs">
+            </label>
+            <button class="btn btn-primary" data-testid="pair-device">Certify device</button>
+        </form>
+    </section>
+    {% else %}
+    <section class="panel px-6 py-5 space-y-3" aria-labelledby="join-title" data-testid="join-form">
+        <h2 id="join-title" class="text-base font-semibold text-ink">Join this Zebra to an existing one</h2>
+        <p class="text-sm text-muted">On the device holding your Zebra key, pair this pairing code. Check the fingerprint <span class="font-mono text-ink">{{ device.fingerprint }}</span> matches there.</p>
+        <p class="font-mono text-sm text-ink break-all" data-testid="pairing-code">{{ device.pairing_code }}</p>
+        <form method="post" action="/commons/import/" class="space-y-3">
+            {% csrf_token %}
+            <label class="block text-sm">
+                <span class="block text-xs text-faint mb-1">Certificate code (zcert1…)</span>
+                <textarea name="cert_code" rows="3" required
+                          class="block w-full font-mono text-xs bg-ground border border-line text-ink rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-needs"></textarea>
+            </label>
+            <button class="btn btn-primary" data-testid="import-cert">Join</button>
+        </form>
+    </section>
+    {% endif %}
+
+    <section class="panel px-6 py-5 space-y-4" aria-labelledby="backup-title" data-testid="backup-forms">
+        <h2 id="backup-title" class="text-base font-semibold text-ink">Back up or restore the Zebra key</h2>
+        <p class="text-sm text-muted">Without a backup, losing the device that holds the Zebra key means starting a new identity.</p>
+        {% if holds_zebra_key %}
+        <form method="post" action="/commons/backup/"
+              onsubmit="return confirm('Show the Zebra secret key on screen?');">
+            {% csrf_token %}
+            <button class="btn" data-testid="show-backup">Show backup key</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/commons/restore/" class="flex flex-wrap gap-2 items-end"
+              onsubmit="return confirm('Replace this device\'s Zebra identity with the one in the backup?');">
+            {% csrf_token %}
+            <label class="block text-sm grow">
+                <span class="block text-xs text-faint mb-1">Restore from backup (nsec1…)</span>
+                <input type="password" name="nsec" required autocomplete="off"
+                       class="bg-ground border border-line text-ink font-mono text-sm rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-needs">
+            </label>
+            <button class="btn" data-testid="restore-backup">Restore</button>
+        </form>
+    </section>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
