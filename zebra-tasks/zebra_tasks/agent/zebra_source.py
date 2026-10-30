@@ -8,7 +8,8 @@ are visible; dot-entries (``.env``, ``.venv``, ``.git``), databases and runtime
 directories are refused, and every refusal says why. A read of a missing path
 with exactly one high-confidence match reads that file, with a note (#221, #223);
 any other bad path fails with the nearest existing paths and a hint to list or
-search, so an agent can recover. Nothing is ever written.
+search, so an agent can recover. Every failure starts with a ``[reason]`` tag
+(``REASONS``) so a caller can tell policy from absence (#258). Nothing is ever written.
 """
 
 import difflib
@@ -45,8 +46,19 @@ CONFIDENT_NAME_RATIO = 0.85
 RECOVERY_HINT = "Use list_zebra_source to see what exists, or search_zebra_source to find a name."
 
 
+#: Why a request failed, the ``[reason]`` that starts every failure message (#258):
+#: ``protected`` (Zebra may never read it), ``not_deployed`` (in the repository, not in
+#: the deployed tree), ``missing`` (does not exist), ``invalid`` (a bad request) and
+#: ``error`` (the file could not be read).
+REASONS = ("protected", "not_deployed", "missing", "invalid", "error")
+
+
 class SourceAccessError(Exception):
-    """Raised when a path is outside what Zebra may read."""
+    """Raised when a request cannot be served; ``reason`` is one of ``REASONS``."""
+
+    def __init__(self, message: str, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 def source_root() -> Path:
@@ -84,17 +96,19 @@ def resolve_source_path(root: Path, path: str) -> Path:
     """
     path = (path or "").strip()
     if not path:
-        raise SourceAccessError("No path given")
+        raise SourceAccessError("No path given", "invalid")
     candidate = Path(path)
     candidate = (candidate if candidate.is_absolute() else root / candidate).resolve()
     try:
         rel = candidate.relative_to(root)
     except ValueError:
-        raise SourceAccessError(f"'{path}' is outside the Zebra source tree") from None
+        raise SourceAccessError(f"'{path}' is outside the Zebra source tree", "protected") from None
     if _hidden(rel):
-        raise SourceAccessError(f"'{path}' is a hidden, secret or runtime file Zebra never reads.")
+        raise SourceAccessError(
+            f"'{path}' is a hidden, secret or runtime file Zebra never reads.", "protected"
+        )
     if not rel.parts or (not _allowed_top(rel) and (root / rel.parts[0]).exists()):
-        raise SourceAccessError(f"'{path}' is not part of Zebra's readable source.")
+        raise SourceAccessError(f"'{path}' is not part of Zebra's readable source.", "protected")
     return candidate
 
 
@@ -183,13 +197,15 @@ def confident_match(root: Path, rel: Path) -> Path | None:
     return root / matches[0] if len(matches) == 1 else None
 
 
-def missing_path_message(root: Path, path: str, resolved: Path) -> str:
+def missing_path_error(root: Path, path: str, resolved: Path) -> SourceAccessError:
     """Why ``path`` cannot be read, with what to try instead."""
     rel = resolved.relative_to(root)
     top = rel.parts[0]
+    reason = "missing"
     if (root / top).exists():
         message = f"'{path}' does not exist."
     elif _allowed_top(rel):
+        reason = "not_deployed"
         deployed = ", ".join(_deployed_entries(root))
         message = (
             f"'{path}' is not deployed: '{top}' is not in the source tree. Deployed: {deployed}."
@@ -200,7 +216,7 @@ def missing_path_message(root: Path, path: str, resolved: Path) -> str:
     suggestions = suggest_paths(root, rel)
     if suggestions:
         message += " Did you mean: " + ", ".join(suggestions) + "?"
-    return message
+    return SourceAccessError(message, reason)
 
 
 def _glob_match(rel: Path, glob: str) -> bool:
@@ -214,7 +230,7 @@ def _glob_match(rel: Path, glob: str) -> bool:
 def _checked_glob(glob: str) -> str:
     """Return ``glob`` if it stays inside the source tree, else raise SourceAccessError."""
     if ".." in Path(glob).parts or Path(glob).is_absolute():
-        raise SourceAccessError("glob must be relative to the source tree")
+        raise SourceAccessError("glob must be relative to the source tree", "invalid")
     return glob
 
 
@@ -319,11 +335,13 @@ class ZebraSourceAction(TaskAction):
                 text = self._list(root, props)
             else:
                 text, output["path"] = self._read(root, props)
-        except SourceAccessError as e:
-            # Every failure says how to recover, so an agent need not retry blind (#211).
-            message = str(e)
+        except (SourceAccessError, OSError) as e:
+            # Every failure starts with why (#258) and says how to recover, so an agent
+            # need not retry blind (#211).
+            reason = getattr(e, "reason", "error")
+            message = str(e) if reason != "error" else f"Could not read the source: {e}"
             end = " " if message.endswith((".", "?")) else ". "
-            return TaskResult.fail(f"{message}{end}{RECOVERY_HINT}")
+            return TaskResult.fail(f"[{reason}] {message}{end}{RECOVERY_HINT}")
 
         context.set_process_property(props.get("output_key") or "source", text)
         return TaskResult.ok(output={"text": text, **output})
@@ -336,21 +354,22 @@ class ZebraSourceAction(TaskAction):
             listing = "\n".join(list_directory(root, path)) or "(no readable source)"
             raise SourceAccessError(
                 f"'{raw}' is a directory, not a file. It contains:\n{listing}\n"
-                "Read one of these paths."
+                "Read one of these paths.",
+                "invalid",
             )
         note = ""
         if not path.is_file():
             # One clear match is read in the same run rather than costing a round trip (#223).
             match = confident_match(root, path.relative_to(root))
             if match is None:
-                raise SourceAccessError(missing_path_message(root, raw, path))
+                raise missing_path_error(root, raw, path)
             path = match
             note = (
                 f"Note: '{raw}' does not exist; read "
                 f"'{path.relative_to(root).as_posix()}' instead (the only close match).\n"
             )
         if path.stat().st_size > MAX_FILE_BYTES:
-            raise SourceAccessError(f"'{props.get('path')}' is too large to read")
+            raise SourceAccessError(f"'{props.get('path')}' is too large to read", "invalid")
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         start = max(_as_int(props.get("start_line"), 1), 1)
         end = min(_as_int(props.get("end_line"), len(lines)), len(lines))
@@ -372,11 +391,11 @@ class ZebraSourceAction(TaskAction):
     def _search(self, root: Path, props: dict) -> str:
         pattern = props.get("pattern") or ""
         if not pattern:
-            raise SourceAccessError("No search pattern given")
+            raise SourceAccessError("No search pattern given", "invalid")
         try:
             regex = re.compile(pattern)
         except re.error as e:
-            raise SourceAccessError(f"Invalid regex: {e}") from None
+            raise SourceAccessError(f"Invalid regex: {e}", "invalid") from None
         glob = _checked_glob(props.get("glob") or "**/*")
         max_results = _as_int(props.get("max_results"), 50)
 
@@ -402,9 +421,9 @@ class ZebraSourceAction(TaskAction):
         directory = root if raw in ("", ".", "./") else resolve_source_path(root, raw)
         label = raw or "the source root"
         if directory.is_file():
-            raise SourceAccessError(f"'{raw}' is a file; read it with read_zebra_source")
+            raise SourceAccessError(f"'{raw}' is a file; read it with read_zebra_source", "invalid")
         if not directory.is_dir():
-            raise SourceAccessError(missing_path_message(root, raw, directory))
+            raise missing_path_error(root, raw, directory)
         max_results = _as_int(props.get("max_results"), 200)
 
         glob = props.get("glob")
