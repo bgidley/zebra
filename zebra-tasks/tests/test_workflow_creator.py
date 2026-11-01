@@ -131,7 +131,9 @@ async def test_invalid_workflow_is_repaired_once(task, context):
     repair_messages = provider.complete.call_args_list[1].kwargs["messages"]
     assert repair_messages[-2].content == _TRUNCATED_YAML.strip()
     assert "'calculate' has no incoming routes" in repair_messages[-1].content
-    library.add_workflow.assert_called_once_with(_VALID_YAML.strip(), llm_defined=True)
+    library.add_workflow.assert_called_once()
+    assert library.add_workflow.call_args.args == (_VALID_YAML.strip(),)
+    assert library.add_workflow.call_args.kwargs["llm_defined"] is True
 
 
 async def test_failed_repair_makes_exactly_two_calls(task, context):
@@ -174,7 +176,9 @@ async def test_truncated_then_complete_is_accepted(task, context):
         result = await WorkflowCreatorAction().run(task, context)
 
     assert result.success is True
-    library.add_workflow.assert_called_once_with(_VALID_YAML.strip(), llm_defined=True)
+    library.add_workflow.assert_called_once()
+    assert library.add_workflow.call_args.args == (_VALID_YAML.strip(),)
+    assert library.add_workflow.call_args.kwargs["llm_defined"] is True
 
 
 async def test_system_prompt_describes_engine_semantics(task, context):

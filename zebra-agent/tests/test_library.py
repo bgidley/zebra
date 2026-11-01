@@ -9,6 +9,7 @@ import yaml
 
 from zebra_agent.library import WorkflowInfo, WorkflowLibrary, list_goal_workflows
 from zebra_agent.metrics import WorkflowRun
+from zebra_agent.provenance import strip_commons
 
 
 @pytest.fixture
@@ -857,7 +858,7 @@ class TestRetireRestore:
 
         dest = library.restore("Old Flow")
 
-        assert dest.read_text() == original
+        assert strip_commons(dest.read_text()) == original
         assert [w.name for w in await library.list_workflows()] == ["Old Flow"]
         assert await library.list_retired_workflows() == []
 
@@ -922,7 +923,7 @@ class TestRetireRestore:
         assert info.retired["reason"] == "second"
         assert library.get_workflow_yaml("Flow") == original
         library.restore("Flow")
-        assert (library.library_path / "flow.yaml").read_text() == original
+        assert strip_commons((library.library_path / "flow.yaml").read_text()) == original
 
     def test_list_workflow_files_keeps_same_name_copies(self, library):
         library.add_workflow(_named_yaml("Flow", ["llm-defined"]))

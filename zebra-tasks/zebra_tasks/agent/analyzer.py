@@ -19,6 +19,12 @@ from zebra_tasks.agent.continuation_analysis import (
 logger = logging.getLogger(__name__)
 
 
+def _user_id(run: Any) -> int | None:
+    """The run's ``user_id`` when it is an int (None for unowned runs)."""
+    user_id = getattr(run, "user_id", None)
+    return user_id if isinstance(user_id, int) and not isinstance(user_id, bool) else None
+
+
 class MetricsAnalyzerAction(TaskAction):
     """
     Analyze workflow performance metrics via the MetricsStore interface.
@@ -281,6 +287,11 @@ class MetricsAnalyzerAction(TaskAction):
             "usage_trends": usage_trends,
             "recommendations": recommendations,
             "continuation_analysis": continuation_analysis,
+            # Users whose runs this analysis shows the dream cycle (#229 foreign_users)
+            "run_user_ids": sorted(
+                {r["user_id"] for r in run_dicts if r.get("user_id") is not None}
+                | set(continuation_analysis.get("user_ids") or [])
+            ),
         }
 
     async def _gather_continuations(
@@ -321,6 +332,7 @@ class MetricsAnalyzerAction(TaskAction):
                     "user_rating": run.user_rating,
                     "tokens_used": run.tokens_used or 0,
                     "error": run.error,
+                    "user_id": _user_id(run),
                 }
             )
         return results

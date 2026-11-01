@@ -20,13 +20,16 @@ def commons_exportable(workflow: WorkflowInfo) -> bool:
 
     Zebra's own workflows (tagged ``system`` or named in ``SYSTEM_WORKFLOW_NAMES``,
     e.g. the Agent Main Loop and the Dream Cycle) never leave: the optimizer can
-    rewrite them, and an adopted copy would skip supervision. S2a adds workflows
-    whose lineage saw other users' runs (``foreign_users``).
+    rewrite them, and an adopted copy would skip supervision. Nor do workflows
+    whose lineage saw other users' runs (``commons.foreign_users``, #229).
 
     Args:
-        workflow: Library metadata with ``name`` and ``tags``.
+        workflow: Library metadata with ``name``, ``tags`` and ``commons``.
 
     Returns:
         False if the workflow must stay on this deployment.
     """
-    return not is_protected_workflow(workflow)
+    if is_protected_workflow(workflow):
+        return False
+    commons = getattr(workflow, "commons", None) or {}
+    return not commons.get("foreign_users", False)

@@ -312,6 +312,10 @@ Respond with JSON only:
             )
             # The run texts this prompt showed, for the optimizer's leak guard (#237)
             evaluation["run_exposure"] = run_texts_from_metrics(metrics_analysis)
+            # ...and whose runs they were, for the saved workflow's foreign_users (#229)
+            evaluation["run_exposure_users"] = list(
+                (metrics_analysis or {}).get("run_user_ids") or []
+            )
             # What the judgement was based on (#254)
             evaluation["definitions_shown"] = shown
             evaluation["definitions_omitted"] = omitted

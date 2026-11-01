@@ -48,15 +48,6 @@ def _yaml_tags(yaml_content: str) -> list:
     return tags if isinstance(tags, list) else []
 
 
-def _tag_llm_defined(yaml_content: str) -> str:
-    """Add the ``llm-defined`` tag via the library helper, if zebra-agent is installed."""
-    try:
-        from zebra_agent.library import tag_llm_defined
-    except ImportError:
-        return yaml_content
-    return tag_llm_defined(yaml_content)
-
-
 class WorkflowOptimizerAction(TaskAction):
     """
     Create new workflows or optimize existing ones based on evaluation.
@@ -302,6 +293,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
             changes_count = 0
             apply_args = (provider, evaluation, existing_workflows, system_prompt, context)
             run_texts = evaluation.get("run_exposure") or []
+            exposure = optimizer_exposure(evaluation, system_prompt)
 
             for priority in continuation_priorities:
                 if changes_count >= max_changes:
@@ -341,6 +333,13 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                 if error:
                     self._record_failure(results, "create", name, error, leak)
                     continue
+                if not dry_run and library_path:
+                    error, rejected = self._save_workflow(
+                        library_path, name, workflow_yaml, context=context, exposure=exposure
+                    )
+                    if error:
+                        self._record_failure(results, "create", name, error, rejected)
+                        continue
 
                 results["new_workflows"].append(
                     {
@@ -349,8 +348,6 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                         "reason": suggestion.get("rationale", ""),
                     }
                 )
-                if not dry_run and library_path:
-                    self._save_workflow(library_path, name, workflow_yaml)
                 change = {
                     "type": "create",
                     "workflow": name,
@@ -663,6 +660,7 @@ Maintain the same name and general purpose, but improve the implementation."""
         """
         ptype = priority.get("type")
         run_texts = evaluation.get("run_exposure") or []
+        exposure = optimizer_exposure(evaluation, system_prompt)
         if ptype == "create":
             name = priority.get("target", "new_workflow")
             workflow_yaml, error, leak = await self._create_workflow_from_priority(
@@ -677,11 +675,17 @@ Maintain the same name and general purpose, but improve the implementation."""
                 self._record_failure(results, "create", name, error, leak)
                 self._track_continuation(results, priority, "failed", error)
                 return False
+            if not dry_run and library_path:
+                error, rejected = self._save_workflow(
+                    library_path, name, workflow_yaml, context=context, exposure=exposure
+                )
+                if error:
+                    self._record_failure(results, "create", name, error, rejected)
+                    self._track_continuation(results, priority, "failed", error)
+                    return False
             results["new_workflows"].append(
                 {"name": name, "yaml": workflow_yaml, "reason": priority.get("rationale", "")}
             )
-            if not dry_run and library_path:
-                self._save_workflow(library_path, name, workflow_yaml)
             self._record_change(results, priority, "create", name, leak)
             return True
 
@@ -720,10 +724,26 @@ Maintain the same name and general purpose, but improve the implementation."""
                         "llm_defined": llm_defined,
                         "reason": priority.get("rationale", ""),
                         "change": self._change(priority, "modify", target, leak),
+                        # #229: the gym saves it with what the optimizer was shown.
+                        "exposure": exposure.to_dict() if exposure else None,
                     }
                 )
                 self._track_continuation(results, priority, "pending_gym")
                 return True
+            if not dry_run and library_path:
+                error, rejected = self._save_workflow(
+                    library_path,
+                    target,
+                    modified_yaml,
+                    llm_defined=llm_defined,
+                    context=context,
+                    parent=target,
+                    exposure=exposure,
+                )
+                if error:
+                    self._record_failure(results, "modify", target, error, rejected)
+                    self._track_continuation(results, priority, "failed", error)
+                    return False
             results["modified_workflows"].append(
                 {
                     "name": target,
@@ -732,8 +752,6 @@ Maintain the same name and general purpose, but improve the implementation."""
                     "reason": priority.get("rationale", ""),
                 }
             )
-            if not dry_run and library_path:
-                self._save_workflow(library_path, target, modified_yaml, llm_defined=llm_defined)
             self._record_change(results, priority, "modify", target, leak)
             return True
 
@@ -800,33 +818,92 @@ Maintain the same name and general purpose, but improve the implementation."""
         results["failed_changes"].append(failure)
 
     def _save_workflow(
-        self, library_path: str, name: str, yaml_content: str, llm_defined: bool = True
-    ) -> None:
-        """Save a workflow to the library (see ``save_workflow_file``)."""
-        save_workflow_file(library_path, name, yaml_content, llm_defined)
+        self,
+        library_path: str,
+        name: str,
+        yaml_content: str,
+        llm_defined: bool = True,
+        *,
+        context: ExecutionContext | None = None,
+        parent: str | None = None,
+        exposure: Any = None,
+    ) -> tuple[str | None, dict | None]:
+        """Save through the library (``save_workflow_file``).
+
+        Returns:
+            ``(None, None)`` when saved, else ``(reason, leak_record)``: the save-time
+            leak guard (#229) refused it, or the library could not write it.
+        """
+        from zebra_agent.library import LeakGuardRejected
+
+        library = context.extras.get("__workflow_library__") if context else None
+        try:
+            save_workflow_file(
+                library_path,
+                name,
+                yaml_content,
+                llm_defined,
+                library=library,
+                writer="optimizer",
+                parent=parent,
+                exposure=exposure,
+            )
+        except LeakGuardRejected as e:
+            return str(e), e.record
+        except ValueError as e:
+            return f"Could not save workflow: {e}", None
+        return None, None
+
+
+def optimizer_exposure(evaluation: dict[str, Any], system_prompt: str):
+    """What the dream-cycle optimizer was shown, for ``WorkflowLibrary.save`` (#229).
+
+    Run texts and the user ids behind them come from the evaluator
+    (``run_exposure`` / ``run_exposure_users``); a leak-guard hit at save rejects.
+    """
+    from zebra_agent.provenance import Exposure, user_ids
+
+    return Exposure(
+        run_texts=[str(t) for t in evaluation.get("run_exposure") or []],
+        allow_text=system_prompt,
+        user_ids=user_ids(evaluation.get("run_exposure_users")),
+        reject=True,
+    )
 
 
 def save_workflow_file(
-    library_path: str, name: str, yaml_content: str, llm_defined: bool = True
-) -> None:
-    """Save a workflow to the library directory, never overwriting a file.
+    library_path: str,
+    name: str,
+    yaml_content: str,
+    llm_defined: bool = True,
+    *,
+    library: Any = None,
+    writer: str = "optimizer",
+    parent: str | None = None,
+    exposure: Any = None,
+) -> Path:
+    """Save a workflow through ``WorkflowLibrary.save()``, never overwriting a file.
 
-    New workflows are tagged ``llm-defined`` so the dream-cycle curator may
-    retire them when unused (#148). A name already taken gets a ``_N`` suffix;
-    the library uses the newest file for a name.
+    A thin delegate kept for the optimizer and the gym (#229): the library stamps
+    the ``commons`` provenance block and runs the leak guard. *library* is used when
+    it manages *library_path* (it knows the Commons owner); otherwise a library is
+    opened on the path. A name already taken gets a ``_N`` suffix; the library uses
+    the newest file for a name. New LLM workflows are tagged ``llm-defined`` (#148).
+
+    Raises:
+        LeakGuardRejected: A rejecting *exposure*'s leak guard found run specifics.
+        ValueError: The YAML is not a workflow mapping.
     """
-    if llm_defined:
-        yaml_content = _tag_llm_defined(yaml_content)
-    path = Path(library_path)
-    path.mkdir(parents=True, exist_ok=True)
+    from zebra_agent.library import WorkflowLibrary, workflow_filename
 
-    filename = name.lower().replace(" ", "_").replace("-", "_")
-    filename = "".join(c for c in filename if c.isalnum() or c == "_")
-    filepath = path / f"{filename}.yaml"
-
-    counter = 1
-    while filepath.exists():
-        filepath = path / f"{filename}_{counter}.yaml"
-        counter += 1
-
-    filepath.write_text(yaml_content)
+    path = Path(library_path).expanduser()
+    if library is None or Path(library.library_path).resolve() != path.resolve():
+        library = WorkflowLibrary(path)
+    return library.save(
+        yaml_content,
+        writer=writer,
+        parent=parent,
+        exposure=exposure,
+        filename=workflow_filename(name),
+        llm_defined=llm_defined,
+    )

@@ -645,7 +645,7 @@ engine = WorkflowEngine(store, registry, extras={
 memory_store = context.extras.get("__memory_store__")
 ```
 
-10. **Storage abstraction in task actions** - Never import database drivers (`aiosqlite`, `psycopg2`, etc.) in task actions. Access data through store interfaces from `context.extras`. Never read workflow files from disk directly — use `WorkflowLibrary`. Always degrade gracefully when a store is `None` (log a warning and skip, rather than crashing). See `zebra-agent/AGENTS.md` for full storage rules.
+10. **Storage abstraction in task actions** - Never import database drivers (`aiosqlite`, `psycopg2`, etc.) in task actions. Access data through store interfaces from `context.extras`. Never read or write workflow files on disk directly — use `WorkflowLibrary`; every write goes through `WorkflowLibrary.save()`, which owns the `commons` provenance block (#229). Always degrade gracefully when a store is `None` (log a warning and skip, rather than crashing). See `zebra-agent/AGENTS.md` for full storage rules.
 
 ## Creating a New Task Action
 

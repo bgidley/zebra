@@ -236,6 +236,7 @@ class RunGoldenGymAction(TaskAction):
                     "llm_defined": bool(c.get("llm_defined", True)),
                     "reason": c.get("reason", ""),
                     "change": c.get("change") or {"type": "modify", "workflow": c.get("name")},
+                    "exposure": c.get("exposure"),
                     "status": "pending",
                 }
                 for c in (candidates or [])
@@ -481,12 +482,19 @@ class RunGoldenGymAction(TaskAction):
             if not library_path:
                 _decide(candidate, REJECTED, "no library path to save to")
                 continue
-            save_workflow_file(
-                library_path,
-                candidate["name"],
-                candidate["modified_yaml"],
-                llm_defined=candidate["llm_defined"],
-            )
+            try:
+                save_workflow_file(
+                    library_path,
+                    candidate["name"],
+                    candidate["modified_yaml"],
+                    llm_defined=candidate["llm_defined"],
+                    library=context.extras.get("__workflow_library__"),
+                    writer="gym",
+                    parent=candidate["name"],
+                    exposure=candidate.get("exposure"),
+                )
+            except ValueError as e:  # incl. LeakGuardRejected at save (#229)
+                _decide(candidate, REJECTED, f"not saved: {e}")
 
         decisions = {
             index: candidate["status"] for index, candidate in enumerate(plan["candidates"])

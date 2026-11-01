@@ -187,8 +187,11 @@ So adoption does two things:
     after the hash is verified to equal the offered or sent hash. Only the local `name`, `sphere`
     bookkeeping and `share_with: []` change, and no `llm-defined` tag is added. This is not a local
     change, so provenance and attestability survive.
+- **Implemented in S2a (#229)** as `zebra_agent/provenance.py` + `WorkflowLibrary.save()`
+  (OpenSpec `commons-provenance`). The owner is S1's `commons_owner_user_id`, else the routine
+  owner; while no owner is known any user's runs set `foreign_users` (fail closed).
 - **Migration:** existing workflows gain the block on their next save, and their definition id
-  moves to the `c:` form. Metrics key on workflow name, so history is kept, and old definitions stay
+  moves to the `c:` form (S2b; S2a leaves ids unchanged). Metrics key on workflow name, so history is kept, and old definitions stay
   in the store, so in-flight processes resume.
 - Attestations and outcome reports are only ever published for a workflow whose current hash equals
   the offered hash. Runs of a locally modified copy never count against the publisher.

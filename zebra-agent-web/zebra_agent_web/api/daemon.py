@@ -93,6 +93,7 @@ async def run_daemon_loop(
     builder_watcher = make_builder_watcher(wf_engine)
 
     async def _goal_queue_tick_fn() -> None:
+        await agent_engine.refresh_commons_owner()  # no-op once known (#229)
         await _tick(
             scheduler=goal_scheduler,
             budget_manager=budget_manager,

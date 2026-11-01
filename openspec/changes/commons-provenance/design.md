@@ -2,7 +2,8 @@
 
 Design: `specs/zebra-commons-design.md` § Workflow provenance (S2). S0 (#245) adds
 `commons_exportable()`; S1 (#228) adds the Commons owner and the device sphere. S2a needs neither
-to be merged: the owner and sphere are attributes of the library, which the web sets.
+to be merged: the owner and sphere are attributes of the library, which the web sets. The
+branch merges S0's branch (`f245/commons-safety`) as its base for `commons_exportable()`.
 
 ## Decisions
 
@@ -36,13 +37,17 @@ where unset, in a fixed order.
    otherwise the save goes ahead (the writer kept them, #237).
 4. `next_block(parent_block, parent_hash, new_hash, ...)`:
    - no parent: fresh block, `sphere` = `tainted_by` = [library sphere].
-   - same hash as the parent: the parent's block, unchanged.
+   - same hash as the parent: the parent's block, unchanged (except that `foreign_users` still
+     takes this writer's exposure into account).
    - changed: `parent_sha256` = parent hash, `ancestors` = [parent hash] + parent's ancestors,
      capped at 32; `origin_pubkey` = null; `tainted_by` ∪ {library sphere}; `share_with` = [];
      `supervised`, `sphere`, `fork_of`, `adopted_at` inherited.
    - `foreign_users` = parent's OR the exposure holds a user id other than the owner. With no
      owner known, any user id counts (fail closed).
 5. Write a new file (`_N.yaml` if taken, never overwrite), clear the cache.
+
+A save-time `LeakGuardRejected` is a failed change in the optimizer (`failed_changes`, nothing
+written) and a rejected candidate in the gym.
 
 `writer` is a label (`human`, `creator`, `variant_creator`, `optimizer`, `gym`) used in logs.
 Taint does not depend on it: every local change marks the sphere (so leak-guard `kept` results
@@ -56,10 +61,13 @@ so the optimizer can hand it to the gym inside `pending_gym`. Sources of user id
   run in the analysis window plus continuation chains).
 
 ### Owner and sphere
-`WorkflowLibrary(owner_user_id=None, sphere="local")`. The web sets both on init from
-`api/commons_owner.py`: `SystemStateModel.commons_owner_user_id` / `sphere` if S1 has added them,
-else the first user (lowest id) and `local`. While no owner is known it retries on each
-`ensure_initialized()`.
+`WorkflowLibrary(..., owner_user_id=None, sphere="local", owner_resolver=None)`. The web passes
+`api/commons_owner.py:resolve_commons_owner` as the async resolver: S1's
+`SystemStateModel.commons_owner_user_id` / `sphere` when those fields exist, else the routine
+owner (`resolve_routine_user(None)`: first active superuser, else the first active user) and
+`local`. `await library.refresh_owner()` runs while the owner is unknown, from
+`agent_engine.ensure_initialized()` and every daemon tick, so a fresh install picks the owner up
+once setup has created the first user.
 
 ### Readers
 `get_workflow_yaml()` returns the YAML without the block (it feeds the evaluator, optimizer,
