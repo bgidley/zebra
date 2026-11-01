@@ -1,5 +1,6 @@
 """Tests for ZebraSourceAction - read-only access to Zebra's own source (#190)."""
 
+import re
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -8,6 +9,7 @@ from zebra.core.models import ProcessDefinition, ProcessInstance, TaskDefinition
 from zebra.tasks.base import ExecutionContext
 
 from zebra_tasks.agent.zebra_source import (
+    REASONS,
     RECOVERY_HINT,
     ZebraSourceAction,
     is_expected_miss,
@@ -425,7 +427,7 @@ async def test_auto_recovery_never_reads_hidden_files(root, context):
 async def test_outside_paths_say_so(root, context, path):
     result = await ZebraSourceAction().run(_task(path=path), context)
 
-    assert result.error.startswith(f"'{path}' is outside the Zebra source tree. ")
+    assert result.error.startswith(f"[protected] '{path}' is outside the Zebra source tree. ")
 
 
 @pytest.mark.parametrize(
@@ -435,7 +437,7 @@ async def test_hidden_paths_say_why(root, context, path):
     result = await ZebraSourceAction().run(_task(path=path), context)
 
     assert result.error.startswith(
-        f"'{path}' is a hidden, secret or runtime file Zebra never reads. "
+        f"[protected] '{path}' is a hidden, secret or runtime file Zebra never reads. "
     )
 
 
@@ -446,7 +448,9 @@ async def test_existing_entry_off_the_allowlist_is_refused(root, context):
     for path in ("legacy/Engine.java", "legacy/Engin.java"):
         result = await ZebraSourceAction().run(_task(path=path), context)
 
-        assert result.error.startswith(f"'{path}' is not part of Zebra's readable source. ")
+        assert result.error.startswith(
+            f"[protected] '{path}' is not part of Zebra's readable source. "
+        )
 
 
 async def test_unknown_entry_without_a_match_names_the_tree(root, context):
@@ -511,3 +515,45 @@ async def test_refusals_and_bad_input_are_not_misses(root, context, props):
 )
 def test_crashes_and_unknown_errors_are_not_misses(error):
     assert not is_expected_miss(error)
+
+
+@pytest.mark.parametrize(
+    ("props", "reason"),
+    [
+        ({"path": ".env"}, "protected"),
+        ({"path": ".no-such-secret"}, "protected"),
+        ({"path": "zebra-tasks/zebra_tasks/gone.sqlite3"}, "protected"),
+        ({"path": "../outside.py"}, "protected"),
+        ({"path": "zebra-tasks/escape.py"}, "protected"),
+        ({"path": "specs/zebra-as-is.md"}, "not_deployed"),
+        ({"operation": "list", "path": "specs"}, "not_deployed"),
+        ({"path": "zebra-tasks/qqqq/zzzzzz.yaml"}, "missing"),
+        ({"path": "zebra_qqqq/zzzzzz.yaml"}, "missing"),
+        ({"operation": "list", "path": "zebra-tasks/nope"}, "missing"),
+        ({"path": ""}, "invalid"),
+        ({"path": "zebra-tasks"}, "invalid"),
+        ({"operation": "search", "pattern": "("}, "invalid"),
+        ({"operation": "search", "pattern": "x", "glob": "../*"}, "invalid"),
+    ],
+)
+async def test_every_failure_starts_with_its_reason(root, context, props, reason):
+    """Callers tell access policy, repo-only paths and absence apart (#258)."""
+    result = await ZebraSourceAction().run(_task(**props), context)
+
+    assert not result.success
+    tags = "|".join(REASONS)
+    assert re.fullmatch(rf"\[({tags})\] .+ {re.escape(RECOVERY_HINT)}", result.error, re.S)
+    assert result.error.startswith(f"[{reason}] "), result.error
+
+
+async def test_unreadable_file_is_an_error_not_a_crash(root, context, monkeypatch):
+    def broken(self, *args, **kwargs):
+        raise PermissionError("Permission denied")
+
+    monkeypatch.setattr(Path, "read_text", broken)
+
+    result = await ZebraSourceAction().run(_task(path="zebra-tasks/zebra_tasks/thing.py"), context)
+
+    assert not result.success
+    assert result.error.startswith("[error] Could not read the source: Permission denied. ")
+    assert result.error.endswith(RECOVERY_HINT)
