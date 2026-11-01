@@ -15,14 +15,13 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml, validate_definition
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.agent.load_definitions import SYSTEM_WORKFLOW_NAMES
+from zebra_tasks.agent.load_definitions import is_system_workflow
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.client import get_llm, model_for
 from zebra_tasks.llm.structured import complete_json
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_TAG = "system"
 LLM_DEFINED_TAG = "llm-defined"
 
 # Rules in the order they are applied; the per-cycle cap keeps the earliest.
@@ -362,7 +361,7 @@ class WorkflowCuratorAction(TaskAction):
 
 
 def _is_protected(wf: Any) -> bool:
-    return SYSTEM_TAG in wf.tags or wf.name in SYSTEM_WORKFLOW_NAMES
+    return is_system_workflow(wf.name, wf.tags)
 
 
 def _definition_problem(content: str) -> str | None:

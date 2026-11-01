@@ -138,7 +138,7 @@ steps; Zebra runs feedback, review and outcome review) and to write `/out/report
 
 | Stage | Sandbox does | Credentials (`STAGE_TOKENS`) | Builder records |
 |---|---|---|---|
-| `propose` | read the issue, OpenSpec change with Outcomes, validate, push branch, post outcomes | Developer GitLab | `head_sha`, changed / sensitive files, pipeline |
+| `propose` | read the issue, OpenSpec change with Outcomes, validate, push branch, post outcomes | Developer GitLab | `head_sha`, changed / sensitive files, pipeline, `diff_excerpt` |
 | `ship` | implement, lint, test, push, watch branch CI and fix (≤3), archive, push GitHub, open PR | Developer GitLab, GitHub | same |
 | `review` | independent outcome verdicts in `report.json`; no changes | Developer GitLab | `report.verdicts` required |
 | `merge` | detached merge of `head_sha`, push both remotes, delete branch, watch master pipeline | **Maintainer** GitLab, GitHub | `merge_sha`, parents include `head_sha`, pipeline |
@@ -146,7 +146,7 @@ steps; Zebra runs feedback, review and outcome review) and to write `/out/report
 - Credentials reach the sandbox as `GITLAB_TOKEN` / `GH_TOKEN` (what glab and gh read), by name;
   `sandbox-run.sh` adds git credential helpers that read them at push time and a `github` remote.
 - `propose`/`ship` clone the branch if it exists, else the base plus `checkout -b` on the host
-  before the sandbox runs. The other stages clone the base. Stages clone all branches.
+  before the sandbox runs. The other stages clone the base. Stages clone all branches. Workflow *Improve Zebra* drives the stages ([self-improvement-design.md](self-improvement-design.md)).
 - Approval check before cloning: the ship job is a `ship` for the same repo, branch and issue,
   its result is `done` with `head_sha`, and `git ls-remote` still shows that head. Else
   `rejected` + audit; if it passes, a `merge_approved` audit line records the ship job, head,
@@ -154,7 +154,7 @@ steps; Zebra runs feedback, review and outcome review) and to write `/out/report
 - Host facts: `git ls-remote` (host credentials), `glab api` compare / commits / pipelines. A
   stage that pushed nothing, a merge that did not move master or did not merge `head_sha`
   (`merge_mismatch`), a review without verdicts, or any builder credential in a pushed diff
-  (`secret_pushed`) fails the stage. `report.json` is capped (100 kB) and redacted. Stage jobs
+  (`secret_pushed`) fails the stage. Propose and ship results also carry `diff_excerpt` (the compare diffs as text, redacted, capped at 60k chars) and `diff_truncated` for Zebra's recommendation. `report.json` is capped (100 kB) and redacted. Stage jobs
   are never published.
 - `--probe --stage <s>` runs the probe with that stage's real credentials; the probe makes
   read-only `glab api user` / `gh api user` calls and `check_probe` requires the logins and

@@ -17,6 +17,7 @@ from zebra_tasks.agent.creator import (
     check_generated_workflow,
 )
 from zebra_tasks.agent.leak_guard import LeakGuard, apply_guard
+from zebra_tasks.agent.load_definitions import is_system_workflow_name
 from zebra_tasks.llm.base import LLMResponse, Message
 from zebra_tasks.llm.client import get_llm, model_for
 
@@ -626,6 +627,11 @@ Maintain the same name and general purpose, but improve the implementation."""
         problem = check_generated_workflow(response, definition)
         if problem:
             return problem
+
+        # A dream copy under a system workflow's name would replace it (newest file wins), so
+        # the dream cycle could rewrite e.g. Improve Zebra by "creating" it (#251).
+        if is_system_workflow_name(context.extras.get("__workflow_library__"), definition.name):
+            return f"'{definition.name}' is a system workflow; the dream cycle may not write it"
 
         registry = getattr(getattr(context, "engine", None), "actions", None)
         if registry is not None:

@@ -15,6 +15,7 @@ from zebra_agent.library import WorkflowLibrary
 from zebra_tasks.agent.improvements import (
     REQUEST_WORKFLOW,
     FileImprovementIssueAction,
+    StartImprovementBuildAction,
     issue_marker,
     neutralize,
     render_markdown,
@@ -83,6 +84,7 @@ def library(tmp_path):
 def engine(library):
     registry = ActionRegistry()
     registry.register_action("file_improvement_issue", FileImprovementIssueAction)
+    registry.register_action("start_improvement_build", StartImprovementBuildAction)
     return WorkflowEngine(InMemoryStore(), registry, extras={"__workflow_library__": library})
 
 

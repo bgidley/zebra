@@ -1,0 +1,319 @@
+# Improve Zebra (#251, slice B)
+#
+# Zebra delivers a change to its own code through its development process (CLAUDE.md), with Claude
+# Code doing the work in the host builder's sandbox and one human review of the GitHub PR.
+#
+#   propose           claude_code_build stage=propose: read the issue, write the OpenSpec change
+#                     with its Outcomes, push the branch, post the outcomes on the issue
+#   await_propose     external wait (BuilderWatcher)
+#   outcome_feedback  Zebra critiques the outcomes against its own source (advisory)
+#   ship              claude_code_build stage=ship: implement, lint, test, push, watch the branch
+#                     pipeline and fix, archive, push GitHub, open the PR (no merge)
+#   await_ship        external wait; the result carries host-checked head, files, pipeline, diff
+#   recommend         Zebra's recommendation per outcome: merge / changes / reject
+#   review_pr         the one human task: PR link + Zebra's recommendation; merge / changes /
+#                     reject. `changes` loops back to ship on the same branch with the feedback
+#   report            low-tier summary -> `answer`
+#   stage_failed      propagate_failure for a stage that did not finish
+#
+# Merging (merge stage) and the outcome review after deploy are slice C; until then `merge`
+# records the approval and the human merges as usual. Started by a Zebra Improvement Request
+# accepted with "build" (start_improvement_build) or `manage.py run_workflow "Improve Zebra"`.
+# System workflow: never selected for a goal, never touched by the dream cycle.
+# Design: specs/self-improvement-design.md.
+
+name: "Improve Zebra"
+version: 1
+description: "Deliver a change to Zebra's own code from a GitLab issue: OpenSpec proposal, Claude Code build in the sandbox, CI, a GitHub PR, and Zebra's recommendation for your review."
+tags: ["system", "code", "self-improvement"]
+use_when: "INTERNAL USE ONLY — started for a GitLab issue on gidley/zebra"
+first_task: propose
+result_key: answer
+inputs:
+  type: object
+  required: [issue]
+  properties:
+    issue:
+      type: string
+      description: "GitLab issue number on gidley/zebra"
+    title:
+      type: string
+      description: "Short title of the change (optional; the issue has the detail)"
+
+tasks:
+  propose:
+    name: "Propose the Change"
+    action: claude_code_build
+    auto: true
+    properties:
+      stage: propose
+      issue: "{{issue}}"
+      branch: "f{{issue}}/improve-zebra"
+      title: "Propose #{{issue}} {{title}}"
+      prompt: |
+        Deliver GitLab issue #{{issue}} on gidley/zebra ({{title}}). In this stage only
+        propose it: read the issue and its comments, then write the OpenSpec change with
+        3-5 observable outcomes a reviewer can check after deploy.
+      max_turns: 60
+      minutes: 30
+      output_key: propose_job
+
+  await_propose:
+    name: "Claude Code Is Proposing"
+    auto: false
+    properties:
+      external: builder
+      job_key: propose_job
+      wait_for: result
+
+  outcome_feedback:
+    name: "Zebra Reviews the Outcomes"
+    action: llm_agent
+    auto: true
+    properties:
+      idempotent: true
+      system_prompt: |
+        You are Zebra. A change to your own code has been proposed with the outcomes below,
+        which it will be reviewed against after deploy. You can read your own source with
+        the List / Read / Search Zebra Source tools.
+
+        Say, briefly and concretely:
+        1. Are these the right outcomes for the issue? What is missing?
+        2. Is each one observable as written? If not, how should "how we'll know" change?
+        3. Anything not needed for the issue (gold-plating)?
+        4. Which outcome is riskiest, and what in the code makes it so?
+        Under 250 words. You have about 6 tool turns; answer from what you have.
+      prompt: |
+        Issue #{{issue}}: {{title}}
+        OpenSpec change: {{__task_output_await_propose.report.change}}
+
+        ## Outcomes
+        {{__task_output_await_propose.report.outcomes_markdown}}
+
+        ## What Claude Code did
+        {{__task_output_await_propose.summary}}
+      tools: ["List Zebra Source", "Read Zebra Source", "Search Zebra Source"]
+      max_tool_turns: 6
+      answer_on_budget: true
+      max_tokens: 1500
+      output_key: outcome_feedback
+
+  ship:
+    name: "Build and Open the PR"
+    action: claude_code_build
+    auto: true
+    properties:
+      stage: ship
+      issue: "{{issue}}"
+      branch: "f{{issue}}/improve-zebra"
+      title: "Ship #{{issue}} {{title}}"
+      prompt: |
+        Deliver GitLab issue #{{issue}} on gidley/zebra ({{title}}): implement the OpenSpec
+        change `{{__task_output_await_propose.report.change}}` on this branch and open the PR.
+
+        Zebra's advice on the outcomes (advisory: adjust them in the proposal only if it
+        finds a real gap, and say so in the PR):
+        {{outcome_feedback}}
+
+        Reviewer feedback from the last review round (empty on the first round; address
+        every point when present):
+        {{__task_output_review_pr.feedback}}
+      max_turns: 200
+      minutes: 90
+      output_key: ship_job
+
+  await_ship:
+    name: "Claude Code Is Building"
+    auto: false
+    properties:
+      external: builder
+      job_key: ship_job
+      wait_for: result
+
+  recommend:
+    name: "Zebra's Recommendation"
+    action: llm_agent
+    auto: true
+    properties:
+      idempotent: true
+      system_prompt: |
+        You are Zebra, deciding whether a change to your own code should be merged. Claude
+        Code built it in a sandbox; the branch's facts below (head, changed files, pipeline,
+        diff) were checked by the host builder, not reported by the sandbox. You can read the
+        code you are running now with the List / Read / Search Zebra Source tools, to check
+        callers and tests the diff does not show.
+
+        For each outcome decide met, partial or missed, on the evidence. Then recommend:
+        - merge: the pipeline status is "success" and every outcome is met;
+        - changes: fixable gaps (say exactly what to change);
+        - reject: the approach is wrong or the change does not belong.
+        Never recommend merge when the pipeline is not "success" or the diff was truncated
+        where it matters. Call out CI, script or deploy files (sensitive files) explicitly.
+        You have about 8 tool turns; answer from what you have.
+
+        Reply with JSON only:
+        {"verdicts": [{"id": "O1", "verdict": "met|partial|missed",
+                       "evidence": "one sentence with file:line or test"}],
+         "recommendation": "merge|changes|reject",
+         "reasons": "two or three sentences",
+         "markdown": "the verdicts as a markdown table (Outcome | Verdict | Evidence), then
+                      **Recommendation: …** and the reasons"}
+      prompt: |
+        Issue #{{issue}}: {{title}}
+        Pull request: {{__task_output_await_ship.report.pr_url}}
+        Branch head: {{__task_output_await_ship.head_sha}}
+        Pipeline: {{__task_output_await_ship.pipeline.status}} {{__task_output_await_ship.pipeline.web_url}}
+        Sensitive files (CI / scripts / deploy): {{__task_output_await_ship.sensitive_files}}
+        Changed files: {{__task_output_await_ship.changed_files}}
+
+        ## Outcomes
+        {{__task_output_await_propose.report.outcomes_markdown}}
+
+        ## Claude Code's notes
+        {{__task_output_await_ship.summary}}
+        {{__task_output_await_ship.report.notes}}
+
+        ## Diff (truncated: {{__task_output_await_ship.diff_truncated}})
+        {{__task_output_await_ship.diff_excerpt}}
+      tools: ["List Zebra Source", "Read Zebra Source", "Search Zebra Source"]
+      max_tool_turns: 10
+      answer_on_budget: true
+      max_tokens: 4000
+      response_format: json
+      output_key: recommendation
+
+  review_pr:
+    name: "Review the Pull Request"
+    auto: false
+    properties:
+      show_prior_outputs: false
+      schema:
+        type: object
+        title: "Review Zebra's change for #{{issue}}"
+        description: "Claude Code built this in the sandbox and opened the PR; Zebra reviewed it against the agreed outcomes. Read the PR, then choose Merge, Changes (with feedback; it goes back to Claude Code on the same branch) or Reject."
+        properties:
+          pull_request:
+            type: string
+            title: "Pull request"
+            readOnly: true
+            default: "{{__task_output_await_ship.report.pr_url}}"
+          pipeline:
+            type: string
+            title: "Branch pipeline"
+            readOnly: true
+            default: "**{{__task_output_await_ship.pipeline.status}}** {{__task_output_await_ship.pipeline.web_url}}"
+          sensitive:
+            type: string
+            title: "CI / script / deploy files changed"
+            description: "These run on the prod host's shell runner. Check them closely."
+            readOnly: true
+            default: "{{__task_output_await_ship.sensitive_files}}"
+          recommendation:
+            type: string
+            title: "Zebra's recommendation"
+            readOnly: true
+            default: "{{recommendation.markdown}}"
+          outcome_feedback:
+            type: string
+            title: "Zebra's feedback on the outcomes (before the build)"
+            readOnly: true
+            default: "{{outcome_feedback}}"
+          feedback:
+            type: string
+            title: "Feedback"
+            description: "For Changes: what Claude Code should change. For Merge or Reject: optional notes."
+            format: multiline
+
+  report:
+    name: "Report"
+    action: llm_call
+    auto: true
+    properties:
+      model: low
+      max_tokens: 400
+      system_prompt: |
+        Tell the user in two or three plain sentences how Zebra's change for the issue ended:
+        the decision, the PR link, and what happens next (an approved PR is merged by hand
+        until Zebra's merge stage exists). Do not invent details.
+      prompt: |
+        Issue #{{issue}}: {{title}}
+        PR: {{__task_output_await_ship.report.pr_url}}
+        Zebra recommended: {{recommendation.recommendation}}
+        Human decision and notes: {{__task_output_review_pr}}
+      output_key: answer
+
+  stage_failed:
+    name: "Stage Did Not Finish"
+    action: propagate_failure
+    auto: true
+    properties:
+      success: false
+      error: "Improve Zebra #{{issue}}: a build stage ended {{__task_output_await_propose.state}} {{__task_output_await_ship.state}}: {{__task_output_await_propose.error}} {{__task_output_await_ship.error}}"
+
+routings:
+  - from: propose
+    to: await_propose
+
+  - from: await_propose
+    to: outcome_feedback
+    condition: route_name
+    name: "done"
+  - from: await_propose
+    to: stage_failed
+    condition: route_name
+    name: "failed"
+  - from: await_propose
+    to: stage_failed
+    condition: route_name
+    name: "over_budget"
+  - from: await_propose
+    to: stage_failed
+    condition: route_name
+    name: "rejected"
+  - from: await_propose
+    to: stage_failed
+    condition: route_name
+    name: "cancelled"
+
+  - from: outcome_feedback
+    to: ship
+
+  - from: ship
+    to: await_ship
+
+  - from: await_ship
+    to: recommend
+    condition: route_name
+    name: "done"
+  - from: await_ship
+    to: stage_failed
+    condition: route_name
+    name: "failed"
+  - from: await_ship
+    to: stage_failed
+    condition: route_name
+    name: "over_budget"
+  - from: await_ship
+    to: stage_failed
+    condition: route_name
+    name: "rejected"
+  - from: await_ship
+    to: stage_failed
+    condition: route_name
+    name: "cancelled"
+
+  - from: recommend
+    to: review_pr
+
+  - from: review_pr
+    to: report
+    condition: route_name
+    name: "merge"
+  - from: review_pr
+    to: ship
+    condition: route_name
+    name: "changes"
+  - from: review_pr
+    to: report
+    condition: route_name
+    name: "reject"

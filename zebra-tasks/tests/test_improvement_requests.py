@@ -17,6 +17,7 @@ from zebra_tasks.agent.improvements import (
     REQUEST_WORKFLOW,
     FileImprovementIssueAction,
     ProposeZebraImprovementsAction,
+    StartImprovementBuildAction,
     gather_findings,
     normalize_title,
 )
@@ -81,6 +82,7 @@ def engine(library):
     registry = ActionRegistry()
     registry.register_action("propose_zebra_improvements", ProposeZebraImprovementsAction)
     registry.register_action("file_improvement_issue", FileImprovementIssueAction)
+    registry.register_action("start_improvement_build", StartImprovementBuildAction)
     return WorkflowEngine(InMemoryStore(), registry, extras={"__workflow_library__": library})
 
 

@@ -12,7 +12,8 @@ link). Requests are capped per cycle and never repeat an earlier request's
 title. The step never fails the cycle.
 
 ``FileImprovementIssueAction`` runs after that review and files an accepted
-request as a GitLab issue (#194).
+request as a GitLab issue (#194). ``StartImprovementBuildAction`` then starts
+*Improve Zebra* for that issue when the reviewer chose "build" (#251).
 """
 
 import json
@@ -342,6 +343,8 @@ class ProposeZebraImprovementsAction(TaskAction):
 # ---------------------------------------------------------------------------
 
 REVIEW_OUTPUT = "__task_output_review"
+# "build" accepts the request and has Zebra deliver it with Improve Zebra (#251).
+ACCEPTED_VERDICTS = ("accepted", "build")
 ISSUE_LABEL = "dream-request"
 ISSUE_MARKER_PREFIX = "zebra-request:"
 DEFAULT_GITLAB_URL = "https://gitlab.com"
@@ -438,7 +441,7 @@ class FileImprovementIssueAction(TaskAction):
         previous = _dict(properties.get(output_key))
         if previous.get("url"):
             return {**previous, "skipped": "already filed"}
-        if review.get("verdict") != "accepted":
+        if review.get("verdict") not in ACCEPTED_VERDICTS:
             return {"skipped": "not accepted"}
         if str(review.get("issue_url") or "").strip():
             return {"skipped": "reviewer linked an issue"}
@@ -486,3 +489,95 @@ class FileImprovementIssueAction(TaskAction):
         issue = response.json()
         logger.info("Improvement issue: filed %s", issue.get("web_url"))
         return {"url": issue.get("web_url"), "iid": issue.get("iid")}
+
+
+# ---------------------------------------------------------------------------
+# Delivering a request with Improve Zebra (#251)
+# ---------------------------------------------------------------------------
+
+BUILD_WORKFLOW = "Improve Zebra"
+ISSUE_IID_RE = re.compile(r"/(?:issues|work_items)/(\d+)(?:[/?#]|$)")
+
+
+def issue_iid(properties: dict[str, Any]) -> int | None:
+    """The request's GitLab issue number: the one filed for it, else the one the reviewer linked."""
+    filed = _dict(properties.get("filed_issue"))
+    if isinstance(filed.get("iid"), int) and filed["iid"] > 0:
+        return filed["iid"]
+    match = ISSUE_IID_RE.search(str(_dict(properties.get(REVIEW_OUTPUT)).get("issue_url") or ""))
+    return int(match.group(1)) if match else None
+
+
+class StartImprovementBuildAction(TaskAction):
+    """Start *Improve Zebra* for a request the reviewer accepted with "build" (#251).
+
+    Runs after ``file_issue``. Starts one Improve Zebra process for the request's issue (filed
+    by Zebra or linked by the reviewer) and records it; any other verdict, or no issue, is a
+    skip. Like the filing step it never fails the request.
+
+    Writes ``improvement_build`` = ``{process_id, issue}``, ``{skipped}`` or ``{error}``.
+    """
+
+    description = "Start Improve Zebra for an improvement request accepted with 'build'"
+    reversibility_hint = "always_reversible"  # it only starts a process; every push is gated
+
+    inputs = [
+        ParameterDef(
+            name="output_key",
+            type="string",
+            description="Process property for the result",
+            required=False,
+            default="improvement_build",
+        ),
+    ]
+
+    outputs = [
+        ParameterDef(name="process_id", type="string", description="Improve Zebra process"),
+        ParameterDef(name="issue", type="int", description="GitLab issue it delivers"),
+        ParameterDef(name="skipped", type="string", description="Why nothing was started"),
+        ParameterDef(name="error", type="string", description="Why starting failed"),
+    ]
+
+    async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+        output_key = task.properties.get("output_key", "improvement_build")
+        result = await self._start(context, output_key)
+        context.set_process_property(output_key, result)
+        return TaskResult.ok(output=result)
+
+    async def _start(self, context: ExecutionContext, output_key: str) -> dict[str, Any]:
+        properties = context.process.properties or {}
+        previous = _dict(properties.get(output_key))
+        if previous.get("process_id"):
+            return {**previous, "skipped": "already started"}
+        if _dict(properties.get(REVIEW_OUTPUT)).get("verdict") != "build":
+            return {"skipped": "not chosen for building"}
+        issue = issue_iid(properties)
+        if issue is None:
+            return {"error": "no GitLab issue to build: filing failed and none was linked"}
+        library = context.extras.get("__workflow_library__")
+        if library is None:
+            return {"error": "no workflow library"}
+        try:
+            definition = library.get_workflow(BUILD_WORKFLOW)
+        except Exception as e:
+            logger.warning("Improvement build: %s workflow not found: %s", BUILD_WORKFLOW, e)
+            return {"error": f"{BUILD_WORKFLOW} workflow not found"}
+
+        title = str(properties.get("improvement_title") or "")
+        start_props: dict[str, Any] = {
+            "goal": f"Improve Zebra: #{issue} {title}".strip(),
+            "issue": str(issue),
+            "title": title,
+            "source_process_id": context.process.id,
+        }
+        user_id = properties.get("__user_id__")
+        if user_id is not None:
+            start_props["__user_id__"] = user_id
+        try:
+            process = await context.engine.create_process(definition, properties=start_props)
+            await context.engine.start_process(process.id)
+        except Exception as e:
+            logger.warning("Improvement build: could not start %s: %s", BUILD_WORKFLOW, e)
+            return {"error": f"could not start {BUILD_WORKFLOW}: {e}"}
+        logger.info("Improvement build: #%s → process %s", issue, process.id)
+        return {"process_id": process.id, "issue": issue}
