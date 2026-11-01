@@ -18,6 +18,7 @@ from typing import Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef
 
+from zebra_tasks.agent.run_kinds import SYSTEM_TAG, TOOL_GOAL_PREFIX
 from zebra_tasks.agent.user_context import copy_user_properties
 from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.llm.base import LLMResponse, Message, MessageRole, ToolCall, ToolDefinition
@@ -43,8 +44,6 @@ DEPTH_KEY = "__agent_depth__"
 DEFINE_TOOL = "define_workflow"
 DEFINE_WORKFLOW_NAME = "Define Workflow"
 
-# Mirrors zebra_agent.library.SYSTEM_TAG; zebra-tasks does not import zebra-agent.
-SYSTEM_TAG = "system"
 
 #: Arguments of a workflow that declares no ``inputs:``.
 DEFAULT_INPUTS: dict[str, Any] = {
@@ -610,7 +609,7 @@ class LLMAgentAction(LLMCallAction):
                 WorkflowRun(
                     id=call["run_id"],
                     workflow_name=call["workflow"],
-                    goal=f"[tool] {_goal_from(call['arguments'])}"[:1000],
+                    goal=f"{TOOL_GOAL_PREFIX}{_goal_from(call['arguments'])}"[:1000],
                     started_at=datetime.fromisoformat(call["started_at"]),
                     completed_at=datetime.now(UTC),
                     success=result["success"],
