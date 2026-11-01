@@ -504,6 +504,135 @@ class TestWorkflowEvaluatorAction:
         assert "Low-Performing" in user_msg.content
 
 
+def _capturing_provider(captured: list):
+    async def complete(messages, **kwargs):
+        captured.extend(messages)
+        return _llm_response(json.dumps(_GOOD_EVALUATION))
+
+    provider = MagicMock()
+    provider.complete = complete
+    return provider
+
+
+def _long_yaml(name: str, size: int) -> str:
+    """A definition of exactly ``size`` characters whose end is recognisable."""
+    head = f"name: {name}\ntasks:\n"
+    tail = f"\n# end of {name}"
+    return head + "#" * (size - len(head) - len(tail)) + tail
+
+
+class TestEvaluatorFullDefinitions:
+    """Definitions reach the evaluator whole, most relevant first (#254)."""
+
+    async def test_long_definition_is_shown_whole(self, mock_task, mock_context):
+        from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
+
+        captured: list = []
+        set_llm_factory(lambda m: _capturing_provider(captured))
+        definition = _long_yaml("Build Software", 10_000)
+        mock_task.properties = {
+            "metrics_analysis": {"workflow_stats": []},
+            "workflow_definitions": {"Build Software": definition},
+        }
+
+        result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
+
+        user_msg = next(m for m in captured if m.role.value == "user")
+        assert definition in user_msg.content
+        assert "(truncated)" not in user_msg.content
+        assert result.output["definitions_shown"] == ["Build Software"]
+        assert result.output["definitions_omitted"] == []
+
+    async def test_over_budget_shows_failing_first_and_names_the_rest(
+        self, mock_task, mock_context
+    ):
+        from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
+
+        captured: list = []
+        set_llm_factory(lambda m: _capturing_provider(captured))
+        definitions = {
+            "Aardvark Unused": _long_yaml("Aardvark Unused", 3000),
+            "Failing": _long_yaml("Failing", 3000),
+            "Tiny": _long_yaml("Tiny", 500),
+        }
+        mock_task.properties = {
+            "metrics_analysis": {
+                "workflow_stats": [
+                    {"workflow_name": "Failing", "total_runs": 4, "success_rate": 0.25}
+                ],
+                "failure_patterns": [{"workflow_name": "Failing", "failure_count": 3}],
+            },
+            "workflow_definitions": definitions,
+            "max_definition_chars": 4000,
+        }
+
+        result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
+
+        user_msg = next(m for m in captured if m.role.value == "user").content
+        # The failing workflow fits first; the unused one no longer fits, the small one still does.
+        assert result.output["definitions_shown"] == ["Failing", "Tiny"]
+        assert result.output["definitions_omitted"] == ["Aardvark Unused"]
+        assert definitions["Failing"] in user_msg
+        assert definitions["Tiny"] in user_msg
+        assert "# end of Aardvark Unused" not in user_msg
+        not_shown = user_msg.split("### Not shown", 1)[1]
+        assert "- Aardvark Unused" in not_shown
+        assert "not provided" in not_shown
+
+    async def test_system_prompt_says_definitions_are_complete(self, mock_task, mock_context):
+        from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
+
+        captured: list = []
+        set_llm_factory(lambda m: _capturing_provider(captured))
+        mock_task.properties = {"metrics_analysis": {"workflow_stats": []}}
+
+        await WorkflowEvaluatorAction().run(mock_task, mock_context)
+
+        system_msg = next(m for m in captured if m.role.value == "system").content
+        assert "Each one shown is complete" in system_msg
+        assert "make no claims" in system_msg
+
+    def test_select_definitions_order(self):
+        from zebra_tasks.agent.evaluator import select_definitions
+
+        definitions = {n: "x" for n in ["zeta", "ran_more", "ran_less", "low", "failing", "alpha"]}
+        metrics = {
+            "failure_patterns": [{"workflow_name": "failing", "failure_count": 2}],
+            "low_performers": [{"workflow_name": "low", "success_rate": 0.5}],
+            "workflow_stats": [
+                {"workflow_name": "ran_less", "total_runs": 1},
+                {"workflow_name": "ran_more", "total_runs": 9},
+                {"workflow_name": "failing", "total_runs": 3},
+                {"workflow_name": "retired", "total_runs": 5},
+            ],
+        }
+
+        shown, omitted = select_definitions(definitions, metrics)
+
+        assert shown == ["failing", "low", "ran_more", "ran_less", "alpha", "zeta"]
+        assert omitted == []
+
+    async def test_definition_over_whole_budget_is_named_not_cut(self, mock_task, mock_context):
+        from zebra_tasks.agent.evaluator import WorkflowEvaluatorAction
+
+        captured: list = []
+        set_llm_factory(lambda m: _capturing_provider(captured))
+        definition = _long_yaml("Huge", 5000)
+        mock_task.properties = {
+            "metrics_analysis": {"workflow_stats": []},
+            "workflow_definitions": {"Huge": definition},
+            "max_definition_chars": 4999,
+        }
+
+        result = await WorkflowEvaluatorAction().run(mock_task, mock_context)
+
+        user_msg = next(m for m in captured if m.role.value == "user").content
+        assert definition[:200] not in user_msg
+        assert "- Huge" in user_msg.split("### Not shown", 1)[1]
+        assert result.output["definitions_shown"] == []
+        assert result.output["definitions_omitted"] == ["Huge"]
+
+
 # ===========================================================================
 # WorkflowOptimizerAction
 # ===========================================================================

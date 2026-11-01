@@ -404,7 +404,10 @@ def run_texts_from_metrics(metrics_analysis: dict[str, Any] | None) -> list[str]
     if not isinstance(metrics_analysis, dict):
         return []
     texts: list[str] = []
-    for pattern in metrics_analysis.get("failure_patterns") or []:
+    patterns = (metrics_analysis.get("failure_patterns") or []) + (
+        metrics_analysis.get("tool_failure_patterns") or []
+    )
+    for pattern in patterns:
         texts.extend(str(e) for e in (pattern.get("error_types") or {}))
         texts.extend(str(g) for g in pattern.get("sample_goals") or [])
     ca = metrics_analysis.get("continuation_analysis") or {}
