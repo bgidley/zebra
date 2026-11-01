@@ -519,7 +519,8 @@ class StartImprovementBuildAction(TaskAction):
     """
 
     description = "Start Improve Zebra for an improvement request accepted with 'build'"
-    reversibility_hint = "always_reversible"  # it only starts a process; every push is gated
+    # Starts a workflow: context-dependent, so trust gates assess it (#245's rule).
+    reversibility_hint = "context_dependent"
 
     inputs = [
         ParameterDef(
