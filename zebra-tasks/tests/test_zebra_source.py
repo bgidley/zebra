@@ -227,15 +227,29 @@ async def test_list_empty_directory_and_no_glob_match(root, context):
         {"path": ".venv"},
         {"path": "/etc"},
         {"path": "zebra-agent-web/tmp"},
-        {"path": "zebra-tasks/zebra_tasks/thing.py"},
         {"glob": "../*"},
     ],
 )
-async def test_list_refuses_hidden_outside_and_files(root, context, props):
+async def test_list_refuses_hidden_and_outside(root, context, props):
     result = await ZebraSourceAction().run(_list(**props), context)
 
     assert not result.success
     assert "source" not in context.process.properties
+
+
+async def test_list_of_a_file_returns_its_entry(root, context):
+    result = await ZebraSourceAction().run(_list(path="zebra-tasks/zebra_tasks/thing.py"), context)
+
+    assert result.success
+    assert result.output["text"] == "zebra-tasks/zebra_tasks/thing.py (811 B)"
+    assert context.process.properties["source"] == result.output["text"]
+
+
+async def test_list_of_a_hidden_file_is_still_refused(root, context):
+    result = await ZebraSourceAction().run(_list(path="zebra-agent-web/db.sqlite3"), context)
+
+    assert not result.success
+    assert "never reads" in result.error
 
 
 async def test_ambiguous_typo_suggests_the_right_one(root, context):
@@ -303,7 +317,6 @@ async def test_directory_read_returns_its_listing(root, context):
         {"path": "zebra-tasks/qqqq/zzzzzz.yaml"},
         {"path": "zebra_qqqq/zzzzzz.yaml"},
         {"path": "specs/zebra-as-is.md"},
-        {"operation": "list", "path": "zebra-tasks/zebra_tasks/thing.py"},
         {"operation": "list", "path": "zebra-tasks/nope"},
         {"operation": "search", "pattern": "("},
         {"operation": "search", "pattern": "x", "glob": "../*"},
