@@ -583,7 +583,10 @@ def unsafe_reason(
     ``strict`` (import mode, #245) also refuses every action that is not
     ``always_reversible``, so a workflow no human has seen cannot write files,
     stores, the library or the goal queue, run code, or start child workflows.
-    Gate mode (the default) is unchanged.
+    The only writes left are by design: the ethics audit trail, files inside the
+    git sandbox workspace, and a staged (unpublished) builder job
+    (``REVERSIBLE_WRITERS`` in ``tests/test_launch.py``). Gate mode (the default)
+    is unchanged.
     """
     for task_id, task_def in definition.tasks.items():
         if not task_def.auto:

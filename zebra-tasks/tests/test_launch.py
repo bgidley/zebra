@@ -5,6 +5,7 @@ The test that refusing at the choke point stops every entry point lives in
 direct runs and the scheduler).
 """
 
+import inspect
 import re
 from importlib.metadata import entry_points
 from pathlib import Path
@@ -189,6 +190,30 @@ WRITERS = {
     "workflow_optimizer",
     "run_golden_gym",
     "llm_agent",
+    # Hinted always_reversible before #245, but they write outside the run.
+    "review_knowledge",
+    "workflow_curator",
+    "propose_zebra_improvements",
+    "write_postmortem",
+}
+
+# Calls that write a store or the library, or start a process. An action whose
+# module makes one must not be always_reversible unless allowlisted below, so a
+# writer that already carries a hint cannot slip past strict mode.
+_WRITE_CALL = re.compile(
+    r"\b(create_process|create_library_process|start_process|add_entry|update_entry"
+    r"|delete_entry|add_postmortem|add_workflow_memory|save_conceptual_memory|save_version"
+    r"|record_run|record_task_executions|record_gym_scores|add_suggestion|set_trust_level"
+    r"|submit_build|retire|save_workflow|add_workflow|audit_store\.append)\("
+)
+
+# always_reversible actions whose module matches _WRITE_CALL, and why that is honest.
+REVERSIBLE_WRITERS = {
+    "claude_code_build": "stages a sandboxed build job; nothing is published without "
+    "publish_build (always_irreversible), and the builder wait is a non-auto task",
+    "ethics_gate": "appends its own verdict to the ethics audit trail",
+    "record_dilemma_resolution": "appends the run's dilemma resolution to the ethics audit trail",
+    "record_ethics_review": "appends the run's post-review to the ethics audit trail",
 }
 
 
@@ -213,6 +238,35 @@ def test_action_declares_its_own_hint(name):
 @pytest.mark.parametrize("name", sorted(WRITERS))
 def test_writers_are_not_always_reversible(name):
     assert ACTIONS[name].reversibility_hint != "always_reversible"
+
+
+def test_no_always_reversible_action_writes_unnoticed():
+    writers = {}
+    for name, cls in ACTIONS.items():
+        if cls.reversibility_hint != "always_reversible":
+            continue
+        calls = set(_WRITE_CALL.findall(inspect.getsource(inspect.getmodule(cls))))
+        if calls:
+            writers[name] = sorted(calls)
+    unexplained = {name: calls for name, calls in writers.items() if name not in REVERSIBLE_WRITERS}
+    assert not unexplained, (
+        "These always_reversible actions write a store, the library or start processes: "
+        f"{unexplained}. Mark them context_dependent (and add them to WRITERS), or "
+        "allowlist them in REVERSIBLE_WRITERS with a reason."
+    )
+    assert set(REVERSIBLE_WRITERS) <= set(writers), "stale REVERSIBLE_WRITERS entry"
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["review_knowledge", "workflow_curator", "propose_zebra_improvements", "write_postmortem"],
+)
+def test_store_and_library_writers_fail_strict_mode(registry, name):
+    definition = _definition("llm_call", name)
+    assert unsafe_reason(definition, registry) is None
+    assert unsafe_reason(definition, registry, strict=True) == (
+        f"action '{name}' is not always reversible (context_dependent)"
+    )
 
 
 # ---------------------------------------------------------------------------

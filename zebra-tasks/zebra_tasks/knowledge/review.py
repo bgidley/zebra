@@ -210,7 +210,8 @@ class ReviewKnowledgeAction(TaskAction):
         "Dream-cycle review of personal knowledge against recent runs: add, update, "
         "flag stale, merge and reinforce entries; human entries only via proposals."
     )
-    reversibility_hint = "always_reversible"
+    # #245: rewrites the knowledge store and starts processes; refused by strict gym
+    reversibility_hint = "context_dependent"
 
     inputs = [
         ParameterDef(

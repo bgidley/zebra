@@ -40,6 +40,17 @@ start child workflows SHALL NOT be `always_reversible`.
   `propose_trust_promotion` are read
 - **THEN** none is `always_reversible`
 
+#### Scenario: Writers that were already hinted
+- **WHEN** the hints of `review_knowledge`, `workflow_curator`, `propose_zebra_improvements` and
+  `write_postmortem` are read
+- **THEN** none is `always_reversible`, and `unsafe_reason(..., strict=True)` refuses a workflow
+  using any of them
+
+#### Scenario: No always_reversible action writes unnoticed
+- **WHEN** an `always_reversible` action's module calls a store write, a library write or a
+  process start
+- **THEN** the hint test fails unless the action is allowlisted with a reason
+
 ### Requirement: Strict gym mode
 `unsafe_reason(definition, registry, *, strict=False)` SHALL keep its current rules when `strict`
 is false. With `strict=True` it SHALL additionally refuse any task whose action is not
