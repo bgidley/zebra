@@ -25,4 +25,4 @@
 
 - [x] 4.1 `specs/zebra-commons-design.md`, `specs/zebra-as-is.md`, `zebra-agent/AGENTS.md`, `zebra-agent-web/AGENTS.md`, `CLAUDE.md` settings
 - [x] 4.2 ruff check + format; full unit suites green
-- [ ] 4.3 Push branch, GitLab pipeline green
+- [x] 4.3 Push branch, GitLab pipeline green
