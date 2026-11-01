@@ -51,6 +51,9 @@ class FileCopyAction(TaskAction):
         - output.files_copied: Number of files copied (for directories)
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Copy a file or directory to a new location."
 
     inputs = [

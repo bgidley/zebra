@@ -51,6 +51,9 @@ class WorkflowVariantCreatorAction(TaskAction):
         ```
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Create a workflow variant by LLM-copying and modifying an existing workflow."
 
     inputs = [

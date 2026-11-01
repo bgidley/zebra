@@ -38,6 +38,9 @@ class QueueGoalAction(TaskAction):
         - process_id: str — ID of the created process
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Queue a goal for later budget-managed execution."
 
     inputs = [

@@ -54,6 +54,9 @@ class FileWriteAction(TaskAction):
         - output.mode: Write mode used
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Write content to a file, with options for append mode and directory creation."
 
     inputs = [

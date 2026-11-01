@@ -87,6 +87,9 @@ JUDGE_USER_PROMPT = """## Goal
 class RunGoldenGymAction(TaskAction):
     """Score workflows on golden tasks; promote or reject staged modifications."""
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = (
         "Run golden tasks against workflows, score the outputs with an LLM judge and "
         "record the scores. With candidates, promote each staged workflow modification "
@@ -568,12 +571,19 @@ class RunGoldenGymAction(TaskAction):
             return None
 
 
-def unsafe_reason(definition: ProcessDefinition, registry: Any) -> str | None:
+def unsafe_reason(
+    definition: ProcessDefinition, registry: Any, *, strict: bool = False
+) -> str | None:
     """Return why the gym must not run *definition*, or None if it is safe to run.
 
     The gym only runs workflows that finish on their own and cannot do anything
     irreversible: every task is ``auto``, and every action is registered and not
     ``always_irreversible``.
+
+    ``strict`` (import mode, #245) also refuses every action that is not
+    ``always_reversible``, so a workflow no human has seen cannot write files,
+    stores, the library or the goal queue, run code, or start child workflows.
+    Gate mode (the default) is unchanged.
     """
     for task_id, task_def in definition.tasks.items():
         if not task_def.auto:
@@ -585,6 +595,8 @@ def unsafe_reason(definition: ProcessDefinition, registry: Any) -> str | None:
         hint = getattr(registry.get_action_class(task_def.action), "reversibility_hint", None)
         if hint == "always_irreversible":
             return f"action '{task_def.action}' is irreversible"
+        if strict and hint != "always_reversible":
+            return f"action '{task_def.action}' is not always reversible ({hint})"
     return None
 
 

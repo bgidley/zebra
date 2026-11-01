@@ -195,6 +195,9 @@ class FileInfoAction(TaskAction):
         - output.is_executable: Whether file is executable
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Get detailed metadata about a file or directory."
 
     inputs = [
@@ -400,6 +403,9 @@ class DirectoryListAction(TaskAction):
         - output.entries: List of entry objects with name, type, path
         - output.count: Number of entries found
     """
+
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
 
     description = "List contents of a directory with optional filtering."
 

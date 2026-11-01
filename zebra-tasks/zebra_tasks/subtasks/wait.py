@@ -46,6 +46,9 @@ class WaitForSubworkflowAction(TaskAction):
         ```
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Wait for a previously spawned sub-workflow to complete."
 
     inputs = [

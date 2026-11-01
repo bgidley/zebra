@@ -73,6 +73,9 @@ class AssessAndRecordAction(TaskAction):
         ```
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Assess effectiveness and record workflow run to metrics and memory stores."
 
     inputs = [

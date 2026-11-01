@@ -28,6 +28,9 @@ class DecayConfidenceAction(TaskAction):
         - skipped: number of entries skipped (not time-sensitive or no half-life)
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Apply exponential confidence decay to time-sensitive knowledge entries."
 
     inputs = []

@@ -54,6 +54,9 @@ class UpdateConceptualMemoryAction(TaskAction):
         ```
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Incrementally update conceptual memory index after a workflow run."
 
     inputs = [

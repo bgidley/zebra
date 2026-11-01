@@ -60,6 +60,9 @@ Constraints:
 class ExtractValuesTagsAction(TaskAction):
     """LLM-extract approved + candidate tags from the user's text fields."""
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Extract structured tags from the four free-form values fields via an LLM."
 
     inputs = [

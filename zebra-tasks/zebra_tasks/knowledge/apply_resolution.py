@@ -31,6 +31,9 @@ class ApplyResolutionAction(TaskAction):
     Degrades gracefully when the knowledge store is absent.
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Apply the user's contradiction resolution to the knowledge store."
 
     inputs: list[ParameterDef] = []

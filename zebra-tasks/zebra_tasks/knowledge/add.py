@@ -123,6 +123,9 @@ class AddKnowledgeAction(TaskAction):
         - "contradiction": a conflicting value was found; the caller should resolve
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Store a knowledge entry with automatic contradiction detection."
 
     inputs = [
