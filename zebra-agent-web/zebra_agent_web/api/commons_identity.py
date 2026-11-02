@@ -328,6 +328,8 @@ async def import_cert(cert_code: str) -> str:
             "This device holds its own Zebra key, so it cannot join another Zebra. "
             "Restore that Zebra's backup here instead."
         )
+    if state.zebra_pubkey and state.zebra_pubkey != cert.zebra_pubkey:
+        raise CommonsError("This device already belongs to another Zebra.")
     await _store_cert(event, await get_owner_id())
     state.zebra_pubkey = cert.zebra_pubkey
     state.device_label = cert.label

@@ -20,6 +20,7 @@
 - [x] 3.2 Events and verify helper: valid, tampered, foreign key, expired, revoked, re-cert newest wins
 - [x] 3.3 Keystore: created once, backup/restore, invalid nsec
 - [x] 3.4 Web: off by default, start, pair B as work/observed, import on B, revoke, non-owner 403, backup/restore
+- [x] 3.5 Web import rejections (review fix): a cert replayed onto another device, changed content or sig, signed by a non-Zebra key, expired, or from a second Zebra; each leaves state unchanged
 
 ## 4. Docs & delivery
 

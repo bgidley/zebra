@@ -26,6 +26,10 @@ A `DEVICE_CERT` SHALL be a NIP-01 event signed by the Zebra key, with tags `d` a
 - **WHEN** a device imports a cert code whose `p` tag names a different device key
 - **THEN** the import is rejected and nothing changes
 
+#### Scenario: Bad cert on import
+- **WHEN** a device imports a decodable cert code whose content or signature was altered, that is signed by a key other than the one it names, that has expired, or that comes from a different Zebra than the one the device already belongs to
+- **THEN** the import is rejected and nothing changes
+
 ### Requirement: Cert-chain verification
 The verify helper SHALL accept an event when it is signed by the Zebra key, or when its signer has a validly signed, unexpired `DEVICE_CERT` from the Zebra key and no `DEVICE_REVOKE` from the Zebra key. Until relay receipts exist, a revoked device's events SHALL be rejected outright.
 

@@ -119,6 +119,9 @@ beyond the above (full record: `openspec/changes/archive/*-commons-identity/desi
 - Pairing works without a network: the new device shows its device `npub` (the pairing code) and a
   fingerprint; the owner certifies it on the Zebra-key device, which shows a `zcert1…` code to paste
   back. Re-pairing re-issues the cert (how a sphere changes); a revoked key cannot be re-paired.
+- Importing a cert changes nothing unless it is correctly signed, names this device's key,
+  is unexpired, and comes from this device's Zebra (if it already has one). Moving a device to
+  another Zebra means a new device key (or restoring that Zebra's backup).
 - Keys sit in a `FileCredentialStore` at `COMMONS_KEY_DIR` (the OS keyring is unusable in the prod
   container), namespaced `instance` rather than by user. Backup is the standard `nsec`.
 

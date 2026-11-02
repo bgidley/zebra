@@ -8,11 +8,18 @@ from __future__ import annotations
 
 import logging
 import re
+from urllib.parse import unquote_plus
 
 import pytest
 from zebra_agent.commons import keys
 from zebra_agent.commons.events import Event, sign_event
-from zebra_agent.commons.identity import verify_attributed, verify_device_chain
+from zebra_agent.commons.identity import (
+    decode_cert_code,
+    encode_cert_code,
+    make_device_cert,
+    verify_attributed,
+    verify_device_chain,
+)
 from zebra_agent.commons.keystore import CommonsKeys
 from zebra_agent.storage.credentials import FileCredentialStore
 from zebra_agent_web.api.models import CommonsDeviceModel, SystemStateModel
@@ -277,3 +284,87 @@ async def test_switching_off_keeps_keys(authenticated_async_client, commons):
     commons("a", enabled=True)
     html = (await authenticated_async_client.get("/commons/")).content.decode()
     assert keys.npub_encode(z_pub) in html
+
+
+def _commons_snapshot() -> dict:
+    return {
+        "rows": list(CommonsDeviceModel.objects.order_by("id").values()),
+        "state": {
+            k: v
+            for k, v in SystemStateModel.objects.filter(pk=1).values().first().items()
+            if k in COMMONS_STATE_FIELDS
+        },
+    }
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_import_rejects_replayed_tampered_expired_and_foreign_certs(
+    authenticated_async_client, commons
+):
+    """O2: a cert only joins the device it names, signed by its Zebra, unaltered and unexpired.
+
+    Every code below decodes, so each rejection comes from the signature, device or
+    chain check in ``import_cert``, not from a corrupted code.
+    """
+    # Device B and device C each have their own device key.
+    commons("b", fresh_db=True)
+    await authenticated_async_client.get("/commons/")
+    b_pub = SystemStateModel.objects.get(pk=1).device_pubkey
+    c_dir = commons("c", fresh_db=True)
+    await authenticated_async_client.get("/commons/")
+    c_pub = SystemStateModel.objects.get(pk=1).device_pubkey
+    assert b_pub and c_pub and b_pub != c_pub
+
+    z_secret = keys.generate_secret_key()
+    z_pub = keys.public_key(z_secret)
+
+    def cert_for(device, *, secret=z_secret, **kwargs):
+        params = {"label": "Laptop", "sphere": "work", "observed": True, **kwargs}
+        return make_device_cert(secret, device, **params)
+
+    valid_for_b = cert_for(b_pub)
+    valid_for_c = cert_for(c_pub)
+    tampered_content = Event.from_dict(
+        {**valid_for_c.to_dict(), "content": valid_for_c.content.replace("work", "home")}
+    )
+    flipped = "0" if valid_for_c.sig[-1] != "0" else "1"
+    tampered_sig = Event.from_dict({**valid_for_c.to_dict(), "sig": valid_for_c.sig[:-1] + flipped})
+    # Signed by another key but claiming the Zebra key as its signer.
+    foreign_signed = Event.from_dict(
+        {**cert_for(c_pub, secret=keys.generate_secret_key()).to_dict(), "pubkey": z_pub}
+    )
+    expired = cert_for(c_pub, expires_at=1_000_000_000)
+
+    cases = {
+        "replayed onto another device": (valid_for_b, "for a different device"),
+        "changed content": (tampered_content, "not correctly signed"),
+        "changed sig": (tampered_sig, "not correctly signed"),
+        "signed by a key other than the Zebra key": (foreign_signed, "not correctly signed"),
+        "expired": (expired, "expired"),
+    }
+    before = _commons_snapshot()
+    for name, (event, reason) in cases.items():
+        code = encode_cert_code(event)
+        assert decode_cert_code(code).to_dict() == event.to_dict(), name
+        response = await authenticated_async_client.post("/commons/import/", {"cert_code": code})
+        assert response.status_code == 302, name
+        location = unquote_plus(response["Location"])
+        assert "error=" in location and reason in location, (name, location)
+        assert _commons_snapshot() == before, name
+    assert await _keys(c_dir).zebra_secret() is None
+
+    # The genuine cert for C is accepted.
+    ok = await authenticated_async_client.post(
+        "/commons/import/", {"cert_code": encode_cert_code(valid_for_c)}
+    )
+    assert "error=" not in ok["Location"]
+    assert SystemStateModel.objects.get(pk=1).zebra_pubkey == z_pub
+
+    # Once C belongs to Z, a valid cert from a different Zebra cannot take it over.
+    joined = _commons_snapshot()
+    other_zebra = cert_for(c_pub, secret=keys.generate_secret_key())
+    response = await authenticated_async_client.post(
+        "/commons/import/", {"cert_code": encode_cert_code(other_zebra)}
+    )
+    assert "another Zebra" in unquote_plus(response["Location"])
+    assert _commons_snapshot() == joined
