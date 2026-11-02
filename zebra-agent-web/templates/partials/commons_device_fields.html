@@ -1,0 +1,31 @@
+{% comment %}
+Device fields for the Commons start and pair forms (#228): label, "who manages this
+device?" (anyone but me makes the sphere observed) and the sphere.
+Parameters: default_label.
+{% endcomment %}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-3" x-data="{ sphere: 'home' }">
+    <label class="block text-sm">
+        <span class="block text-xs text-faint mb-1">Device label</span>
+        <input type="text" name="label" required maxlength="100" value="{{ default_label }}"
+               class="bg-ground border border-line text-ink text-sm rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-needs">
+    </label>
+    <fieldset class="text-sm">
+        <legend class="block text-xs text-faint mb-1">Who manages this device?</legend>
+        <label class="mr-4"><input type="radio" name="managed_by" value="me" checked> Me</label>
+        <label><input type="radio" name="managed_by" value="someone_else"> Someone else (employer, school…)</label>
+    </fieldset>
+    <label class="block text-sm">
+        <span class="block text-xs text-faint mb-1">Sphere</span>
+        <select name="sphere" x-model="sphere"
+                class="bg-ground border border-line text-ink text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-needs">
+            <option value="home">home</option>
+            <option value="work">work</option>
+            <option value="other">other…</option>
+        </select>
+    </label>
+    <label class="block text-sm" x-show="sphere === 'other'" x-cloak>
+        <span class="block text-xs text-faint mb-1">Sphere name</span>
+        <input type="text" name="sphere_other" maxlength="40"
+               class="bg-ground border border-line text-ink text-sm rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-needs">
+    </label>
+</div>

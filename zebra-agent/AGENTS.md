@@ -39,6 +39,7 @@ This file provides coding agent guidelines specific to the `zebra-agent` package
 | `zebra_agent/direct_run.py` | `run_named_workflow()` (start a named workflow from inputs, required `inputs` checked, no selection) and `workflow_status()` (`complete` + `result_key` output / `awaiting_input` + task id / `failed` / `running`) — used by `manage.py run_workflow` (#190) |
 | `zebra_agent/commons.py` | `commons_exportable(workflow)`: false for protected workflows (`system` tag or `SYSTEM_WORKFLOW_NAMES`), which never leave the deployment; the Commons' offer / export / sync call it (#245) |
 | `zebra_agent/replay.py` | `replay_process()` / `replay_status()`: create and run a replay of a finished process (#170), status plus `replay_of`, `live`, `cost`. Used by `manage.py replay_process` |
+| `zebra_agent/commons/` | Zebra Commons S1 identity (#228), no Django or network: `keys.py` (the only importer of `btclib-secp256k1`: BIP-340 sign/verify, NIP-19 npub/nsec), `events.py` (NIP-01 `Event`, `sign_event`, `verify_event`), `identity.py` (`make_device_cert` / `make_device_revoke`, pairing code + fingerprint, `zcert1` cert codes, `verify_device_chain` / `verify_attributed`), `keystore.py` (`CommonsKeys`: Zebra/device secret keys in a `CredentialStore`, nsec backup/restore). Never log secret keys or nsecs |
 | `zebra_agent/ioc/` | IoC (Inversion of Control) module |
 | `zebra_agent/ioc/container.py` | `ZebraContainer` - dependency injection container |
 | `zebra_agent/ioc/registry.py` | `IoCActionRegistry` - action registry with constructor injection |

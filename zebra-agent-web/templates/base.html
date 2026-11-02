@@ -50,6 +50,9 @@
                 <div class="space-y-0.5">
                     {% include "partials/nav_item.html" with url="/trust/" icon="shield-check" label="Trust" %}
                     {% include "partials/nav_item.html" with url="/profile/taxonomy/" icon="tag" label="Values Tags" %}
+                    {% if commons_enabled %}
+                    {% include "partials/nav_item.html" with url="/commons/" icon="fingerprint" label="Commons" %}
+                    {% endif %}
                     {% if user.is_staff %}
                     {% include "partials/nav_item.html" with url="/ethics-audit/" icon="scales" label="Ethics Audit" %}
                     {% endif %}

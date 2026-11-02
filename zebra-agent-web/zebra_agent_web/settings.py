@@ -76,6 +76,8 @@ TEMPLATES = [
                 # Provides `user` to templates; base.html relies on it for the
                 # staff-only nav item and the signed-in user footer (#160).
                 "django.contrib.auth.context_processors.auth",
+                # `commons_enabled` for the Commons nav link (#228).
+                "zebra_agent_web.api.context_processors.commons",
             ],
         },
     },
@@ -259,6 +261,11 @@ ZEBRA_AGENT_SETTINGS = {
     # Set to False (or ZEBRA_DAEMON_AUTO_START=0) to disable and use
     # the standalone ``python manage.py run_daemon`` command instead.
     "DAEMON_AUTO_START": os.environ.get("ZEBRA_DAEMON_AUTO_START", "1") != "0",
+    # Zebra Commons master switch (#228, off by default) and where the Commons secret
+    # keys (Zebra key, device key) are kept: a FileCredentialStore directory, 0600 files.
+    "COMMONS_ENABLED": os.environ.get("ZEBRA_COMMONS_ENABLED", "0").lower()
+    in ("1", "true", "yes", "on"),
+    "COMMONS_KEY_DIR": os.environ.get("ZEBRA_COMMONS_KEY_DIR", "~/.zebra-agent/commons-keys"),
 }
 
 # Logging

@@ -430,12 +430,61 @@ class SystemStateModel(models.Model):
     user_identity_id = models.CharField(max_length=255, blank=True, default="")
     setup_completed = models.BooleanField(default=False)
 
+    # Zebra Commons identity (S1, #228). Public keys only: secrets live in the
+    # credential store (commons-zebra / commons-device).
+    zebra_pubkey = models.CharField(max_length=64, blank=True, default="")
+    zebra_display_name = models.CharField(max_length=255, blank=True, default="")
+    device_pubkey = models.CharField(max_length=64, blank=True, default="")
+    device_label = models.CharField(max_length=100, blank=True, default="")
+    sphere = models.CharField(max_length=40, blank=True, default="")
+    sphere_observed = models.BooleanField(default=False)
+    sync_direction = models.CharField(
+        max_length=10, default="both", help_text="send / receive / both / off (S3b)"
+    )
+    commons_owner_user_id = models.IntegerField(null=True, blank=True)
+
     class Meta:
         db_table = "zebra_system_state"
         verbose_name = "System State"
 
     def __str__(self):
         return f"SystemState halted={self.halted} user={self.user_display_name!r}"
+
+
+class CommonsDeviceModel(models.Model):
+    """A device certified (or revoked) by a Zebra key, with the signed events (#228).
+
+    One row per (Zebra key, device key). ``cert_event`` is the latest ``DEVICE_CERT``
+    and ``revoke_event`` the ``DEVICE_REVOKE``, both as NIP-01 JSON, so the chain can
+    be re-verified at any time. Label, sphere and observed mirror the cert for listing.
+    """
+
+    zebra_pubkey = models.CharField(max_length=64, db_index=True)
+    device_pubkey = models.CharField(max_length=64, db_index=True)
+    label = models.CharField(max_length=100)
+    sphere = models.CharField(max_length=40)
+    observed = models.BooleanField(default=False)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    cert_event = models.JSONField()
+    revoke_event = models.JSONField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    user_id = models.IntegerField(null=True, blank=True, help_text="Commons owner")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "zebra_commons_devices"
+        verbose_name = "Commons device"
+        verbose_name_plural = "Commons devices"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["zebra_pubkey", "device_pubkey"],
+                name="zebra_commons_device_unique",
+            ),
+        ]
+
+    def __str__(self):
+        return f"CommonsDevice({self.label}, {self.sphere})"
 
 
 # =============================================================================

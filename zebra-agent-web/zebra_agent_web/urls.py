@@ -10,13 +10,25 @@ This is an agent-only web application with simplified URL structure:
 
 from django.urls import include, path
 
-from zebra_agent_web.api import web_views
+from zebra_agent_web.api import commons_views, web_views
 
 urlpatterns = [
     # Auth endpoints (passkey)
     path("auth/", include("zebra_agent_web.api.auth_urls")),
     # API endpoints (JSON)
     path("api/", include("zebra_agent_web.api.urls")),
+    # Zebra Commons identity (#228)
+    path("commons/", commons_views.commons_page, name="commons"),
+    path("commons/start/", commons_views.commons_start, name="commons_start"),
+    path("commons/pair/", commons_views.commons_pair, name="commons_pair"),
+    path("commons/import/", commons_views.commons_import, name="commons_import"),
+    path(
+        "commons/devices/<str:device_pubkey>/revoke/",
+        commons_views.commons_revoke,
+        name="commons_revoke",
+    ),
+    path("commons/backup/", commons_views.commons_backup, name="commons_backup"),
+    path("commons/restore/", commons_views.commons_restore, name="commons_restore"),
     # First-run setup
     path("setup/", web_views.setup_view, name="setup"),
     # Web UI (HTML + HTMX) - Agent focused

@@ -2,8 +2,9 @@
 
 **GitLab issue**: #41 (epic), slices below
 **Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-010
-**Status**: Reviewed 2026-10-26; delivery planned in waves (see the end). Only the leak guard (#237)
-is implemented. The reputation market (S7) is parked as its own later theme.
+**Status**: Reviewed 2026-10-26; delivery planned in waves (see the end). Implemented: the leak guard
+(#237) and S1 identity (#228, see "Identity (S1) as built" below). The reputation market (S7) is
+parked as its own later theme.
 
 > **Owner decisions (2026-10-26)**
 > - **a. One owner per deployment.** Commons and sync act only for the deployment's owner, and
@@ -108,6 +109,21 @@ so reputation and market balance attach to the Zebra, not to a device.
 - **`SystemStateModel`** gains `zebra_pubkey`, `zebra_display_name`, `device_pubkey`,
   `device_label`, `sphere`, `sphere_observed`, `sync_direction` and `commons_owner_user_id`. Public
   keys are not secrets.
+
+**Identity (S1) as built (#228).** Code in `zebra-agent/zebra_agent/commons/` (`keys`, `events`,
+`identity`, `keystore`) and `zebra-agent-web` (`api/commons_identity.py`, `/commons/`). Decisions
+beyond the above (full record: `openspec/changes/archive/*-commons-identity/design.md`):
+- secp256k1 / BIP-340 via **`btclib-secp256k1`** (libsecp256k1 bindings with CPython 3.14 wheels
+  for linux x86_64/aarch64; `coincurve` has no 3.14 wheels). Only `keys.py` imports it.
+- Kinds are provisional until S4: `DEVICE_CERT` 30228, `DEVICE_REVOKE` 1228.
+- Pairing works without a network: the new device shows its device `npub` (the pairing code) and a
+  fingerprint; the owner certifies it on the Zebra-key device, which shows a `zcert1…` code to paste
+  back. Re-pairing re-issues the cert (how a sphere changes); a revoked key cannot be re-paired.
+- Importing a cert changes nothing unless it is correctly signed, names this device's key,
+  is unexpired, and comes from this device's Zebra (if it already has one). Moving a device to
+  another Zebra means a new device key (or restoring that Zebra's backup).
+- Keys sit in a `FileCredentialStore` at `COMMONS_KEY_DIR` (the OS keyring is unusable in the prod
+  container), namespaced `instance` rather than by user. Backup is the standard `nsec`.
 
 ### Workflow provenance (S2)
 The library gains provenance per workflow file, stored as YAML metadata so it survives the
@@ -571,6 +587,7 @@ my work machine?"**
 | Setting | Env var | Default | Purpose |
 |---|---|---|---|
 | `COMMONS_ENABLED` | `ZEBRA_COMMONS_ENABLED` | false | Master switch |
+| `COMMONS_KEY_DIR` | `ZEBRA_COMMONS_KEY_DIR` | `~/.zebra-agent/commons-keys` | Where the Zebra and device secret keys are kept (`FileCredentialStore`, 0600; prod volume `zebra-commons-keys`) |
 | `COMMONS_RELAYS` | `ZEBRA_COMMONS_RELAYS` | our relay plus 2 public | Read and write relays; the first is canonical (receipts) |
 | `COMMONS_RECEIPT_PUBKEY` | `ZEBRA_COMMONS_RECEIPT_PUBKEY` | — | The relay operator key trusted for `RECEIPT`s |
 | `SYNC_RELAY` | `ZEBRA_SYNC_RELAY` | — | The private relay for `SKILL` events. Unset means no device sync. |

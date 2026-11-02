@@ -24,6 +24,7 @@ dependencies = [
     "pydantic-settings>=2.0",
     "cronsim>=2.6",
     "keyring>=24.0",
+    "btclib-secp256k1>=0.8.0.13",
 ]
 
 [tool.uv.sources]
