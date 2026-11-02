@@ -105,7 +105,8 @@ class WorkflowCuratorAction(TaskAction):
     """
 
     description = "Retire failing, unused, duplicate and broken workflows from the library."
-    reversibility_hint = "always_reversible"  # retired workflows can be restored
+    # #245: retires library workflows (restorable, but a write outside the run)
+    reversibility_hint = "context_dependent"
 
     inputs = [
         ParameterDef(

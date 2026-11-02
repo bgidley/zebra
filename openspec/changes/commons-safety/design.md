@@ -61,10 +61,16 @@ adds `foreign_users`. `curator._is_protected` is renamed to the public `is_prote
 
 ## Risks / open questions
 
-- Some existing hints are `always_reversible` but write state (`workflow_curator` retires,
-  `review_knowledge` edits knowledge, `propose_zebra_improvements` starts processes,
-  `claude_code_build` writes a build job). They are reversible, but strict mode would let an
-  imported workflow use them in the gym. S3 should refuse those by name in import mode or move
-  them to `context_dependent`; left as-is here to keep gate behaviour unchanged.
+- Existing `always_reversible` hints that wrote outside the run moved to `context_dependent`
+  (review finding): `workflow_curator` (retires library workflows), `review_knowledge` (rewrites
+  the knowledge store, starts processes), `propose_zebra_improvements` (starts processes),
+  `write_postmortem` (memory store). Only dream-cycle / system workflows use them, and those have
+  no trust gate, so runtime behaviour is unchanged. A source-scan test now fails if any
+  `always_reversible` action's module makes a store / library / process-start call, unless it is
+  allowlisted with a reason (`REVERSIBLE_WRITERS`): the ethics audit appends (`ethics_gate`,
+  `record_dilemma_resolution`, `record_ethics_review`) and `claude_code_build` (stages an
+  unpublished build job; its wait is a non-auto task the gym refuses). The `git_*` actions write
+  only inside the sandboxed workspace and stay reversible. S3 may still refuse
+  `claude_code_build` by name in import mode.
 - `check_launch` has no access to the human-task machinery yet; S3 decides how a refusal becomes
   a pending approval rather than a failure.

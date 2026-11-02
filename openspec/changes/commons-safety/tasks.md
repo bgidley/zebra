@@ -9,6 +9,7 @@
 
 - [x] 2.1 Set `reversibility_hint` on every unhinted action (zebra-tasks + zebra-py `shell`)
 - [x] 2.2 Test: every registered action declares its hint; writers are not `always_reversible`
+- [x] 2.3 Review fix: `review_knowledge`, `workflow_curator`, `propose_zebra_improvements`, `write_postmortem` → `context_dependent`; source-scan test with `REVERSIBLE_WRITERS` allowlist
 
 ## 3. Strict gym mode
 
