@@ -196,14 +196,20 @@ class Exposure:
     def with_shown(self, blocks: list[dict[str, Any] | None]) -> Exposure:
         """Fold in the taint of library workflows the writer was shown (#229).
 
+        Unknown provenance fails closed: a shown workflow with no block (None, or
+        anything that is not a mapping) counts as ``foreign_users``. Pass
+        ``WorkflowLibrary.commons_block()``, which gives an unmodified built-in a
+        clean block and any other blockless file ``legacy_block()``.
+
         Args:
-            blocks: The shown workflows' ``commons`` blocks (None for a workflow without one)
+            blocks: The shown workflows' ``commons`` blocks
 
         Returns:
             Self, with ``foreign_users`` OR-ed and ``tainted_by`` extended.
         """
         for block in blocks:
             if not isinstance(block, dict):
+                self.foreign_users = True
                 continue
             if block.get("foreign_users"):
                 self.foreign_users = True
@@ -260,6 +266,17 @@ def has_foreign_users(ids: list[int], owner_user_id: int | None) -> bool:
     return any(uid != owner_user_id for uid in ids)
 
 
+def legacy_block(*, builtin: bool) -> dict[str, Any]:
+    """The provenance of a workflow file written before #229, which has no block.
+
+    Its history is unknown: the dream cycle may have rewritten it from other users'
+    runs. Only an unmodified built-in (the content hash of a shipped workflow) is
+    known clean; any other blockless file is ``foreign_users`` (fail closed). Never
+    written to disk: the next ``WorkflowLibrary.save()`` gives it a real block.
+    """
+    return {"foreign_users": not builtin, "tainted_by": [], "legacy": True}
+
+
 def next_block(
     *,
     new_hash: str | None,
@@ -268,6 +285,7 @@ def next_block(
     has_parent: bool,
     sphere: str,
     foreign: bool,
+    parent_unknown: bool = False,
 ) -> dict[str, Any]:
     """The ``commons`` block for a local save (the design's local-change rules).
 
@@ -278,9 +296,12 @@ def next_block(
         has_parent: Whether the save has a parent workflow at all
         sphere: This library's sphere
         foreign: The writer's exposure held another user's runs
+        parent_unknown: The parent has no block and is not an unmodified built-in,
+            so its lineage may have seen other users' runs: the result is
+            ``foreign_users`` (a first save never launders taint)
     """
     parent_block = parent_block or {}
-    inherited_foreign = bool(parent_block.get("foreign_users"))
+    inherited_foreign = bool(parent_block.get("foreign_users")) or (has_parent and parent_unknown)
     if has_parent and new_hash is not None and new_hash == parent_hash and parent_block:
         # Unchanged content: same provenance (a taint the writer adds still counts).
         block = {key: parent_block.get(key) for key in BLOCK_KEYS}

@@ -54,6 +54,26 @@ inherited by every later version. `commons_exportable()` SHALL return false for 
 - **WHEN** a workflow with `foreign_users: true` is rewritten from owner-only runs
 - **THEN** the new version still has `foreign_users: true`
 
+### Requirement: Unknown provenance is foreign
+A workflow file without a `commons` block (written before this change) SHALL be treated as
+`foreign_users` unless its content hash matches a shipped built-in workflow. `commons_exportable()`
+SHALL return false for any workflow without a block. A save whose parent has no block and is not
+an unmodified built-in SHALL set `foreign_users: true`. A shown workflow without a block SHALL
+taint the writer's exposure the same way.
+
+#### Scenario: Legacy LLM-defined workflow rewritten from owner-only runs
+- **WHEN** a blockless `llm-defined` workflow is rewritten by the optimizer from owner-only runs
+- **THEN** the new version has `foreign_users: true` and `commons_exportable` is false
+
+#### Scenario: Unmodified built-in stays clean
+- **WHEN** a blockless file identical to a shipped built-in is edited from owner-only runs
+- **THEN** the new version has `foreign_users: false`
+
+#### Scenario: Legacy workflow shown to the optimizer
+- **WHEN** the optimizer creates a workflow from owner-only runs while its prompt shows a blockless
+  non-built-in workflow
+- **THEN** the new workflow has `foreign_users: true`
+
 ### Requirement: Shown workflows carry their taint
 When an LLM writer is shown other library workflows (the optimizer's `existing_workflows` and the
 evaluator's `definitions_shown`), its exposure SHALL fold in their taint: `foreign_users` is set if

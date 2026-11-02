@@ -340,7 +340,11 @@ async def test_protected_workflows_are_not_exportable(library):
     assert commons_exportable(infos["Dream Cycle"]) is False
     system_tagged = [i for i in infos.values() if "system" in i.tags]
     assert system_tagged and not any(commons_exportable(i) for i in system_tagged)
-    assert commons_exportable(infos["Child Tool"]) is True
+    # Written straight to disk: no commons block, unknown lineage (#229)
+    assert commons_exportable(infos["Child Tool"]) is False
+    library.add_workflow(CHILD_YAML.replace("Child Tool", "Saved Tool"))
+    infos = {info.name: info for info in await library.list_workflows()}
+    assert commons_exportable(infos["Saved Tool"]) is True
 
 
 def test_system_name_is_protected_even_without_the_tag():

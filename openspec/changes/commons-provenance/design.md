@@ -51,7 +51,8 @@ where unset, in a fixed order.
      (`WorkflowLibrary.commons_block(name)`) of every workflow in `existing_workflows` (whose
      YAML its create prompt includes) and the evaluator's `definitions_shown` (whose judgement
      drives the priorities and rationale it acts on) via `Exposure.with_shown()`: OR in
-     `foreign_users`, add their `tainted_by`. An unreadable block counts as foreign. The goal-time
+     `foreign_users`, add their `tainted_by`. An unreadable block counts as foreign, and so does
+     a shown workflow with no block (see *Unknown provenance*). The goal-time
      creator shows only names and descriptions of up to 5 workflows, not their YAML, and is not
      folded (see risks).
 5. Write a new file (`_N.yaml` if taken, never overwrite), clear the cache.
@@ -83,11 +84,31 @@ once setup has created the first user.
 `get_workflow_yaml()` returns the YAML without the block (it feeds the evaluator, optimizer,
 variant creator and gym). `WorkflowInfo.commons` carries the block for `commons_exportable()`.
 
+### Unknown provenance (fail closed)
+A workflow file written before this deploy has no block, and its lineage is unknown: the dream
+cycle's optimizer may already have rewritten it from other users' runs. Treating it as clean
+would launder that taint for good (its first save would stamp `foreign_users: false`). So a
+blockless file is `foreign_users` everywhere it matters, unless it is an **unmodified built-in**
+(its content hash equals that of a workflow shipped in `zebra-agent/workflows/`, or a directory
+installed with `copy_builtin_workflows`; `WorkflowLibrary.builtin_hashes()`):
+- `commons_exportable()` returns false when `commons` is missing (and true only for an explicit
+  `foreign_users: false`).
+- `save()` with a blockless, non-built-in parent passes `parent_unknown=True` to `next_block()`,
+  so the new version is `foreign_users: true` and every later version inherits it.
+- `WorkflowLibrary.commons_block(name)` returns `legacy_block(builtin=...)` for a blockless file
+  (`{foreign_users: not builtin, tainted_by: [], legacy: true}`, never written), and
+  `Exposure.with_shown()` counts a `None` / non-mapping block as foreign.
+
 ## Migration
 
 Existing workflows have no block. They gain one the next time they are saved; their parent hash
-is computed from their current content. Built-in installs copy files as before and get a block
-on their first save. Definition ids do not change in S2a (the `c:` id is S2b), so metrics,
+is computed from their current content. **Fail closed:** a blockless workflow is never
+exportable, and unless it is an unmodified built-in its next version (and every version after) is
+`foreign_users: true`, as is any workflow written by a writer that was shown it. Pre-deploy
+dream-cycle rewrites and LLM-defined workflows therefore stay on this deployment for good; a
+workflow the owner wants to share must be rewritten from a clean (built-in or new) lineage.
+Built-in installs copy files as before and stay clean: they are recognised by hash and get a
+`foreign_users: false` block on their first save from owner-only exposure. Definition ids do not change in S2a (the `c:` id is S2b), so metrics,
 history and in-flight processes are unaffected. Old files without a block are still loaded,
 listed and selected exactly as before.
 
@@ -95,6 +116,9 @@ listed and selected exactly as before.
 
 - A writer that sees other users' runs without listing their ids would under-taint. The only
   multi-user exposure today is the dream cycle's metrics analysis, which records them.
+- Unknown provenance over-taints: a human-written workflow added before the deploy (not a
+  built-in) is treated as foreign and can never be shared from that lineage. Accepted; the
+  alternative launders dream-cycle taint.
 - With no owner known the library fails closed: any user id marks `foreign_users`, which never
   clears. The web resolves the owner before the first goal runs.
 - The goal-time creator's prompt lists names and descriptions of existing workflows (no YAML); their taint is not folded in. A description is short and LLM-written from the workflow, so the risk is low; revisit if the creator ever shows definitions.

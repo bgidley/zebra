@@ -19,6 +19,7 @@ from zebra_agent.provenance import (
     DEFAULT_SPHERE,
     Exposure,
     has_foreign_users,
+    legacy_block,
     next_block,
     read_commons,
     strip_commons,
@@ -27,6 +28,10 @@ from zebra_agent.provenance import (
 )
 
 logger = logging.getLogger(__name__)
+
+# The built-in workflows shipped with zebra-agent (the web installs from here, #229:
+# a blockless file whose hash matches one of them is an unmodified built-in).
+BUILTIN_WORKFLOWS_DIR = Path(__file__).resolve().parent.parent / "workflows"
 
 
 @dataclass
@@ -254,6 +259,8 @@ class WorkflowLibrary:
         self.owner_user_id = owner_user_id
         self.sphere = sphere or DEFAULT_SPHERE
         self.owner_resolver = owner_resolver
+        self._builtin_dirs: list[Path] = [BUILTIN_WORKFLOWS_DIR]
+        self._builtin_hashes: set[str] | None = None
 
     async def refresh_owner(self) -> int | None:
         """Resolve the Commons owner and sphere while the owner is unknown (#229)."""
@@ -465,6 +472,13 @@ class WorkflowLibrary:
         parent_hash = (parent_block or {}).get("content_sha256")
         if parent_yaml is not None and not parent_hash:
             parent_hash, _ = try_content_sha256(parent_yaml)
+        # A parent written before #229 has no block: unless it is an unmodified
+        # built-in its lineage is unknown, so the save inherits foreign_users.
+        parent_unknown = (
+            parent_path is not None
+            and parent_block is None
+            and not (parent_hash and parent_hash in self.builtin_hashes())
+        )
         foreign = exposure is not None and (
             exposure.foreign_users or has_foreign_users(exposure.user_ids, self.owner_user_id)
         )
@@ -475,6 +489,7 @@ class WorkflowLibrary:
             has_parent=parent_path is not None,
             sphere=self.sphere,
             foreign=foreign,
+            parent_unknown=parent_unknown,
         )
         if exposure is not None:
             # Taint from other workflows the writer was shown (Exposure.with_shown)
@@ -531,15 +546,38 @@ class WorkflowLibrary:
         logger.warning("Leak guard at save (%s) kept hits: %s", writer, describe_hits(hits))
 
     def commons_block(self, name: str) -> dict[str, Any] | None:
-        """The ``commons`` block of workflow *name* (newest file, retired included).
+        """The provenance of workflow *name* (newest file, retired included).
 
-        None when there is no such workflow or its file has no block. Writers that
-        are shown other workflows fold these into their ``Exposure`` (#229).
+        Its ``commons`` block; for a file written before #229 (no block) the
+        ``legacy_block()``: clean for an unmodified built-in, else ``foreign_users``
+        (unknown lineage fails closed). None when there is no such workflow.
+        Writers that are shown other workflows fold these into their ``Exposure``.
         """
         self.ensure_initialized()
         for yaml_file in self._files_named(name, include_retired=True):
-            return read_commons(yaml_file.read_text().split(_RETIRED_MARKER, 1)[0])
+            text = yaml_file.read_text().split(_RETIRED_MARKER, 1)[0]
+            block = read_commons(text)
+            if block is not None:
+                return block
+            content_hash, _ = try_content_sha256(text)
+            builtin = bool(content_hash) and content_hash in self.builtin_hashes()
+            return legacy_block(builtin=builtin)
         return None
+
+    def builtin_hashes(self) -> set[str]:
+        """Content hashes of the shipped built-in workflows (computed once)."""
+        if self._builtin_hashes is None:
+            hashes: set[str] = set()
+            for directory in self._builtin_dirs:
+                for path in directory.glob("*.yaml") if directory.is_dir() else []:
+                    try:
+                        content_hash, _ = try_content_sha256(path.read_text())
+                    except OSError:
+                        continue
+                    if content_hash:
+                        hashes.add(content_hash)
+            self._builtin_hashes = hashes
+        return self._builtin_hashes
 
     def get_workflow_yaml(self, name: str) -> str:
         """
@@ -815,6 +853,9 @@ class WorkflowLibrary:
 
         if not builtin_path.exists():
             return 0, []
+        if builtin_path.resolve() not in [d.resolve() for d in self._builtin_dirs]:
+            self._builtin_dirs.append(builtin_path)
+            self._builtin_hashes = None
 
         copied = 0
         upgraded_names: list[str] = []

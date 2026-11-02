@@ -917,7 +917,11 @@ def optimizer_exposure(
 
 
 def _commons_block(library: Any, name: str) -> dict[str, Any] | None:
-    """A workflow's ``commons`` block; an unreadable one counts as foreign (fail closed)."""
+    """A workflow's provenance; an unreadable one counts as foreign (fail closed).
+
+    The library gives a blockless file ``legacy_block()`` (foreign unless an
+    unmodified built-in), and ``Exposure.with_shown`` counts a missing block as foreign.
+    """
     try:
         return library.commons_block(name)
     except Exception as e:  # noqa: BLE001 - never let a bad file clear the taint

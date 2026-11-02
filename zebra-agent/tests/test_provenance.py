@@ -4,7 +4,7 @@ import pytest
 import yaml
 
 from zebra_agent.commons import commons_exportable
-from zebra_agent.library import LeakGuardRejected, WorkflowLibrary
+from zebra_agent.library import BUILTIN_WORKFLOWS_DIR, LeakGuardRejected, WorkflowLibrary
 from zebra_agent.provenance import (
     ANCESTOR_WINDOW,
     Exposure,
@@ -12,6 +12,7 @@ from zebra_agent.provenance import (
     canonical_content,
     content_sha256,
     has_foreign_users,
+    legacy_block,
     next_block,
     read_commons,
     strip_commons,
@@ -408,3 +409,89 @@ class TestExportable:
         library.save(WORKFLOW, writer="optimizer", exposure=Exposure(user_ids=[1]))
         (info,) = await library.list_workflows()
         assert commons_exportable(info) is True
+
+
+class TestLegacyWorkflows:
+    """Files written before #229 have no block: unknown lineage fails closed."""
+
+    LEGACY = WORKFLOW.replace("tags: [planning]", "tags: [planning, llm-defined]")
+
+    def _write_legacy(self, library, text: str = LEGACY, filename: str = "project_update.yaml"):
+        library.ensure_initialized()
+        path = library.library_path / filename
+        path.write_text(text)
+        return path
+
+    async def test_legacy_llm_defined_rewritten_by_owner_is_not_exportable(self, library):
+        # A dream-cycle rewrite from before the deploy may have learnt from other users.
+        self._write_legacy(library)
+        path = library.save(
+            _changed(), writer="optimizer", exposure=Exposure(user_ids=[1]), llm_defined=True
+        )
+        block = _block(path)
+        assert block["foreign_users"] is True
+        assert block["parent_sha256"] == content_sha256(self.LEGACY)
+        info = next(i for i in await library.list_workflows() if i.definition_path == path)
+        assert commons_exportable(info) is False
+
+    def test_legacy_taint_is_never_laundered(self, library):
+        self._write_legacy(library)
+        library.save(_changed(), writer="optimizer", exposure=Exposure(user_ids=[1]))
+        path = library.save(_changed("v3: {{goal}}"), writer="human")
+        assert _block(path)["foreign_users"] is True
+
+    def test_unmodified_builtin_parent_is_clean(self, library):
+        builtin = BUILTIN_WORKFLOWS_DIR / "brainstorm.yaml"
+        self._write_legacy(library, builtin.read_text(), "brainstorm.yaml")
+        name = yaml.safe_load(builtin.read_text())["name"]
+        edited = builtin.read_text().replace("Generate and refine", "Edited: generate and refine")
+        path = library.save(edited, writer="optimizer", exposure=Exposure(user_ids=[1]))
+        assert yaml.safe_load(path.read_text())["name"] == name
+        assert _block(path)["foreign_users"] is False
+
+    def test_modified_builtin_parent_is_unknown(self, library):
+        builtin = BUILTIN_WORKFLOWS_DIR / "brainstorm.yaml"
+        rewritten = builtin.read_text().replace("Generate and", "Dreamt: generate and")
+        self._write_legacy(library, rewritten, "brainstorm.yaml")
+        edited = rewritten.replace("Dreamt:", "Dreamt again:")
+        path = library.save(edited, writer="human")
+        assert _block(path)["foreign_users"] is True
+
+    def test_copied_builtins_are_known(self, library, tmp_path):
+        shipped = tmp_path / "shipped"
+        shipped.mkdir()
+        (shipped / "project_update.yaml").write_text(WORKFLOW)
+        library.copy_builtin_workflows(shipped)
+        assert library.commons_block("Project Update") == legacy_block(builtin=True)
+        path = library.save(_changed(), writer="optimizer", exposure=Exposure(user_ids=[1]))
+        assert _block(path)["foreign_users"] is False
+
+    def test_commons_block_of_a_legacy_file_is_foreign(self, library):
+        self._write_legacy(library)
+        block = library.commons_block("Project Update")
+        assert block["foreign_users"] is True and block["legacy"] is True
+
+    async def test_blockless_workflow_is_not_exportable(self, library):
+        self._write_legacy(library, WORKFLOW)
+        (info,) = await library.list_workflows()
+        assert info.commons is None
+        assert commons_exportable(info) is False
+
+    def test_shown_workflow_without_a_block_taints(self):
+        assert Exposure(user_ids=[1]).with_shown([None]).foreign_users is True
+        legacy = Exposure().with_shown([legacy_block(builtin=False)])
+        assert legacy.foreign_users is True
+        builtin = Exposure().with_shown([legacy_block(builtin=True)])
+        assert builtin.foreign_users is False
+
+    def test_next_block_parent_unknown(self):
+        block = next_block(
+            new_hash="b",
+            parent_block=None,
+            parent_hash="a",
+            has_parent=True,
+            sphere="home",
+            foreign=False,
+            parent_unknown=True,
+        )
+        assert block["foreign_users"] is True and block["parent_sha256"] == "a"

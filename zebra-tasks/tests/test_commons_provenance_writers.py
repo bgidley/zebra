@@ -263,6 +263,18 @@ class TestShownWorkflowsTaint:
         block, _ = await _create(library, context, evaluation, ["Status Digest"])
         assert block["foreign_users"] is True
 
+    async def test_legacy_shown_workflow_taints(self, library, context):
+        # Written before #229 (no block), perhaps by a dream cycle over other users' runs.
+        legacy = _workflow("Summarise the status: {{goal}}", name="Status Digest")
+        (library.library_path / "status_digest.yaml").write_text(legacy)
+        library.add_workflow(ORIGINAL)
+        block, _ = await _create(
+            library, context, _create_evaluation([OWNER]), ["Status Digest", "Project Update"]
+        )
+        assert block["foreign_users"] is True
+        info = next(i for i in await library.list_workflows() if i.name == "Risk Review")
+        assert commons_exportable(info) is False
+
     def test_unreadable_shown_workflow_fails_closed(self):
         from zebra_tasks.agent.optimizer import optimizer_exposure
 

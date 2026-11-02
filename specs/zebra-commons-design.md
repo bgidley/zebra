@@ -190,6 +190,7 @@ So adoption does two things:
     after the hash is verified to equal the offered or sent hash. Only the local `name`, `sphere`
     bookkeeping and `share_with: []` change, and no `llm-defined` tag is added. This is not a local
     change, so provenance and attestability survive.
+- **Unknown provenance fails closed (S2a):** a workflow without a block (written before S2a) is treated as `foreign_users` unless it is an unmodified built-in (hash match): never exportable, and it taints any version saved from it or any writer shown it.
 - **Implemented in S2a (#229)** as `zebra_agent/provenance.py` + `WorkflowLibrary.save()`
   (OpenSpec `commons-provenance`). The owner is S1's `commons_owner_user_id`, else the routine
   owner; while no owner is known any user's runs set `foreign_users` (fail closed).
