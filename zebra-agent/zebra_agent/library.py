@@ -1,8 +1,8 @@
 """Workflow library management."""
 
 import logging
+import os
 import re
-import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -18,6 +18,7 @@ from zebra_agent.metrics import MetricsStore, WorkflowStats
 from zebra_agent.provenance import (
     DEFAULT_SPHERE,
     Exposure,
+    builtin_block,
     has_foreign_users,
     legacy_block,
     next_block,
@@ -764,6 +765,9 @@ class WorkflowLibrary:
     def restore(self, name: str) -> Path:
         """Restore a retired workflow to the active library.
 
+        The file keeps its ``commons`` block; one without a block gets a re-derived
+        block (#269): the built-in block for a shipped built-in, else ``foreign_users``.
+
         Returns:
             The path of the restored file.
 
@@ -782,8 +786,24 @@ class WorkflowLibrary:
                 f"{name!r} is an unparseable workflow file and cannot be restored; "
                 "fix its YAML (kept in the retired file) and add it again"
             )
+        text = source.read_text().split(_RETIRED_MARKER, 1)[0]
+        if read_commons(text) is None:
+            # Re-derive a block (#269): clean if it is a shipped built-in, else fail closed.
+            content_hash, _ = try_content_sha256(text)
+            if content_hash and content_hash in self.builtin_hashes():
+                block = builtin_block(content_hash, self.sphere)
+            else:
+                block = next_block(
+                    new_hash=content_hash,
+                    parent_block=None,
+                    parent_hash=None,
+                    has_parent=False,
+                    sphere=self.sphere,
+                    foreign=True,
+                )
+            text = with_commons(text, block)
         dest = _free_path(self.library_path, source.name)
-        dest.write_text(source.read_text().split(_RETIRED_MARKER, 1)[0])
+        dest.write_text(text)
         source.unlink()
         self._cache.pop(name, None)
         return dest
@@ -841,6 +861,10 @@ class WorkflowLibrary:
         newer version retires every other active file with the workflow's name: those
         are dream-cycle copies of the older built-in (#224).
 
+        Installed files carry the built-in ``commons`` block (``builtin_block``, #269);
+        an installed copy without one whose content is the shipped content is stamped
+        in place, mtime kept.
+
         Args:
             builtin_path: Path to directory containing built-in workflows
 
@@ -881,10 +905,13 @@ class WorkflowLibrary:
                 upgrade = True
             elif dest.exists():
                 if version <= _yaml_version(dest):
+                    self._backfill_builtin_block(dest, yaml_file)
                     continue
                 upgrade = True
 
-            shutil.copy(yaml_file, dest)
+            shipped = yaml_file.read_text()
+            content_hash, _ = try_content_sha256(shipped)
+            dest.write_text(with_commons(shipped, builtin_block(content_hash, self.sphere)))
             copied += 1
             if name:
                 self._cache.pop(name, None)
@@ -893,6 +920,23 @@ class WorkflowLibrary:
                     self._retire_stale_copies(name, dest, version)
 
         return copied, upgraded_names
+
+    def _backfill_builtin_block(self, dest: Path, shipped: Path) -> None:
+        """Stamp an installed built-in that has no ``commons`` block (#269).
+
+        Only when its content is the shipped content; its mtime is kept so the
+        newest-file-wins order (dream copies vs built-in, #224) does not change.
+        """
+        text = dest.read_text()
+        if read_commons(text) is not None:
+            return
+        content_hash, _ = try_content_sha256(text)
+        if content_hash is None or content_hash != try_content_sha256(shipped.read_text())[0]:
+            return
+        stat = dest.stat()
+        dest.write_text(with_commons(text, builtin_block(content_hash, self.sphere)))
+        os.utime(dest, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+        logger.info("Stamped built-in %s with its commons block (#269)", dest.name)
 
     def _retire_stale_copies(self, name: str, builtin: Path, version: int) -> None:
         """Retire active files named *name* other than the just-installed built-in (#224)."""

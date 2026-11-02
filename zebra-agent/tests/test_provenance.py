@@ -1,5 +1,7 @@
 """Tests for workflow provenance and the library's one save path (#229, S2a)."""
 
+import os
+
 import pytest
 import yaml
 
@@ -9,6 +11,7 @@ from zebra_agent.provenance import (
     ANCESTOR_WINDOW,
     Exposure,
     NotHashableError,
+    builtin_block,
     canonical_content,
     content_sha256,
     has_foreign_users,
@@ -42,6 +45,10 @@ def _changed(prompt: str = "Rewrite the plan: {{goal}}") -> str:
 @pytest.fixture
 def library(tmp_path):
     return WorkflowLibrary(tmp_path / "workflows", owner_user_id=1, sphere="home")
+
+
+def content_hash(text: str) -> str:
+    return content_sha256(text)
 
 
 def _block(path) -> dict:
@@ -462,7 +469,9 @@ class TestLegacyWorkflows:
         shipped.mkdir()
         (shipped / "project_update.yaml").write_text(WORKFLOW)
         library.copy_builtin_workflows(shipped)
-        assert library.commons_block("Project Update") == legacy_block(builtin=True)
+        block = library.commons_block("Project Update")
+        assert block["content_sha256"] == content_hash(WORKFLOW)
+        assert block["foreign_users"] is False
         path = library.save(_changed(), writer="optimizer", exposure=Exposure(user_ids=[1]))
         assert _block(path)["foreign_users"] is False
 
@@ -495,3 +504,112 @@ class TestLegacyWorkflows:
             parent_unknown=True,
         )
         assert block["foreign_users"] is True and block["parent_sha256"] == "a"
+
+
+class TestBuiltinProvenance:
+    """Built-ins and restored workflows carry a block too (#269)."""
+
+    V2 = WORKFLOW.replace("version: 1", "version: 2").replace("Update the plan", "Refresh")
+
+    @pytest.fixture
+    def shipped(self, tmp_path):
+        directory = tmp_path / "shipped"
+        directory.mkdir()
+        (directory / "project_update.yaml").write_text(WORKFLOW)
+        return directory
+
+    def test_builtin_block(self):
+        block = builtin_block("abc", "home")
+        assert block["content_sha256"] == "abc" and block["sphere"] == "home"
+        assert block["parent_sha256"] is None and block["ancestors"] == []
+        assert block["tainted_by"] == [] and block["foreign_users"] is False
+
+    def test_new_builtin_is_stamped(self, library, shipped):
+        assert library.copy_builtin_workflows(shipped) == (1, [])
+        path = library.library_path / "project_update.yaml"
+        assert _block(path) == builtin_block(content_sha256(WORKFLOW), "home")
+        assert strip_commons(path.read_text()) == WORKFLOW
+        assert library.get_workflow_yaml("Project Update") == WORKFLOW
+
+    def test_every_shipped_builtin_is_stamped(self, library):
+        library.copy_builtin_workflows(BUILTIN_WORKFLOWS_DIR)
+        files = list(library.library_path.glob("*.yaml"))
+        assert files
+        for path in files:
+            block = _block(path)
+            assert block is not None, path.name
+            assert block["foreign_users"] is False
+            assert block["content_sha256"] in library.builtin_hashes()
+
+    def test_upgraded_builtin_is_stamped(self, library, shipped):
+        library.copy_builtin_workflows(shipped)
+        (shipped / "project_update.yaml").write_text(self.V2)
+        assert library.copy_builtin_workflows(shipped) == (1, ["Project Update"])
+        path = library.library_path / "project_update.yaml"
+        assert _block(path)["content_sha256"] == content_sha256(self.V2)
+
+    def test_blockless_builtin_is_backfilled_keeping_mtime(self, library, shipped):
+        library.ensure_initialized()
+        path = library.library_path / "project_update.yaml"
+        path.write_text(WORKFLOW)
+        os.utime(path, (1_000_000, 1_000_000))
+        assert library.copy_builtin_workflows(shipped) == (0, [])
+        assert _block(path) == builtin_block(content_sha256(WORKFLOW), "home")
+        assert path.stat().st_mtime == 1_000_000
+
+    def test_backfill_keeps_a_newer_dream_copy_current(self, library, shipped):
+        library.ensure_initialized()
+        builtin = library.library_path / "project_update.yaml"
+        builtin.write_text(WORKFLOW)
+        os.utime(builtin, (1_000_000, 1_000_000))
+        copy = library.save(_changed(), writer="optimizer", exposure=Exposure(user_ids=[1]))
+        library.copy_builtin_workflows(shipped)
+        assert library._files_named("Project Update")[0] == copy
+
+    def test_modified_blockless_copy_is_left_alone(self, library, shipped):
+        library.ensure_initialized()
+        path = library.library_path / "project_update.yaml"
+        path.write_text(_changed())
+        library.copy_builtin_workflows(shipped)
+        assert path.read_text() == _changed()
+        assert library.commons_block("Project Update")["foreign_users"] is True
+
+    def test_stamped_builtin_is_not_restamped(self, library, shipped):
+        library.copy_builtin_workflows(shipped)
+        path = library.library_path / "project_update.yaml"
+        before = path.read_text()
+        library.sphere = "work"
+        library.copy_builtin_workflows(shipped)
+        assert path.read_text() == before
+
+    def test_restore_keeps_lineage(self, library):
+        library.save(WORKFLOW, writer="human")
+        path = library.save(_changed(), writer="optimizer", exposure=Exposure(user_ids=[2]))
+        block = _block(path)
+        for active in library._files_named("Project Update"):
+            library.retire("Project Update", "test", path=active)
+        retired = library._files_named("Project Update", include_retired=True)
+        newest = next(p for p in retired if read_commons(p.read_text()) == block)
+        os.utime(newest, (3_000_000_000, 3_000_000_000))
+        restored = library.restore("Project Update")
+        assert _block(restored) == block
+        assert block["parent_sha256"] == content_sha256(WORKFLOW)
+
+    def test_restore_of_blockless_workflow_fails_closed(self, library):
+        library.ensure_initialized()
+        library.retired_path.mkdir(parents=True, exist_ok=True)
+        (library.retired_path / "project_update.yaml").write_text(_changed())
+        restored = library.restore("Project Update")
+        block = _block(restored)
+        assert block["content_sha256"] == content_sha256(_changed())
+        assert block["foreign_users"] is True
+        assert strip_commons(restored.read_text()) == _changed()
+
+    def test_restore_of_blockless_builtin_is_clean(self, library):
+        builtin = BUILTIN_WORKFLOWS_DIR / "brainstorm.yaml"
+        name = yaml.safe_load(builtin.read_text())["name"]
+        library.ensure_initialized()
+        library.retired_path.mkdir(parents=True, exist_ok=True)
+        (library.retired_path / "brainstorm.yaml").write_text(builtin.read_text())
+        restored = library.restore(name)
+        assert _block(restored) == builtin_block(content_sha256(builtin.read_text()), "home")
