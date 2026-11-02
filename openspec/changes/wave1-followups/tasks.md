@@ -15,7 +15,7 @@
 
 - [x] 3.1 Stamped workflow selected and run end to end
 - [x] 3.2 Legacy (blockless) workflow selected and run
-- [ ] 3.3 After deploy: read-only prod check for a workflow saved since 68516eb with a `commons` block; post on #270
+- [x] 3.3 Read-only prod check for a workflow saved since 68516eb with a `commons` block; posted on #270 (2026-11-02: nothing saved since the deploy yet, reported as pending)
 
 ## 4. Docs
 
