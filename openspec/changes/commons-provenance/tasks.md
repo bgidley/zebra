@@ -11,6 +11,7 @@
 - [x] 2.2 Gym promotion saves through the library with the candidate's exposure
 - [x] 2.3 Creator / variant creator pass exposure (`__user_id__`) and parent
 - [x] 2.4 Analyzer `run_user_ids` (incl. continuation chains) → evaluator `run_exposure_users`
+- [x] 2.5 Optimizer folds the taint of shown workflows (`existing_workflows`, `definitions_shown`) into its exposure (`Exposure.with_shown`, review fix)
 
 ## 3. Web + export gate
 

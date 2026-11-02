@@ -179,6 +179,10 @@ class Exposure:
         allow_text: Text Zebra supplied (system prompt, action list); never a leak
         user_ids: Users whose runs or goal the writer saw (``foreign_users``)
         reject: A leak-guard hit refuses the save (dream cycle); otherwise it is kept
+        foreign_users: Taint carried in by other library workflows the writer was
+            shown (one of them is ``foreign_users``), so it cannot be laundered
+            through a new lineage
+        tainted_by: Spheres from the ``tainted_by`` of the workflows the writer was shown
     """
 
     run_texts: list[str] = field(default_factory=list)
@@ -186,6 +190,27 @@ class Exposure:
     allow_text: str = ""
     user_ids: list[int] = field(default_factory=list)
     reject: bool = False
+    foreign_users: bool = False
+    tainted_by: list[str] = field(default_factory=list)
+
+    def with_shown(self, blocks: list[dict[str, Any] | None]) -> Exposure:
+        """Fold in the taint of library workflows the writer was shown (#229).
+
+        Args:
+            blocks: The shown workflows' ``commons`` blocks (None for a workflow without one)
+
+        Returns:
+            Self, with ``foreign_users`` OR-ed and ``tainted_by`` extended.
+        """
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            if block.get("foreign_users"):
+                self.foreign_users = True
+            for sphere in block.get("tainted_by") or []:
+                if isinstance(sphere, str) and sphere not in self.tainted_by:
+                    self.tainted_by.append(sphere)
+        return self
 
     @property
     def has_texts(self) -> bool:
@@ -198,6 +223,8 @@ class Exposure:
             "allow_text": self.allow_text,
             "user_ids": list(self.user_ids),
             "reject": self.reject,
+            "foreign_users": self.foreign_users,
+            "tainted_by": list(self.tainted_by),
         }
 
     @classmethod
@@ -210,6 +237,8 @@ class Exposure:
             allow_text=str(data.get("allow_text") or ""),
             user_ids=user_ids(data.get("user_ids")),
             reject=bool(data.get("reject", False)),
+            foreign_users=bool(data.get("foreign_users", False)),
+            tainted_by=[t for t in data.get("tainted_by") or [] if isinstance(t, str)],
         )
 
 

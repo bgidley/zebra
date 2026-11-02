@@ -299,6 +299,29 @@ class TestLibrarySave:
         )
         assert _block(path)["foreign_users"] is True
 
+    def test_shown_workflows_taint_a_new_lineage(self, library):
+        # Owner-only runs, but the writer was shown a foreign workflow from elsewhere.
+        exposure = Exposure(user_ids=[1]).with_shown(
+            [{"foreign_users": True, "tainted_by": ["away", "home"]}, None, {"junk": 1}]
+        )
+        path = library.save(WORKFLOW, writer="optimizer", exposure=exposure)
+        block = _block(path)
+        assert block["parent_sha256"] is None
+        assert block["foreign_users"] is True
+        assert block["tainted_by"] == ["home", "away"]
+
+    def test_shown_taint_survives_the_gym_round_trip(self, library):
+        exposure = Exposure(user_ids=[1]).with_shown([{"foreign_users": True}])
+        restored = Exposure.from_dict(exposure.to_dict())
+        assert restored.foreign_users is True
+        path = library.save(WORKFLOW, writer="gym", exposure=exposure.to_dict())
+        assert _block(path)["foreign_users"] is True
+
+    def test_commons_block_reads_a_workflow_block(self, library):
+        library.add_workflow(WORKFLOW)
+        assert library.commons_block("Project Update")["sphere"] == "home"
+        assert library.commons_block("Missing") is None
+
     def test_unhashable_workflow_is_saved_without_a_hash(self, library):
         path = library.save(WORKFLOW + "odd: {1: one}\n", writer="human")
         assert _block(path)["content_sha256"] is None

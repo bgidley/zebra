@@ -180,7 +180,10 @@ So adoption does two things:
     - set `parent_sha256` to the previous hash and push it onto `ancestors`
     - clear `origin_pubkey` (the change is now local)
     - add the writer's sphere to `tainted_by`
-    - set `foreign_users` if the writer's exposure set holds runs of any user but the owner
+    - set `foreign_users` if the writer's exposure set holds runs of any user but the owner,
+      or holds another workflow (shown in its prompt or judged by the evaluator) that has
+      `foreign_users`; that workflow's `tainted_by` joins too, so taint cannot be laundered
+      through a new lineage
     - reset `share_with` to `[]`
     - keep `supervised` until a human clears it
   - **Adoption or sync** (`commons_adopt`, `SKILL` receive): the received block is kept verbatim

@@ -465,7 +465,9 @@ class WorkflowLibrary:
         parent_hash = (parent_block or {}).get("content_sha256")
         if parent_yaml is not None and not parent_hash:
             parent_hash, _ = try_content_sha256(parent_yaml)
-        foreign = exposure is not None and has_foreign_users(exposure.user_ids, self.owner_user_id)
+        foreign = exposure is not None and (
+            exposure.foreign_users or has_foreign_users(exposure.user_ids, self.owner_user_id)
+        )
         block = next_block(
             new_hash=new_hash,
             parent_block=parent_block,
@@ -474,6 +476,10 @@ class WorkflowLibrary:
             sphere=self.sphere,
             foreign=foreign,
         )
+        if exposure is not None:
+            # Taint from other workflows the writer was shown (Exposure.with_shown)
+            tainted = list(block.get("tainted_by") or [])
+            block["tainted_by"] = tainted + [s for s in exposure.tainted_by if s not in tainted]
 
         filepath = _free_path(self.library_path, filename or workflow_filename(name))
         filepath.write_text(with_commons(yaml_content, block))
@@ -523,6 +529,17 @@ class WorkflowLibrary:
         if exposure.reject:
             raise LeakGuardRejected(rejection_reason(hits), leak_record("rejected", hits))
         logger.warning("Leak guard at save (%s) kept hits: %s", writer, describe_hits(hits))
+
+    def commons_block(self, name: str) -> dict[str, Any] | None:
+        """The ``commons`` block of workflow *name* (newest file, retired included).
+
+        None when there is no such workflow or its file has no block. Writers that
+        are shown other workflows fold these into their ``Exposure`` (#229).
+        """
+        self.ensure_initialized()
+        for yaml_file in self._files_named(name, include_retired=True):
+            return read_commons(yaml_file.read_text().split(_RETIRED_MARKER, 1)[0])
+        return None
 
     def get_workflow_yaml(self, name: str) -> str:
         """

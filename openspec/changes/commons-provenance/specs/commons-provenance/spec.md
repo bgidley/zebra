@@ -54,6 +54,22 @@ inherited by every later version. `commons_exportable()` SHALL return false for 
 - **WHEN** a workflow with `foreign_users: true` is rewritten from owner-only runs
 - **THEN** the new version still has `foreign_users: true`
 
+### Requirement: Shown workflows carry their taint
+When an LLM writer is shown other library workflows (the optimizer's `existing_workflows` and the
+evaluator's `definitions_shown`), its exposure SHALL fold in their taint: `foreign_users` is set if
+any of them has it, and their `tainted_by` spheres join the saved block's `tainted_by`. A shown
+workflow whose block cannot be read SHALL count as foreign.
+
+#### Scenario: New lineage from a foreign-tainted example
+- **WHEN** the optimizer creates a new workflow from owner-only runs while its prompt shows a
+  workflow with `foreign_users: true`
+- **THEN** the new workflow has `foreign_users: true` and `commons_exportable` is false
+
+#### Scenario: Evaluated definitions taint too
+- **WHEN** the evaluator judged a workflow with `foreign_users: true` (`definitions_shown`) and
+  the optimizer then creates a workflow
+- **THEN** the new workflow has `foreign_users: true`
+
 ### Requirement: Leak guard at save
 When the exposure holds texts, `save()` SHALL run the leak guard (#237) on the text added versus
 the parent. With hits and a rejecting writer (the dream cycle), nothing SHALL be saved.

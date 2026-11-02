@@ -91,7 +91,10 @@ ALLOWED_CREATE_PROCESS = {
         1,
         "the gym's own sandboxed runs, gated by unsafe_reason (strict mode for imports)",
     ),
-    "zebra-tasks/zebra_tasks/agent/improvements.py": (1, "built-in Zebra Improvement Request"),
+    "zebra-tasks/zebra_tasks/agent/improvements.py": (
+        2,
+        "built-in Zebra Improvement Request and Improve Zebra (system workflows, #251)",
+    ),
     "zebra-tasks/zebra_tasks/agent/queue_goal.py": (
         1,
         "queues the Agent Main Loop; its goal workflow launches via execute_goal_workflow",

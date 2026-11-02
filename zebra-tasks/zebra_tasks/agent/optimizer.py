@@ -292,9 +292,20 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
             other_priorities = [p for p in priorities if p.get("source") != CONTINUATION]
 
             changes_count = 0
-            apply_args = (provider, evaluation, existing_workflows, system_prompt, context)
             run_texts = evaluation.get("run_exposure") or []
-            exposure = optimizer_exposure(evaluation, system_prompt)
+            exposure = optimizer_exposure(
+                evaluation,
+                system_prompt,
+                library=_taint_library(context, library_path),
+                shown=list(existing_workflows),
+            )
+            apply_args = (
+                provider,
+                evaluation,
+                existing_workflows,
+                system_prompt,
+                context,
+            )
 
             for priority in continuation_priorities:
                 if changes_count >= max_changes:
@@ -307,6 +318,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                     dry_run=dry_run,
                     library_path=library_path,
                     gym_gate=gym_gate,
+                    exposure=exposure,
                 ):
                     changes_count += 1
 
@@ -371,6 +383,7 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                     dry_run=dry_run,
                     library_path=library_path,
                     gym_gate=gym_gate,
+                    exposure=exposure,
                 ):
                     changes_count += 1
 
@@ -659,14 +672,25 @@ Maintain the same name and general purpose, but improve the implementation."""
         dry_run: bool,
         library_path: str | None,
         gym_gate: bool = False,
+        exposure: Any = None,
     ) -> bool:
         """Generate, validate and (unless dry run) save one priority's change.
+
+        Args:
+            exposure: What the writer was shown (``optimizer_exposure``); built here
+                when None.
 
         Returns True when a change was made (counts toward ``max_changes``).
         """
         ptype = priority.get("type")
         run_texts = evaluation.get("run_exposure") or []
-        exposure = optimizer_exposure(evaluation, system_prompt)
+        if exposure is None:
+            exposure = optimizer_exposure(
+                evaluation,
+                system_prompt,
+                library=_taint_library(context, library_path),
+                shown=list(existing_workflows),
+            )
         if ptype == "create":
             name = priority.get("target", "new_workflow")
             workflow_yaml, error, leak = await self._create_workflow_from_priority(
@@ -861,20 +885,56 @@ Maintain the same name and general purpose, but improve the implementation."""
         return None, None
 
 
-def optimizer_exposure(evaluation: dict[str, Any], system_prompt: str):
+def optimizer_exposure(
+    evaluation: dict[str, Any],
+    system_prompt: str,
+    *,
+    library: Any = None,
+    shown: list[str] | None = None,
+):
     """What the dream-cycle optimizer was shown, for ``WorkflowLibrary.save`` (#229).
 
     Run texts and the user ids behind them come from the evaluator
     (``run_exposure`` / ``run_exposure_users``); a leak-guard hit at save rejects.
+    The optimizer's prompts also carry other library workflows: their YAML
+    (*shown*, the ``existing_workflows``) and, through the evaluation's priorities
+    and rationale, the definitions the evaluator judged (``definitions_shown``).
+    Their ``commons`` taint is folded in, so a workflow that saw another user's
+    runs cannot pass it on through a new lineage with ``foreign_users: false``.
     """
     from zebra_agent.provenance import Exposure, user_ids
 
-    return Exposure(
+    exposure = Exposure(
         run_texts=[str(t) for t in evaluation.get("run_exposure") or []],
         allow_text=system_prompt,
         user_ids=user_ids(evaluation.get("run_exposure_users")),
         reject=True,
     )
+    names = list(dict.fromkeys([*(shown or []), *(evaluation.get("definitions_shown") or [])]))
+    if library is not None and names:
+        exposure.with_shown([_commons_block(library, n) for n in names if isinstance(n, str)])
+    return exposure
+
+
+def _commons_block(library: Any, name: str) -> dict[str, Any] | None:
+    """A workflow's ``commons`` block; an unreadable one counts as foreign (fail closed)."""
+    try:
+        return library.commons_block(name)
+    except Exception as e:  # noqa: BLE001 - never let a bad file clear the taint
+        logger.warning("Could not read the commons block of %r (%s): treated as foreign", name, e)
+        return {"foreign_users": True}
+
+
+def _taint_library(context: ExecutionContext, library_path: str | None) -> Any:
+    """The library to read shown workflows' taint from: the injected one, else the path's."""
+    library = context.extras.get("__workflow_library__") if context else None
+    if library is not None and hasattr(library, "commons_block"):
+        return library
+    if library_path:
+        from zebra_agent.library import WorkflowLibrary
+
+        return WorkflowLibrary(Path(library_path).expanduser())
+    return None
 
 
 def save_workflow_file(

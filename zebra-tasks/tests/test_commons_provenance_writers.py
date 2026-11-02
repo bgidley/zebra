@@ -89,11 +89,15 @@ def _evaluation(users: list[int], run_texts: list[str] | None = None) -> dict:
     }
 
 
-def _optimizer_task(library, evaluation: dict, gym_gate: bool = False) -> MagicMock:
+def _optimizer_task(
+    library, evaluation: dict, gym_gate: bool = False, shown: list[str] | None = None
+) -> MagicMock:
     task = MagicMock()
     task.properties = {
         "evaluation": evaluation,
-        "existing_workflows": {"Project Update": library.get_workflow_yaml("Project Update")},
+        "existing_workflows": {
+            name: library.get_workflow_yaml(name) for name in shown or ["Project Update"]
+        },
         "dry_run": False,
         "gym_gate": gym_gate,
         "workflow_library_path": str(library.library_path),
@@ -172,6 +176,117 @@ class TestOptimizer:
         (staged,) = result.output["pending_gym"]
         assert staged["exposure"]["user_ids"] == [OTHER]
         assert staged["exposure"]["reject"] is True
+
+
+RISK_REVIEW = _workflow("Review the open risks: {{goal}}", name="Risk Review")
+
+
+def _tainted(library, name: str, user: int) -> None:
+    """Save workflow *name*, written from *user*'s runs."""
+    from zebra_agent.provenance import Exposure
+
+    library.save(
+        _workflow("Summarise the status: {{goal}}", name=name),
+        writer="optimizer",
+        exposure=Exposure(user_ids=[user]),
+    )
+
+
+async def _create(library, context, evaluation: dict, shown: list[str]):
+    """Run the optimizer's create path with *shown* workflows' YAML in the prompt."""
+    from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+    provider = _provider(RISK_REVIEW)
+    task = _optimizer_task(library, evaluation, shown=shown)
+    result = await WorkflowOptimizerAction().run(task, context)
+    assert result.success and result.output["new_workflows"], result.output
+    path = library._files_named("Risk Review")[0]
+    return read_commons(path.read_text()), provider
+
+
+def _create_evaluation(users: list[int], **extra) -> dict:
+    evaluation = {
+        "improvement_priorities": [],
+        "new_workflow_suggestions": [
+            {"name": "Risk Review", "description": "Review open risks", "rationale": "gap"}
+        ],
+        "workflow_evaluations": [],
+        "run_exposure": ["Update the plan for next week"],
+        "run_exposure_users": users,
+    }
+    evaluation.update(extra)
+    return evaluation
+
+
+class TestShownWorkflowsTaint:
+    """A writer shown another workflow carries its taint into a new lineage (#229)."""
+
+    async def test_create_shown_a_foreign_workflow_is_foreign(self, library, context):
+        _tainted(library, "Status Digest", OTHER)
+        library.add_workflow(ORIGINAL)
+        # Owner-only runs in the window, but the prompt shows the foreign workflow.
+        block, provider = await _create(
+            library, context, _create_evaluation([OWNER]), ["Status Digest", "Project Update"]
+        )
+        assert "Status Digest" in str(provider.complete.call_args_list[0])
+        assert block["parent_sha256"] is None and block["ancestors"] == []
+        assert block["foreign_users"] is True
+        info = await library._load_workflow_info(library._files_named("Risk Review")[0])
+        assert commons_exportable(info) is False
+
+    async def test_create_shown_only_clean_workflows_stays_clean(self, library, context):
+        _tainted(library, "Status Digest", OWNER)
+        library.add_workflow(ORIGINAL)
+        block, _ = await _create(
+            library, context, _create_evaluation([OWNER]), ["Status Digest", "Project Update"]
+        )
+        assert block["foreign_users"] is False
+        assert block["tainted_by"] == ["home"]
+
+    async def test_evaluated_definitions_taint_too(self, library, context):
+        # Not in the optimizer's prompt, but the evaluator judged it (definitions_shown),
+        # and its findings drive what the optimizer writes.
+        _tainted(library, "Status Digest", OTHER)
+        library.add_workflow(ORIGINAL)
+        evaluation = _create_evaluation([OWNER], definitions_shown=["Status Digest"])
+        block, _ = await _create(library, context, evaluation, ["Project Update"])
+        assert block["foreign_users"] is True
+
+    async def test_priority_create_is_tainted_too(self, library, context):
+        _tainted(library, "Status Digest", OTHER)
+        library.add_workflow(ORIGINAL)
+        evaluation = _create_evaluation([OWNER])
+        evaluation["new_workflow_suggestions"] = []
+        evaluation["improvement_priorities"] = [
+            {"type": "create", "target": "Risk Review", "action": "review risks"}
+        ]
+        block, _ = await _create(library, context, evaluation, ["Status Digest"])
+        assert block["foreign_users"] is True
+
+    def test_unreadable_shown_workflow_fails_closed(self):
+        from zebra_tasks.agent.optimizer import optimizer_exposure
+
+        broken = MagicMock()
+        broken.commons_block = MagicMock(side_effect=OSError("disk"))
+        exposure = optimizer_exposure(
+            _create_evaluation([OWNER]), "", library=broken, shown=["Status Digest"]
+        )
+        assert exposure.foreign_users is True
+
+    async def test_shown_spheres_join_tainted_by(self, library, context):
+        from zebra_agent.provenance import with_commons
+
+        library.add_workflow(ORIGINAL)
+        imported = _workflow("Summarise the status: {{goal}}", name="Status Digest")
+        own = library._files_named("Project Update")[0]
+        block = dict(read_commons(own.read_text()))
+        block.update(sphere="away", tainted_by=["away"], foreign_users=False)
+        (library.library_path / "status_digest.yaml").write_text(with_commons(imported, block))
+        new_block, _ = await _create(
+            library, context, _create_evaluation([OWNER]), ["Status Digest", "Project Update"]
+        )
+        assert new_block["tainted_by"] == ["home", "away"]
+        assert new_block["foreign_users"] is False
 
 
 class TestSaveWorkflowFile:

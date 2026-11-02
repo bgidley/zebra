@@ -42,8 +42,18 @@ where unset, in a fixed order.
    - changed: `parent_sha256` = parent hash, `ancestors` = [parent hash] + parent's ancestors,
      capped at 32; `origin_pubkey` = null; `tainted_by` ∪ {library sphere}; `share_with` = [];
      `supervised`, `sphere`, `fork_of`, `adopted_at` inherited.
-   - `foreign_users` = parent's OR the exposure holds a user id other than the owner. With no
-     owner known, any user id counts (fail closed).
+   - `foreign_users` = parent's OR the exposure holds a user id other than the owner OR the
+     exposure's `foreign_users` (taint folded in from shown workflows, below). With no owner
+     known, any user id counts (fail closed). The exposure's `tainted_by` joins the block's.
+   - **Shown workflows**: a writer shown other workflows can paraphrase their content into a new
+     lineage that has no parent, so the parent rule alone would launder their taint. The
+     optimizer's exposure (`optimizer_exposure`) therefore folds in the `commons` blocks
+     (`WorkflowLibrary.commons_block(name)`) of every workflow in `existing_workflows` (whose
+     YAML its create prompt includes) and the evaluator's `definitions_shown` (whose judgement
+     drives the priorities and rationale it acts on) via `Exposure.with_shown()`: OR in
+     `foreign_users`, add their `tainted_by`. An unreadable block counts as foreign. The goal-time
+     creator shows only names and descriptions of up to 5 workflows, not their YAML, and is not
+     folded (see risks).
 5. Write a new file (`_N.yaml` if taken, never overwrite), clear the cache.
 
 A save-time `LeakGuardRejected` is a failed change in the optimizer (`failed_changes`, nothing
@@ -87,3 +97,4 @@ listed and selected exactly as before.
   multi-user exposure today is the dream cycle's metrics analysis, which records them.
 - With no owner known the library fails closed: any user id marks `foreign_users`, which never
   clears. The web resolves the owner before the first goal runs.
+- The goal-time creator's prompt lists names and descriptions of existing workflows (no YAML); their taint is not folded in. A description is short and LLM-written from the workflow, so the risk is low; revisit if the creator ever shows definitions.
