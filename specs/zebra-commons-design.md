@@ -3,8 +3,9 @@
 **GitLab issue**: #41 (epic), slices below
 **Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-010
 **Status**: Reviewed 2026-10-26; delivery planned in waves (see the end). Implemented: the leak guard
-(#237) and S1 identity (#228, see "Identity (S1) as built" below). The reputation market (S7) is
-parked as its own later theme.
+(#237), S1 identity (#228, see "Identity (S1) as built" below), S2a provenance and S2b export
+(#229, see "Export and adoption (S2b) as built" below). The reputation market (S7) is parked as its
+own later theme.
 
 > **Owner decisions (2026-10-26)**
 > - **a. One owner per deployment.** Commons and sync act only for the deployment's owner, and
@@ -211,8 +212,42 @@ So adoption does two things:
   (OpenSpec `commons-provenance`). The owner is S1's `commons_owner_user_id`, else the routine
   owner; while no owner is known any user's runs set `foreign_users` (fail closed).
 - **Migration:** existing workflows gain the block on their next save, and their definition id
-  moves to the `c:` form (S2b; S2a leaves ids unchanged). Metrics key on workflow name, so history is kept, and old definitions stay
-  in the store, so in-flight processes resume.
+  moves to the `c:` form then (S2b: the loader derives it whenever the block has a hash). Metrics key
+  on workflow name, so history is kept, and old definitions stay in the store, so in-flight
+  processes resume.
+
+**Export and adoption (S2b) as built (#229, OpenSpec `commons-export`).**
+- **Ids:** `zebra.definitions.loader` uses `c:` + sha256(`content_sha256:name`)[:16] when the
+  `commons` block has a hash, else `sha256(name:version)`.
+- **Export file** (`zebra_agent/commons/export.py`): canonical JSON
+  `{format: "zebra-workflow-export", version: 1, event, chain}`. `event` is kind 31229
+  (provisional) signed by the **device** key, tags `x` (hash), `zebra` (publisher Zebra pubkey),
+  content `{name, yaml, commons}` with the YAML's block and local tags removed; `chain` holds the
+  signer's `DEVICE_CERT`s. `verify_export` needs the exact bytes `dump_export` wrote (so any changed
+  byte fails), lowercase hex ids/keys/sigs, every chain event a valid cert of the signer from the
+  Zebra, `verify_attributed` against the chain plus the certs and revokes the verifier holds (a held
+  revoke rejects; without relays a revoke made elsewhere is unknown), `x` = block hash = the hash
+  recomputed from the YAML, and `foreign_users: false`. `export_workflow` refuses unless
+  `commons_exportable` and the device is certified. Web: `api/commons_export.py`,
+  `manage.py commons_export NAME [--out F]` and `commons_import F [--expect-zebra NPUB] [--adopt]
+  [--name N]` (needs `COMMONS_ENABLED`; adopting at the command line is the owner's approval).
+- **Adoption:** `WorkflowLibrary.save(yaml, writer="adopt", received=block, expected_sha256=hash,
+  name=, origin_pubkey=)` (`provenance.adopted_block`): hash of the YAML = block hash = offered hash,
+  block `foreign_users: false`; keeps the block verbatim except `sphere` (local), `share_with: []`,
+  `adopted_at`, `supervised: true`, `origin_pubkey` if absent; drops received local tags, never adds
+  `llm-defined`; refuses a name taken by a different active workflow (no shadowing `_N` copy),
+  returns the existing file for a re-adopt of the same hash. Raises `AdoptionRefused`.
+- **`sharing` domain:** in `DEFAULT_DOMAINS`; `OWNER_GOVERNED_DOMAINS = {"sharing"}`: the trust gate
+  reads the owner's level and freed status (`__workflow_library__.refresh_owner()`), whoever the
+  process runs for, and routes `approve` with no owner.
+- **`commons_pii_scan`** (`zebra_tasks/commons/pii_scan.py`): rules (emails outside reserved example
+  domains, phone, Luhn card, UK NI, postcode, non-loopback/non-documentation IPv4, common secret
+  formats, URLs with credentials; `{{templates}}` ignored) then a low-tier `complete_json` call over
+  every string of the workflow (keys and values, no `commons` block) and the golden tasks. Routes
+  `clean` / `rejected`; findings are masked. Fails closed (`failed_closed: true`) on bad YAML, more
+  than `max_chars` (60000) of text, no LLM, a provider error or a reply without a boolean
+  `personal_data`. `always_reversible`: reads plus one LLM call. The workflow text goes to the LLM
+  provider like every LLM-written workflow already does; the scan guards the wider audience.
 - Attestations and outcome reports are only ever published for a workflow whose current hash equals
   the offered hash. Runs of a locally modified copy never count against the publisher.
 

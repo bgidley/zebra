@@ -59,7 +59,8 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/agent/outcome_review.py` | CompareOutcomeReviewsAction (`compare_outcome_reviews`): `parse_review()`, `compare_reviews()`; per-outcome Zebra vs Claude verdicts, route `agreed`/`disputed` (unreadable or missing = disputed), `reconsidered_key` overlay, `ruling_key` → `ruled`, `final` (no route); writes `review_result` with `table_markdown` (issue, with evidence), `summary_markdown` (ruling form) and a `dispute_notes` section per disputed outcome; `outcome_texts()` (#190, #215) |
 | `zebra_tasks/agent/record_ethics_review.py` | RecordEthicsReviewAction - normalise + audit the post-execution ethics review (#143) |
 | `zebra_tasks/agent/record_ethics_rejection.py` | RecordEthicsRejectionAction - record which ethics gate rejected a goal and why (#143) |
-| `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13/F14) |
+| `zebra_tasks/agent/trust_gate.py` | TrustGateAction - per-domain trust level enforcement (F13/F14); `OWNER_GOVERNED_DOMAINS` (`sharing`, #229): the Commons owner's level (via `__workflow_library__.refresh_owner()`) governs, no owner → `approve` |
+| `zebra_tasks/commons/pii_scan.py` | CommonsPiiScanAction (`commons_pii_scan`, #229 S2b): rules (`rule_findings`) plus a low-tier LLM over every string of the workflow (`collect_texts`, no `commons` block) and `golden_tasks`; routes `clean` / `rejected`, masked findings, fails closed (`failed_closed`) on bad YAML, > `max_chars`, no LLM or an unusable reply; `always_reversible` |
 | `zebra_tasks/agent/reversibility.py` | `assess_reversibility()` - contextual reversibility assessment (F14) |
 | `zebra_tasks/agent/propose_trust_promotion.py` | ProposeTrustPromotionAction - queue a trust promotion suggestion (F15) |
 | `zebra_tasks/agent/load_values_profile.py` | LoadValuesProfileAction - load current values-profile version |

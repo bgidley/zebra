@@ -38,6 +38,10 @@ _FREED = "FREED"
 ROUTE_PROCEED = "proceed"
 ROUTE_APPROVE = "approve"
 
+# Domains governed by the Commons owner rather than the process user (REQ-NET-006,
+# #229). Mirrors zebra_agent.storage.trust.OWNER_GOVERNED_DOMAINS.
+OWNER_GOVERNED_DOMAINS = frozenset({"sharing"})
+
 
 def _resolve(value, context: ExecutionContext):
     """Resolve {{template}} strings against the process properties."""
@@ -152,11 +156,17 @@ class TrustGateAction(TaskAction):
         reversibility = _resolve(task.properties.get("reversibility"), context)
 
         user_id = self._resolve_user_id(task, context)
+        owner_reason = None
+        if domain in OWNER_GOVERNED_DOMAINS:
+            # The Commons owner governs sharing, whoever this process runs for (#229).
+            user_id, owner_reason = await self._resolve_owner(context)
 
         # Freed users (REQ-TRUST-006) bypass trust gates entirely — before any
         # level read or assessment. Ethics gates and the kill switch are
         # independent and still apply.
-        if user_id is not None and await self._is_freed(user_id, context):
+        if owner_reason is not None:
+            level, level_reason = _SUPERVISED, owner_reason
+        elif user_id is not None and await self._is_freed(user_id, context):
             level, level_reason = _FREED, None
         else:
             level, level_reason = await self._read_level(user_id, domain, context)
@@ -208,6 +218,29 @@ class TrustGateAction(TaskAction):
             reason,
         )
         return TaskResult(success=True, output=decision, next_route=route)
+
+    async def _resolve_owner(self, context: ExecutionContext) -> tuple[int | None, str | None]:
+        """The Commons owner from the workflow library (#229); fails closed when unknown.
+
+        Returns (owner_id, None), or (None, reason) when the owner cannot be determined.
+        """
+        library = context.extras.get("__workflow_library__")
+        refresh = getattr(library, "refresh_owner", None)
+        if refresh is None:
+            logger.warning("Trust gate: no workflow library for the Commons owner — failing closed")
+            return None, "Commons owner unknown (no library) — failing closed"
+        try:
+            owner = await refresh()
+        except Exception as exc:
+            logger.warning("Trust gate: Commons owner lookup failed (%s) — failing closed", exc)
+            return None, f"Commons owner lookup failed — failing closed: {exc}"
+        if owner is None:
+            logger.warning("Trust gate: no Commons owner — failing closed")
+            return None, "no Commons owner — failing closed"
+        try:
+            return int(owner), None
+        except (TypeError, ValueError):
+            return None, f"invalid Commons owner {owner!r} — failing closed"
 
     async def _is_freed(self, user_id: int, context: ExecutionContext) -> bool:
         """Return True if the user is freed; degrade to False on any problem.

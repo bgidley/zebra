@@ -116,8 +116,9 @@ def load_definition_from_dict(data: dict[str, Any], source: str = "dict") -> Pro
     name = data["name"]
     version = data.get("version", 1)
 
-    # Generate ID from name and version
-    definition_id = _generate_id(name, version)
+    # A workflow stamped by the Zebra library (#229) gets a content-addressed id, so
+    # two workflows with the same name and version but different content never collide.
+    definition_id = _commons_id(data.get("commons"), name) or _generate_id(name, version)
 
     # Parse tasks
     tasks: dict[str, TaskDefinition] = {}
@@ -253,6 +254,21 @@ def validate_definition(definition: ProcessDefinition) -> list[str]:
                 errors.append(f"Synchronized task '{task_id}' should have multiple incoming routes")
 
     return errors
+
+
+def _commons_id(block: Any, name: str) -> str | None:
+    """Content-addressed id from a ``commons`` block (#229), or None without a hash.
+
+    ``c:`` + sha256(``content_sha256`` + ``:`` + ``name``)[:16]. The block is written
+    only by the Zebra workflow library, which owns it.
+    """
+    if not isinstance(block, dict):
+        return None
+    content_hash = block.get("content_sha256")
+    if not isinstance(content_hash, str) or not content_hash:
+        return None
+    digest = hashlib.sha256(f"{content_hash}:{name}".encode()).hexdigest()
+    return f"c:{digest[:16]}"
 
 
 def _generate_id(name: str, version: int) -> str:
