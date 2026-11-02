@@ -15,6 +15,8 @@ from zebra_tasks.agent.continuation_analysis import (
     analyze_continuations,
     empty_continuation_analysis,
 )
+from zebra_tasks.agent.run_kinds import GOAL_RUN, SYSTEM_RUN, SYSTEM_TAG, TOOL_RUN, run_kind
+from zebra_tasks.agent.zebra_source import is_expected_miss
 
 logger = logging.getLogger(__name__)
 
@@ -39,15 +41,24 @@ class MetricsAnalyzerAction(TaskAction):
             proposing to extend it (default: 2)
         output_key: Where to store analysis (default: "metrics_analysis")
 
+    Runs are goal runs, tool runs (``llm_agent`` tool calls, goal ``[tool] …``) or system
+    runs (workflow tagged ``system`` in ``__workflow_library__``, when there is one). Only
+    goal runs feed the goal statistics; tool and system runs are reported apart (#256).
+
     Output includes:
-        - workflow_stats: Per-workflow statistics (incl. continuation_rate)
+        - workflow_stats: Per-workflow statistics of goal runs (incl. continuation_rate)
         - low_performers: Workflows with success rate < 70%
         - high_performers: Workflows with success rate >= 90%
-        - unrated_runs_count: Number of runs without user ratings
-        - failure_patterns: Common failure reasons
+        - unrated_runs_count: Number of goal runs without user ratings
+        - failure_patterns: Common failure reasons of goal runs
         - usage_trends: Workflow usage over time
         - recommendations: Initial recommendations based on metrics
         - continuation_analysis: Continuation chains, patterns and proposals (F136)
+        - run_counts: Goal, tool and system runs, and expected tool misses
+        - tool_workflow_stats: Per tool workflow: calls, successes, expected misses
+          (``zebra_source.is_expected_miss``), real failures, success rate without misses
+        - tool_failure_patterns: Failure reasons of tool runs, expected misses left out
+        - system_workflow_stats: Per-workflow statistics of system runs
 
     Example workflow usage:
         ```yaml
@@ -165,6 +176,33 @@ class MetricsAnalyzerAction(TaskAction):
             ),
             required=True,
         ),
+        ParameterDef(
+            name="run_counts",
+            type="dict",
+            description="Number of goal, tool and system runs, and of expected tool misses",
+            required=True,
+        ),
+        ParameterDef(
+            name="tool_workflow_stats",
+            type="list[dict]",
+            description=(
+                "Per tool workflow: calls, successes, expected misses, real failures and "
+                "success rate over calls that were not expected misses"
+            ),
+            required=True,
+        ),
+        ParameterDef(
+            name="tool_failure_patterns",
+            type="list[dict]",
+            description="Failure reasons of tool runs, expected misses left out",
+            required=True,
+        ),
+        ParameterDef(
+            name="system_workflow_stats",
+            type="list[dict]",
+            description="Per-workflow statistics of system workflow runs",
+            required=True,
+        ),
     ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
@@ -181,14 +219,35 @@ class MetricsAnalyzerAction(TaskAction):
         output_key = task.properties.get("output_key", "metrics_analysis")
 
         try:
-            analysis = await self._analyze_metrics(metrics_store, days, min_runs, min_continuations)
+            system_workflows = await self._system_workflows(
+                context.extras.get("__workflow_library__")
+            )
+            analysis = await self._analyze_metrics(
+                metrics_store, days, min_runs, min_continuations, system_workflows
+            )
             context.set_process_property(output_key, analysis)
             return TaskResult.ok(output=analysis)
         except Exception as e:
             return TaskResult.fail(f"Metrics analysis failed: {str(e)}")
 
+    @staticmethod
+    async def _system_workflows(library: Any) -> set[str]:
+        """Names of the library's workflows tagged ``system``; none without a library."""
+        if library is None:
+            return set()
+        try:
+            return {w.name for w in await library.list_workflows() if SYSTEM_TAG in (w.tags or [])}
+        except Exception as e:
+            logger.warning("metrics_analyzer: could not list system workflows: %s", e)
+            return set()
+
     async def _analyze_metrics(
-        self, metrics_store: Any, days: int, min_runs: int, min_continuations: int = 2
+        self,
+        metrics_store: Any,
+        days: int,
+        min_runs: int,
+        min_continuations: int = 2,
+        system_workflows: set[str] | None = None,
     ) -> dict[str, Any]:
         """Perform the actual metrics analysis using the MetricsStore interface."""
         cutoff_date = datetime.now() - timedelta(days=days)
@@ -199,44 +258,20 @@ class MetricsAnalyzerAction(TaskAction):
 
         # Convert runs to dicts for downstream processing
         run_dicts = self._runs_to_dicts(recent_runs)
+        by_kind: dict[str, list[dict]] = {GOAL_RUN: [], TOOL_RUN: [], SYSTEM_RUN: []}
+        for r in run_dicts:
+            by_kind[run_kind(r, system_workflows or set())].append(r)
+        goal_runs = by_kind[GOAL_RUN]
+        tool_runs = by_kind[TOOL_RUN]
+        miss_ids = {r["id"] for r in tool_runs if not r["success"] and is_expected_miss(r["error"])}
 
         continuation_analysis = await self._gather_continuations(
             metrics_store, cutoff_date, min_continuations
         )
         continued_ids = set(continuation_analysis["continued_run_ids"])
 
-        # Build per-workflow stats from the all_stats response,
-        # filtered to only workflows active in the analysis period
-        active_workflow_names = {r["workflow_name"] for r in run_dicts}
-        workflow_stats = []
-        for stat in all_stats:
-            if stat.workflow_name in active_workflow_names:
-                # Recalculate stats from the recent runs for the analysis period
-                period_runs = [r for r in run_dicts if r["workflow_name"] == stat.workflow_name]
-                total = len(period_runs)
-                successful = sum(1 for r in period_runs if r["success"])
-                ratings = [r["user_rating"] for r in period_runs if r["user_rating"] is not None]
-                avg_rating = sum(ratings) / len(ratings) if ratings else None
-                avg_tokens = sum(r["tokens_used"] for r in period_runs) / total if total > 0 else 0
-                last_used = max(r["started_at"] for r in period_runs) if period_runs else None
-                continued = sum(1 for r in period_runs if r["id"] in continued_ids)
-
-                workflow_stats.append(
-                    {
-                        "workflow_name": stat.workflow_name,
-                        "total_runs": total,
-                        "successful_runs": successful,
-                        "success_rate": successful / total if total > 0 else 0,
-                        "avg_rating": avg_rating,
-                        "avg_tokens": avg_tokens,
-                        "last_used": last_used,
-                        "continued_runs": continued,
-                        "continuation_rate": continued / total if total > 0 else 0,
-                    }
-                )
-
-        # Sort by total_runs descending
-        workflow_stats.sort(key=lambda w: w["total_runs"], reverse=True)
+        known_workflows = [stat.workflow_name for stat in all_stats]
+        workflow_stats = self._workflow_stats(goal_runs, known_workflows, continued_ids)
 
         # Categorize workflows
         low_performers = [
@@ -247,13 +282,13 @@ class MetricsAnalyzerAction(TaskAction):
         ]
 
         # Get unrated runs
-        unrated_runs = [r for r in run_dicts if r.get("user_rating") is None]
+        unrated_runs = [r for r in goal_runs if r.get("user_rating") is None]
 
         # Analyze failure patterns
-        failure_patterns = self._analyze_failures(run_dicts)
+        failure_patterns = self._analyze_failures(goal_runs)
 
         # Calculate usage trends
-        usage_trends = self._calculate_usage_trends(run_dicts)
+        usage_trends = self._calculate_usage_trends(goal_runs)
 
         # Generate initial recommendations
         recommendations = self._generate_recommendations(
@@ -278,7 +313,78 @@ class MetricsAnalyzerAction(TaskAction):
             "usage_trends": usage_trends,
             "recommendations": recommendations,
             "continuation_analysis": continuation_analysis,
+            "run_counts": {
+                GOAL_RUN: len(goal_runs),
+                TOOL_RUN: len(tool_runs),
+                SYSTEM_RUN: len(by_kind[SYSTEM_RUN]),
+                "expected_misses": len(miss_ids),
+            },
+            "tool_workflow_stats": self._tool_workflow_stats(tool_runs),
+            "tool_failure_patterns": self._analyze_failures(
+                [r for r in tool_runs if r["id"] not in miss_ids]
+            ),
+            "system_workflow_stats": self._workflow_stats(
+                by_kind[SYSTEM_RUN], known_workflows, continued_ids
+            ),
         }
+
+    @staticmethod
+    def _workflow_stats(
+        runs: list[dict], known_workflows: list[str], continued_ids: set[str]
+    ) -> list[dict[str, Any]]:
+        """Per-workflow statistics of ``runs`` for the store's known workflows, busiest first."""
+        workflow_stats = []
+        for name in known_workflows:
+            period_runs = [r for r in runs if r["workflow_name"] == name]
+            if not period_runs:
+                continue
+            total = len(period_runs)
+            successful = sum(1 for r in period_runs if r["success"])
+            ratings = [r["user_rating"] for r in period_runs if r["user_rating"] is not None]
+            continued = sum(1 for r in period_runs if r["id"] in continued_ids)
+            workflow_stats.append(
+                {
+                    "workflow_name": name,
+                    "total_runs": total,
+                    "successful_runs": successful,
+                    "success_rate": successful / total,
+                    "avg_rating": sum(ratings) / len(ratings) if ratings else None,
+                    "avg_tokens": sum(r["tokens_used"] for r in period_runs) / total,
+                    "last_used": max(r["started_at"] for r in period_runs),
+                    "continued_runs": continued,
+                    "continuation_rate": continued / total,
+                }
+            )
+        workflow_stats.sort(key=lambda w: w["total_runs"], reverse=True)
+        return workflow_stats
+
+    @staticmethod
+    def _tool_workflow_stats(runs: list[dict]) -> list[dict[str, Any]]:
+        """Per tool workflow: calls, successes, expected misses and real failures (#256).
+
+        The success rate leaves expected misses out: a miss is a correct answer, neither a
+        success nor a failure of the tool. ``None`` when every call was a miss.
+        """
+        by_workflow: dict[str, list[dict]] = {}
+        for r in runs:
+            by_workflow.setdefault(r["workflow_name"], []).append(r)
+        stats = []
+        for name, calls in by_workflow.items():
+            successful = sum(1 for r in calls if r["success"])
+            misses = sum(1 for r in calls if not r["success"] and is_expected_miss(r["error"]))
+            judged = len(calls) - misses
+            stats.append(
+                {
+                    "workflow_name": name,
+                    "total_runs": len(calls),
+                    "successful_runs": successful,
+                    "expected_misses": misses,
+                    "failures": judged - successful,
+                    "success_rate": successful / judged if judged else None,
+                }
+            )
+        stats.sort(key=lambda w: w["total_runs"], reverse=True)
+        return stats
 
     async def _gather_continuations(
         self, metrics_store: Any, cutoff: datetime, min_continuations: int

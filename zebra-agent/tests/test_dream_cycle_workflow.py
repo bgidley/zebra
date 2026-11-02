@@ -114,7 +114,8 @@ def test_improvement_request_workflow_is_a_valid_system_workflow():
     assert review.auto is False
     schema = review.properties["schema"]
     assert schema["required"] == ["verdict"]
-    assert schema["properties"]["verdict"]["enum"] == ["accepted", "rejected", "duplicate", "later"]
+    verdicts = schema["properties"]["verdict"]["enum"]
+    assert verdicts == ["accepted", "build", "rejected", "duplicate", "later"]
 
 
 def test_improvement_request_files_an_issue_after_review():
@@ -126,7 +127,11 @@ def test_improvement_request_files_an_issue_after_review():
     file_issue = definition.tasks["file_issue"]
     assert file_issue.action == "file_improvement_issue"
     assert file_issue.auto is True
-    assert routes == {("review", "file_issue")}
+    # build verdicts then start Improve Zebra (#251); start_build decides, so no branching
+    start_build = definition.tasks["start_build"]
+    assert start_build.action == "start_improvement_build"
+    assert start_build.auto is True
+    assert routes == {("review", "file_issue"), ("file_issue", "start_build")}
 
 
 def test_summary_reports_knowledge():
