@@ -27,6 +27,9 @@ _FIELDS = ("core_values", "ethical_positions", "priorities", "deal_breakers")
 class SaveValuesProfileAction(TaskAction):
     """Persist the wizard output as a new ValuesProfileVersion."""
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Save the values profile, creating a new immutable version and tag rows."
 
     inputs = [

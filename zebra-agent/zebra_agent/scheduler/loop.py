@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
 from zebra.core.models import ProcessState
+from zebra_tasks.launch import LaunchRefused, create_library_process
 
 from zebra_agent.scheduler.registry import RoutineRegistry
 from zebra_agent.scheduler.routine import Routine, RoutineRun
@@ -173,7 +174,13 @@ class SchedulerLoop:
             "__routine__": routine.name,
             **routine.extra_properties,
         }
-        process = await self._engine.create_process(definition, properties=properties)
+        try:
+            process = await create_library_process(
+                self._engine, definition, entry="routine", properties=properties
+            )
+        except LaunchRefused as e:
+            logger.warning("[scheduler:skip] %s — launch refused: %s", routine.name, e)
+            return "refused"
         logger.info(
             "[scheduler:dispatch] %s  workflow=%s  process=%s",
             routine.name,

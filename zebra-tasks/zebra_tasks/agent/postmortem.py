@@ -112,7 +112,8 @@ class WritePostmortemAction(TaskAction):
     """
 
     description = "Write a postmortem (what happened, root cause, lesson) into long-term memory."
-    reversibility_hint = "always_reversible"
+    # #245: writes the memory store; refused by strict gym
+    reversibility_hint = "context_dependent"
 
     inputs = [
         ParameterDef(name="goal", type="string", description="The run's goal", required=True),

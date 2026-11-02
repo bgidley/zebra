@@ -667,7 +667,7 @@ then merged to master one at a time.
 | Wave | Slice | Delivers | Depends on |
 |---|---|---|---|
 | done | #237 Leak guard | Exposure set per LLM writer, check on added literals before save, generalise-or-reject, optimizer prompt rule | — |
-| 1 | #245 S0 Safety prerequisites | One launch choke point for library workflows (goals, direct runs, routines, subworkflows); honest reversibility hints; strict gym mode (`always_reversible` only); `commons_exportable()` keeps protected workflows home | — |
+| 1 | #245 S0 Safety prerequisites (**shipped**: `zebra_tasks/launch.py`, `unsafe_reason(strict=)`, `zebra_agent/commons.py`) | One launch choke point for library workflows (goals, direct runs, routines, subworkflows); honest reversibility hints; strict gym mode (`always_reversible` only); `commons_exportable()` keeps protected workflows home | — |
 | 1 | #228 S1 Zebra + device identity | Zebra key and device keys in the credential store, pairing with sphere and `observed`, local `DEVICE_CERT`/`DEVICE_REVOKE`, deployment owner, keys in the UI, Zebra key backup and restore | — |
 | 1 | #229 S2a Provenance | `WorkflowLibrary.save()` as the one save path, canonical hash, `commons` block (incl. `sphere` / `tainted_by` / `share_with` / `foreign_users`) | S0 |
 | 2 | #229 S2b Export + shared pieces | Signed single-workflow export/import, `c:` definition ids, `sharing` trust domain, `commons_pii_scan`, `save(writer="adopt")` | S1, S2a |

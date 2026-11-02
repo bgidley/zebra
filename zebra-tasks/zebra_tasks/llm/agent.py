@@ -20,6 +20,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef
 
 from zebra_tasks.agent.run_kinds import SYSTEM_TAG, TOOL_GOAL_PREFIX
 from zebra_tasks.agent.user_context import copy_user_properties
+from zebra_tasks.launch import LaunchRefused, create_library_process
 from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.llm.base import LLMResponse, Message, MessageRole, ToolCall, ToolDefinition
 from zebra_tasks.llm.client import get_llm, model_for
@@ -478,18 +479,7 @@ class LLMAgentAction(LLMCallAction):
                 error = f"Workflow '{tool['workflow']}' could not be loaded: {e}"
         arguments = call.arguments if isinstance(call.arguments, dict) else {}
         if error is not None:
-            self._answer(state, call.id, call.name, f"Error: {error}")
-            state["transcript"].append(
-                {
-                    "tool": call.name,
-                    "workflow": tool["workflow"] if tool else None,
-                    "arguments": arguments,
-                    "process_id": None,
-                    "success": False,
-                    "result": error[:TRANSCRIPT_CHARS],
-                }
-            )
-            return None
+            return self._refuse_call(state, call, tool, arguments, error)
 
         parent = context.process.properties
         # The model never sets internal (``__``) properties on a child.
@@ -503,12 +493,17 @@ class LLMAgentAction(LLMCallAction):
         props["__parent_task_id__"] = task.id
         props["run_id"] = str(uuid.uuid4())
 
-        child = await context.engine.create_process(
-            definition,
-            properties=props,
-            parent_process_id=context.process.id,
-            parent_task_id=task.id,
-        )
+        try:
+            child = await create_library_process(
+                context.engine,
+                definition,
+                entry="llm_agent_tool",
+                properties=props,
+                parent_process_id=context.process.id,
+                parent_task_id=task.id,
+            )
+        except LaunchRefused as e:
+            return self._refuse_call(state, call, tool, arguments, f"Launch refused: {e}")
         state["pending"].append(
             {
                 "tool_call_id": call.id,
@@ -522,6 +517,28 @@ class LLMAgentAction(LLMCallAction):
         )
         logger.info("llm_agent: tool %s -> child process %s", call.name, child.id)
         return child.id
+
+    def _refuse_call(
+        self,
+        state: dict[str, Any],
+        call: ToolCall,
+        tool: dict[str, Any] | None,
+        arguments: dict[str, Any],
+        error: str,
+    ) -> None:
+        """Answer a tool call that starts no child with *error*, and record it."""
+        self._answer(state, call.id, call.name, f"Error: {error}")
+        state["transcript"].append(
+            {
+                "tool": call.name,
+                "workflow": tool["workflow"] if tool else None,
+                "arguments": arguments,
+                "process_id": None,
+                "success": False,
+                "result": error[:TRANSCRIPT_CHARS],
+            }
+        )
+        return None
 
     async def _absorb_results(self, state: dict[str, Any], context: ExecutionContext) -> None:
         """Turn finished children into tool results, roll up cost, record metrics."""

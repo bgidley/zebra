@@ -53,6 +53,9 @@ class PythonExecAction(TaskAction):
         Do not execute untrusted code.
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Execute Python code in a restricted environment and capture the result."
 
     inputs = [

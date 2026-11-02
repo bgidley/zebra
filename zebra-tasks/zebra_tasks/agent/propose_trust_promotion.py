@@ -30,6 +30,9 @@ class ProposeTrustPromotionAction(TaskAction):
     unavailable.
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Propose a trust level promotion for human approval (never self-promotes)."
 
     inputs = [

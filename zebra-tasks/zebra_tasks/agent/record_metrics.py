@@ -46,6 +46,9 @@ class RecordMetricsAction(TaskAction):
         ```
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Record workflow run and task executions to metrics store."
 
     inputs = [

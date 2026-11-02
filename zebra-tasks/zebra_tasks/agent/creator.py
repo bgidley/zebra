@@ -178,6 +178,9 @@ class WorkflowCreatorAction(TaskAction):
         Dictionary with 'yaml' (string) and 'name' (string)
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Use LLM to create a new workflow definition in YAML format."
 
     inputs = [

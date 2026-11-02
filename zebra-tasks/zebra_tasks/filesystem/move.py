@@ -49,6 +49,9 @@ class FileMoveAction(TaskAction):
         - output.type: "file" or "directory"
     """
 
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
+
     description = "Move or rename a file or directory."
 
     inputs = [

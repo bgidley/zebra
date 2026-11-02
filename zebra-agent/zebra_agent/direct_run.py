@@ -13,6 +13,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from zebra.core.models import ProcessState
+from zebra_tasks.launch import LaunchRefused, create_library_process
 
 from zebra_agent.human_tasks import find_pending_human_task
 
@@ -49,7 +50,8 @@ async def run_named_workflow(
         The ``workflow_status`` dict for the new process.
 
     Raises:
-        DirectRunError: If the workflow is unknown or a required input is missing.
+        DirectRunError: If the workflow is unknown, a required input is missing, or the
+            launch check refuses it (#245).
     """
     try:
         definition = library.get_workflow(name)
@@ -70,7 +72,12 @@ async def run_named_workflow(
         "workflow_name": name,
         "__llm_model__": model,
     }
-    process = await engine.create_process(definition, properties=properties)
+    try:
+        process = await create_library_process(
+            engine, definition, entry="direct_run", properties=properties
+        )
+    except LaunchRefused as e:
+        raise DirectRunError(f"Launch of '{name}' refused: {e}") from e
     await engine.start_process_with_timeout(process.id, timeout)
     return await workflow_status(engine, process.id)
 

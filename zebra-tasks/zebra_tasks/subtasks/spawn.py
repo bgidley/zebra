@@ -8,6 +8,7 @@ from zebra.core.models import (
 from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.launch import LaunchRefused, create_library_process
 from zebra_tasks.subtasks.common import child_result, start_child
 
 
@@ -40,6 +41,9 @@ class SubworkflowAction(TaskAction):
               output_key: analysis_result
         ```
     """
+
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
 
     description = "Spawn and execute a sub-workflow as a child process."
 
@@ -151,12 +155,17 @@ class SubworkflowAction(TaskAction):
 
         # Create the sub-process linked from its first save, so the daemon never
         # takes it for a queued goal (#227)
-        sub_process = await context.engine.create_process(
-            workflow_def,
-            properties=resolved_properties,
-            parent_process_id=context.process.id,
-            parent_task_id=task.id,
-        )
+        try:
+            sub_process = await create_library_process(
+                context.engine,
+                workflow_def,
+                entry="subworkflow",
+                properties=resolved_properties,
+                parent_process_id=context.process.id,
+                parent_task_id=task.id,
+            )
+        except LaunchRefused as e:
+            return TaskResult.fail(f"Sub-workflow launch refused: {e}")
 
         # Start sub-process; its inline run is bounded by timeout
         await start_child(context, sub_process.id, task.properties.get("timeout"))

@@ -152,7 +152,8 @@ class ProposeZebraImprovementsAction(TaskAction):
     """
 
     description = "Dream cycle: request human-reviewed improvements to Zebra's own code"
-    reversibility_hint = "always_reversible"
+    # #245: starts Zebra Improvement Request processes; refused by strict gym
+    reversibility_hint = "context_dependent"
 
     inputs = [
         ParameterDef(

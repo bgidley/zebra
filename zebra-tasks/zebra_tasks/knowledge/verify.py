@@ -33,6 +33,9 @@ class PickEntriesForVerificationAction(TaskAction):
         - count: number of entries selected
     """
 
+    # #245: effects stay in this run (reads, LLM calls, gates, audit appends)
+    reversibility_hint = "always_reversible"
+
     description = "Select low-confidence or stale knowledge entries for human verification."
 
     inputs = [

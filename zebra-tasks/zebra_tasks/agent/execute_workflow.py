@@ -21,6 +21,7 @@ from zebra_tasks.agent.history import with_workflow_history
 from zebra_tasks.agent.postmortem import with_lessons
 from zebra_tasks.agent.stuck import with_help_guidance
 from zebra_tasks.agent.user_context import copy_user_properties
+from zebra_tasks.launch import create_library_process
 
 if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
@@ -100,6 +101,9 @@ class ExecuteGoalWorkflowAction(TaskAction):
               output_key: execution_result
         ```
     """
+
+    # #245: writes outside this run; judged at runtime, refused by strict gym
+    reversibility_hint = "context_dependent"
 
     description = "Execute a goal workflow by name and capture its output."
 
@@ -471,8 +475,11 @@ class ExecuteGoalWorkflowAction(TaskAction):
 
         # Linked from its first save: an unlinked CREATED process is a queued goal to
         # the daemon, which would start it a second time (#227).
-        sub_process = await context.engine.create_process(
+        # #245: every library-workflow start goes through the launch choke point
+        sub_process = await create_library_process(
+            context.engine,
             definition,
+            entry="goal",
             properties=sub_properties,
             parent_process_id=context.process.id,
             parent_task_id=task.id,
