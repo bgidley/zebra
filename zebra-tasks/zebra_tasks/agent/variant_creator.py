@@ -1,13 +1,21 @@
 """WorkflowVariantCreatorAction - LLM-driven copy-and-modify of an existing workflow."""
 
+import logging
+
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.agent.creator import generate_guarded_workflow, goal_exposure
+from zebra_tasks.agent.creator import (
+    generate_guarded_workflow,
+    goal_exposure,
+    writer_exposure,
+)
 from zebra_tasks.agent.followup import with_previous_run
 from zebra_tasks.agent.leak_guard import LeakGuard
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.client import get_llm
+
+logger = logging.getLogger(__name__)
 
 
 class WorkflowVariantCreatorAction(TaskAction):
@@ -196,9 +204,20 @@ class WorkflowVariantCreatorAction(TaskAction):
             # Save to library
             if library is not None:
                 try:
-                    library.add_workflow(yaml_content, llm_defined=True)
-                except Exception:
-                    pass  # Don't fail — workflow is still valid
+                    library.add_workflow(
+                        yaml_content,
+                        llm_defined=True,
+                        writer="variant_creator",
+                        parent=source_name,
+                        exposure=writer_exposure(
+                            context,
+                            run_texts,
+                            goal_texts + [suggested_name, reasoning],
+                            self.SYSTEM_PROMPT,
+                        ),
+                    )
+                except Exception as e:  # Don't fail — workflow is still valid
+                    logger.warning("Could not save workflow variant: %s", e)
 
             if callback:
                 await callback(

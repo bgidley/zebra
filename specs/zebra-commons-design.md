@@ -196,15 +196,22 @@ So adoption does two things:
     - set `parent_sha256` to the previous hash and push it onto `ancestors`
     - clear `origin_pubkey` (the change is now local)
     - add the writer's sphere to `tainted_by`
-    - set `foreign_users` if the writer's exposure set holds runs of any user but the owner
+    - set `foreign_users` if the writer's exposure set holds runs of any user but the owner,
+      or holds another workflow (shown in its prompt or judged by the evaluator) that has
+      `foreign_users`; that workflow's `tainted_by` joins too, so taint cannot be laundered
+      through a new lineage
     - reset `share_with` to `[]`
     - keep `supervised` until a human clears it
   - **Adoption or sync** (`commons_adopt`, `SKILL` receive): the received block is kept verbatim
     after the hash is verified to equal the offered or sent hash. Only the local `name`, `sphere`
     bookkeeping and `share_with: []` change, and no `llm-defined` tag is added. This is not a local
     change, so provenance and attestability survive.
+- **Unknown provenance fails closed (S2a):** a workflow without a block (written before S2a) is treated as `foreign_users` unless it is an unmodified built-in (hash match): never exportable, and it taints any version saved from it or any writer shown it.
+- **Implemented in S2a (#229)** as `zebra_agent/provenance.py` + `WorkflowLibrary.save()`
+  (OpenSpec `commons-provenance`). The owner is S1's `commons_owner_user_id`, else the routine
+  owner; while no owner is known any user's runs set `foreign_users` (fail closed).
 - **Migration:** existing workflows gain the block on their next save, and their definition id
-  moves to the `c:` form. Metrics key on workflow name, so history is kept, and old definitions stay
+  moves to the `c:` form (S2b; S2a leaves ids unchanged). Metrics key on workflow name, so history is kept, and old definitions stay
   in the store, so in-flight processes resume.
 - Attestations and outcome reports are only ever published for a workflow whose current hash equals
   the offered hash. Runs of a locally modified copy never count against the publisher.

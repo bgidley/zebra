@@ -35,6 +35,7 @@ def empty_continuation_analysis() -> dict[str, Any]:
         "decision_counts": {},
         "proposals": [],
         "continued_run_ids": [],
+        "user_ids": [],
     }
 
 
@@ -106,10 +107,14 @@ async def analyze_continuations(
     # link key = continuation run id -> (predecessor run, continuation run)
     links: dict[str, tuple[Any, Any]] = {}
 
+    chain_user_ids: set[int] = set()
     for leaf in leaves:
         chain_runs = list(await metrics_store.get_run_chain(leaf.id))
         if len(chain_runs) < 2:
             continue
+        chain_user_ids.update(
+            r.user_id for r in chain_runs if isinstance(getattr(r, "user_id", None), int)
+        )
         root = chain_runs[0]
         root_execs = await _executions(metrics_store, root.id, exec_cache)
         steps = []
@@ -224,6 +229,7 @@ async def analyze_continuations(
         "decision_counts": dict(decision_counts),
         "proposals": proposals,
         "continued_run_ids": sorted({prev.id for prev, _ in links.values()}),
+        "user_ids": sorted(chain_user_ids),
     }
 
 

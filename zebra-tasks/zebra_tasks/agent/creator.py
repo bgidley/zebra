@@ -97,6 +97,29 @@ def goal_exposure(goal: str, goal_text: str) -> tuple[list[str], list[str]]:
     return ([previous] if previous.strip() else []), [goal]
 
 
+def writer_exposure(
+    context: ExecutionContext,
+    run_texts: list[str],
+    goal_texts: list[str],
+    allow_text: str,
+):
+    """The ``Exposure`` a goal-time writer saves with (#229).
+
+    The writer saw this goal and its previous run, both the goal's user's, so the
+    user ids are the process's ``__user_id__``. Leak-guard hits are kept (the
+    user's own words), so ``reject`` is false.
+    """
+    from zebra_agent.provenance import Exposure, user_ids
+
+    return Exposure(
+        run_texts=list(run_texts),
+        goal_texts=[t for t in goal_texts if isinstance(t, str)],
+        allow_text=allow_text,
+        user_ids=user_ids([context.process.properties.get("__user_id__")]),
+        reject=False,
+    )
+
+
 async def generate_guarded_workflow(
     provider,
     messages: list[Message],
@@ -508,11 +531,9 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
             system_prompt = self._PROMPT_HEADER + actions_section + self._PROMPT_FOOTER
             messages = [Message.system(system_prompt), Message.user(prompt)]
             run_texts, goal_texts = goal_exposure(goal, goal_text)
-            guard = LeakGuard(
-                run_texts=run_texts,
-                goal_texts=goal_texts + [suggested_name or ""],
-                allow_text=system_prompt + library_section,
-            )
+            guard_goals = goal_texts + [suggested_name or ""]
+            guard_allow = system_prompt + library_section
+            guard = LeakGuard(run_texts=run_texts, goal_texts=guard_goals, allow_text=guard_allow)
             # Structured output; creativity lives in the workflow's own tasks
             yaml_content, definition, problem, leak = await generate_guarded_workflow(
                 provider, messages, temperature=0.3, guard=guard
@@ -524,10 +545,15 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
             library = context.extras.get("__workflow_library__")
             if library is not None:
                 try:
-                    library.add_workflow(yaml_content, llm_defined=True)
-                except Exception:
+                    library.add_workflow(
+                        yaml_content,
+                        llm_defined=True,
+                        writer="creator",
+                        exposure=writer_exposure(context, run_texts, guard_goals, guard_allow),
+                    )
+                except Exception as e:
                     # Log but don't fail - workflow is still valid
-                    pass
+                    logger.warning("Could not save created workflow: %s", e)
 
             # Emit progress event: workflow created/selected
             if callback:

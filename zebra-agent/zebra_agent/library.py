@@ -3,6 +3,7 @@
 import logging
 import re
 import shutil
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,8 +15,23 @@ from zebra.definitions.loader import load_definition
 
 from zebra_agent.gym import GoldenTask, golden_dir, load_golden_tasks
 from zebra_agent.metrics import MetricsStore, WorkflowStats
+from zebra_agent.provenance import (
+    DEFAULT_SPHERE,
+    Exposure,
+    has_foreign_users,
+    legacy_block,
+    next_block,
+    read_commons,
+    strip_commons,
+    try_content_sha256,
+    with_commons,
+)
 
 logger = logging.getLogger(__name__)
+
+# The built-in workflows shipped with zebra-agent (the web installs from here, #229:
+# a blockless file whose hash matches one of them is an unmodified built-in).
+BUILTIN_WORKFLOWS_DIR = Path(__file__).resolve().parent.parent / "workflows"
 
 
 @dataclass
@@ -32,6 +48,7 @@ class WorkflowInfo:
     use_count: int = 0
     retired: dict[str, Any] | None = None  # {reason, retired_at, superseded_by} (#148)
     inputs: dict[str, Any] | None = None  # JSON Schema of tool arguments; None = {goal} (#146)
+    commons: dict[str, Any] | None = None  # Provenance block (#229); None for older files
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -176,6 +193,21 @@ def _yaml_version(path: Path) -> int:
         return 1
 
 
+class LeakGuardRejected(ValueError):
+    """``save()`` refused a dream-cycle write that copies run specifics (#237, #229)."""
+
+    def __init__(self, reason: str, record: dict[str, Any]):
+        super().__init__(reason)
+        self.record = record
+
+
+def workflow_filename(name: str) -> str:
+    """Default file name for a workflow name (``Web Research`` → ``web_research.yaml``)."""
+    safe_name = name.lower().replace(" ", "_").replace("-", "_")
+    safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+    return f"{safe_name or 'untitled'}.yaml"
+
+
 def _free_path(directory: Path, filename: str) -> Path:
     """Return ``directory/filename``, adding ``_N`` to the stem if it is taken."""
     dest = directory / filename
@@ -200,6 +232,10 @@ class WorkflowLibrary:
         library_path: Path,
         metrics_store: MetricsStore | None = None,
         golden_path: Path | None = None,
+        *,
+        owner_user_id: int | None = None,
+        sphere: str = DEFAULT_SPHERE,
+        owner_resolver: Callable[[], Awaitable[tuple[int | None, str | None]]] | None = None,
     ):
         """
         Initialize the workflow library.
@@ -210,11 +246,34 @@ class WorkflowLibrary:
                           workflows will have default stats (0 uses, 0% success).
             golden_path: Directory of golden task YAML files (#171). Defaults to
                          ``ZEBRA_GOLDEN_TASKS_DIR`` or the built-in ``zebra-agent/golden``.
+            owner_user_id: The Commons owner (#229). While unknown, any user's runs
+                mark a saved workflow ``foreign_users`` (fail closed).
+            sphere: This deployment's sphere, recorded in ``tainted_by`` on each save.
+            owner_resolver: Async ``() -> (owner_user_id, sphere)``; ``refresh_owner()``
+                calls it while the owner is unknown.
         """
         self.library_path = Path(library_path).expanduser()
         self.metrics = metrics_store
         self.golden_path = Path(golden_path).expanduser() if golden_path else None
         self._cache: dict[str, ProcessDefinition] = {}
+        self.owner_user_id = owner_user_id
+        self.sphere = sphere or DEFAULT_SPHERE
+        self.owner_resolver = owner_resolver
+        self._builtin_dirs: list[Path] = [BUILTIN_WORKFLOWS_DIR]
+        self._builtin_hashes: set[str] | None = None
+
+    async def refresh_owner(self) -> int | None:
+        """Resolve the Commons owner and sphere while the owner is unknown (#229)."""
+        if self.owner_user_id is None and self.owner_resolver is not None:
+            try:
+                owner, sphere = await self.owner_resolver()
+            except Exception as e:  # never block a goal on the owner lookup
+                logger.warning("Could not resolve the Commons owner: %s", e)
+                return None
+            self.owner_user_id = owner
+            if sphere:
+                self.sphere = sphere
+        return self.owner_user_id
 
     def ensure_initialized(self) -> None:
         """Ensure the library directory exists."""
@@ -288,6 +347,7 @@ class WorkflowLibrary:
                 success_rate=stats.success_rate,
                 use_count=stats.total_runs,
                 inputs=inputs if isinstance(inputs, dict) else None,
+                commons=data.get("commons") if isinstance(data.get("commons"), dict) else None,
             )
         except Exception as e:
             logger.warning(f"Failed to load workflow info from {yaml_file}: {e}")
@@ -325,61 +385,205 @@ class WorkflowLibrary:
         raise ValueError(f"Workflow not found: {name}")
 
     def add_workflow(
-        self, yaml_content: str, filename: str | None = None, llm_defined: bool = False
+        self,
+        yaml_content: str,
+        filename: str | None = None,
+        llm_defined: bool = False,
+        *,
+        writer: str = "human",
+        parent: str | None = None,
+        exposure: Exposure | dict | None = None,
     ) -> str:
-        """
-        Add a new workflow to the library.
-
-        Args:
-            yaml_content: YAML content of the workflow definition
-            filename: Optional filename (will be generated from name if not provided)
-            llm_defined: Tag the workflow ``llm-defined``, so the curator may retire
-                it when unused (#148)
-
-        Returns:
-            Name of the added workflow
+        """Add a workflow to the library through ``save()``; returns its name.
 
         Raises:
             ValueError: If the YAML does not parse or is not a mapping.
+            LeakGuardRejected: If a rejecting exposure's leak guard finds run specifics.
+        """
+        path = self.save(
+            yaml_content,
+            writer=writer,
+            parent=parent,
+            exposure=exposure,
+            filename=filename,
+            llm_defined=llm_defined,
+        )
+        return parse_workflow_yaml(path.read_text()).get("name", "untitled")
+
+    def save(
+        self,
+        yaml_content: str,
+        *,
+        writer: str,
+        parent: str | None = None,
+        exposure: Exposure | dict | None = None,
+        filename: str | None = None,
+        llm_defined: bool = False,
+    ) -> Path:
+        """Write a workflow file: the one save path, which owns the ``commons`` block (#229).
+
+        Any ``commons`` block in *yaml_content* is dropped (an LLM can never set it),
+        the leak guard (#237) re-checks the exposure, and the provenance block is
+        computed from the parent by the local-change rules
+        (``zebra_agent.provenance.next_block``). An existing file is never overwritten:
+        a taken name gets a ``_N`` copy and the newest file wins.
+
+        Args:
+            yaml_content: The workflow YAML
+            writer: Who wrote it (``human``, ``creator``, ``variant_creator``,
+                ``optimizer``, ``gym``), for logs
+            parent: Name of the workflow this one derives from; default the active
+                workflow with the same name, if any
+            exposure: What the writer was shown (texts for the leak guard, user ids
+                for ``foreign_users``); None for a human writer
+            filename: File name; default from the workflow name
+            llm_defined: Tag the workflow ``llm-defined`` (#148)
+
+        Returns:
+            The path written.
+
+        Raises:
+            ValueError: If the YAML does not parse or is not a mapping (#158).
+            LeakGuardRejected: If the exposure rejects hits and the guard found some.
         """
         self.ensure_initialized()
+        if isinstance(exposure, dict):
+            exposure = Exposure.from_dict(exposure)
 
+        parse_workflow_yaml(yaml_content)  # never write a file the library cannot load
+        yaml_content = strip_commons(yaml_content)
         if llm_defined:
             yaml_content = tag_llm_defined(yaml_content)
-
-        # Parse to get the name; never write a file the library cannot load (#158)
         data = parse_workflow_yaml(yaml_content)
         name = data.get("name", "untitled")
 
-        # Generate filename if not provided
-        if not filename:
-            # Convert name to filename-safe string
-            safe_name = name.lower().replace(" ", "_")
-            safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
-            filename = f"{safe_name}.yaml"
+        parent_name = parent or name
+        parent_path = next(iter(self._files_named(parent_name)), None)
+        parent_text = parent_path.read_text() if parent_path else None
+        parent_yaml = strip_commons(parent_text) if parent_text else None
+        parent_block = read_commons(parent_text) if parent_text else None
 
-        # Write to file
-        filepath = self.library_path / filename
+        if exposure is not None and exposure.has_texts:
+            self._check_leaks(yaml_content, exposure, parent_yaml, writer)
 
-        # Don't overwrite existing files - add suffix if needed
-        counter = 1
-        while filepath.exists():
-            base = filename.rsplit(".", 1)[0]
-            filepath = self.library_path / f"{base}_{counter}.yaml"
-            counter += 1
+        new_hash, reason = try_content_sha256(yaml_content)
+        if new_hash is None:
+            logger.warning("Workflow %r has no content hash: %s", name, reason)
+        parent_hash = (parent_block or {}).get("content_sha256")
+        if parent_yaml is not None and not parent_hash:
+            parent_hash, _ = try_content_sha256(parent_yaml)
+        # A parent written before #229 has no block: unless it is an unmodified
+        # built-in its lineage is unknown, so the save inherits foreign_users.
+        parent_unknown = (
+            parent_path is not None
+            and parent_block is None
+            and not (parent_hash and parent_hash in self.builtin_hashes())
+        )
+        foreign = exposure is not None and (
+            exposure.foreign_users or has_foreign_users(exposure.user_ids, self.owner_user_id)
+        )
+        block = next_block(
+            new_hash=new_hash,
+            parent_block=parent_block,
+            parent_hash=parent_hash,
+            has_parent=parent_path is not None,
+            sphere=self.sphere,
+            foreign=foreign,
+            parent_unknown=parent_unknown,
+        )
+        if exposure is not None:
+            # Taint from other workflows the writer was shown (Exposure.with_shown)
+            tainted = list(block.get("tainted_by") or [])
+            block["tainted_by"] = tainted + [s for s in exposure.tainted_by if s not in tainted]
 
-        with open(filepath, "w") as f:
-            f.write(yaml_content)
+        filepath = _free_path(self.library_path, filename or workflow_filename(name))
+        filepath.write_text(with_commons(yaml_content, block))
+        self._cache.pop(name, None)
+        self._cache.pop(parent_name, None)
+        logger.info(
+            "Saved workflow %r (%s) by %s: sha256 %s, parent %s, foreign_users %s",
+            name,
+            filepath.name,
+            writer,
+            (new_hash or "-")[:12],
+            (block["parent_sha256"] or "-")[:12],
+            block["foreign_users"],
+        )
+        return filepath
 
-        # Clear cache for this workflow
-        if name in self._cache:
-            del self._cache[name]
+    @staticmethod
+    def _check_leaks(
+        yaml_content: str, exposure: Exposure, parent_yaml: str | None, writer: str
+    ) -> None:
+        """Run the leak guard (#237) at save time; raise when a rejecting writer leaks."""
+        from zebra_tasks.agent.leak_guard import (
+            LeakGuard,
+            describe_hits,
+            leak_record,
+            rejection_reason,
+        )
 
-        return name
+        guard = LeakGuard(
+            run_texts=exposure.run_texts,
+            goal_texts=exposure.goal_texts,
+            parent_yaml=parent_yaml,
+            allow_text=exposure.allow_text,
+        )
+        try:
+            hits = guard.check(yaml_content)
+        except Exception as e:
+            if exposure.reject:
+                raise LeakGuardRejected(
+                    f"Leak guard: check failed, change not saved: {e}",
+                    {"status": "rejected", "hits": [], "error": str(e)[:500]},
+                ) from e
+            logger.exception("Leak guard check failed at save (%s); saving anyway", writer)
+            return
+        if not hits:
+            return
+        if exposure.reject:
+            raise LeakGuardRejected(rejection_reason(hits), leak_record("rejected", hits))
+        logger.warning("Leak guard at save (%s) kept hits: %s", writer, describe_hits(hits))
+
+    def commons_block(self, name: str) -> dict[str, Any] | None:
+        """The provenance of workflow *name* (newest file, retired included).
+
+        Its ``commons`` block; for a file written before #229 (no block) the
+        ``legacy_block()``: clean for an unmodified built-in, else ``foreign_users``
+        (unknown lineage fails closed). None when there is no such workflow.
+        Writers that are shown other workflows fold these into their ``Exposure``.
+        """
+        self.ensure_initialized()
+        for yaml_file in self._files_named(name, include_retired=True):
+            text = yaml_file.read_text().split(_RETIRED_MARKER, 1)[0]
+            block = read_commons(text)
+            if block is not None:
+                return block
+            content_hash, _ = try_content_sha256(text)
+            builtin = bool(content_hash) and content_hash in self.builtin_hashes()
+            return legacy_block(builtin=builtin)
+        return None
+
+    def builtin_hashes(self) -> set[str]:
+        """Content hashes of the shipped built-in workflows (computed once)."""
+        if self._builtin_hashes is None:
+            hashes: set[str] = set()
+            for directory in self._builtin_dirs:
+                for path in directory.glob("*.yaml") if directory.is_dir() else []:
+                    try:
+                        content_hash, _ = try_content_sha256(path.read_text())
+                    except OSError:
+                        continue
+                    if content_hash:
+                        hashes.add(content_hash)
+            self._builtin_hashes = hashes
+        return self._builtin_hashes
 
     def get_workflow_yaml(self, name: str) -> str:
         """
-        Get the raw YAML content of a workflow.
+        Get the YAML content of a workflow, without its ``commons`` block (#229).
+
+        Every LLM writer reads workflows here, so none sees or copies the block.
 
         Args:
             name: Workflow name
@@ -393,7 +597,7 @@ class WorkflowLibrary:
         self.ensure_initialized()
 
         for yaml_file in self._files_named(name, include_retired=True):
-            return yaml_file.read_text().split(_RETIRED_MARKER, 1)[0]
+            return strip_commons(yaml_file.read_text().split(_RETIRED_MARKER, 1)[0])
 
         raise ValueError(f"Workflow not found: {name}")
 
@@ -649,6 +853,9 @@ class WorkflowLibrary:
 
         if not builtin_path.exists():
             return 0, []
+        if builtin_path.resolve() not in [d.resolve() for d in self._builtin_dirs]:
+            self._builtin_dirs.append(builtin_path)
+            self._builtin_hashes = None
 
         copied = 0
         upgraded_names: list[str] = []

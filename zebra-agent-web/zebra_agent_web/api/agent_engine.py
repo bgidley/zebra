@@ -136,8 +136,11 @@ async def _async_init() -> None:
     # Initialize workflow library
     library_path = Path(agent_settings["LIBRARY_PATH"]).expanduser()
     logger.info(f"Initializing workflow library at {library_path}")
-    _library = WorkflowLibrary(library_path, _metrics)
+    from zebra_agent_web.api.commons_owner import resolve_commons_owner
+
+    _library = WorkflowLibrary(library_path, _metrics, owner_resolver=resolve_commons_owner)
     _library.ensure_initialized()
+    await _library.refresh_owner()
 
     # Copy built-in workflows if library is empty
     builtin_path = Path(__file__).parent.parent.parent.parent / "zebra-agent" / "workflows"
@@ -282,6 +285,17 @@ async def ensure_initialized() -> None:
     """
     if _library is None:
         await _async_init()
+    else:
+        await refresh_commons_owner()
+
+
+async def refresh_commons_owner() -> None:
+    """Resolve the library's Commons owner while it is unknown (#229).
+
+    A fresh install has no user until setup, so the owner is picked up later.
+    """
+    if getattr(_library, "owner_user_id", 0) is None and hasattr(_library, "refresh_owner"):
+        await _library.refresh_owner()
 
 
 def run_async(coro):
