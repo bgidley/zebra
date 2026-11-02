@@ -1045,6 +1045,29 @@ class TestWorkflowOptimizerValidation:
         assert "no_such_action" in result.output["failed_changes"][0]["reason"]
         assert list(tmp_path.iterdir()) == []
 
+    async def test_workflow_named_after_a_system_workflow_is_rejected(
+        self, mock_task, mock_context, tmp_path
+    ):
+        """A dream copy under a system workflow's name would replace it (#251)."""
+        from zebra_tasks.agent.optimizer import WorkflowOptimizerAction
+
+        evaluation = self._fix_evaluation()
+        evaluation["improvement_priorities"] = []
+        evaluation["new_workflow_suggestions"] = [
+            {"name": "Improve Zebra", "description": "x", "use_case": "y", "rationale": "z"}
+        ]
+        shadow = _SIMPLE_YAML.replace("name: New Workflow", "name: Improve Zebra")
+        self._setup(mock_task, mock_context, tmp_path, [self._response(shadow)], evaluation)
+        library = MagicMock()
+        library.get_workflow_yaml = MagicMock(return_value="name: Improve Zebra\ntags: [system]\n")
+        mock_context.extras["__workflow_library__"] = library
+
+        result = await WorkflowOptimizerAction().run(mock_task, mock_context)
+
+        assert result.output["changes_made"] == []
+        assert "system workflow" in result.output["failed_changes"][0]["reason"]
+        assert list(tmp_path.iterdir()) == []
+
     async def test_valid_and_invalid_changes_reported_separately(
         self, mock_task, mock_context, tmp_path
     ):

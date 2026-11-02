@@ -894,6 +894,20 @@ class TestStageCollect:
         assert result["report"]["pr_url"].endswith("/pull/9")
         assert "patch_sha256" not in result
         assert not (job_dir / "workspace").exists()
+        assert "+++ b/scripts/x.sh\n+a" in result["diff_excerpt"]  # from the remote, for review
+        assert result["diff_truncated"] is False
+
+    def test_diff_excerpt_is_capped_and_redacted(self, zb, stage_builder, stage_config, runner):
+        job_dir = make_stage_job(stage_config, "ship")
+        stage_builder.tick()
+        runner.heads["f251/builder-stages"] = HEAD_SHA
+        big = "+" + "x" * (zb.PATCH_EXCERPT_CHARS + 10)
+        runner.api["repository/compare"] = {"diffs": [{"new_path": "a.py", "diff": big}]}
+        finish_stage(job_dir, runner, {})
+        stage_builder.tick()
+        result = read(job_dir, "result.json")
+        assert len(result["diff_excerpt"]) == zb.PATCH_EXCERPT_CHARS
+        assert result["diff_truncated"] is True
 
     def test_a_stage_that_pushed_nothing_fails(self, stage_builder, stage_config, runner):
         job_dir = make_stage_job(stage_config, "propose")

@@ -1158,6 +1158,26 @@ class TestLoadWorkflowDefinitionsAction:
         assert "Agent Main Loop" not in result.output
         assert "Dream Cycle" not in result.output
 
+    async def test_system_tagged_workflows_are_excluded(
+        self, mock_task, mock_context, mock_workflow_library
+    ):
+        """Any workflow tagged system is internal, not just the core four (#251)."""
+        from zebra_tasks.agent.load_definitions import LoadWorkflowDefinitionsAction
+
+        tagged = MagicMock()
+        tagged.name = "Improve Zebra"
+        tagged.tags = ["system", "code"]
+        plain = MagicMock()
+        plain.name = "Answer Question"
+        plain.tags = ["qa"]
+        mock_workflow_library.list_workflows.return_value = [tagged, plain]
+        mock_context.extras["__workflow_library__"] = mock_workflow_library
+        mock_task.properties = {}
+
+        result = await LoadWorkflowDefinitionsAction().run(mock_task, mock_context)
+
+        assert list(result.output) == ["Answer Question"]
+
     async def test_include_system_workflows(self, mock_task, mock_context, mock_workflow_library):
         """Test that system workflows can be included."""
         from zebra_tasks.agent.load_definitions import LoadWorkflowDefinitionsAction
