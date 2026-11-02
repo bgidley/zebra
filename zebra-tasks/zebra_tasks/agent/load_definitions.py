@@ -5,14 +5,17 @@ definitions, ensuring compatibility with all storage backends.
 """
 
 import logging
+from typing import Any
 
+import yaml
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 logger = logging.getLogger(__name__)
 
 # Workflows that are internal to the agent and should not be evaluated
-# or optimized by the dream cycle.
+# or optimized by the dream cycle: these core ones, and every workflow tagged
+# ``system`` (#251 — e.g. Improve Zebra, Outcome Review, Golden Gym).
 SYSTEM_WORKFLOW_NAMES = frozenset(
     {
         "Agent Main Loop",
@@ -21,6 +24,28 @@ SYSTEM_WORKFLOW_NAMES = frozenset(
         "Memory Compact Long",
     }
 )
+SYSTEM_TAG = "system"
+
+
+def is_system_workflow(name: str, tags: list[str] | None) -> bool:
+    """Whether a workflow is internal to Zebra, so the dream cycle must leave it alone."""
+    return name in SYSTEM_WORKFLOW_NAMES or SYSTEM_TAG in (tags or [])
+
+
+def is_system_workflow_name(library: Any, name: str) -> bool:
+    """Whether *name* belongs to a system workflow in *library* (by name or its ``system`` tag).
+
+    Used to stop the dream cycle writing a workflow that would shadow one (#251).
+    """
+    if name in SYSTEM_WORKFLOW_NAMES:
+        return True
+    if library is None:
+        return False
+    try:
+        data = yaml.safe_load(library.get_workflow_yaml(name))
+    except Exception:  # unknown name, unreadable file: not a system workflow we know of
+        return False
+    return isinstance(data, dict) and is_system_workflow(name, data.get("tags"))
 
 
 class LoadWorkflowDefinitionsAction(TaskAction):
@@ -102,7 +127,7 @@ class LoadWorkflowDefinitionsAction(TaskAction):
             definitions: dict[str, str] = {}
 
             for wf in workflows:
-                if exclude_system and wf.name in SYSTEM_WORKFLOW_NAMES:
+                if exclude_system and is_system_workflow(wf.name, wf.tags):
                     continue
 
                 try:

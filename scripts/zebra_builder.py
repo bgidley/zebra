@@ -992,6 +992,15 @@ class Builder:
             if self.contains_secret(json.dumps(diffs)):
                 result.update(state="failed", error=f"a credential was pushed to {branch}")
                 self.audit(job_id, "secret_pushed", branch=branch)
+            # The branch's own diff, for Zebra's merge recommendation (#251): read from the
+            # remote like the rest, never from the sandbox.
+            text = "\n".join(
+                f"--- a/{d.get('old_path')}\n+++ b/{d.get('new_path')}\n{d.get('diff') or ''}"
+                for d in diffs
+                if isinstance(d, dict)
+            )
+            result["diff_excerpt"] = self.redact(text[:PATCH_EXCERPT_CHARS])
+            result["diff_truncated"] = len(text) > PATCH_EXCERPT_CHARS
         result["pipeline"] = self.pipeline(repo, head)
 
     def merge_facts(self, job_id: str, job: dict, status: dict, result: dict) -> None:

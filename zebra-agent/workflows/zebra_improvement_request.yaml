@@ -13,11 +13,14 @@
 # (__task_output_review) is the verdict shown on /dreams/. file_issue then
 # files an accepted request as a GitLab issue unless the reviewer linked one
 # (#194); its result is filed_issue = {url, iid} | {skipped} | {error}.
+# The "build" verdict accepts the request and has Zebra deliver it: start_build
+# starts Improve Zebra for the issue (#251); its result is improvement_build =
+# {process_id, issue} | {skipped} | {error}.
 #
 # This workflow is a system workflow — the goal selector never picks it.
 
 name: "Zebra Improvement Request"
-version: 2
+version: 3
 description: "Hold a dream-cycle request for an improvement to Zebra itself for human review."
 tags: ["system", "improvement-request"]
 use_when: "INTERNAL USE ONLY — started by the dream cycle"
@@ -42,8 +45,8 @@ tasks:
           verdict:
             type: string
             title: "Verdict"
-            enum: [accepted, rejected, duplicate, later]
-            enumLabels: ["Accept", "Reject", "Duplicate", "Later"]
+            enum: [accepted, build, rejected, duplicate, later]
+            enumLabels: ["Accept", "Accept and let Zebra build it", "Reject", "Duplicate", "Later"]
           issue_url:
             type: string
             title: "Issue link"
@@ -63,6 +66,16 @@ tasks:
     properties:
       output_key: filed_issue
 
+  start_build:
+    name: "Start Improve Zebra"
+    action: start_improvement_build
+    auto: true
+    idempotent: true
+    properties:
+      output_key: improvement_build
+
 routings:
   - from: review
     to: file_issue
+  - from: file_issue
+    to: start_build

@@ -27,6 +27,7 @@ IMPROVEMENT_WORKFLOW = "Zebra Improvement Request"
 IMPROVEMENT_REVIEW_TASK = "review"
 VERDICTS = {
     "accepted": "Accepted",
+    "build": "Accepted, Zebra builds it",
     "rejected": "Rejected",
     "duplicate": "Duplicate",
     "later": "Later",
