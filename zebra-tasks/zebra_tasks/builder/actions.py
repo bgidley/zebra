@@ -68,12 +68,16 @@ class ClaudeCodeBuildAction(TaskAction):
     sends the approval as the ship job's id and the head commit its result recorded, read from
     the process properties named by ``approval_job_key`` / ``approval_result_key``; run it only on
     a human approval route.
+
+    ``context_dependent`` (#267): a ``patch``, ``propose`` or ``review`` job stays in the sandbox,
+    but ``ship`` pushes a branch and ``merge`` merges to master, so the stage decides.
     """
 
     description = (
-        "Ask the host builder to run Claude Code on a repo in a sandbox (staged, not published)."
+        "Ask the host builder to run Claude Code on a repo in a sandbox; a patch is staged, "
+        "but the ship and merge stages push and merge."
     )
-    reversibility_hint = "always_reversible"
+    reversibility_hint = "context_dependent"
 
     inputs = [
         ParameterDef(

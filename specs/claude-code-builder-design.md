@@ -66,7 +66,7 @@ Result: `state` (done | failed | over_budget | rejected | cancelled), `summary`,
 
 Zebra side:
 - `zebra_tasks/builder/`: `BuilderSpool` (`get_spool(extras)`: `__builder_spool__`, else env),
-  `claude_code_build` (`always_reversible`), `publish_build` (`always_irreversible`; needs a `done`
+  `claude_code_build` (`context_dependent` since #267: `ship` / `merge` push and merge), `publish_build` (`always_irreversible`; needs a `done`
   result and sends its `patch_sha256`).
 - `zebra.forms.is_human_task(task_def)`: `auto: false` and no `properties.external`. The web views
   use it, so external waits never show as needing a person. `find_pending_human_task` still sees

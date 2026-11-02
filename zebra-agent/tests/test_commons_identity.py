@@ -294,7 +294,84 @@ async def test_keys_survive_restart_in_file_store(tmp_path):
     device = await first.get_or_create_device_secret()
     zebra_secret = await first.create_zebra_secret()
 
-    # A new process: new store and keystore objects over the same directory.
+    # New store and keystore objects over the same directory (same process; see below for a
+    # real restart).
     second = CommonsKeys(FileCredentialStore(tmp_path))
     assert await second.get_or_create_device_secret() == device
     assert await second.zebra_secret() == zebra_secret
+
+
+# Run in a fresh interpreter: "write" creates the identity and signs this device's cert,
+# "read" reloads it. Only public keys and the signed cert are printed, never a secret.
+_RESTART_SCRIPT = """
+import asyncio, json, os, sys
+from pathlib import Path
+
+from zebra_agent.commons import keys
+from zebra_agent.commons.events import Event
+from zebra_agent.commons.identity import make_device_cert, verify_device_chain
+from zebra_agent.commons.keystore import CommonsKeys
+from zebra_agent.storage.credentials import FileCredentialStore
+
+
+async def main(mode, key_dir, cert_file):
+    commons = CommonsKeys(FileCredentialStore(Path(key_dir)))
+    if mode == "write":
+        device = await commons.get_or_create_device_secret()
+        zebra = await commons.create_zebra_secret()
+        cert = make_device_cert(
+            zebra, keys.public_key(device), label="Home server", sphere="home", observed=False
+        )
+        Path(cert_file).write_text(json.dumps(cert.to_dict()))
+    else:
+        device = await commons.device_secret()
+        zebra = await commons.zebra_secret()
+        if device is None or zebra is None:
+            sys.exit("keys missing after restart")
+    zebra_pub, device_pub = keys.public_key(zebra), keys.public_key(device)
+    cert = Event.from_dict(json.loads(Path(cert_file).read_text()))
+    chain = verify_device_chain(device_pub, zebra_pub, [cert])
+    print(json.dumps({
+        "pid": os.getpid(),
+        "npub": keys.npub_encode(zebra_pub),
+        "zebra_pubkey": zebra_pub,
+        "device_pubkey": device_pub,
+        "chain": chain.reason,
+    }))
+
+
+asyncio.run(main(*sys.argv[1:]))
+"""
+
+
+def _run_identity_process(mode: str, key_dir, cert_file) -> dict:
+    import subprocess
+    import sys
+
+    done = subprocess.run(
+        [sys.executable, "-c", _RESTART_SCRIPT, mode, str(key_dir), str(cert_file)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_identity_survives_a_real_process_restart(tmp_path):
+    """#268: write the identity in one process, read it back in a fresh one (same key dir)."""
+    key_dir, cert_file = tmp_path / "keys", tmp_path / "cert.json"
+    written = _run_identity_process("write", key_dir, cert_file)
+    reread = _run_identity_process("read", key_dir, cert_file)
+
+    assert reread["pid"] != written["pid"]
+    assert written["chain"] == reread["chain"] == "ok"
+    for field in ("npub", "zebra_pubkey", "device_pubkey"):
+        assert reread[field] == written[field]
+    assert reread["npub"].startswith("npub1")
+
+    # The cert signed before the restart still verifies here, against the reloaded keys.
+    cert = Event.from_dict(json.loads(cert_file.read_text()))
+    assert verify_device_chain(reread["device_pubkey"], reread["zebra_pubkey"], [cert]).ok
+    # Nothing secret reached stdout.
+    assert all("nsec" not in str(v) for v in reread.values())

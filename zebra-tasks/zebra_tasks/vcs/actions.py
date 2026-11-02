@@ -100,7 +100,8 @@ class _GitAction(TaskAction):
     """Shared run(): turn GitActionError into a failed task and store the output."""
 
     default_output_key: ClassVar[str] = "git_result"
-    reversibility_hint = "always_reversible"
+    # No reversibility_hint here: each action states its own (#267), so a new one that
+    # forgets falls back to context_dependent instead of inheriting always_reversible.
 
     async def execute(
         self, task: TaskInstance, context: ExecutionContext
@@ -128,6 +129,7 @@ class GitCloneAction(_GitAction):
         "<workspace>/<process id>/<repo name>) and return its path."
     )
     default_output_key = "repo"
+    reversibility_hint = "always_reversible"
     inputs = [
         ParameterDef(
             name="url",
@@ -196,6 +198,7 @@ class GitStatusAction(_GitAction):
 
     description = "Report a repository's branch and changed files; routes 'clean' or 'changed'."
     default_output_key = "git_status"
+    reversibility_hint = "always_reversible"
     inputs = [_REPO_PATH, _WORKSPACE, _TIMEOUT, _output_key("git_status")]
     outputs = [
         ParameterDef(name="branch", type="string", description="Current branch"),
@@ -234,6 +237,7 @@ class GitDiffAction(_GitAction):
         "truncated to max_chars."
     )
     default_output_key = "git_diff"
+    reversibility_hint = "always_reversible"
     inputs = [
         _REPO_PATH,
         ParameterDef(
@@ -309,6 +313,7 @@ class GitBranchAction(_GitAction):
 
     description = "Check out a branch in a repository, creating it from start_point if asked."
     default_output_key = "git_branch"
+    reversibility_hint = "always_reversible"
     inputs = [
         _REPO_PATH,
         ParameterDef(name="name", type="string", description="Branch name", required=True),
@@ -360,6 +365,7 @@ class GitCommitAction(_GitAction):
         "'nothing_to_commit'."
     )
     default_output_key = "git_commit"
+    reversibility_hint = "always_reversible"
     inputs = [
         _REPO_PATH,
         ParameterDef(name="message", type="string", description="Commit message", required=True),
@@ -444,6 +450,7 @@ class GitPullAction(_GitAction):
 
     description = "Pull the current branch from a remote, fast-forward only."
     default_output_key = "git_pull"
+    reversibility_hint = "always_reversible"
     inputs = [
         _REPO_PATH,
         _REMOTE,

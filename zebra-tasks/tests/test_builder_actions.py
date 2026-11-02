@@ -90,7 +90,8 @@ class TestClaudeCodeBuild:
         assert "ZEBRA_BUILDER_SPOOL" in result.error
 
     def test_reversibility(self):
-        assert ClaudeCodeBuildAction.reversibility_hint == "always_reversible"
+        # The ship and merge stages push and merge (#251), so the stage decides (#267).
+        assert ClaudeCodeBuildAction.reversibility_hint == "context_dependent"
         assert PublishBuildAction.reversibility_hint == "always_irreversible"
 
 
