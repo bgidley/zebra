@@ -12,8 +12,9 @@ shape produces a blank prompt or a misleading "complete" result.
   registry=None)` returns warnings/errors for `{{...}}` references in task properties that name no
   task, no declared process property and no known runtime key, and for references to a task output
   that is not produced on every path to the referencing task (branch-specific outputs, honouring
-  `synchronized` joins). Declared `outputs` of an action (`ParameterDef`) are checked for
-  `{{task.output.key}}` references. Findings carry a severity: `error` for a reference to an
+  `synchronized` joins). Checking `{{task.output.key}}` against an action's declared `outputs`
+  (`ParameterDef`) is deferred: the runtime does not resolve that form (see
+  `specs/workflow-contracts-design.md`). Findings carry a severity: `error` for a reference to an
   unknown task or an output that exists on no path; `warning` for one that exists on only some paths.
 - **Run-time check** in `resolve_template`: a reference that resolves to nothing is logged and
   recorded on the process (`__contract_violations__`) instead of vanishing. A per-workflow
