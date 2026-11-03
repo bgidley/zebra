@@ -253,6 +253,29 @@ async def test_equal_candidate_is_promoted_and_saved(engine, library, metrics, j
     assert "compromise" in (library.library_path / "answer_question_1.yaml").read_text()
 
 
+async def test_promotion_journals_the_evaluator_reason(engine, library, judge):
+    """#238: the gym's save records the candidate's reason and its leak record."""
+    from zebra_agent.genealogy import LineageJournal
+
+    candidate = _candidate(_workflow("Canberra: chosen as a compromise"))
+    candidate["change"]["leak_guard"] = {
+        "status": "generalised",
+        "hits": [{"kind": "name", "text": "Jane", "where": "tasks.a", "source": "run"}],
+    }
+    await _gate(engine, library, candidate)
+
+    record = LineageJournal(library.library_path).read()[-1]
+    assert record["writer"] == "gym"
+    assert record["reason"] == {
+        "text": "make it better",
+        "kind": "reasoning",
+        "source": "evaluator",
+    }
+    assert record["leak_guard"]["status"] == "generalised"
+    hit = {"kind": "name", "where": "tasks.a", "source": "run"}
+    assert record["leak_guard"]["hits"] == [hit]
+
+
 async def test_candidate_is_scored_separately_from_current(engine, library, judge):
     """Same name + version must not make both runs use one definition."""
     process = await _gate(engine, library, _candidate(DEGRADED))
@@ -525,4 +548,4 @@ class TestOptimizerStaging:
         )
         assert results["pending_gym"] == []
         assert len(results["changes_made"]) == 1
-        assert [p.name for p in tmp_path.iterdir()] == ["answer_question.yaml"]
+        assert [p.name for p in tmp_path.glob("*.yaml")] == ["answer_question.yaml"]

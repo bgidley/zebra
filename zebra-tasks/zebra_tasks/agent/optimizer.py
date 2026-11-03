@@ -348,7 +348,13 @@ Output ONLY valid YAML, no explanations or markdown code blocks."""
                     continue
                 if not dry_run and library_path:
                     error, rejected = self._save_workflow(
-                        library_path, name, workflow_yaml, context=context, exposure=exposure
+                        library_path,
+                        name,
+                        workflow_yaml,
+                        context=context,
+                        exposure=exposure,
+                        reason=suggestion.get("rationale"),
+                        leak=leak,
                     )
                     if error:
                         self._record_failure(results, "create", name, error, rejected)
@@ -707,7 +713,13 @@ Maintain the same name and general purpose, but improve the implementation."""
                 return False
             if not dry_run and library_path:
                 error, rejected = self._save_workflow(
-                    library_path, name, workflow_yaml, context=context, exposure=exposure
+                    library_path,
+                    name,
+                    workflow_yaml,
+                    context=context,
+                    exposure=exposure,
+                    reason=priority.get("rationale"),
+                    leak=leak,
                 )
                 if error:
                     self._record_failure(results, "create", name, error, rejected)
@@ -769,6 +781,8 @@ Maintain the same name and general purpose, but improve the implementation."""
                     context=context,
                     parent=target,
                     exposure=exposure,
+                    reason=priority.get("rationale"),
+                    leak=leak,
                 )
                 if error:
                     self._record_failure(results, "modify", target, error, rejected)
@@ -857,6 +871,8 @@ Maintain the same name and general purpose, but improve the implementation."""
         context: ExecutionContext | None = None,
         parent: str | None = None,
         exposure: Any = None,
+        reason: str | None = None,
+        leak: dict | None = None,
     ) -> tuple[str | None, dict | None]:
         """Save through the library (``save_workflow_file``).
 
@@ -877,12 +893,20 @@ Maintain the same name and general purpose, but improve the implementation."""
                 writer="optimizer",
                 parent=parent,
                 exposure=exposure,
+                reason=evaluator_reason(reason),
+                leak=leak,
             )
         except LeakGuardRejected as e:
             return str(e), e.record
         except ValueError as e:
             return f"Could not save workflow: {e}", None
         return None, None
+
+
+def evaluator_reason(rationale: Any) -> dict[str, str] | None:
+    """The evaluator's recorded rationale as a journal reason (#238); None when blank."""
+    text = str(rationale or "").strip()
+    return {"text": text, "kind": "reasoning", "source": "evaluator"} if text else None
 
 
 def optimizer_exposure(
@@ -951,6 +975,8 @@ def save_workflow_file(
     writer: str = "optimizer",
     parent: str | None = None,
     exposure: Any = None,
+    reason: str | dict | None = None,
+    leak: dict | None = None,
 ) -> Path:
     """Save a workflow through ``WorkflowLibrary.save()``, never overwriting a file.
 
@@ -959,6 +985,7 @@ def save_workflow_file(
     it manages *library_path* (it knows the Commons owner); otherwise a library is
     opened on the path. A name already taken gets a ``_N`` suffix; the library uses
     the newest file for a name. New LLM workflows are tagged ``llm-defined`` (#148).
+    *reason* and *leak* go to the lineage journal (#238).
 
     Raises:
         LeakGuardRejected: A rejecting *exposure*'s leak guard found run specifics.
@@ -976,4 +1003,6 @@ def save_workflow_file(
         exposure=exposure,
         filename=workflow_filename(name),
         llm_defined=llm_defined,
+        reason=reason,
+        leak=leak,
     )

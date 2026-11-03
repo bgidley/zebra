@@ -22,6 +22,7 @@
                 {% icon "lightning" class="h-4 w-4" %}
                 Run
             </a>
+            <a href="{% url 'workflow_genealogy' workflow_name %}" class="btn">Genealogy</a>
             {% if retired %}
             <button hx-post="/workflows/{{ workflow_name }}/restore/" class="btn">Restore</button>
             {% else %}

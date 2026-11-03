@@ -13,6 +13,7 @@ import yaml
 from zebra.core.models import ProcessDefinition
 from zebra.definitions.loader import load_definition
 
+from zebra_agent.genealogy import REJECTED, SAVED, LineageJournal, journal_record, merge_leak
 from zebra_agent.gym import GoldenTask, golden_dir, load_golden_tasks
 from zebra_agent.metrics import MetricsStore, WorkflowStats
 from zebra_agent.provenance import (
@@ -243,7 +244,8 @@ class WorkflowLibrary:
         *,
         owner_user_id: int | None = None,
         sphere: str = DEFAULT_SPHERE,
-        owner_resolver: Callable[[], Awaitable[tuple[int | None, str | None]]] | None = None,
+        owner_resolver: Callable[[], Awaitable[tuple]] | None = None,
+        device: str | None = None,
     ):
         """
         Initialize the workflow library.
@@ -257,8 +259,9 @@ class WorkflowLibrary:
             owner_user_id: The Commons owner (#229). While unknown, any user's runs
                 mark a saved workflow ``foreign_users`` (fail closed).
             sphere: This deployment's sphere, recorded in ``tainted_by`` on each save.
-            owner_resolver: Async ``() -> (owner_user_id, sphere)``; ``refresh_owner()``
-                calls it while the owner is unknown.
+            owner_resolver: Async ``() -> (owner_user_id, sphere[, device])``;
+                ``refresh_owner()`` calls it while the owner is unknown.
+            device: This device's label, recorded in the lineage journal (#238).
         """
         self.library_path = Path(library_path).expanduser()
         self.metrics = metrics_store
@@ -267,6 +270,8 @@ class WorkflowLibrary:
         self.owner_user_id = owner_user_id
         self.sphere = sphere or DEFAULT_SPHERE
         self.owner_resolver = owner_resolver
+        self.device = device or None
+        self.journal = LineageJournal(self.library_path)
         self._builtin_dirs: list[Path] = [BUILTIN_WORKFLOWS_DIR]
         self._builtin_hashes: set[str] | None = None
 
@@ -274,13 +279,15 @@ class WorkflowLibrary:
         """Resolve the Commons owner and sphere while the owner is unknown (#229)."""
         if self.owner_user_id is None and self.owner_resolver is not None:
             try:
-                owner, sphere = await self.owner_resolver()
+                owner, sphere, *rest = await self.owner_resolver()
             except Exception as e:  # never block a goal on the owner lookup
                 logger.warning("Could not resolve the Commons owner: %s", e)
                 return None
             self.owner_user_id = owner
             if sphere:
                 self.sphere = sphere
+            if rest and rest[0]:
+                self.device = rest[0]
         return self.owner_user_id
 
     def ensure_initialized(self) -> None:
@@ -407,6 +414,8 @@ class WorkflowLibrary:
         writer: str = "human",
         parent: str | None = None,
         exposure: Exposure | dict | None = None,
+        reason: str | dict | None = None,
+        leak: dict | None = None,
     ) -> str:
         """Add a workflow to the library through ``save()``; returns its name.
 
@@ -421,6 +430,8 @@ class WorkflowLibrary:
             exposure=exposure,
             filename=filename,
             llm_defined=llm_defined,
+            reason=reason,
+            leak=leak,
         )
         return parse_workflow_yaml(path.read_text()).get("name", "untitled")
 
@@ -437,6 +448,8 @@ class WorkflowLibrary:
         expected_sha256: str | None = None,
         name: str | None = None,
         origin_pubkey: str | None = None,
+        reason: str | dict | None = None,
+        leak: dict | None = None,
     ) -> Path:
         """Write a workflow file: the one save path, which owns the ``commons`` block (#229).
 
@@ -461,6 +474,13 @@ class WorkflowLibrary:
             expected_sha256: ``writer="adopt"`` only: the offered or sent hash
             name: ``writer="adopt"`` only: the local display name
             origin_pubkey: ``writer="adopt"`` only: the publisher's Zebra key
+            reason: Why the writer made this version, only as it recorded it (#238): a
+                string (recorded reasoning) or ``{text, kind: voice|reasoning, source}``
+            leak: The writer's own leak-guard record (``leak_record()``), if any
+
+        Each save, and each save the leak guard refuses, appends a record to the
+        local lineage journal (``zebra_agent.genealogy``, #238); the ``commons``
+        block and hash are not affected.
 
         Returns:
             The path written.
@@ -501,15 +521,35 @@ class WorkflowLibrary:
         parent_yaml = strip_commons(parent_text) if parent_text else None
         parent_block = read_commons(parent_text) if parent_text else None
 
-        if exposure is not None and exposure.has_texts:
-            self._check_leaks(yaml_content, exposure, parent_yaml, writer)
-
-        new_hash, reason = try_content_sha256(yaml_content)
+        new_hash, why_unhashed = try_content_sha256(yaml_content)
         if new_hash is None:
-            logger.warning("Workflow %r has no content hash: %s", name, reason)
+            logger.warning("Workflow %r has no content hash: %s", name, why_unhashed)
         parent_hash = (parent_block or {}).get("content_sha256")
         if parent_yaml is not None and not parent_hash:
             parent_hash, _ = try_content_sha256(parent_yaml)
+
+        def record(event: str, file: str | None, leak_record: dict | None) -> dict:
+            return journal_record(
+                event=event,
+                name=name,
+                file=file,
+                writer=writer,
+                content_sha256=new_hash,
+                parent_sha256=parent_hash if parent_path is not None else None,
+                parent_name=parent_name if parent_path is not None else None,
+                sphere=self.sphere,
+                device=self.device,
+                reason=reason,
+                leak=leak_record,
+            )
+
+        save_leak = None
+        if exposure is not None and exposure.has_texts:
+            try:
+                save_leak = self._check_leaks(yaml_content, exposure, parent_yaml, writer)
+            except LeakGuardRejected as e:
+                self.journal.append(record(REJECTED, None, merge_leak(leak, e.record)))
+                raise
         # A parent written before #229 has no block: unless it is an unmodified
         # built-in its lineage is unknown, so the save inherits foreign_users.
         parent_unknown = (
@@ -536,6 +576,7 @@ class WorkflowLibrary:
 
         filepath = _free_path(self.library_path, filename or workflow_filename(name))
         filepath.write_text(with_commons(yaml_content, block))
+        self.journal.append(record(SAVED, filepath.name, merge_leak(leak, save_leak)))
         self._cache.pop(name, None)
         self._cache.pop(parent_name, None)
         logger.info(
@@ -617,8 +658,11 @@ class WorkflowLibrary:
     @staticmethod
     def _check_leaks(
         yaml_content: str, exposure: Exposure, parent_yaml: str | None, writer: str
-    ) -> None:
-        """Run the leak guard (#237) at save time; raise when a rejecting writer leaks."""
+    ) -> dict | None:
+        """Run the leak guard (#237) at save time; raise when a rejecting writer leaks.
+
+        Returns the ``kept`` leak record when a non-rejecting writer's hits remain.
+        """
         from zebra_tasks.agent.leak_guard import (
             LeakGuard,
             describe_hits,
@@ -641,12 +685,13 @@ class WorkflowLibrary:
                     {"status": "rejected", "hits": [], "error": str(e)[:500]},
                 ) from e
             logger.exception("Leak guard check failed at save (%s); saving anyway", writer)
-            return
+            return None
         if not hits:
-            return
+            return None
         if exposure.reject:
             raise LeakGuardRejected(rejection_reason(hits), leak_record("rejected", hits))
         logger.warning("Leak guard at save (%s) kept hits: %s", writer, describe_hits(hits))
+        return leak_record("kept", hits)
 
     def commons_block(self, name: str) -> dict[str, Any] | None:
         """The provenance of workflow *name* (newest file, retired included).

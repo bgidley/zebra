@@ -327,7 +327,7 @@ class TestOptimizer:
         )
 
         assert result.success
-        (saved,) = tmp_path.iterdir()
+        (saved,) = tmp_path.glob("*.yaml")
         text = saved.read_text()
         assert "Acme" not in text and "Jane" not in text
         (change,) = result.output["changes_made"]

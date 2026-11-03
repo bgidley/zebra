@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% comment %}
+Private genealogy of one workflow (#238): the lineage DAG (api/genealogy_view.py) and one
+card per version, newest first. Local to this device and never published. Reasons are only
+ever ones a writer recorded; per-sphere share status and forks are empty until skill sync
+(#236). No JavaScript.
+{% endcomment %}
+
+{% block title %}{{ workflow_name }} genealogy - Zebra Agent{% endblock %}
+{% block page_title %}Genealogy{% endblock %}
+
+{% block content %}
+<style>
+    .genealogy-graph { max-width: 100%; height: auto; }
+    .gen-node:focus { outline: none; }
+    .gen-node:focus-visible rect, .gen-node:hover rect { stroke: var(--color-ink); stroke-width: 3; }
+</style>
+<div class="space-y-6">
+    <div class="min-w-0">
+        <a href="{% url 'workflow_detail' workflow_name %}" class="text-sm text-muted hover:text-ink">{{ workflow_name }}</a>
+        <h1 class="mt-1 text-xl font-semibold text-ink break-words">Genealogy</h1>
+        <p class="text-muted mt-1 max-w-[65ch]">Every version of this workflow on this device: who wrote it, when, why, and what changed. This page is never published.</p>
+        <p class="mt-2 text-sm text-faint"><span class="font-mono tabular-nums">{{ version_count }}</span> version{{ version_count|pluralize }}{% if hash_only_count %}, <span class="font-mono tabular-nums">{{ hash_only_count }}</span> earlier version{{ hash_only_count|pluralize }} known only by hash{% endif %}</p>
+    </div>
+
+    <section class="panel min-w-0" data-testid="genealogy-graph" aria-labelledby="graph-title">
+        <div class="px-5 py-3 border-b border-line">
+            <h2 id="graph-title" class="text-base font-semibold text-ink">Lineage</h2>
+            <p class="text-xs text-faint">Oldest at the top. Select a version to read it.</p>
+        </div>
+        <div class="p-4 flex justify-center">{{ graph_svg|safe }}</div>
+    </section>
+
+    <section aria-labelledby="versions-title" class="space-y-4" data-testid="genealogy-versions">
+        <h2 id="versions-title" class="text-base font-semibold text-ink">Versions</h2>
+        {% for card in cards %}{% with v=card.v %}
+        <article id="{{ card.anchor }}" class="panel scroll-mt-20 min-w-0" data-version="{{ v.key }}">
+            <div class="px-5 py-3 border-b border-line flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span class="font-mono text-sm text-ink" title="{{ v.key }}">{{ v.short }}</span>
+                {% if v.hash_only %}
+                <span class="rounded-full border border-line px-2.5 py-0.5 text-xs text-faint">no file on this device</span>
+                {% else %}
+                <span class="rounded-full border border-line px-2.5 py-0.5 text-xs text-muted" data-testid="writer">{{ v.writer_label }}</span>
+                {% endif %}
+                {% if v.current %}<span class="rounded-full bg-ok/15 px-2.5 py-0.5 text-xs text-ok">current</span>{% endif %}
+                {% if v.retired and not v.active %}<span class="rounded-full border border-line px-2.5 py-0.5 text-xs text-faint">retired</span>{% endif %}
+                {% if v.at %}<span class="font-mono text-xs text-faint tabular-nums" title="{% if v.date_source == 'file' %}File date: no save was recorded for this version{% else %}Saved{% endif %}">{{ v.at|date:"Y-m-d H:i" }}{% if v.date_source == "file" %} (file date){% endif %}</span>{% endif %}
+            </div>
+            <div class="px-5 py-3 space-y-3 text-sm">
+                {% if v.hash_only %}
+                <p class="text-muted">This version came before one that is here, but its file is not on this device, so it cannot be shown or compared.{% if v.writer %} It was written by the {{ v.writer_label }}.{% endif %}</p>
+                {% else %}
+                <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+                    {% if card.other_names %}<dt class="text-muted">Name</dt><dd class="text-ink break-words">{{ card.other_names|join:", " }}</dd>{% endif %}
+                    <dt class="text-muted">Sphere</dt><dd class="text-ink">{{ v.sphere|default:"not recorded" }}</dd>
+                    <dt class="text-muted">Device</dt><dd class="text-ink break-words">{{ v.device|default:"not recorded" }}</dd>
+                    {% if v.tainted_by %}<dt class="text-muted">Shaped by</dt><dd class="text-ink">{{ v.tainted_by|join:", " }}</dd>{% endif %}
+                    {% if v.foreign_users %}<dt class="text-muted">Other users</dt><dd class="text-needs">Saw other people's runs, so it stays on this deployment</dd>{% endif %}
+                    {% if v.legacy %}<dt class="text-muted">Provenance</dt><dd class="text-faint">Written before provenance was recorded</dd>{% endif %}
+                    {% if card.parents %}<dt class="text-muted">From</dt><dd>{% for p in card.parents %}<a href="#{{ p.anchor }}" class="font-mono text-xs text-ink underline">{{ p.short }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+                    {% if card.children %}<dt class="text-muted">Led to</dt><dd>{% for c in card.children %}<a href="#{{ c.anchor }}" class="font-mono text-xs text-ink underline">{{ c.short }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+                    {% if v.files %}<dt class="text-muted">File</dt><dd class="font-mono text-xs text-faint break-all">{{ v.files|join:", " }}</dd>{% endif %}
+                </dl>
+                {% endif %}
+
+                {% if v.retired and not v.active %}
+                <p class="text-muted" data-testid="retired"><span class="font-medium text-ink">Retired</span>{% if v.retired.retired_at %} <span class="font-mono text-xs">{{ v.retired.retired_at|slice:":10" }}</span>{% endif %}: {{ v.retired.reason|default:"no reason given" }}{% if v.retired.superseded_by %}, replaced by {{ v.retired.superseded_by }}{% endif %}</p>
+                {% endif %}
+
+                {% if v.leak_guard %}
+                <p class="text-muted" data-testid="leak-guard"><span class="font-medium text-ink">Leak guard:</span>
+                    {% if v.leak_guard.status == "generalised" %}specifics from runs were generalised{% elif v.leak_guard.status == "kept" %}specifics from the goal were kept{% else %}{{ v.leak_guard.status }}{% endif %}{% if card.hit_kinds %} ({{ card.hit_kinds|join:", " }}){% endif %}</p>
+                {% endif %}
+
+                {% if not v.hash_only %}
+                <div data-testid="reason">
+                    {% if card.thought %}
+                    {% include "components/thought.html" with thought=card.thought %}
+                    {% elif v.parents %}
+                    <p class="text-faint">No reason recorded.</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if card.diff %}
+                <details class="group rounded-md border border-line" data-testid="diff">
+                    <summary class="cursor-pointer list-none px-3 py-2 text-sm text-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+                        <span class="group-open:hidden">Show what changed</span><span class="hidden group-open:inline">Hide what changed</span>
+                    </summary>
+                    <pre class="overflow-x-auto border-t border-line px-3 py-2 font-mono text-[12px] leading-relaxed">{% for line in card.diff %}<span class="block {% if line.kind == 'add' %}bg-surface-2 text-ink{% elif line.kind == 'remove' %}text-faint line-through{% elif line.kind == 'hunk' %}text-faint{% else %}text-muted{% endif %}">{{ line.text }}</span>{% endfor %}</pre>
+                    {% if v.diff_truncated %}<p class="px-3 pb-2 text-xs text-faint">Diff cut at 400 lines.</p>{% endif %}
+                </details>
+                {% elif v.parents and not v.hash_only %}
+                <p class="text-xs text-faint">No diff: the earlier version's file is not on this device.</p>
+                {% endif %}
+            </div>
+        </article>
+        {% endwith %}{% endfor %}
+    </section>
+
+    {% if rejected %}
+    <section class="panel" aria-labelledby="refused-title" data-testid="genealogy-refused">
+        <div class="px-5 py-3 border-b border-line">
+            <h2 id="refused-title" class="text-base font-semibold text-ink">Refused saves</h2>
+            <p class="text-xs text-faint">Changes the leak guard stopped because they copied specifics from runs. Nothing was saved.</p>
+        </div>
+        <ul class="divide-y divide-line">
+            {% for r in rejected %}
+            <li class="px-5 py-3 text-sm space-y-1">
+                <p class="text-muted"><span class="text-ink">{{ r.writer_label }}</span>{% if r.at_dt %} <span class="font-mono text-xs text-faint">{{ r.at_dt|date:"Y-m-d H:i" }}</span>{% endif %}{% if r.hit_kinds %}: {{ r.hit_kinds|join:", " }}{% endif %}</p>
+                {% if r.thought %}{% include "components/thought.html" with thought=r.thought %}{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <section class="panel" aria-labelledby="share-title" data-testid="genealogy-share">
+            <div class="px-5 py-3 border-b border-line">
+                <h2 id="share-title" class="text-base font-semibold text-ink">Shared with other spheres</h2>
+            </div>
+            {% if share_status %}
+            <ul class="divide-y divide-line">{% for s in share_status %}<li class="px-5 py-2 text-sm text-ink">{{ s.sphere }}: {{ s.status }}</li>{% endfor %}</ul>
+            {% else %}
+            <p class="px-5 py-4 text-sm text-muted">Nothing shared yet. Per-sphere share status arrives with skill sync (#236).</p>
+            {% endif %}
+        </section>
+        <section class="panel" aria-labelledby="forks-title" data-testid="genealogy-forks">
+            <div class="px-5 py-3 border-b border-line">
+                <h2 id="forks-title" class="text-base font-semibold text-ink">Forks</h2>
+            </div>
+            {% if forks %}
+            <ul class="divide-y divide-line">{% for f in forks %}<li class="px-5 py-2 text-sm text-ink">{{ f.summary }}</li>{% endfor %}</ul>
+            {% else %}
+            <p class="px-5 py-4 text-sm text-muted">No forks waiting for a choice.</p>
+            {% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}
