@@ -60,6 +60,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.contrib.auth.middleware.LoginRequiredMiddleware",
     "zebra_agent_web.middleware.SetupRedirectMiddleware",
+    "zebra_agent_web.middleware.NoStoreHtmlMiddleware",
 ]
 
 ROOT_URLCONF = "zebra_agent_web.urls"
