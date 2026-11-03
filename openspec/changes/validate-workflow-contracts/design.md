@@ -19,8 +19,10 @@
   warning; in neither = error. Cycles are handled by iterating to a fixpoint.
 - **Run time**: `resolve_template` gains an optional collector; misses append to
   `process.properties["__contract_violations__"]` (JSON-serializable list of `{task, ref}`).
-  `strict_templates` is a process property so it needs no schema change.
-- **Schema validation** uses `jsonschema` (already a dependency of `zebra.forms`; verify).
+  `strict_templates` is read from the process properties, else the definition's `properties` (create_process does not copy definition properties onto the process). Under strict mode `resolve_template` raises `TemplateResolutionError`, which the engine turns into a failed task.
+- **Task-output roots**: a `{{x.output}}` whose root is a process property written by a task `*_key` property (e.g. `output_key: execution_result`) is a property reference, not a task reference.
+- **Deferred**: checking `{{task.output.key}}` against an action's declared `outputs` (the runtime does not resolve that form, and `ParameterDef` outputs describe the action result, not its keys).
+- **Schema validation**: `jsonschema` is *not* a dependency (`zebra.forms` hand-rolls its checks), so `validate_output_schema` in `contracts.py` implements the small subset needed (type, enum, required, properties, items) rather than adding one.
 - **Library gate**: `WorkflowLibrary.save()` already owns writes; it calls `validate_contracts` and
   raises on `error` findings only.
 

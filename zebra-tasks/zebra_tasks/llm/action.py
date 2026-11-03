@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
+from zebra.definitions.contracts import validate_output_schema
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.llm.base import Message, MessageRole
@@ -170,6 +171,12 @@ class LLMCallAction(TaskAction):
             content = response.content or ""
             output = self._process_response(content, task)
 
+            schema_errors = self._schema_errors(task, output)
+            if schema_errors:
+                return TaskResult.fail(
+                    "LLM output does not match output_schema: " + "; ".join(schema_errors)
+                )
+
             # Store result
             output_key = task.properties.get("output_key", "llm_response")
             context.set_process_property(output_key, output)
@@ -224,6 +231,15 @@ class LLMCallAction(TaskAction):
             messages.append(Message.user(resolved))
 
         return messages
+
+    def _schema_errors(self, task: TaskInstance, output: Any) -> list[str]:
+        """Violations of the task's ``output_schema`` by a JSON response (#271)."""
+        schema = task.properties.get("output_schema")
+        if not schema or task.properties.get("response_format") != "json":
+            return []
+        if isinstance(output, str):  # _process_response keeps unparseable text as a string
+            return ["response is not valid JSON"]
+        return validate_output_schema(schema, output)
 
     def _process_response(self, content: str, task: TaskInstance) -> Any:
         """Process response based on expected format."""

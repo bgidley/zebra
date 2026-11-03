@@ -1200,3 +1200,30 @@ class TestUnparseableWorkflows:
         with pytest.raises(ValueError, match="Invalid workflow YAML"):
             library.add_workflow(content)
         assert list(library.library_path.glob("*.yaml")) == []
+
+
+class TestContractGate:
+    """``save`` refuses workflows whose template references cannot resolve (#271)."""
+
+    BROKEN = """name: "Broken"
+first_task: a
+tasks:
+  a:
+    name: A
+    action: llm_call
+    properties:
+      prompt: "{{ghost.output}}"
+routings: []
+"""
+
+    def test_broken_contract_raises_and_writes_nothing(self, library, library_path):
+        from zebra_agent.library import WorkflowContractError
+
+        before = set(library_path.rglob("*.yaml"))
+        with pytest.raises(WorkflowContractError, match="unknown task 'ghost'"):
+            library.save(self.BROKEN, writer="human")
+
+        assert set(library_path.rglob("*.yaml")) == before
+
+    def test_clean_workflow_saves(self, library, sample_workflow_yaml):
+        assert library.save(sample_workflow_yaml, writer="human").exists()

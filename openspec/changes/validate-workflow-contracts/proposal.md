@@ -25,7 +25,6 @@ shape produces a blank prompt or a misleading "complete" result.
   a key fails the parent task naming the key.
 - Library saves (`WorkflowLibrary.save`) reject definitions with `error` findings, so the optimizer
   and dream cycle cannot add broken contracts; built-in workflows are fixed or annotated to pass.
-- **Terminal-route integration tests** for each route-ending path of the built-in workflows.
 
 ## Capabilities
 
@@ -41,10 +40,10 @@ shape produces a blank prompt or a misleading "complete" result.
 | # | Outcome | How we'll know |
 |---|---------|----------------|
 | O1 | A template reference to an unknown task or to an output no path produces is reported at load/save time, before execution | Unit tests: a YAML with `{{ghost.output}}` and one referencing a task on a never-taken branch yield `error` findings naming task and reference; a valid workflow yields none |
-| O2 | A reference to an output produced on only some paths to the referencing task is flagged as a warning; a synchronized join of all branches is not | Tests over branch/merge fixtures: warning for an `if/else` branch output used after the merge, none when both branches or a default define it |
-| O3 | At run time an unresolved template is no longer silent: it is logged and recorded, and fails the task under `strict_templates` | Engine test: workflow with a missing key records `__contract_violations__`; with `strict_templates: true` the task fails with the reference in its error |
-| O4 | An `llm_call` JSON output that violates its declared `output_schema`, or a subworkflow result missing an `expects` key, fails the task with a clear message | Tests for `llm_call` (mock provider returning bad JSON) and `subworkflow` (child lacking key) assert failure text; conforming output passes |
-| O5 | All built-in workflows pass the static check and the library rejects new broken ones | A test loads every built-in workflow and asserts no `error` findings; `WorkflowLibrary.save` of a broken definition raises; terminal-route integration tests pass |
+| O2 | A reference to an output produced on only some paths to the referencing task is flagged as a warning; a synchronized join of all branches, or an output every path produces, is not | Tests over branch/merge fixtures: warning for a branch output used after a plain merge, none for a synchronized join or an output produced on every path |
+| O3 | At run time an unresolved template is no longer silent: it is logged and recorded as `{task, ref}` entries in the *process* property `__contract_violations__`, and raises (failing the task) under `strict_templates` | Engine test: workflow with a missing key has `__contract_violations__ == [{"task": "a", "ref": "typo_key"}]`; with `strict_templates: true` the task error contains `{{typo_key}}` |
+| O4 | An `llm_call` JSON output that violates its declared `output_schema`, or a subworkflow result missing an `expects` key, fails the task with a clear message | Tests assert exact substrings: `missing required key 'sentiment'` for `llm_call` (mock provider), `missing expected key(s): summary` for `subworkflow`; conforming output passes |
+| O5 | All built-in workflows pass the static check and the library rejects new broken ones | A test loads every built-in workflow and asserts no `error` findings; `WorkflowLibrary.save` of a broken definition raises `WorkflowContractError` and writes nothing |
 
 ## Non-goals
 

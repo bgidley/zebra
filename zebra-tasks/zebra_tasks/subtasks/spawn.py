@@ -27,6 +27,7 @@ class SubworkflowAction(TaskAction):
         wait: Whether to wait for completion (default: True)
         timeout: Seconds the child's inline auto-task run may take (optional)
         output_key: Where to store result in process properties
+        expects: Keys the child's ``__output__`` must contain; a missing key fails the task
 
     Example workflow usage:
         ```yaml
@@ -81,6 +82,12 @@ class SubworkflowAction(TaskAction):
             required=False,
         ),
         ParameterDef(
+            name="expects",
+            type="list",
+            description="Keys the sub-workflow's output must contain (when wait=True)",
+            required=False,
+        ),
+        ParameterDef(
             name="output_key",
             type="string",
             description="Process property key to store the result",
@@ -116,6 +123,13 @@ class SubworkflowAction(TaskAction):
         ),
     ]
 
+    @staticmethod
+    def _missing_keys(task: TaskInstance, output: object) -> list[str]:
+        """Keys listed in the task's ``expects`` that the child's output lacks (#271)."""
+        expects = task.properties.get("expects") or []
+        have = output if isinstance(output, dict) else {}
+        return [key for key in expects if key not in have]
+
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Start the sub-workflow; when waiting, suspend on it and collect its result on resume.
 
@@ -127,6 +141,11 @@ class SubworkflowAction(TaskAction):
             result = child_result(context.subflow_results[0])
             context.set_process_property(output_key, result)
             if result["success"]:
+                missing = self._missing_keys(task, result["output"])
+                if missing:
+                    return TaskResult.fail(
+                        "Sub-workflow output is missing expected key(s): " + ", ".join(missing)
+                    )
                 return TaskResult.ok(output=result)
             return TaskResult.fail(result["error"])
 

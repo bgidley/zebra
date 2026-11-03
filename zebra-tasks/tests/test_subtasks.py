@@ -221,6 +221,51 @@ class TestSubworkflowAction:
         assert "No workflow definition" in result.error
 
 
+class TestSubworkflowExpects:
+    """``expects`` checks the child's output shape (#271)."""
+
+    WORKFLOW = {
+        "id": "test",
+        "name": "Test",
+        "first_task_id": "t1",
+        "tasks": {"t1": {"id": "t1", "name": "T1", "action": "test"}},
+        "routings": [],
+    }
+
+    @pytest.mark.asyncio
+    async def test_missing_key_fails_naming_it(self, mock_context, mock_task):
+        mock_task.properties = {"workflow": self.WORKFLOW, "expects": ["summary", "score"]}
+        mock_context.subflow_results = [
+            subflow_entry("proc_0", properties={"__output__": {"score": 1}})
+        ]
+
+        result = await SubworkflowAction().run(mock_task, mock_context)
+
+        assert result.success is False
+        assert "missing expected key(s): summary" in result.error
+
+    @pytest.mark.asyncio
+    async def test_non_dict_output_fails(self, mock_context, mock_task):
+        mock_task.properties = {"workflow": self.WORKFLOW, "expects": ["summary"]}
+        mock_context.subflow_results = [subflow_entry("proc_0", properties={"__output__": "x"})]
+
+        result = await SubworkflowAction().run(mock_task, mock_context)
+
+        assert result.success is False
+        assert "summary" in result.error
+
+    @pytest.mark.asyncio
+    async def test_conforming_output_passes(self, mock_context, mock_task):
+        mock_task.properties = {"workflow": self.WORKFLOW, "expects": ["summary"]}
+        mock_context.subflow_results = [
+            subflow_entry("proc_0", properties={"__output__": {"summary": "ok"}})
+        ]
+
+        result = await SubworkflowAction().run(mock_task, mock_context)
+
+        assert result.success is True
+
+
 class TestWaitForSubworkflowAction:
     """Tests for WaitForSubworkflowAction."""
 

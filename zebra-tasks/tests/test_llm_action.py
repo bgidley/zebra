@@ -310,3 +310,71 @@ That's the result."""
         # Should succeed but return raw content
         assert result.success is True
         assert llm_context.process.properties["data"] == "This is not valid JSON {broken"
+
+
+class TestOutputSchema:
+    """``output_schema`` validates a JSON response (#271)."""
+
+    SCHEMA = {
+        "type": "object",
+        "required": ["sentiment"],
+        "properties": {"sentiment": {"type": "string", "enum": ["positive", "negative"]}},
+    }
+
+    @pytest.fixture
+    def llm_context(self, mock_context):
+        provider = MockLLMProvider()
+        mock_context.llm = provider
+        set_llm_factory(lambda m: provider)
+        return mock_context
+
+    @pytest.fixture
+    def props(self):
+        return {
+            "prompt": "Analyze",
+            "response_format": "json",
+            "output_schema": self.SCHEMA,
+            "output_key": "analysis",
+        }
+
+    @pytest.mark.asyncio
+    async def test_conforming_json_passes(self, llm_context, mock_task, props):
+        llm_context.llm.response_content = '{"sentiment": "positive"}'
+        mock_task.properties = props
+
+        result = await LLMCallAction().run(mock_task, llm_context)
+
+        assert result.success is True
+        assert llm_context.process.properties["analysis"] == {"sentiment": "positive"}
+
+    @pytest.mark.asyncio
+    async def test_missing_required_key_fails(self, llm_context, mock_task, props):
+        llm_context.llm.response_content = '{"confidence": 0.9}'
+        mock_task.properties = props
+
+        result = await LLMCallAction().run(mock_task, llm_context)
+
+        assert result.success is False
+        assert "output_schema" in result.error
+        assert "missing required key 'sentiment'" in result.error
+        assert "analysis" not in llm_context.process.properties
+
+    @pytest.mark.asyncio
+    async def test_wrong_enum_value_fails(self, llm_context, mock_task, props):
+        llm_context.llm.response_content = '{"sentiment": "meh"}'
+        mock_task.properties = props
+
+        result = await LLMCallAction().run(mock_task, llm_context)
+
+        assert result.success is False
+        assert "$.sentiment" in result.error
+
+    @pytest.mark.asyncio
+    async def test_unparseable_json_fails(self, llm_context, mock_task, props):
+        llm_context.llm.response_content = "not json {"
+        mock_task.properties = props
+
+        result = await LLMCallAction().run(mock_task, llm_context)
+
+        assert result.success is False
+        assert "response is not valid JSON" in result.error
