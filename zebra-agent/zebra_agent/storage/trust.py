@@ -37,7 +37,13 @@ DEFAULT_DOMAINS: tuple[str, ...] = (
     "home",
     "creative",
     "social",
+    # Zebra Commons (REQ-NET-006, #229): offering, importing and sharing workflows.
+    # Owner-governed: trust gates read the Commons owner's level (OWNER_GOVERNED_DOMAINS).
+    "sharing",
 )
+
+#: Domains whose level is the Commons owner's, whoever the process runs for (#229).
+OWNER_GOVERNED_DOMAINS: frozenset[str] = frozenset({"sharing"})
 
 # Ordered registry of known domains; dict keys give stable iteration order.
 _DOMAIN_REGISTRY: dict[str, None] = dict.fromkeys(DEFAULT_DOMAINS)

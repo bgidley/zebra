@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from zebra_agent.storage.trust import TrustLevel, reset_domain_registry
+from zebra_agent.storage.trust import DEFAULT_DOMAINS, TrustLevel, reset_domain_registry
 from zebra_agent_web.api import agent_engine
 from zebra_agent_web.trust_store import DjangoTrustStore
 
@@ -49,7 +49,8 @@ def test_get_trust_levels(authenticated_client):
     assert response.status_code == 200
     levels = response.json()["levels"]
     assert levels["code"] == "SUPERVISED"
-    assert len(levels) == 8
+    assert set(levels) == set(DEFAULT_DOMAINS)
+    assert levels["sharing"] == "SUPERVISED"  # Commons, REQ-NET-006 (#229)
 
 
 @pytest.mark.django_db(transaction=True)

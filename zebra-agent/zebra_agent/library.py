@@ -18,11 +18,14 @@ from zebra_agent.metrics import MetricsStore, WorkflowStats
 from zebra_agent.provenance import (
     DEFAULT_SPHERE,
     Exposure,
+    NotHashableError,
+    adopted_block,
     builtin_block,
     has_foreign_users,
     legacy_block,
     next_block,
     read_commons,
+    relabel,
     strip_commons,
     try_content_sha256,
     with_commons,
@@ -194,6 +197,10 @@ def _yaml_version(path: Path) -> int:
         return 1
 
 
+class AdoptionRefused(ValueError):
+    """``save(writer="adopt")`` refused a received workflow (#229 S2b); nothing was saved."""
+
+
 class LeakGuardRejected(ValueError):
     """``save()`` refused a dream-cycle write that copies run specifics (#237, #229)."""
 
@@ -354,6 +361,12 @@ class WorkflowLibrary:
             logger.warning(f"Failed to load workflow info from {yaml_file}: {e}")
             return None
 
+    async def get_workflow_info(self, name: str) -> WorkflowInfo | None:
+        """Metadata of the current (newest active) file of workflow *name*, or None."""
+        self.ensure_initialized()
+        path = next(iter(self._files_named(name)), None)
+        return await self._load_workflow_info(path) if path is not None else None
+
     def get_workflow(self, name: str) -> ProcessDefinition:
         """
         Load a workflow definition by name.
@@ -420,6 +433,10 @@ class WorkflowLibrary:
         exposure: Exposure | dict | None = None,
         filename: str | None = None,
         llm_defined: bool = False,
+        received: dict[str, Any] | None = None,
+        expected_sha256: str | None = None,
+        name: str | None = None,
+        origin_pubkey: str | None = None,
     ) -> Path:
         """Write a workflow file: the one save path, which owns the ``commons`` block (#229).
 
@@ -439,6 +456,11 @@ class WorkflowLibrary:
                 for ``foreign_users``); None for a human writer
             filename: File name; default from the workflow name
             llm_defined: Tag the workflow ``llm-defined`` (#148)
+            received: ``writer="adopt"`` only: the received ``commons`` block, kept
+                verbatim (``_save_adopted``)
+            expected_sha256: ``writer="adopt"`` only: the offered or sent hash
+            name: ``writer="adopt"`` only: the local display name
+            origin_pubkey: ``writer="adopt"`` only: the publisher's Zebra key
 
         Returns:
             The path written.
@@ -446,8 +468,23 @@ class WorkflowLibrary:
         Raises:
             ValueError: If the YAML does not parse or is not a mapping (#158).
             LeakGuardRejected: If the exposure rejects hits and the guard found some.
+            AdoptionRefused: ``writer="adopt"`` with a hash mismatch, a taken name or
+                a block that must not be shared.
         """
         self.ensure_initialized()
+        if writer == "adopt":
+            if exposure is not None or llm_defined:
+                raise AdoptionRefused("adoption takes no exposure and is never llm-defined")
+            return self._save_adopted(
+                yaml_content,
+                received=received,
+                expected_sha256=expected_sha256,
+                name=name,
+                origin_pubkey=origin_pubkey,
+                filename=filename,
+            )
+        if received is not None or expected_sha256 is not None:
+            raise ValueError("received / expected_sha256 are only for writer='adopt'")
         if isinstance(exposure, dict):
             exposure = Exposure.from_dict(exposure)
 
@@ -509,6 +546,71 @@ class WorkflowLibrary:
             (new_hash or "-")[:12],
             (block["parent_sha256"] or "-")[:12],
             block["foreign_users"],
+        )
+        return filepath
+
+    def _save_adopted(
+        self,
+        yaml_content: str,
+        *,
+        received: dict[str, Any] | None,
+        expected_sha256: str | None,
+        name: str | None,
+        origin_pubkey: str | None,
+        filename: str | None,
+    ) -> Path:
+        """Save a received workflow, keeping its ``commons`` block (#229 S2b).
+
+        Adoption (a judged import) and sync are not local changes: the received block
+        stays verbatim once the YAML's hash is checked against it and against the
+        offered or sent hash (``provenance.adopted_block``). The received local tags
+        are dropped and ``llm-defined`` is never added. A name already used by another
+        active workflow is refused, since a ``_N`` copy would shadow it.
+        """
+        if not isinstance(received, dict):
+            raise AdoptionRefused("no received commons block")
+        offered = received.get("content_sha256")
+        if not isinstance(offered, str) or not offered:
+            raise AdoptionRefused("received block has no content_sha256")
+        if not expected_sha256 or expected_sha256 != offered:
+            raise AdoptionRefused("received block hash does not match the offered hash")
+        if received.get("foreign_users") is not False:
+            raise AdoptionRefused("received workflow saw other users' runs (foreign_users)")
+        parse_workflow_yaml(yaml_content)
+        try:
+            yaml_content = relabel(yaml_content, name=name)
+        except NotHashableError as e:
+            raise AdoptionRefused(f"received workflow is not hashable: {e}") from e
+        actual, reason = try_content_sha256(yaml_content)
+        if actual != offered:
+            raise AdoptionRefused(
+                f"content hash {(actual or reason or '-')[:16]} does not match "
+                f"the offered {offered[:16]}"
+            )
+        local_name = parse_workflow_yaml(yaml_content).get("name", "untitled")
+        existing = next(iter(self._files_named(local_name)), None)
+        if existing is not None:
+            existing_block = read_commons(existing.read_text()) or {}
+            if existing_block.get("content_sha256") == offered:
+                logger.info("Workflow %r (%s) already adopted", local_name, offered[:12])
+                return existing
+            raise AdoptionRefused(f"a different workflow is already named {local_name!r}")
+
+        block = adopted_block(
+            received,
+            sphere=self.sphere,
+            adopted_at=datetime.now(UTC).isoformat(),
+            origin_pubkey=origin_pubkey,
+        )
+        filepath = _free_path(self.library_path, filename or workflow_filename(local_name))
+        filepath.write_text(with_commons(yaml_content, block))
+        self._cache.pop(local_name, None)
+        logger.info(
+            "Adopted workflow %r (%s): sha256 %s, origin %s",
+            local_name,
+            filepath.name,
+            offered[:12],
+            (block.get("origin_pubkey") or "-")[:12],
         )
         return filepath
 

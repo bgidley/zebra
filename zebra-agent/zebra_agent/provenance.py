@@ -365,3 +365,75 @@ def next_block(
         "share_with": [],
         "foreign_users": inherited_foreign or foreign,
     }
+
+
+class _ExportDumper(yaml.SafeDumper):
+    """SafeDumper writing multi-line strings (prompts) as ``|`` blocks."""
+
+
+def _block_str(dumper: yaml.SafeDumper, value: str) -> yaml.Node:
+    style = "|" if "\n" in value else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", value, style=style)
+
+
+_ExportDumper.add_representer(str, _block_str)
+
+
+def relabel(yaml_content: str, *, name: str | None = None) -> str:
+    """The workflow YAML without its ``commons`` block and local tags, optionally renamed.
+
+    What travels between Zebras (export, adoption, #229 S2b): the block is re-attached by
+    the receiving library and local tags (``llm-defined``, ``system``) are bookkeeping of
+    the sender. Neither the name nor these tags is hashed, so ``content_sha256`` is
+    unchanged. The YAML is re-dumped only when something changes.
+
+    Raises:
+        NotHashableError: If the YAML does not parse to a mapping.
+    """
+    yaml_content = strip_commons(yaml_content)
+    try:
+        data = yaml.load(yaml_content, Loader=_CanonicalLoader)  # noqa: S506 - SafeLoader subclass
+    except yaml.YAMLError as e:
+        raise NotHashableError(f"invalid YAML: {e}") from e
+    if not isinstance(data, dict):
+        raise NotHashableError("not a mapping")
+    changed = False
+    if name is not None and data.get("name") != name:
+        data["name"] = name
+        changed = True
+    tags = data.get("tags")
+    if isinstance(tags, list) and any(t in LOCAL_TAGS for t in tags):
+        kept = [t for t in tags if t not in LOCAL_TAGS]
+        if kept:
+            data["tags"] = kept
+        else:
+            data.pop("tags")
+        changed = True
+    if not changed:
+        return yaml_content
+    return yaml.dump(data, Dumper=_ExportDumper, sort_keys=False, allow_unicode=True, width=100)
+
+
+def adopted_block(
+    received: dict[str, Any],
+    *,
+    sphere: str,
+    adopted_at: str,
+    origin_pubkey: str | None = None,
+) -> dict[str, Any]:
+    """The block for an adopted or synced workflow (``save(writer="adopt")``, #229 S2b).
+
+    The received block is kept verbatim (hash, lineage, ``tainted_by``,
+    ``foreign_users``, ``fork_of``): adoption is not a local change. Only local
+    bookkeeping changes: ``sphere`` (this library's), ``share_with: []`` (each share
+    is decided again here), ``adopted_at``, ``supervised: true`` (until a human clears
+    it) and ``origin_pubkey`` when the block has none (the publisher's Zebra key).
+    """
+    block = {key: received.get(key) for key in BLOCK_KEYS}
+    block["sphere"] = sphere
+    block["share_with"] = []
+    block["adopted_at"] = adopted_at
+    block["supervised"] = True
+    if not block.get("origin_pubkey") and origin_pubkey:
+        block["origin_pubkey"] = origin_pubkey
+    return block
