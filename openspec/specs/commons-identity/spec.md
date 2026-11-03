@@ -6,7 +6,7 @@ TBD - created by archiving change commons-identity. Update Purpose after archive
 ## Requirements
 
 ### Requirement: Zebra and device keys
-With Commons enabled, a deployment SHALL keep its Zebra secret key under `integration_name="commons-zebra"` and its device secret key under `integration_name="commons-device"` in a `CredentialStore`, and SHALL store only the public keys in the database. Signatures SHALL be BIP-340 Schnorr over secp256k1, and public keys SHALL be shown as NIP-19 `npub`.
+With Commons enabled, a deployment SHALL keep its Zebra secret key under `integration_name="commons-zebra"` and its device secret key under `integration_name="commons-device"` in a `CredentialStore`, and SHALL store only the public keys in the database. Signatures SHALL be BIP-340 Schnorr over secp256k1, and public keys SHALL be shown as NIP-19 `npub`. Keys in a file credential store SHALL survive a process restart.
 
 #### Scenario: Start a new Zebra
 - **WHEN** the owner starts a new Zebra on a deployment with no identity
@@ -15,6 +15,10 @@ With Commons enabled, a deployment SHALL keep its Zebra secret key under `integr
 #### Scenario: Keys are created once
 - **WHEN** the device key is requested twice
 - **THEN** the same key is returned both times
+
+#### Scenario: Keys survive a real restart
+- **WHEN** one Python process creates the identity in a key directory and a fresh process reads that directory
+- **THEN** the fresh process has the same npub and device public key, and the device's `DEVICE_CERT` from the first process verifies against them
 
 ### Requirement: Device certificates and pairing
 A `DEVICE_CERT` SHALL be a NIP-01 event signed by the Zebra key, with tags `d` and `p` set to the device public key, and content `{label, sphere, observed, expires_at?}`. Pairing SHALL take the new device's pairing code (its npub), a label, a sphere and the answer to "who manages this device?" (someone else means `observed`), and SHALL produce a cert code the new device imports after verifying it names its own key.
@@ -74,3 +78,11 @@ The owner SHALL be able to reveal the Zebra key as an `nsec` and to restore a Ze
 #### Scenario: Off by default
 - **WHEN** Commons is off and the owner opens the Commons page and posts "start"
 - **THEN** the page says Commons is off, the post returns 404, and the credential store holds no Commons key
+
+#### Scenario: Every action is off
+- **WHEN** Commons is off and the owner posts start, pair, import, revoke, backup or restore
+- **THEN** each returns 404 and no key directory is created
+
+#### Scenario: Turned off over existing keys
+- **WHEN** a deployment that has keys turns Commons off and the owner posts any of the six actions
+- **THEN** each returns 404 and the stored keys are unchanged
