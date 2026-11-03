@@ -75,6 +75,17 @@ def _chain_events(zebra_pubkey: str) -> list[Event]:
     return events
 
 
+# Every Commons action POST (start, pair, import, revoke, backup, restore), #268.
+COMMONS_ACTION_URLS = [
+    "/commons/start/",
+    "/commons/pair/",
+    "/commons/import/",
+    f"/commons/devices/{'a' * 64}/revoke/",
+    "/commons/backup/",
+    "/commons/restore/",
+]
+
+
 async def _start(client, **overrides):
     data = {"label": "Home server", "managed_by": "me", "sphere": "home", **overrides}
     return await client.post("/commons/start/", data)
@@ -96,9 +107,26 @@ async def test_off_by_default_creates_nothing(authenticated_async_client, settin
     assert 'data-testid="commons-off"' in html
     assert 'href="/commons/"' not in html  # nav link hidden
 
-    for url in ["/commons/start/", "/commons/pair/", "/commons/backup/", "/commons/restore/"]:
-        assert (await authenticated_async_client.post(url, {})).status_code == 404
+    for url in COMMONS_ACTION_URLS:
+        assert (await authenticated_async_client.post(url, {})).status_code == 404, url
     assert not (tmp_path / "keys").exists()
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_turning_off_over_existing_keys_disables_every_action(
+    authenticated_async_client, commons
+):
+    """#268: a deployment with keys that turns Commons off answers 404 and keeps its keys."""
+    key_dir = commons("a")
+    assert (await _start(authenticated_async_client)).status_code == 302
+    before = {p.name: p.read_bytes() for p in key_dir.rglob("*") if p.is_file()}
+    assert before
+
+    commons("a", enabled=False)
+    for url in COMMONS_ACTION_URLS:
+        response = await authenticated_async_client.post(url, {"nsec": "x", "code": "x"})
+        assert response.status_code == 404, url
+    assert {p.name: p.read_bytes() for p in key_dir.rglob("*") if p.is_file()} == before
 
 
 @pytest.mark.django_db(transaction=True)

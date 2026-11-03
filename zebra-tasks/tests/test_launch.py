@@ -198,6 +198,8 @@ WRITERS = {
     "workflow_curator",
     "propose_zebra_improvements",
     "write_postmortem",
+    # Hinted always_reversible before #267: its ship and merge stages push and merge (#251).
+    "claude_code_build",
 }
 
 # Calls that write a store or the library, or start a process. An action whose
@@ -212,8 +214,6 @@ _WRITE_CALL = re.compile(
 
 # always_reversible actions whose module matches _WRITE_CALL, and why that is honest.
 REVERSIBLE_WRITERS = {
-    "claude_code_build": "stages a sandboxed build job; nothing is published without "
-    "publish_build (always_irreversible), and the builder wait is a non-auto task",
     "ethics_gate": "appends its own verdict to the ethics audit trail",
     "record_dilemma_resolution": "appends the run's dilemma resolution to the ethics audit trail",
     "record_ethics_review": "appends the run's post-review to the ethics audit trail",
@@ -226,11 +226,13 @@ def test_registry_is_not_empty():
 
 @pytest.mark.parametrize("name", sorted(ACTIONS))
 def test_action_declares_its_own_hint(name):
+    # The hint must be on the registered class itself (#267): one inherited from a shared base
+    # (as the git actions once had from _GitAction) would make a new subclass that pushes or
+    # deletes silently always_reversible.
     cls = ACTIONS[name]
-    declared = any(
-        "reversibility_hint" in vars(klass) for klass in cls.__mro__ if klass is not TaskAction
+    assert "reversibility_hint" in vars(cls), (
+        f"{name} ({cls.__qualname__}) does not declare its own reversibility hint"
     )
-    assert declared, f"{name} ({cls.__qualname__}) relies on the default reversibility hint"
     assert cls.reversibility_hint in {
         "always_reversible",
         "always_irreversible",
@@ -260,9 +262,31 @@ def test_no_always_reversible_action_writes_unnoticed():
     assert set(REVERSIBLE_WRITERS) <= set(writers), "stale REVERSIBLE_WRITERS entry"
 
 
+def test_no_always_reversible_action_submits_builds():
+    """A builder job can push a branch or merge to master (#251), so no allowlist (#267)."""
+    submitters = sorted(
+        name
+        for name, cls in ACTIONS.items()
+        if cls.reversibility_hint == "always_reversible"
+        and "submit_build(" in inspect.getsource(inspect.getmodule(cls))
+    )
+    assert not submitters, f"always_reversible actions that submit builder jobs: {submitters}"
+
+
+def test_claude_code_build_is_context_dependent():
+    assert ACTIONS["claude_code_build"].reversibility_hint == "context_dependent"
+    assert ACTIONS["publish_build"].reversibility_hint == "always_irreversible"
+
+
 @pytest.mark.parametrize(
     "name",
-    ["review_knowledge", "workflow_curator", "propose_zebra_improvements", "write_postmortem"],
+    [
+        "review_knowledge",
+        "workflow_curator",
+        "propose_zebra_improvements",
+        "write_postmortem",
+        "claude_code_build",
+    ],
 )
 def test_store_and_library_writers_fail_strict_mode(registry, name):
     definition = _definition("llm_call", name)
