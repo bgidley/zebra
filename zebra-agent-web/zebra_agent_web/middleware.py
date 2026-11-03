@@ -5,14 +5,18 @@ Provides:
 - CurrentUserMiddleware: sets _current_user_id contextvars so storage
   layers can scope queries to the authenticated user without needing an
   explicit parameter through every call stack.
+- NoStoreHtmlMiddleware: marks dynamic HTML responses uncacheable so the
+  browser never shows a stale copy of a live page (#272).
 """
 
 import asyncio
+import inspect
 from contextvars import ContextVar
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
+from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils.decorators import sync_and_async_middleware
 
 # Module-level ContextVar: populated by CurrentUserMiddleware on each request.
@@ -133,5 +137,39 @@ def CurrentUserMiddleware(get_response):
                 return get_response(request)
             finally:
                 _current_user_id_var.reset(token)
+
+    return middleware
+
+
+def _mark_uncacheable(response):
+    """Make a dynamic HTML response uncacheable and vary it on ``HX-Request``.
+
+    Pages like ``/activity/`` serve the full page and its HTMX partial from the
+    same URL. Without these headers the browser may reuse an old copy (or the
+    partial) on back/forward or tab restore, and ``no-store`` also keeps such
+    pages out of the back/forward cache. Responses that set their own
+    ``Cache-Control`` are left alone.
+    """
+    if response.get("Content-Type", "").startswith("text/html"):
+        patch_vary_headers(response, ["HX-Request"])
+        if not response.has_header("Cache-Control"):
+            patch_cache_control(response, no_store=True, private=True)
+    return response
+
+
+@sync_and_async_middleware
+def NoStoreHtmlMiddleware(get_response):
+    """Send ``Cache-Control: no-store`` + ``Vary: HX-Request`` on HTML responses (#272).
+
+    Static files never reach this middleware: WhiteNoise answers them earlier.
+    """
+    if inspect.iscoroutinefunction(get_response):
+
+        async def middleware(request):
+            return _mark_uncacheable(await get_response(request))
+    else:
+
+        def middleware(request):
+            return _mark_uncacheable(get_response(request))
 
     return middleware

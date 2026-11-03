@@ -6,6 +6,8 @@
     <script src="{% static 'js/workflow-diagram.js' %}"></script>
     {% comment %}Not deferred: buffers JS/HTMX errors from page load for bug reports (#186){% endcomment %}
     <script src="{% static 'js/bug-report.js' %}"></script>
+    {% comment %}A page restored from the back/forward cache is a frozen snapshot: reload it (#272){% endcomment %}
+    <script>window.addEventListener("pageshow", function (e) { if (e.persisted) window.location.reload(); });</script>
     {% block extra_head %}{% endblock %}
 </head>
 <body class="h-full text-ink" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
