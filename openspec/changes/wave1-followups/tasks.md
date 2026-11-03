@@ -15,7 +15,8 @@
 
 - [x] 3.1 Stamped workflow selected and run end to end
 - [x] 3.2 Legacy (blockless) workflow selected and run
-- [x] 3.3 Read-only prod check for a workflow saved since 68516eb with a `commons` block; posted on #270 (2026-11-02: nothing saved yet, pending; 2026-11-03: prod at 608ec0f, the 03:05–03:07 UTC dream cycle saved three workflows and all three carry a `commons` block. `content_sha256` recompute and goal run still to confirm)
+- [x] 3.3 Read-only prod check for a workflow saved since 68516eb with a `commons` block, and its `content_sha256` recomputed; posted on #270 (2026-11-02: nothing saved yet, pending; 2026-11-03: prod at 608ec0f, the 03:05–03:07 UTC dream cycle saved three workflows, all three carry a `commons` block, and all three stored `content_sha256` values match a recompute)
+- [ ] 3.4 Confirm whether a goal ran one of the three stamped workflows. **Pending**: no process for their definition ids is in the web log (from 2026-10-30) or the daemon log (from its 2026-11-03 21:41 restart). The daemon's 03:05–21:41 history is gone, and the authoritative `WorkflowRunModel` query on prod Oracle was not allowed from an agent session. Needs a human query (see #270).
 
 ## 4. Docs
 
