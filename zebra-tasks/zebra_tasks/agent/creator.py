@@ -120,6 +120,22 @@ def writer_exposure(
     )
 
 
+def selection_reason(context: ExecutionContext) -> dict[str, str] | None:
+    """Why the selector asked for a new workflow, as it recorded it (#238).
+
+    The process ``selection``'s first-person ``voice`` line (kind ``voice``), else its
+    ``reasoning`` (kind ``reasoning``); None when it recorded neither. Never invented.
+    """
+    selection = context.process.properties.get("selection")
+    if not isinstance(selection, dict):
+        return None
+    for key, kind in (("voice", "voice"), ("reasoning", "reasoning")):
+        text = selection.get(key)
+        if isinstance(text, str) and text.strip():
+            return {"text": text.strip(), "kind": kind, "source": "selector"}
+    return None
+
+
 async def generate_guarded_workflow(
     provider,
     messages: list[Message],
@@ -550,6 +566,8 @@ Return ONLY valid YAML, no explanations or markdown code blocks."""
                         llm_defined=True,
                         writer="creator",
                         exposure=writer_exposure(context, run_texts, guard_goals, guard_allow),
+                        reason=selection_reason(context),
+                        leak=leak,
                     )
                 except Exception as e:
                     # Log but don't fail - workflow is still valid

@@ -316,6 +316,12 @@ A family tree of skills, in two views built from data Zebra already keeps:
   - forks waiting for a choice, and retired versions
   Versions that exist only in another sphere appear only if they were shared here. A device can't
   see what it was never sent.
+- **Implemented in #238 (private):** writer, time, sphere, device, reason and leak-guard status
+  live in a local journal (`<library>/.lineage/journal.jsonl`, `zebra_agent/genealogy.py`), not in
+  the `commons` block, so they never ship with an export. Reasons are only the evaluator's
+  rationale (optimizer, gym) or the selector's voice / reasoning (creator, variant); a human save
+  has none. Hit text is never journaled. Per-sphere share status and forks show empty states
+  until S3b-1 (#236). Spec: `openspec/specs/workflow-genealogy/spec.md`.
 - **Public genealogy** (`/commons/genealogy/`): built only from public events.
   - **Workflow lineage across Zebras:** offers linked by `parent`, who published each, how many
     Zebras adopted it, attestations (worked, failed, rejected and why), and the market price over

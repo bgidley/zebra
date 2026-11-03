@@ -422,6 +422,20 @@ async def workflow_detail(request, workflow_name):
     return render(request, "pages/workflow_detail.html", context)
 
 
+async def workflow_genealogy(request, workflow_name):
+    """The private genealogy of one workflow on this device (#238). Never published."""
+    from zebra_agent.genealogy import build_genealogy
+
+    from zebra_agent_web.api.genealogy_view import genealogy_context
+
+    await agent_engine.ensure_initialized()
+    library = agent_engine.get_library()
+    genealogy = await asyncio.to_thread(build_genealogy, library, workflow_name)
+    if genealogy is None:
+        return HttpResponse("Workflow not found", status=404)
+    return render(request, "pages/workflow_genealogy.html", genealogy_context(genealogy))
+
+
 @require_http_methods(["POST"])
 async def workflow_create(request):
     """Create a new workflow from YAML."""

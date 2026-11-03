@@ -49,19 +49,20 @@ would ship them with an export (S2b) and a reason may quote run specifics. So `s
 3. One node per hash (several files can share one; newest wins for display). Edges
    `parent_sha256 → hash`, plus `ancestors[i+1] → ancestors[i]` for links no file states.
    Ancestor hashes with no file become **hash-only** nodes.
-4. Writer: the newest journal `saved` record for that file, else the newest for that hash, else
+4. Writer, reason, device and date: the first journal `saved` record for that hash (the save that
+   made the content; by file for an unhashable one), else
    `builtin` (hash in `builtin_hashes()`), else `unknown`. Display labels: `creator`, `variant`
    (variant_creator), `optimizer` (optimizer, gym), `human`, `adopted` (adopt), `synced` (sync),
    `built-in`, `unknown`.
 5. Diff: `difflib.unified_diff` of the parent's and the node's stripped YAML (bounded to 400
    lines), only when both files exist here.
-6. Layers: longest path from a root (Kahn order); within a layer, by date. Cycles cannot occur
-   by hash, but the walk is guarded.
+6. Layers: longest path from a root (Kahn order); within a layer, by date. A revert to earlier
+   content makes a cycle by hash; it is broken at its oldest node and drawn as a dashed side edge.
 
 ### Page
 `GET /workflows/<name>/genealogy/` (`web_views.workflow_genealogy`) → `pages/workflow_genealogy.html`.
 `api/genealogy_view.py` does the layout: a fixed grid (column = layer, row = order in layer),
-viewBox scales to the width, nodes are links to `#v-<hash12>` anchors, `<title>` per node, the
+oldest at the top, the SVG shrinks to the width (`max-width: 100%`), nodes are links to `#v-<hash12>` anchors, `<title>` per node, the
 SVG has `role="img"` and an `aria-label`. Colours via CSS variables (frame tokens); the current
 version gets `ok`, retired `faint`, hash-only dashed. The version list is the primary content
 (newest first): cards with mono hash, date, writer pill, sphere / device, `tainted_by`,

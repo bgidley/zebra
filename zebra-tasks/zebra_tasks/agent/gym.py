@@ -30,7 +30,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_agent.metrics import GymScore
 
 from zebra_tasks.agent.execute_workflow import extract_workflow_output
-from zebra_tasks.agent.optimizer import save_workflow_file
+from zebra_tasks.agent.optimizer import evaluator_reason, save_workflow_file
 from zebra_tasks.agent.stuck import _parse_json
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.client import get_llm
@@ -492,6 +492,8 @@ class RunGoldenGymAction(TaskAction):
                     writer="gym",
                     parent=candidate["name"],
                     exposure=candidate.get("exposure"),
+                    reason=evaluator_reason(candidate.get("reason")),
+                    leak=(candidate.get("change") or {}).get("leak_guard"),
                 )
             except ValueError as e:  # incl. LeakGuardRejected at save (#229)
                 _decide(candidate, REJECTED, f"not saved: {e}")

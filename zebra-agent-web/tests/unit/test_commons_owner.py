@@ -11,14 +11,14 @@ User = get_user_model()
 
 @pytest.mark.django_db(transaction=True)
 async def test_no_user_means_no_owner_yet():
-    assert await resolve_commons_owner() == (None, "local")
+    assert await resolve_commons_owner() == (None, "local", None)
 
 
 @pytest.mark.django_db(transaction=True)
 async def test_owner_defaults_to_the_first_user():
     owner = await sync_to_async(User.objects.create_user)(username="c229_owner", password="x")
     await sync_to_async(User.objects.create_user)(username="c229_smoke", password="x")
-    assert await resolve_commons_owner() == (owner.id, "local")
+    assert await resolve_commons_owner() == (owner.id, "local", None)
 
 
 @pytest.mark.django_db(transaction=True)

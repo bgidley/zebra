@@ -8,6 +8,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.agent.creator import (
     generate_guarded_workflow,
     goal_exposure,
+    selection_reason,
     writer_exposure,
 )
 from zebra_tasks.agent.followup import with_previous_run
@@ -215,6 +216,8 @@ class WorkflowVariantCreatorAction(TaskAction):
                             goal_texts + [suggested_name, reasoning],
                             self.SYSTEM_PROMPT,
                         ),
+                        reason=selection_reason(context),
+                        leak=leak,
                     )
                 except Exception as e:  # Don't fail — workflow is still valid
                     logger.warning("Could not save workflow variant: %s", e)
