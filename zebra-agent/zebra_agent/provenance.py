@@ -277,6 +277,27 @@ def legacy_block(*, builtin: bool) -> dict[str, Any]:
     return {"foreign_users": not builtin, "tainted_by": [], "legacy": True}
 
 
+def builtin_block(content_hash: str | None, sphere: str) -> dict[str, Any]:
+    """The ``commons`` block of a shipped built-in as installed here (#269).
+
+    A root: no parent or ancestors, no run data shaped it (``tainted_by`` empty),
+    never ``foreign_users``. Written by ``copy_builtin_workflows`` and ``restore()``.
+    """
+    return {
+        "content_sha256": content_hash,
+        "parent_sha256": None,
+        "ancestors": [],
+        "origin_pubkey": None,
+        "fork_of": None,
+        "adopted_at": None,
+        "supervised": False,
+        "sphere": sphere,
+        "tainted_by": [],
+        "share_with": [],
+        "foreign_users": False,
+    }
+
+
 def next_block(
     *,
     new_hash: str | None,
