@@ -13,12 +13,15 @@ Context:
   has_running - boolean, whether any running goals exist
 {% endcomment %}
 
+{% comment %}
+Always polls (#272): every 5s while goals are running or queued, every 30s
+otherwise, and at once when the tab becomes visible again. Polling only while
+running stopped for good once nothing ran, so later goals never appeared.
+{% endcomment %}
 <div id="activity-list"
-     {% if has_running %}
      hx-get="{% url 'activity' %}?human_only={{ human_only|yesno:'true,false' }}&show_completed={{ show_completed|yesno:'true,false' }}&group_by={{ group_by }}"
-     hx-trigger="every 5s"
-     hx-swap="outerHTML"
-     {% endif %}>
+     hx-trigger="every {% if has_running or has_queued %}5s{% else %}30s{% endif %}, visibilitychange[document.visibilityState === 'visible'] from:document"
+     hx-swap="outerHTML">
 
     {% if groups %}
     <!-- Bulk action toolbar -->
