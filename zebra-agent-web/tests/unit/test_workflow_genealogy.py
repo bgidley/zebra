@@ -1,6 +1,7 @@
 """The private genealogy page (#238)."""
 
 import re
+from urllib.parse import parse_qs
 
 import pytest
 from zebra_agent.library import WorkflowLibrary
@@ -128,16 +129,65 @@ async def test_unknown_workflow_is_404(library, rf):
     assert status == 404
 
 
-def test_the_page_is_behind_login():
-    """LoginRequiredMiddleware guards every view not marked login_not_required.
+def _prod_middleware() -> list[str]:
+    """The MIDDLEWARE declared in settings.py, read from source.
 
-    Unit settings drop that middleware, so check the view is not exempt.
+    ``test_settings`` removes ``LoginRequiredMiddleware`` from the shared list object, so the
+    imported value cannot be trusted. Reading the source means dropping the middleware from
+    ``settings.py`` fails the login test below. ``SetupRedirectMiddleware`` is left out: it only
+    handles first-run setup and causes SQLite lock contention in unit tests.
     """
-    from django.urls import resolve
+    import ast
+    from pathlib import Path
 
-    match = resolve("/workflows/Old%20Search/genealogy/")
-    assert match.func is web_views.workflow_genealogy
-    assert getattr(match.func, "login_required", True) is True
+    import zebra_agent_web.settings as prod_settings
+
+    tree = ast.parse(Path(prod_settings.__file__).read_text())
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "MIDDLEWARE" for t in node.targets
+        ):
+            stack = ast.literal_eval(node.value)
+            return [m for m in stack if not m.endswith("SetupRedirectMiddleware")]
+    raise AssertionError("settings.py declares no MIDDLEWARE list")
+
+
+@pytest.mark.parametrize(
+    ("path", "marker"),
+    [
+        ("/workflows/Old%20Search/genealogy/", 'data-testid="genealogy-graph"'),
+        ("/commons/", "Commons"),
+    ],
+)
+def test_pages_are_behind_login(library, settings, tmp_path, path, marker):
+    """With the prod middleware stack, anonymous visitors go to login; the owner gets the page.
+
+    Fails if the view is made login-exempt or LoginRequiredMiddleware leaves settings.py (#274).
+    """
+    from django.contrib.auth import get_user_model
+    from django.test import Client
+    from zebra_agent_web.api.identity import set_identity_sync
+
+    settings.MIDDLEWARE = _prod_middleware()
+    settings.ZEBRA_AGENT_SETTINGS = {
+        **settings.ZEBRA_AGENT_SETTINGS,
+        "COMMONS_ENABLED": True,
+        "COMMONS_KEY_DIR": str(tmp_path / "keys"),
+    }
+    set_identity_sync("Test User")
+    library.add_workflow(_YAML)
+
+    anonymous = Client().get(path)
+    assert anonymous.status_code == 302
+    login, _, query = anonymous.url.partition("?")
+    assert login == settings.LOGIN_URL
+    assert parse_qs(query)["next"] == [path]
+
+    client = Client()
+    client.force_login(get_user_model().objects.create_user(username="login-owner"))
+    response = client.get(path)
+    assert response.status_code == 200
+    assert marker in response.content.decode()
 
 
 async def test_detail_page_links_to_the_genealogy(library, rf, monkeypatch):
