@@ -142,3 +142,33 @@ async def commons_backup(request):
 async def commons_restore(request):
     npub = await ci.restore_backup(request.POST.get("nsec", ""))
     return _redirect(message=f"Zebra key restored: {npub}")
+
+
+@_owner_action
+async def commons_workflow_import(request):
+    """Start a judged import of an uploaded workflow file (#230); show its trace."""
+    from zebra_agent_web.api.commons_import import MAX_IMPORT_BYTES, start_judged_import
+
+    upload = request.FILES.get("export_file")
+    if upload is None:
+        raise ci.CommonsError("Choose a workflow export file.")
+    if upload.size > MAX_IMPORT_BYTES:
+        raise ci.CommonsError("The file is too large to be a workflow export.")
+    try:
+        text = upload.read().decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ci.CommonsError("The file is not a workflow export (not UTF-8).") from exc
+    user = await request.auser()
+    process_id = await start_judged_import(text, user_id=user.id)
+    return redirect(f"/processes/{process_id}/trace/")
+
+
+@_owner_action
+async def commons_clear_supervision(request, name: str):
+    """The owner clears an adopted workflow's supervised flag (#230)."""
+    from zebra_agent_web.api import agent_engine
+
+    await agent_engine.ensure_initialized()
+    if agent_engine.get_library().clear_supervision(name):
+        logger.info("Owner cleared supervision of %r", name)
+    return redirect("/workflows/")

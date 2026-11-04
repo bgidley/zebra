@@ -171,6 +171,10 @@ async def _async_init() -> None:
     engine.extras["__budget_manager__"] = _budget_manager
     engine.extras["__ethics_audit_store__"] = _ethics_audit
     engine.extras["__trust_store__"] = _trust
+    # Commons S3 (#230): stop state (Commons off, kill switch) and held certs/revokes
+    from zebra_agent_web.api.commons_import import WebCommonsServices
+
+    engine.extras["__commons__"] = WebCommonsServices()
 
     # Initialize agent loop with memory and personal knowledge store
     _agent_loop = AgentLoop(

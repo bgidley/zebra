@@ -4,6 +4,13 @@ The gym runs curated golden tasks (``WorkflowLibrary.list_golden_tasks``) as chi
 processes, has an LLM judge score each output against the task's criteria, and
 records the scores in the ``MetricsStore``.
 
+Import mode (``mode: import`` + ``offer``, #230) tests a workflow received from another
+Zebra before the owner sees it: only the candidate runs, on the offer's golden tasks plus
+local golden tasks for the same capability, under strict ``unsafe_reason`` (only
+``always_reversible`` actions). It routes ``passed`` / ``rejected`` / ``escalate`` and
+never saves (``commons_adopt`` is the only writer): anything it cannot run safely, no
+runnable golden tasks, no judge or an unscored run escalates to the owner.
+
 With ``candidates`` (staged workflow modifications from ``workflow_optimizer``
 with ``gym_gate: true``) it is a promotion gate: each candidate and the current
 version run on the workflow's golden tasks, and the candidate is saved only if
@@ -27,6 +34,7 @@ from typing import Any
 from zebra.core.models import ProcessDefinition, ProcessState, TaskInstance, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
+from zebra_agent.gym import GoldenTask, parse_golden_task
 from zebra_agent.metrics import GymScore
 
 from zebra_tasks.agent.execute_workflow import extract_workflow_output
@@ -49,6 +57,13 @@ CURRENT = "current"
 CANDIDATE = "candidate"
 PROMOTED = "promoted"
 REJECTED = "rejected"
+# Import-mode decisions, also its routes (#230)
+PASSED = "passed"
+ESCALATE = "escalate"
+PENDING = "pending"
+IMPORT_MODE = "import"
+#: Default mean score an imported workflow needs on its golden tasks.
+DEFAULT_PASS_SCORE = 0.6
 
 _PURE_TEMPLATE_RE = re.compile(r"^\{\{\s*([\w.]+)\s*\}\}$")
 
@@ -105,6 +120,25 @@ class RunGoldenGymAction(TaskAction):
                 "'{{optimization_results.pending_gym}}'. Omit to score current workflows."
             ),
             required=False,
+        ),
+        ParameterDef(
+            name="mode",
+            type="string",
+            description="'import' to test a received workflow (with offer); default gate/on demand",
+            required=False,
+        ),
+        ParameterDef(
+            name="offer",
+            type="dict",
+            description="Import mode: the offer from commons_judge_import, e.g. '{{offer}}'",
+            required=False,
+        ),
+        ParameterDef(
+            name="pass_score",
+            type="float",
+            description="Import mode: mean golden-task score needed to pass",
+            required=False,
+            default=DEFAULT_PASS_SCORE,
         ),
         ParameterDef(
             name="workflows",
@@ -203,6 +237,8 @@ class RunGoldenGymAction(TaskAction):
             for candidate in plan["candidates"]:
                 if candidate["status"] == "pending":
                     _decide(candidate, REJECTED, f"gym error: {e}")
+            if plan.get("import"):
+                _decide_import(plan["import"], ESCALATE, f"gym error: {e}")
             plan["errors"].append(str(e))
             return await self._complete(task, context, plan, [])
 
@@ -225,6 +261,26 @@ class RunGoldenGymAction(TaskAction):
         promote = props.get("promote", True)
         if isinstance(promote, str):
             promote = promote.strip().lower() not in ("false", "0", "no", "")
+        if str(props.get("mode") or "").strip().lower() == IMPORT_MODE:
+            offer = _resolve_value(context, props.get("offer"))
+            try:
+                pass_score = float(props.get("pass_score", DEFAULT_PASS_SCORE))
+            except (TypeError, ValueError):
+                pass_score = DEFAULT_PASS_SCORE
+            return {
+                "mode": IMPORT_MODE,
+                "promote": False,  # never saves: commons_adopt is the only writer
+                "candidates": [],
+                "import": {
+                    "offer": offer if isinstance(offer, dict) else None,
+                    "status": PENDING,
+                    "reason": "",
+                    "pass_score": pass_score,
+                    "golden": [],
+                },
+                "skipped": [],
+                "errors": [],
+            }
         return {
             "mode": "gate" if candidates is not None else "on_demand",
             "promote": bool(promote),
@@ -261,7 +317,9 @@ class RunGoldenGymAction(TaskAction):
         def tasks_for(workflow: str) -> list:
             return [t for t in golden if t.workflow == workflow][:max_tasks]
 
-        if plan["mode"] == "gate":
+        if plan["mode"] == IMPORT_MODE:
+            runs = self._plan_import(plan, library, registry, max_tasks, max_runs)
+        elif plan["mode"] == "gate":
             for index, candidate in enumerate(plan["candidates"]):
                 name = candidate["name"]
                 golden_tasks = tasks_for(name)
@@ -329,6 +387,8 @@ class RunGoldenGymAction(TaskAction):
             for candidate in plan["candidates"]:
                 if candidate["status"] == "pending":
                     _decide(candidate, REJECTED, "gym has no LLM judge")
+            if plan.get("import"):
+                _decide_import(plan["import"], ESCALATE, "the gym has no LLM judge")
             plan["errors"].append("no LLM provider for the judge")
             return await self._complete(task, context, plan, [])
 
@@ -348,6 +408,56 @@ class RunGoldenGymAction(TaskAction):
             if isinstance(outcome, BaseException):
                 await self._fail_unfinished(context, pid, outcome)
         return TaskResult.suspend(child_ids)
+
+    def _plan_import(
+        self,
+        plan: dict[str, Any],
+        library: Any,
+        registry: Any,
+        max_tasks: int,
+        max_runs: int,
+    ) -> list[dict[str, Any]]:
+        """Plan the runs of a received workflow (#230); decide now if it cannot run.
+
+        Strict: a workflow using any action that is not ``always_reversible`` is never
+        run here, and no runnable golden tasks is never a pass: both escalate.
+        """
+        imp = plan["import"]
+        offer = imp["offer"]
+        if not offer or not isinstance(offer.get("yaml"), str):
+            _decide_import(imp, ESCALATE, "no offer to test")
+            return []
+        try:
+            definition = load_definition_from_yaml(offer["yaml"])
+        except Exception as e:  # noqa: BLE001
+            _decide_import(imp, REJECTED, f"the gym could not load the workflow: {e}")
+            return []
+        problem = unsafe_reason(definition, registry, strict=True)
+        if problem:
+            _decide_import(imp, ESCALATE, f"not run in the gym: {problem}")
+            return []
+        capability = str(offer.get("name") or definition.name)
+        prefix = f"offer-{str(offer.get('content_sha256') or 'x')[:12]}"
+        golden: list[GoldenTask] = []
+        for i, raw in enumerate(offer.get("golden_tasks") or [], start=1):
+            data = dict(raw) if isinstance(raw, dict) else {}
+            data.update(id=f"{prefix}-{i}", workflow=capability)
+            try:
+                golden.append(parse_golden_task(data))
+            except ValueError as e:
+                plan["skipped"].append({"golden_id": f"{prefix}-{i}", "reason": str(e)})
+        imp["golden"] = [t.to_dict() for t in golden]
+        local = list(library.list_golden_tasks(capability)) if library is not None else []
+        golden = (golden + local[:max_tasks])[:max_runs]
+        if not golden:
+            _decide_import(imp, ESCALATE, "no runnable golden tasks: never passed ungated")
+            return []
+        # The received workflow keeps its name and version, so give it its own id:
+        # a same-named local workflow's stored definition must never be replaced.
+        definition = definition.model_copy(
+            update={"id": f"{definition.id}-import-{uuid.uuid4().hex[:8]}"}
+        )
+        return [_run(t, CANDIDATE, definition, None) for t in golden]
 
     async def _create_children(
         self, task: TaskInstance, context: ExecutionContext, runs: list[dict[str, Any]]
@@ -393,6 +503,8 @@ class RunGoldenGymAction(TaskAction):
         runs = task.properties.get(RUNS_KEY) or {}
         library = context.extras.get("__workflow_library__")
         golden = {t.id: t for t in (library.list_golden_tasks() if library else [])}
+        for raw in (plan.get("import") or {}).get("golden") or []:
+            golden[raw["id"]] = parse_golden_task(raw)
         provider = self._judge_provider(task, context)
 
         async def score(entry: dict[str, Any]) -> dict[str, Any]:
@@ -468,6 +580,8 @@ class RunGoldenGymAction(TaskAction):
     ) -> TaskResult:
         """Decide the pending candidates, save promotions, record scores and report."""
         tolerance = float(task.properties.get("tolerance", 0.1))
+        if plan.get("import") and plan["import"]["status"] == PENDING:
+            _decide_import_on_scores(plan["import"], scored)
         for index, candidate in enumerate(plan["candidates"]):
             if candidate["status"] == "pending":
                 mine = [r for r in scored if r.get("candidate_index") == index]
@@ -532,6 +646,15 @@ class RunGoldenGymAction(TaskAction):
             "skipped": plan["skipped"],
             "errors": plan["errors"],
         }
+        if plan.get("import"):
+            imp = plan["import"]
+            report["import"] = {
+                "decision": imp["status"],
+                "reason": imp["reason"],
+                "mean": imp.get("mean"),
+                "pass_score": imp["pass_score"],
+                "golden_ids": [r.get("golden_id") for r in scored],
+            }
         context.set_process_property(
             task.properties.get("output_key", "golden_gym"),
             report,
@@ -539,6 +662,8 @@ class RunGoldenGymAction(TaskAction):
         if plan["mode"] == "gate" and plan["promote"]:
             self._update_optimizer_results(task, context, plan["candidates"])
         await _record_scores(context, records, report)
+        if plan.get("import"):
+            return TaskResult(success=True, output=report, next_route=plan["import"]["status"])
         return TaskResult.ok(output=report)
 
     def _update_optimizer_results(
@@ -645,6 +770,26 @@ def _resolve_value(context: ExecutionContext, raw: Any) -> Any:
 def _decide(candidate: dict[str, Any], status: str, reason: str) -> None:
     candidate["status"] = status
     candidate["decision_reason"] = reason
+
+
+def _decide_import(imp: dict[str, Any], status: str, reason: str) -> None:
+    imp["status"] = status
+    imp["reason"] = reason
+
+
+def _decide_import_on_scores(imp: dict[str, Any], runs: list[dict[str, Any]]) -> None:
+    """Pass a received workflow whose mean meets ``pass_score``; unscored escalates."""
+    if not runs:
+        _decide_import(imp, ESCALATE, "gym runs missing")
+        return
+    if any(r.get("score") is None for r in runs):
+        errors = "; ".join(sorted({str(r.get("error")) for r in runs if r.get("score") is None}))
+        _decide_import(imp, ESCALATE, f"the gym could not score it: {errors}")
+        return
+    mean = _mean([r["score"] for r in runs])
+    imp["mean"] = mean
+    summary = f"scored {mean:.2f} on {len(runs)} golden task(s), pass mark {imp['pass_score']:.2f}"
+    _decide_import(imp, PASSED if mean >= imp["pass_score"] else REJECTED, summary)
 
 
 def _mean(values: list[float]) -> float | None:

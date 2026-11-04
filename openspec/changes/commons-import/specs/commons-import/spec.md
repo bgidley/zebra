@@ -1,0 +1,82 @@
+## ADDED Requirements
+
+### Requirement: Judged import pipeline
+The `Commons Import` system workflow SHALL take a signed export file and run, in order: the
+judge (signature and chain verification, YAML validation, every action registered, no name
+clash), `commons_pii_scan`, the ethics gate, the gym in import mode, the `sharing` trust gate and
+`commons_adopt`. Any gate rejecting SHALL end the import with `commons_import_result` holding
+`status: rejected`, the stage and the reason, and SHALL save nothing to the library.
+
+#### Scenario: Owner approves an import
+- **WHEN** a valid signed file passes every gate and the owner approves the trust-gate task
+- **THEN** the workflow is in the library as `<name> (from <publisher display name>)` with
+  `supervised: true` and the offered content hash, and `commons_import_result.status` is `adopted`
+
+#### Scenario: Personal data in a prompt
+- **WHEN** the imported workflow's prompt holds personal data
+- **THEN** the import is rejected at stage `pii` with the scan's reason and no file is written
+
+#### Scenario: Tampered file
+- **WHEN** the file does not verify
+- **THEN** the import is rejected at stage `judge` with the verification reason
+
+#### Scenario: Unregistered action
+- **WHEN** the workflow uses an action this deployment does not have
+- **THEN** the import is rejected at stage `judge`
+
+### Requirement: Gym import mode
+In import mode the gym SHALL run only the candidate workflow, on the offer's golden tasks plus
+local golden tasks for the same capability, scored against their criteria, and SHALL never save
+to the library. It SHALL escalate to the owner, without running anything, when the workflow uses
+any action that is not `always_reversible`, when there are no runnable golden tasks, or when it
+cannot judge; it SHALL never pass a workflow as ungated.
+
+#### Scenario: Irreversible-capable action
+- **WHEN** the imported workflow uses `file_delete`
+- **THEN** no gym child process is created and the gym routes `escalate` with the reason
+
+#### Scenario: No golden tasks
+- **WHEN** neither the offer nor the library has golden tasks for the workflow
+- **THEN** the gym routes `escalate`
+
+#### Scenario: Scored below the pass mark
+- **WHEN** the candidate's mean score is below `pass_score`
+- **THEN** the gym routes `rejected` with the scores and nothing is saved
+
+### Requirement: Supervised pre-run approval
+`check_launch` SHALL treat a library workflow whose `commons.supervised` is set as needing
+approval, whatever the entry point (goal, agent loop, direct run, routine, `subworkflow`,
+`parallel_subworkflows`, `llm_agent` tool). The launch SHALL then create a *Supervised run*
+process whose first task is an owner-only human task "Run imported workflow X for this goal?"
+listing the workflow's actions and flagging those that are not always reversible; nothing of the
+imported workflow SHALL run before it is approved.
+
+#### Scenario: First goal run of an imported workflow
+- **WHEN** a goal selects a supervised workflow
+- **THEN** the goal parks on the pre-run approval task and the workflow has no process yet
+
+#### Scenario: Routine start
+- **WHEN** a scheduled routine starts a supervised workflow
+- **THEN** the same pre-run approval task is raised
+
+#### Scenario: Owner rejects a goal's run
+- **WHEN** the owner rejects the pre-run approval of a goal's workflow
+- **THEN** the goal selects again without that workflow
+
+#### Scenario: Flag clears
+- **WHEN** a supervised workflow completes `SUPERVISED_RUNS` (3) approved runs successfully, or
+  the owner clears it
+- **THEN** its `commons.supervised` is false and later launches need no approval
+
+### Requirement: Owner-only approvals and stop conditions
+Tasks marked `owner_only` SHALL be completable only by the Commons owner. While the Commons is
+off or the kill switch is on, imports, adoption and supervised launches SHALL be refused. The
+emergency override SHALL set `supervised` again on every adopted workflow.
+
+#### Scenario: Another user tries to approve
+- **WHEN** a user who is not the owner submits an owner-only task
+- **THEN** the submission is refused with 403 and the task stays ready
+
+#### Scenario: Kill switch
+- **WHEN** the kill switch is on and a supervised workflow is launched
+- **THEN** the launch is refused

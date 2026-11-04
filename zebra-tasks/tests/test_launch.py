@@ -55,7 +55,7 @@ async def test_create_library_process_creates_when_allowed():
 async def test_create_library_process_refused_creates_nothing(monkeypatch):
     seen: list[tuple[str, dict]] = []
 
-    async def refuse(definition, *, entry, properties):
+    async def refuse(definition, *, entry, properties, **_):
         seen.append((entry, properties))
         raise LaunchRefused("not approved")
 
@@ -87,6 +87,10 @@ ALLOWED_CREATE_PROCESS = {
         "docstring example; create_replay re-runs a recorded process for a human debugging it",
     ),
     "zebra-tasks/zebra_tasks/launch.py": (1, "the choke point itself"),
+    "zebra-tasks/zebra_tasks/commons/supervised.py": (
+        1,
+        "a supervised workflow the owner approved at the choke point (its Supervised run, #230)",
+    ),
     "zebra-tasks/zebra_tasks/agent/gym.py": (
         1,
         "the gym's own sandboxed runs, gated by unsafe_reason (strict mode for imports)",

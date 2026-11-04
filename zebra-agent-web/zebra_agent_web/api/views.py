@@ -1017,6 +1017,10 @@ def task_complete(request, task_id):
     If the task definition has a JSON Schema in properties.schema, the result
     data is validated and coerced against it. Invalid data returns 400.
     """
+    from zebra_agent_web.api.commons_import import owner_only_refusal
+
+    user = request.user
+    refused: list[str] = []
 
     async def _load():
         await engine.ensure_initialized()
@@ -1036,6 +1040,10 @@ def task_complete(request, task_id):
         if definition:
             task_def = definition.tasks.get(task.task_definition_id)
             if task_def:
+                # #230: Commons approvals are the owner's alone
+                refusal = await owner_only_refusal(user, task_def)
+                if refusal:
+                    refused.append(refusal)
                 schema = resolve_task_schema(
                     task_def.properties.get("schema"), process.properties or {}
                 )
@@ -1045,6 +1053,8 @@ def task_complete(request, task_id):
     task, schema, error = async_to_sync(_load)()
     if error:
         return Response({"error": error}, status=status.HTTP_404_NOT_FOUND)
+    if refused:
+        return Response({"error": refused[0]}, status=status.HTTP_403_FORBIDDEN)
 
     req_serializer = CompleteTaskRequestSerializer(data=request.data)
     if not req_serializer.is_valid():
@@ -1677,7 +1687,10 @@ def trust_pause_all(request):
     reason = request.data.get("reason", "")
     trust = _trust_store_sync()
     reverted = async_to_sync(trust.pause_all)(request.user.id, reason, request.user.username)
-    return Response({"reverted": reverted})
+    from zebra_agent_web.api.commons_import import resupervise_on_override
+
+    resupervised = async_to_sync(resupervise_on_override)()
+    return Response({"reverted": reverted, "resupervised": resupervised})
 
 
 def _freeing_disabled() -> bool:

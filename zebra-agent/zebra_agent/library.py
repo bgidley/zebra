@@ -1,5 +1,6 @@
 """Workflow library management."""
 
+import json
 import logging
 import os
 import re
@@ -33,6 +34,11 @@ from zebra_agent.provenance import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: Approved, successful runs after which an adopted workflow is no longer supervised (#230).
+SUPERVISED_RUNS = 3
+#: Local supervision bookkeeping (approved-run counts by content hash), never exported.
+SUPERVISION_FILE = "supervision.json"
 
 # The built-in workflows shipped with zebra-agent (the web installs from here, #229:
 # a blockless file whose hash matches one of them is an unmodified built-in).
@@ -711,6 +717,115 @@ class WorkflowLibrary:
             builtin = bool(content_hash) and content_hash in self.builtin_hashes()
             return legacy_block(builtin=builtin)
         return None
+
+    # ------------------------------------------------------------------
+    # Supervised use of imported workflows (#230)
+    # ------------------------------------------------------------------
+
+    def is_supervised(self, name: str) -> bool:
+        """Whether workflow *name* needs a human's approval before each run.
+
+        True when its ``commons`` block has ``supervised`` set (adopted workflows start
+        so). Retired files count, since a retired workflow still loads by name.
+        """
+        block = self.commons_block(name)
+        return bool(block and block.get("supervised"))
+
+    @property
+    def _supervision_path(self) -> Path:
+        return self.journal.path.parent / SUPERVISION_FILE
+
+    def _supervision_counts(self) -> dict[str, int]:
+        try:
+            data = json.loads(self._supervision_path.read_text())
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, int)}
+
+    def _write_supervision_counts(self, counts: dict[str, int]) -> None:
+        self._supervision_path.parent.mkdir(parents=True, exist_ok=True)
+        self._supervision_path.write_text(json.dumps(counts, sort_keys=True))
+
+    def _set_supervised(self, path: Path, block: dict[str, Any], supervised: bool) -> None:
+        """Rewrite only the ``supervised`` flag of *path*'s block, in place.
+
+        Local bookkeeping, not a content change: the hash, lineage and definition id are
+        unchanged, the file keeps its mtime (so "newest file wins" is unaffected) and
+        nothing is journaled as a new version.
+        """
+        stat = path.stat()
+        text = path.read_text()
+        path.write_text(with_commons(strip_commons(text), {**block, "supervised": supervised}))
+        os.utime(path, (stat.st_atime, stat.st_mtime))
+        name = parse_workflow_yaml(text).get("name")
+        self._cache.pop(name, None)
+
+    def _current_block(self, name: str) -> tuple[Path, dict[str, Any]] | None:
+        path = next(iter(self._files_named(name)), None)
+        if path is None:
+            return None
+        block = read_commons(path.read_text())
+        return (path, block) if isinstance(block, dict) else None
+
+    def record_supervised_run(self, name: str) -> dict[str, Any]:
+        """Count one approved, successful run of supervised workflow *name*.
+
+        After ``SUPERVISED_RUNS`` of them the flag clears. Returns ``{supervised, runs}``.
+        """
+        current = self._current_block(name)
+        if current is None or not current[1].get("supervised"):
+            return {"supervised": False, "runs": 0}
+        path, block = current
+        key = str(block.get("content_sha256") or path.name)
+        counts = self._supervision_counts()
+        counts[key] = counts.get(key, 0) + 1
+        runs = counts[key]
+        if runs >= SUPERVISED_RUNS:
+            self._set_supervised(path, block, False)
+            counts.pop(key, None)
+            logger.info("Workflow %r is no longer supervised after %d approved runs", name, runs)
+        self._write_supervision_counts(counts)
+        return {"supervised": runs < SUPERVISED_RUNS, "runs": runs}
+
+    def clear_supervision(self, name: str) -> bool:
+        """The owner clears the supervised flag of *name*; returns whether it was set."""
+        current = self._current_block(name)
+        if current is None or not current[1].get("supervised"):
+            return False
+        path, block = current
+        self._set_supervised(path, block, False)
+        counts = self._supervision_counts()
+        counts.pop(str(block.get("content_sha256") or path.name), None)
+        self._write_supervision_counts(counts)
+        logger.info("Supervision of workflow %r cleared by the owner", name)
+        return True
+
+    def resupervise_adopted(self) -> list[str]:
+        """Emergency override: supervise every adopted workflow again; returns their names.
+
+        An adopted workflow is one with ``adopted_at`` or ``origin_pubkey`` in its block
+        (a local change keeps ``adopted_at``). Approved-run counts restart.
+        """
+        names: list[str] = []
+        seen: set[str] = set()
+        for wf in self.list_workflow_files():  # newest first: the current file per name
+            if wf.name in seen:
+                continue
+            seen.add(wf.name)
+            block = read_commons(wf.content)
+            if not isinstance(block, dict) or not (
+                block.get("adopted_at") or block.get("origin_pubkey")
+            ):
+                continue
+            if not block.get("supervised"):
+                self._set_supervised(wf.path, block, True)
+            names.append(wf.name)
+        self._write_supervision_counts({})
+        if names:
+            logger.warning("Emergency override: supervising adopted workflows again: %s", names)
+        return names
 
     def builtin_hashes(self) -> set[str]:
         """Content hashes of the shipped built-in workflows (computed once)."""

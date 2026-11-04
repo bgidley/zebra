@@ -331,8 +331,19 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
         # so workflows added since then are candidates too.
         workflows = await self._current_workflows(context, workflows)
 
+        # #230: workflows the owner refused to run for this goal are not candidates.
+        excluded = set(context.process.properties.get("__excluded_workflows__") or [])
+        if excluded:
+            workflows = [
+                w
+                for w in workflows
+                if (w.get("name") if isinstance(w, dict) else getattr(w, "name", w)) not in excluded
+            ]
+
         # A goal may name its workflow up front (e.g. a scheduled routine — F155).
         requested = context.process.properties.get("requested_workflow")
+        if requested and requested in excluded:
+            requested = None
         if requested:
             available_names = {w.get("name") if isinstance(w, dict) else w.name for w in workflows}
             if requested in available_names:
@@ -481,10 +492,9 @@ Note: create_new and create_variant are mutually exclusive. If use_existing, bot
             available_names = {w.get("name") if isinstance(w, dict) else w for w in workflows} - {
                 None
             }
-            if (
-                available_names
-                and not selection.create_new
-                and selection.workflow_name not in available_names
+            if not selection.create_new and (
+                selection.workflow_name in excluded
+                or (available_names and selection.workflow_name not in available_names)
             ):
                 logger.warning(
                     "Selected workflow %r not in library — falling back to create_new",

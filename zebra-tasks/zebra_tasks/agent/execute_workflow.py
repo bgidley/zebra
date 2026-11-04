@@ -21,6 +21,11 @@ from zebra_tasks.agent.history import with_workflow_history
 from zebra_tasks.agent.postmortem import with_lessons
 from zebra_tasks.agent.stuck import with_help_guidance
 from zebra_tasks.agent.user_context import copy_user_properties
+from zebra_tasks.commons.supervised import (
+    SUPERVISED_LAUNCH_KEY,
+    SUPERVISED_REJECTED_KEY,
+    is_supervised_wrapper,
+)
 from zebra_tasks.launch import create_library_process
 
 if TYPE_CHECKING:
@@ -37,6 +42,11 @@ _TERMINAL_STATES = frozenset({ProcessState.FAILED, ProcessState.COMPLETE})
 
 
 #: Process properties a goal workflow's output is usually stored under.
+#: Process property: workflows the owner refused to run for this goal (#230).
+EXCLUDED_WORKFLOWS_KEY = "__excluded_workflows__"
+#: Route taken when the owner refuses a supervised workflow's pre-run approval.
+SUPERVISION_REJECTED_ROUTE = "supervision_rejected"
+
 OUTPUT_KEYS = [
     "answer",
     "summary",
@@ -197,6 +207,20 @@ class ExecuteGoalWorkflowAction(TaskAction):
 
         if context.subflow_results is not None:
             result = await self._collect_child(task, context)
+            rejected = await self._supervision_rejected(task, context)
+            if rejected:
+                # #230: the owner refused an imported workflow's run: select again
+                # without it (the Agent Main Loop routes supervision_rejected back).
+                excluded = list(context.process.properties.get(EXCLUDED_WORKFLOWS_KEY) or [])
+                if rejected not in excluded:
+                    excluded.append(rejected)
+                context.set_process_property(EXCLUDED_WORKFLOWS_KEY, excluded)
+                task.properties.pop(CHILD_PROCESS_ID_KEY, None)
+                result["supervision_rejected"] = rejected
+                context.set_process_property(output_key, result)
+                return TaskResult(
+                    success=True, output=result, next_route=SUPERVISION_REJECTED_ROUTE
+                )
             return self._finish(result, context, output_key, continue_on_failure)
 
         workflow_name = task.properties.get("workflow_name")
@@ -271,6 +295,16 @@ class ExecuteGoalWorkflowAction(TaskAction):
         # The child has finished, failed, or parked on a human task. The engine
         # re-runs this action with subflow_results once it is terminal (#146).
         return TaskResult.suspend([sub_process.id])
+
+    @staticmethod
+    async def _supervision_rejected(task: TaskInstance, context: ExecutionContext) -> str | None:
+        """The workflow name if the child was a supervised run the owner refused (#230)."""
+        child_id = task.properties.get(CHILD_PROCESS_ID_KEY)
+        child = await context.store.load_process(child_id) if child_id else None
+        record = (child.properties or {}).get(SUPERVISED_REJECTED_KEY) if child else None
+        if isinstance(record, dict) and record.get("workflow"):
+            return str(record["workflow"])
+        return None
 
     def _finish(
         self,
@@ -484,6 +518,13 @@ class ExecuteGoalWorkflowAction(TaskAction):
             parent_process_id=context.process.id,
             parent_task_id=task.id,
         )
+
+        # #230: a supervised workflow came back as its Supervised run wrapper, which
+        # starts the real workflow (at the resume point) once the owner approves.
+        if is_supervised_wrapper(sub_process) and start_task_ids:
+            sub_process.properties[SUPERVISED_LAUNCH_KEY]["start_task_ids"] = start_task_ids
+            await context.store.save_process(sub_process)
+            start_task_ids = None
 
         # F129: record the child on the task *before* starting it, so a re-run
         # after an interruption re-attaches instead of spawning a duplicate.

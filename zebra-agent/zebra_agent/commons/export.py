@@ -70,6 +70,8 @@ class ExportVerification:
     yaml: str | None = None
     commons: dict[str, Any] | None = field(default=None)
     content_sha256: str | None = None
+    display_name: str | None = None
+    golden_tasks: list[dict[str, Any]] = field(default_factory=list)
 
 
 def build_export(
@@ -79,11 +81,15 @@ def build_export(
     zebra_pubkey: str,
     chain: list[Event],
     created_at: int | None = None,
+    display_name: str | None = None,
+    golden_tasks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build a signed export of a library workflow (its file text, block included).
 
     The caller has checked ``commons_exportable``; this checks what the file needs: a
     block whose hash matches the content, and a device chain that verifies.
+    *display_name* (the publisher Zebra's name) and *golden_tasks* (``{goal, expected,
+    criteria}`` for the importer's gym, #230) are optional signed content keys.
 
     Raises:
         ExportRefused: No block, a hash mismatch, ``foreign_users`` or an unattributed device.
@@ -114,8 +120,13 @@ def build_export(
         if not result.ok:
             raise ExportRefused(f"this device is not attributed to its Zebra ({result.reason})")
     name = _name_of(body)
+    payload: dict[str, Any] = {"name": name, "yaml": body, "commons": block}
+    if display_name:
+        payload["display_name"] = display_name
+    if golden_tasks:
+        payload["golden_tasks"] = [_golden_payload(t) for t in golden_tasks]
     content = json.dumps(
-        {"name": name, "yaml": body, "commons": block},
+        payload,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -137,8 +148,13 @@ async def export_workflow(
     device_secret: str,
     zebra_pubkey: str,
     chain: list[Event],
+    display_name: str | None = None,
+    with_golden: bool = False,
 ) -> str:
     """Export the active workflow *name* as the text of a signed export file.
+
+    *display_name* is the publisher's name shown to importers; *with_golden* ships the
+    library's golden tasks for the workflow (the importer scans them for personal data).
 
     Raises:
         ExportRefused: Unknown workflow, not ``commons_exportable`` (system, foreign or
@@ -153,12 +169,29 @@ async def export_workflow(
             "users' runs, or no provenance yet)"
         )
     text = info.definition_path.read_text()
-    data = build_export(text, device_secret=device_secret, zebra_pubkey=zebra_pubkey, chain=chain)
+    golden = [t.to_dict() for t in library.list_golden_tasks(name)] if with_golden else None
+    data = build_export(
+        text,
+        device_secret=device_secret,
+        zebra_pubkey=zebra_pubkey,
+        chain=chain,
+        display_name=display_name,
+        golden_tasks=golden,
+    )
     file_text = dump_export(data)
     check = verify_export(file_text, revocations=chain)
     if not check.ok:  # pragma: no cover - build_export guards every reason
         raise ExportRefused(f"export failed its own verification ({check.reason})")
     return file_text
+
+
+def _golden_payload(task: dict[str, Any]) -> dict[str, Any]:
+    """The shareable part of a golden task: goal, expected outcome and criteria."""
+    return {
+        "goal": str(task.get("goal", "")),
+        "expected": str(task.get("expected", "")),
+        "criteria": [str(c) for c in task.get("criteria") or []],
+    }
 
 
 def dump_export(data: dict[str, Any]) -> str:
@@ -255,6 +288,12 @@ def verify_export(
         return ExportVerification(False, "hash_mismatch", zebra_pubkey, event.pubkey)
     if block.get("foreign_users") is not False:
         return ExportVerification(False, "foreign_users", zebra_pubkey, event.pubkey)
+    display_name = content.get("display_name")
+    golden = content.get("golden_tasks", [])
+    if (display_name is not None and not isinstance(display_name, str)) or not (
+        isinstance(golden, list) and all(isinstance(t, dict) for t in golden)
+    ):
+        return ExportVerification(False, "malformed", zebra_pubkey, event.pubkey)
     return ExportVerification(
         True,
         "ok",
@@ -264,6 +303,8 @@ def verify_export(
         yaml=body,
         commons=block,
         content_sha256=actual,
+        display_name=display_name or None,
+        golden_tasks=golden,
     )
 
 

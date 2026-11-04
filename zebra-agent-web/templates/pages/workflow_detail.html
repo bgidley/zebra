@@ -23,6 +23,15 @@
                 Run
             </a>
             <a href="{% url 'workflow_genealogy' workflow_name %}" class="btn">Genealogy</a>
+            {% if supervised %}
+            <span class="rounded-full border border-needs/60 px-2.5 py-0.5 text-xs text-needs" data-testid="supervised-badge"
+                  title="Imported from another Zebra: each run asks you first">Supervised</span>
+            <form method="post" action="/commons/workflows/{{ workflow_name|urlencode }}/clear-supervision/"
+                  onsubmit="return confirm('Let this imported workflow run without asking you first?');">
+                {% csrf_token %}
+                <button class="btn" data-testid="clear-supervision">Stop asking</button>
+            </form>
+            {% endif %}
             {% if retired %}
             <button hx-post="/workflows/{{ workflow_name }}/restore/" class="btn">Restore</button>
             {% else %}

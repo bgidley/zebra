@@ -1,0 +1,202 @@
+name: "Commons Import"
+description: "Judge a signed workflow file from another Zebra and, if it passes and the owner agrees, adopt it as a supervised workflow"
+tags: ["agent", "internal", "system", "commons"]
+use_when: "INTERNAL USE ONLY - started by the owner uploading a workflow file on /commons/ or `manage.py commons_import FILE --judge` (#230)"
+version: 1
+first_task: judge
+result_key: commons_import_result
+# Run inputs (process properties):
+#   export_file:    the signed export file's text (zebra-workflow-export)
+#   expected_zebra: optional hex Zebra pubkey the file must come from
+inputs:
+  type: object
+  required: [export_file]
+  properties:
+    export_file:
+      type: string
+      description: "The signed workflow export file"
+    expected_zebra:
+      type: string
+      description: "Accept only this publisher (hex Zebra pubkey)"
+
+tasks:
+  judge:
+    name: "Verify and Validate"
+    action: commons_judge_import
+    properties:
+      export_file: "{{export_file}}"
+      expected_zebra: "{{expected_zebra}}"
+      output_key: offer
+
+  pii_scan:
+    name: "Scan for Personal Data"
+    action: commons_pii_scan
+    properties:
+      yaml: "{{offer.yaml}}"
+      golden_tasks: "{{offer.golden_tasks}}"
+      output_key: pii_scan
+
+  ethics:
+    name: "Ethics Review"
+    action: ethics_gate
+    properties:
+      goal: "Adopt a workflow another Zebra published into my library and run it for my owner's goals"
+      check_type: plan_review
+      plan_context: "{{offer.yaml}}"
+      output_key: import_ethics
+
+  gym:
+    name: "Test on Golden Tasks"
+    action: run_golden_gym
+    properties:
+      idempotent: true
+      mode: import
+      offer: "{{offer}}"
+      promote: false
+      pass_score: 0.6
+      timeout: 150
+      max_runs: 6
+      output_key: golden_gym
+
+  trust:
+    name: "Trust Gate (sharing)"
+    action: trust_gate
+    properties:
+      domain: sharing
+      target_task_id: adopt
+      action_description: "Adopt the imported workflow {{offer.local_name}} into the library (supervised)"
+      output_key: import_trust
+
+  review:
+    name: "Prepare Owner Review"
+    action: commons_import_review
+    properties:
+      output_key: import_review
+
+  owner_approval:
+    name: "Adopt imported workflow?"
+    auto: false
+    properties:
+      owner_only: true
+      show_prior_outputs: false
+      schema:
+        type: object
+        title: "Adopt this imported workflow?"
+        description: "Only the Commons owner can answer. Adopted workflows stay supervised: each run asks you first until it has 3 approved runs."
+        required: [decision]
+        properties:
+          review:
+            type: string
+            title: "What I found"
+            readOnly: true
+            default: "{{import_review}}"
+          decision:
+            type: string
+            title: "Decision"
+            enum: [adopt, reject]
+          note:
+            type: string
+            title: "Note"
+            format: multiline
+
+  adopt:
+    name: "Adopt Workflow"
+    action: commons_adopt
+    properties:
+      offer: "{{offer}}"
+      export_file: "{{export_file}}"
+      output_key: commons_adoption
+
+  adopt_approved:
+    name: "Adopt Approved Workflow"
+    action: commons_adopt
+    properties:
+      offer: "{{offer}}"
+      export_file: "{{export_file}}"
+      approval_task: owner_approval
+      output_key: commons_adoption
+
+  record_adopted:
+    name: "Record Adoption"
+    action: commons_record_import
+    properties:
+      status: adopted
+      stage: adopt
+      reason: "adopted as {{commons_adoption.name}}, supervised"
+
+  rejected_judge:
+    name: "Record Rejection (judge)"
+    action: commons_record_import
+    properties:
+      status: rejected
+      stage: judge
+      reason: "{{import_judgement.reason}}"
+
+  rejected_pii:
+    name: "Record Rejection (personal data)"
+    action: commons_record_import
+    properties:
+      status: rejected
+      stage: pii
+      reason: "{{pii_scan.reason}}"
+
+  rejected_ethics:
+    name: "Record Rejection (ethics)"
+    action: commons_record_import
+    properties:
+      status: rejected
+      stage: ethics
+      reason: "{{import_ethics.overall_reasoning}}"
+
+  rejected_gym:
+    name: "Record Rejection (golden tasks)"
+    action: commons_record_import
+    properties:
+      status: rejected
+      stage: gym
+      reason: "{{golden_gym.import.reason}}"
+
+  rejected_owner:
+    name: "Record Rejection (owner)"
+    action: commons_record_import
+    properties:
+      status: rejected
+      stage: owner
+      reason: "{{commons_adoption.reason}}"
+
+  rejected_adopt:
+    name: "Record Rejection (adoption)"
+    action: commons_record_import
+    properties:
+      status: rejected
+      stage: adopt
+      reason: "{{commons_adoption.reason}}"
+
+routings:
+  - {from: judge, to: pii_scan, condition: route_name, name: proceed}
+  - {from: judge, to: rejected_judge, condition: route_name, name: reject}
+
+  - {from: pii_scan, to: ethics, condition: route_name, name: clean}
+  - {from: pii_scan, to: rejected_pii, condition: route_name, name: rejected}
+
+  - {from: ethics, to: gym, condition: route_name, name: proceed}
+  - {from: ethics, to: rejected_ethics, condition: route_name, name: reject}
+  # A values dilemma is the owner's call
+  - {from: ethics, to: review, condition: route_name, name: escalate}
+
+  - {from: gym, to: trust, condition: route_name, name: passed}
+  - {from: gym, to: rejected_gym, condition: route_name, name: rejected}
+  # Not runnable safely, no golden tasks, or unscored: never ungated, the owner decides
+  - {from: gym, to: review, condition: route_name, name: escalate}
+
+  - {from: trust, to: adopt, condition: route_name, name: proceed}
+  - {from: trust, to: review, condition: route_name, name: approve}
+
+  - {from: review, to: owner_approval}
+  - {from: owner_approval, to: adopt_approved}
+
+  - {from: adopt, to: record_adopted, condition: route_name, name: adopted}
+  - {from: adopt, to: rejected_adopt, condition: route_name, name: refused}
+  - {from: adopt_approved, to: record_adopted, condition: route_name, name: adopted}
+  - {from: adopt_approved, to: rejected_owner, condition: route_name, name: declined}
+  - {from: adopt_approved, to: rejected_adopt, condition: route_name, name: refused}

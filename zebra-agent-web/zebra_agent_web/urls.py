@@ -29,6 +29,17 @@ urlpatterns = [
     ),
     path("commons/backup/", commons_views.commons_backup, name="commons_backup"),
     path("commons/restore/", commons_views.commons_restore, name="commons_restore"),
+    # Judged import and supervised use (#230)
+    path(
+        "commons/workflow-import/",
+        commons_views.commons_workflow_import,
+        name="commons_workflow_import",
+    ),
+    path(
+        "commons/workflows/<str:name>/clear-supervision/",
+        commons_views.commons_clear_supervision,
+        name="commons_clear_supervision",
+    ),
     # First-run setup
     path("setup/", web_views.setup_view, name="setup"),
     # Web UI (HTML + HTMX) - Agent focused

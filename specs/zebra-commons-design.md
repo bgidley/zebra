@@ -251,6 +251,22 @@ So adoption does two things:
 - Attestations and outcome reports are only ever published for a workflow whose current hash equals
   the offered hash. Runs of a locally modified copy never count against the publisher.
 
+**Judged import and supervised use (S3) as built (#230, OpenSpec `commons-import`).**
+- No relays yet: the import takes a signed export file (S2b), now optionally carrying signed
+  `display_name` and `golden_tasks`. The owner uploads it on `/commons/` (or `manage.py
+  commons_import F --judge`); `commons_judge_import` stands in for the reputation step and does
+  validation + registry check. Rejections are recorded on the run (`commons_import_result`,
+  stage + reason), not attested.
+- Gym import mode scores only the candidate against a pass mark (`pass_score` 0.6), since there
+  is no local version to regress against.
+- Supervised use is a generated *Supervised run* wrapper process created by
+  `create_library_process` when `check_launch` says so, not a check inside
+  `execute_goal_workflow`: every entry point then parks on the same owner-only approval with no
+  change of its own. A rejected goal run routes `supervision_rejected` back to the selector with
+  the workflow excluded. Approved-run counts are local (`.lineage/supervision.json`).
+- Stops: the kill switch and `COMMONS_ENABLED` off refuse imports, adoption and supervised
+  launches; the emergency override re-supervises every adopted workflow.
+
 ### Commons cache (S4–S7, Django models)
 
 | Model | Purpose |
