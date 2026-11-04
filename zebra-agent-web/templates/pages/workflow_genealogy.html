@@ -2,7 +2,7 @@
 {% comment %}
 Private genealogy of one workflow (#238): the lineage DAG (api/genealogy_view.py) and one
 card per version, newest first. Local to this device and never published. Reasons are only
-ever ones a writer recorded; per-sphere share status and forks are empty until skill sync
+ever ones a writer recorded; per-sphere share status and sync forks come from skill sync
 (#236). No JavaScript.
 {% endcomment %}
 
@@ -121,9 +121,9 @@ ever ones a writer recorded; per-sphere share status and forks are empty until s
                 <h2 id="share-title" class="text-base font-semibold text-ink">Shared with other spheres</h2>
             </div>
             {% if share_status %}
-            <ul class="divide-y divide-line">{% for s in share_status %}<li class="px-5 py-2 text-sm text-ink">{{ s.sphere }}: {{ s.status }}</li>{% endfor %}</ul>
+            <ul class="divide-y divide-line">{% for s in share_status %}<li class="px-5 py-2 text-sm text-ink" data-sphere="{{ s.sphere }}" data-status="{{ s.status }}"><span class="font-medium">{{ s.sphere }}</span>: {{ s.label }}</li>{% endfor %}</ul>
             {% else %}
-            <p class="px-5 py-4 text-sm text-muted">Nothing shared yet. Per-sphere share status arrives with skill sync (#236).</p>
+            <p class="px-5 py-4 text-sm text-muted">Nothing shared yet. I only suggest sharing a workflow with your other spheres after it has worked here.</p>
             {% endif %}
         </section>
         <section class="panel" aria-labelledby="forks-title" data-testid="genealogy-forks">
@@ -131,7 +131,7 @@ ever ones a writer recorded; per-sphere share status and forks are empty until s
                 <h2 id="forks-title" class="text-base font-semibold text-ink">Forks</h2>
             </div>
             {% if forks %}
-            <ul class="divide-y divide-line">{% for f in forks %}<li class="px-5 py-2 text-sm text-ink">{{ f.summary }}</li>{% endfor %}</ul>
+            <ul class="divide-y divide-line">{% for f in forks %}<li class="px-5 py-2 text-sm text-ink" data-fork="{{ f.fork_name }}"><a class="underline hover:text-ink" href="{% url 'workflow_genealogy' f.fork_name %}">{{ f.fork_name }}</a>: both changed, waiting for your choice</li>{% endfor %}</ul>
             {% else %}
             <p class="px-5 py-4 text-sm text-muted">No forks waiting for a choice.</p>
             {% endif %}

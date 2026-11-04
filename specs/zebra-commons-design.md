@@ -4,7 +4,7 @@
 **Requirements**: REQ-PRIN-007, REQ-NET-001 – REQ-NET-010
 **Status**: Reviewed 2026-10-26; delivery planned in waves (see the end). Implemented: the leak guard
 (#237), S1 identity (#228, see "Identity (S1) as built" below), S2a provenance and S2b export
-(#229, see "Export and adoption (S2b) as built" below). The reputation market (S7) is parked as its
+(#229, see "Export and adoption (S2b) as built" below) and the S3b-1 skill sync logic (#236, see "Skill sync (S3b-1) as built" below). The reputation market (S7) is parked as its
 own later theme.
 
 > **Owner decisions (2026-10-26)**
@@ -483,6 +483,27 @@ reach home.
      step.
    - A workflow whose `tainted_by` includes an `observed` sphere always needs a human approval to go
      public, whatever the trust level.
+
+**Skill sync (S3b-1) as built (#236, OpenSpec `commons-skill-sync`).** Over an in-memory
+transport only; the relay, NIP-44 and receipts are #246.
+- `zebra_agent/commons/client.py`: `CommonsClient` ABC plus `InMemoryRelay` /
+  `InMemoryCommonsClient`. `check_publish` (the hard filter) refuses `SKILL` (provisional kind
+  4236) on any relay that is not private.
+- `skill.py`: one event per recipient device (certified, unrevoked, sphere in `share_with`, never
+  the sender), signed by the sending device, `p`-tagged, plaintext with `["enc","none"]` until
+  NIP-44. The receiver accepts only its own Zebra's devices and reads the sender's sphere from its
+  cert, never from the event body; its own sphere must be in the sent `share_with`.
+- `sync.py` `SyncService` (`extras["__commons_sync__"]`) proposes, sends and merges. Share
+  decisions are `share` records in the #238 journal per (hash, sphere), so each version is asked
+  about once and the genealogy shows each sphere's status.
+- System workflows `skill_share.yaml` and `skill_receive.yaml` hold the gates and human tasks
+  (`share_approval`, `observed_share_approval`, `receive_approval`, `fork_choice`). A sensitive
+  workflow for an unobserved sphere is still asked about, with no autonomy skip.
+- A received workflow keeps its sent `supervised` (same Zebra, normal trust); fast-forward
+  retires the old file; a fork is `<name> (from <sphere>)` with `fork_of` on both copies.
+- Leak-guard `kept` (journal) blocks a version from being proposed.
+- Not yet: building the service from the web settings (#246), a Share button on the workflow page
+  (`start_share(manual=True)` exists), `after_run` wiring into goal runs (#246, with the service).
 
 ### Leak guard (all LLM workflow writers; #237)
 Problem: the dream cycle's evaluator prompt includes raw **sample failed goals**

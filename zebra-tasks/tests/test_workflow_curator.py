@@ -178,6 +178,26 @@ async def test_older_same_name_copy_is_retired(library, context):
     assert [f.path.name for f in library.list_workflow_files()] == ["flow_1.yaml"]
 
 
+async def test_diverged_and_forked_copies_are_not_retired(library, context):
+    """Only an ancestor of the current copy is superseded; forks wait for a human (#236)."""
+    from zebra_agent.provenance import read_commons, with_commons
+
+    first = library.add_workflow(_yaml("Flow"))
+    path = next(iter(library._files_named(first)))
+    # A second file with unrelated lineage (as a sync or hand copy would give)
+    other = library.library_path / "flow_9.yaml"
+    block = read_commons(path.read_text())
+    other_block = dict(block, content_sha256="f" * 64, ancestors=[], parent_sha256=None)
+    other.write_text(with_commons(path.read_text(), other_block))
+    assert not (await _run(context)).output["retired"]
+
+    forked = dict(block, fork_of="e" * 64)
+    path.write_text(with_commons(path.read_text(), forked))
+    other.unlink()
+    library.add_workflow(_yaml("Flow"))  # a descendant of the fork copy
+    assert not [d for d in (await _run(context)).output["retired"] if d["file"] == path.name]
+
+
 async def test_dry_run_reports_without_retiring(library, metrics, context):
     library.add_workflow(_yaml("Bad"))
     metrics.get_all_stats.return_value = [_stats("Bad", 10, 0)]

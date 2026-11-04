@@ -105,6 +105,7 @@ ALLOWED_CREATE_PROCESS = {
         "built-in Resolve Knowledge Contradiction",
     ),
     "zebra-agent/zebra_agent/postmortem.py": (1, "built-in Postmortem"),
+    "zebra-agent/zebra_agent/commons/sync.py": (2, "built-in Skill Share and Skill Receive (#236)"),
     "zebra-agent-web/zebra_agent_web/api/goals.py": (
         1,
         "queues the Agent Main Loop; its goal workflow launches via execute_goal_workflow",

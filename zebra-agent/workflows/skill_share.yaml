@@ -1,0 +1,216 @@
+# Skill Share (#236, Commons S3b-1)
+#
+# Zebra suggests sharing one workflow with another sphere of the same Zebra (e.g. home →
+# work); a human (or, only where allowed, earned `sharing` autonomy) approves; then the
+# workflow is scanned again on the exact bytes and sent as SKILL events to the certified
+# devices of that sphere. Started by SyncService (after runs, after the dream cycle, or a
+# manual share). Properties: workflow_name, target_sphere, trigger, manual.
+#
+# Every gate fails closed. Observed-sphere approvals are `observed_share_approval`, a
+# human task and never a trust gate, so freeing Zebra does not skip them.
+
+name: "Skill Share"
+version: 1
+description: "Suggest sharing a workflow with another of this Zebra's spheres, then send it once approved."
+tags: ["system", "commons"]
+use_when: "INTERNAL USE ONLY — started by skill sync"
+first_task: prepare
+
+tasks:
+  prepare:
+    name: "Check Share"
+    action: skill_share_prepare
+    properties:
+      workflow_name: "{{workflow_name}}"
+      target_sphere: "{{target_sphere}}"
+      trigger: "{{trigger}}"
+      manual: "{{manual}}"
+
+  pii_scan:
+    name: "Personal-Data Scan"
+    action: commons_pii_scan
+    properties:
+      yaml: "{{share.yaml}}"
+      output_key: pii_scan
+
+  confidentiality_scan:
+    name: "Confidentiality Scan"
+    action: commons_confidentiality_scan
+    properties:
+      yaml: "{{share.yaml}}"
+      output_key: confidentiality_scan
+
+  sensitivity:
+    name: "Sensitivity Check"
+    action: commons_sensitivity_check
+    properties:
+      yaml: "{{share.yaml}}"
+      sphere: "{{share.sphere}}"
+      observed: "{{share.observed}}"
+      output_key: sensitivity
+
+  route:
+    name: "Choose Approval"
+    action: skill_share_route
+
+  sharing_gate:
+    name: "Sharing Trust Gate"
+    action: trust_gate
+    properties:
+      domain: sharing
+      target_task_id: send
+      action_description: "Share the workflow {{share.name}} with my {{share.sphere}} devices"
+
+  share_approval:
+    name: "Share Workflow"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "{{share.title}}"
+        description: "{{share.reason}}"
+        required: [decision]
+        properties:
+          workflow:
+            type: string
+            title: "Workflow"
+            format: multiline
+            readOnly: true
+            default: "{{share.yaml}}"
+          diff:
+            type: string
+            title: "Changes against the copy there"
+            format: multiline
+            readOnly: true
+            default: "{{share.diff}}"
+          decision:
+            type: string
+            title: "Decision"
+            enum: [approve, decline]
+            enumLabels: ["Share it", "Keep it here"]
+          note:
+            type: string
+            title: "Note"
+
+  observed_share_approval:
+    name: "Share Workflow (Managed Device)"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "{{share.title}}"
+        description: "{{share.reason}} {{share.sphere}} includes a device managed by someone else, or this workflow was shaped there. This approval is never skipped."
+        required: [decision]
+        properties:
+          workflow:
+            type: string
+            title: "Workflow"
+            format: multiline
+            readOnly: true
+            default: "{{share.yaml}}"
+          diff:
+            type: string
+            title: "Changes against the copy there"
+            format: multiline
+            readOnly: true
+            default: "{{share.diff}}"
+          visible_on_managed_device:
+            type: boolean
+            title: "I understand this will be visible on a managed device"
+            default: false
+          decision:
+            type: string
+            title: "Decision"
+            enum: [approve, decline]
+            enumLabels: ["Share it", "Keep it here"]
+          note:
+            type: string
+            title: "Note"
+
+  record_auto:
+    name: "Record Approval"
+    action: skill_share_record
+    properties:
+      auto: true
+
+  record_asked:
+    name: "Record Decision"
+    action: skill_share_record
+    properties:
+      approval_task: share_approval
+
+  record_observed:
+    name: "Record Decision"
+    action: skill_share_record
+    properties:
+      approval_task: observed_share_approval
+
+  send_pii:
+    name: "Personal-Data Scan (Send)"
+    action: commons_pii_scan
+    properties:
+      yaml: "{{share.yaml}}"
+      output_key: send_pii
+
+  send_confidential:
+    name: "Confidentiality Scan (Send)"
+    action: commons_confidentiality_scan
+    properties:
+      yaml: "{{share.yaml}}"
+      output_key: send_confidential
+
+  send:
+    name: "Send Workflow"
+    action: skill_send
+
+  blocked_pii:
+    name: "Record Block"
+    action: skill_sync_record
+    properties:
+      status: blocked
+      reason: "personal-data scan: {{pii_scan.reason}}"
+
+  blocked_confidential:
+    name: "Record Block"
+    action: skill_sync_record
+    properties:
+      status: blocked
+      reason: "confidentiality scan: {{confidentiality_scan.reason}}"
+
+  blocked_at_send:
+    name: "Record Block"
+    action: skill_sync_record
+    properties:
+      status: blocked
+      reason: "send-time scan"
+
+  finish:
+    name: "Done"
+    # No action: ends the run on a route that needs nothing more.
+
+routings:
+  - {from: prepare, to: pii_scan, condition: route_name, name: propose}
+  - {from: pii_scan, to: confidentiality_scan, condition: route_name, name: clean}
+  - {from: pii_scan, to: blocked_pii, condition: route_name, name: rejected}
+  - {from: confidentiality_scan, to: sensitivity, condition: route_name, name: clean}
+  - {from: confidentiality_scan, to: blocked_confidential, condition: route_name, name: rejected}
+  - {from: sensitivity, to: route}
+  - {from: route, to: sharing_gate, condition: route_name, name: trusted}
+  - {from: route, to: share_approval, condition: route_name, name: ask}
+  - {from: route, to: observed_share_approval, condition: route_name, name: observed}
+  - {from: sharing_gate, to: record_auto, condition: route_name, name: proceed}
+  - {from: sharing_gate, to: share_approval, condition: route_name, name: approve}
+  - {from: share_approval, to: record_asked}
+  - {from: observed_share_approval, to: record_observed}
+  - {from: record_auto, to: send_pii, condition: route_name, name: approved}
+  - {from: record_asked, to: send_pii, condition: route_name, name: approved}
+  - {from: record_observed, to: send_pii, condition: route_name, name: approved}
+  - {from: send_pii, to: send_confidential, condition: route_name, name: clean}
+  - {from: send_pii, to: blocked_at_send, condition: route_name, name: rejected}
+  - {from: send_confidential, to: send, condition: route_name, name: clean}
+  - {from: send_confidential, to: blocked_at_send, condition: route_name, name: rejected}
+  - {from: prepare, to: finish, condition: route_name, name: skip}
+  - {from: route, to: finish, condition: route_name, name: never}
+  - {from: record_auto, to: finish, condition: route_name, name: declined}
+  - {from: record_asked, to: finish, condition: route_name, name: declined}
+  - {from: record_observed, to: finish, condition: route_name, name: declined}

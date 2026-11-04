@@ -1,0 +1,152 @@
+# Skill Receive (#236, Commons S3b-1)
+#
+# A SKILL event from another device of this Zebra arrived. The short import pipeline:
+# verify (cert chain to this Zebra, hash, sphere in share_with, valid definition, every
+# action registered), the personal-data and confidentiality scans again on this side,
+# `trust_gate (sharing)` (or a human approval), then adopt by lineage: no-op, fast-forward,
+# or a fork saved as "<name> (from <sphere>)" with a choice task. Reputation, market and
+# gym are skipped (same Zebra); the workflow keeps its supervised flag as sent and the
+# ethics gate still runs at every execution. Started by SyncService.receive_pending with
+# the event in `skill_event`.
+
+name: "Skill Receive"
+version: 1
+description: "Check and adopt a workflow sent by another of this Zebra's devices."
+tags: ["system", "commons"]
+use_when: "INTERNAL USE ONLY — started by skill sync"
+first_task: verify
+
+tasks:
+  verify:
+    name: "Verify Skill"
+    action: skill_receive_verify
+    properties:
+      event: "{{skill_event}}"
+
+  pii_scan:
+    name: "Personal-Data Scan"
+    action: commons_pii_scan
+    properties:
+      yaml: "{{incoming.yaml}}"
+      output_key: pii_scan
+
+  confidentiality_scan:
+    name: "Confidentiality Scan"
+    action: commons_confidentiality_scan
+    properties:
+      yaml: "{{incoming.yaml}}"
+      output_key: confidentiality_scan
+
+  sharing_gate:
+    name: "Sharing Trust Gate"
+    action: trust_gate
+    properties:
+      domain: sharing
+      target_task_id: adopt
+      action_description: "Adopt the workflow {{incoming.name}} sent by my {{incoming.sender_sphere}} device"
+
+  receive_approval:
+    name: "Adopt Synced Workflow"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "Adopt {{incoming.name}} from {{incoming.sender_sphere}}?"
+        description: "{{incoming.reason}}"
+        required: [decision]
+        properties:
+          workflow:
+            type: string
+            title: "Workflow"
+            format: multiline
+            readOnly: true
+            default: "{{incoming.yaml}}"
+          diff:
+            type: string
+            title: "Changes against my copy"
+            format: multiline
+            readOnly: true
+            default: "{{incoming.diff}}"
+          decision:
+            type: string
+            title: "Decision"
+            enum: [approve, decline]
+            enumLabels: ["Adopt it", "Not here"]
+
+  adopt:
+    name: "Adopt Skill"
+    action: skill_receive_adopt
+
+  adopt_approved:
+    name: "Adopt Skill"
+    action: skill_receive_adopt
+    properties:
+      approval_task: receive_approval
+
+  fork_choice:
+    name: "Choose Between Versions"
+    auto: false
+    properties:
+      schema:
+        type: object
+        title: "{{received.name}} changed here and in {{incoming.sender_sphere}}"
+        description: "I kept both: the version from {{incoming.sender_sphere}} is saved as {{received.fork_name}}. Which should I keep?"
+        required: [keep]
+        properties:
+          diff:
+            type: string
+            title: "Their changes against my copy"
+            format: multiline
+            readOnly: true
+            default: "{{incoming.diff}}"
+          keep:
+            type: string
+            title: "Keep"
+            enum: [mine, theirs, both]
+            enumLabels: ["Mine", "Theirs", "Both, as separate workflows"]
+
+  resolve_fork:
+    name: "Resolve Fork"
+    action: skill_fork_resolve
+    properties:
+      choice_task: fork_choice
+
+  rejected_pii:
+    name: "Record Rejection"
+    action: skill_sync_record
+    properties:
+      incoming: true
+      status: rejected
+      reason: "personal-data scan: {{pii_scan.reason}}"
+
+  rejected_confidential:
+    name: "Record Rejection"
+    action: skill_sync_record
+    properties:
+      incoming: true
+      status: rejected
+      reason: "confidentiality scan: {{confidentiality_scan.reason}}"
+
+  finish:
+    name: "Done"
+    # No action: ends the run on a route that needs nothing more.
+
+routings:
+  - {from: verify, to: pii_scan, condition: route_name, name: verified}
+  - {from: pii_scan, to: confidentiality_scan, condition: route_name, name: clean}
+  - {from: pii_scan, to: rejected_pii, condition: route_name, name: rejected}
+  - {from: confidentiality_scan, to: sharing_gate, condition: route_name, name: clean}
+  - {from: confidentiality_scan, to: rejected_confidential, condition: route_name, name: rejected}
+  - {from: sharing_gate, to: adopt, condition: route_name, name: proceed}
+  - {from: sharing_gate, to: receive_approval, condition: route_name, name: approve}
+  - {from: receive_approval, to: adopt_approved}
+  - {from: adopt, to: fork_choice, condition: route_name, name: fork}
+  - {from: adopt_approved, to: fork_choice, condition: route_name, name: fork}
+  - {from: fork_choice, to: resolve_fork}
+  - {from: verify, to: finish, condition: route_name, name: rejected}
+  - {from: verify, to: finish, condition: route_name, name: nothing_to_do}
+  - {from: adopt, to: finish, condition: route_name, name: adopted}
+  - {from: adopt, to: finish, condition: route_name, name: refused}
+  - {from: adopt_approved, to: finish, condition: route_name, name: adopted}
+  - {from: adopt_approved, to: finish, condition: route_name, name: declined}
+  - {from: adopt_approved, to: finish, condition: route_name, name: refused}

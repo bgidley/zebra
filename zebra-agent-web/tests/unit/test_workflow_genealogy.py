@@ -173,3 +173,25 @@ def test_diff_lines_drop_file_headers():
         ("add", "+new"),
         ("context", " same"),
     ]
+
+
+async def test_share_status_and_forks_are_listed(library, rf):
+    from zebra_agent.commons.sync import SENT, record_share
+    from zebra_agent.provenance import read_commons, with_commons
+
+    library.save(_YAML, writer="human")
+    block = library.commons_block("Old Search")
+    library.approve_share("Old Search", "work", block["content_sha256"])
+    record_share(library, "Old Search", block["content_sha256"], "work", SENT)
+    record_share(library, "Old Search", block["content_sha256"], "office", "sensitive")
+    fork = library.save(V2.replace('"Old Search"', '"Old Search (from work)"'), writer="human")
+    fork_block = read_commons(fork.read_text())
+    fork_block["fork_of"] = block["content_sha256"]
+    fork.write_text(with_commons(fork.read_text(), fork_block))
+
+    _, html = await _page(rf)
+
+    assert 'data-sphere="work" data-status="sent"' in html and "work</span>: shared" in html
+    assert "never proposed (sensitive)" in html
+    assert 'data-fork="Old Search (from work)"' in html
+    assert "Nothing shared yet" not in html and "No forks waiting" not in html

@@ -276,8 +276,8 @@ class Genealogy:
     edges: list[tuple[str, str]]  # (parent key, child key)
     current: str | None
     rejected: list[dict[str, Any]] = field(default_factory=list)  # refused saves, newest first
-    # Per-sphere share status and forks arrive with skill sync (S3b-1, #236):
-    # nothing on this device records them yet.
+    # Skill sync (#236): the current version's status per sphere (journal share
+    # records and ``share_with``) and the sync forks waiting for a choice.
     share_status: list[dict[str, Any]] = field(default_factory=list)
     forks: list[dict[str, Any]] = field(default_factory=list)
 
@@ -501,10 +501,27 @@ def build_genealogy(library: WorkflowLibrary, name: str) -> Genealogy | None:
         r["reason"] = normalize_reason(r.get("reason"))
         r["leak_guard"] = scrub_leak(r.get("leak_guard"))
         r["writer_label"] = writer_label(r.get("writer"))
+    from zebra_agent.commons.sync import share_status
+
+    current_file = next((f for f in files if f.name == name and f.retired is None), None)
+    current_block = current_file.block if current_file is not None else None
+    forks = [
+        {
+            "fork_name": f.name,
+            "of": name,
+            "summary": f"{f.name} forked from {name}: both changed, waiting for your choice",
+        }
+        for f in members
+        if f.retired is None and f.fork_of and f.name != name
+    ]
     return Genealogy(
         name=name,
         versions=ordered,
         edges=sorted((p, c) for p, c in edges if p in versions and c in versions),
         current=current,
         rejected=rejected,
+        share_status=share_status(
+            library, name, (current_block or {}).get("content_sha256"), current_block
+        ),
+        forks=forks,
     )
