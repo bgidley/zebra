@@ -2,10 +2,12 @@
 
 Usage:
     python manage.py commons_export "Web Research" --out web_research.zebra.json
+    python manage.py commons_export "Web Research" --with-golden --out web_research.zebra.json
 
 Signed with this device's key and attributed to the Zebra by its ``DEVICE_CERT``.
 Refused unless the workflow may leave the deployment (``commons_exportable``). Writes
 the file (or stdout with ``--out -``); exits 1 with the reason on failure.
+``--with-golden`` ships the workflow's golden tasks for the importer's gym (#230).
 """
 
 import asyncio
@@ -20,12 +22,17 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("name", help="Workflow name")
         parser.add_argument("--out", default="-", help="Output file, or - for stdout")
+        parser.add_argument(
+            "--with-golden", action="store_true", help="Include the workflow's golden tasks"
+        )
 
     def handle(self, *args, **options):
         from zebra_agent_web.api.commons_export import export_workflow_file
 
         try:
-            text = asyncio.run(export_workflow_file(options["name"]))
+            text = asyncio.run(
+                export_workflow_file(options["name"], with_golden=options["with_golden"])
+            )
         except ValueError as e:  # CommonsError, ExportRefused
             self.stderr.write(f"Export refused: {e}")
             raise SystemExit(1) from e

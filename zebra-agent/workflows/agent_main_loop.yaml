@@ -2,7 +2,7 @@ name: "Agent Main Loop"
 description: "Main agent orchestration loop - select, execute, and learn from workflows with Kantian ethics gates"
 tags: ["agent", "internal", "system", "orchestration"]
 use_when: "INTERNAL USE ONLY - entry point for agent goal processing"
-version: 18
+version: 19
 first_task: consult_memory
 
 tasks:
@@ -520,9 +520,17 @@ routings:
     condition: route_name
     name: "reject"
 
-  # Post-execution flow
+  # Post-execution flow (a nameless route_name routing fires when no route is set)
   - from: execute_workflow
     to: assess_stuck
+    condition: route_name
+
+  # #230: the owner refused an imported workflow's pre-run approval: select again
+  # without it (execute_goal_workflow adds it to __excluded_workflows__)
+  - from: execute_workflow
+    to: select_workflow
+    condition: route_name
+    name: "supervision_rejected"
 
   # "I'm stuck" handoff (#176)
   - from: assess_stuck

@@ -188,6 +188,20 @@ certified by the Zebra key. Actions are owner-only. Nothing here is published ye
             <button class="btn" data-testid="restore-backup">Restore</button>
         </form>
     </section>
+
+    <section class="panel px-6 py-5 space-y-3" aria-labelledby="workflow-import-title" data-testid="workflow-import-form">
+        <h2 id="workflow-import-title" class="text-base font-semibold text-ink">Import a workflow file</h2>
+        <p class="text-sm text-muted">I check a signed workflow file from another Zebra before anything of it is kept: its signature, personal data, ethics and its golden tasks. Then I ask you. An adopted workflow asks you before each of its first runs.</p>
+        <form method="post" action="/commons/workflow-import/" enctype="multipart/form-data" class="flex flex-wrap gap-2 items-end">
+            {% csrf_token %}
+            <label class="block text-sm grow">
+                <span class="block text-xs text-faint mb-1">Workflow export file (.zebra.json)</span>
+                <input type="file" name="export_file" required accept=".json,application/json"
+                       class="block w-full text-sm text-ink">
+            </label>
+            <button class="btn btn-primary" data-testid="import-workflow">Check and import</button>
+        </form>
+    </section>
     {% endif %}
     {% endif %}
 </div>

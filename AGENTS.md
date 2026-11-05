@@ -666,7 +666,7 @@ The `IoCActionRegistry` (in `zebra-agent/ioc/`) auto-discovers entry points at s
 
 For conditional routing, return `TaskResult.ok(output=..., next_route="route_name")` where `next_route` matches a routing's `name` field in the YAML definition.
 
-**Starting a library workflow** from code (an action or an entry point) goes through `zebra_tasks.launch.create_library_process(engine, definition, entry=..., ...)`, never `engine.create_process` directly: it calls the `check_launch` hook that S3 of the Commons extends (#245). A source-scan test allowlists the few direct calls (built-in system workflows, the gym) with reasons.
+**Starting a library workflow** from code (an action or an entry point) goes through `zebra_tasks.launch.create_library_process(engine, definition, entry=..., ...)`, never `engine.create_process` directly: it calls `check_launch`, which turns a supervised (imported) workflow's launch into an owner-only pre-run approval (#245, #230). A source-scan test allowlists the few direct calls (built-in system workflows, the gym) with reasons.
 
 ## Human Tasks (Convention-Based Pattern)
 

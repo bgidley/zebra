@@ -360,3 +360,37 @@ class TestAdopt:
         assert block["parent_sha256"] == digest
         assert block["supervised"] is True
         assert block["tainted_by"] == ["home", "work"]
+
+
+# ---------------------------------------------------------------------------
+# Signed display name and golden tasks for the importer (#230)
+# ---------------------------------------------------------------------------
+
+
+async def test_export_carries_signed_display_name_and_golden_tasks(home, zebra, device, tmp_path):
+    golden = tmp_path / "golden"
+    golden.mkdir()
+    (golden / "g.yaml").write_text(
+        "id: g1\nworkflow: Project Update\ngoal: Update the launch plan\n"
+        "expected: A plan\ncriteria: [Lists steps]\n"
+    )
+    home.golden_path = golden
+    home.add_workflow(WORKFLOW)
+    _, z_pub = zebra
+    d_sec, cert = device
+    text = await export_workflow(
+        home,
+        "Project Update",
+        device_secret=d_sec,
+        zebra_pubkey=z_pub,
+        chain=[cert],
+        display_name="Home Zebra",
+        with_golden=True,
+    )
+    result = verify_export(text)
+    assert result.ok and result.display_name == "Home Zebra"
+    assert result.golden_tasks == [
+        {"goal": "Update the launch plan", "expected": "A plan", "criteria": ["Lists steps"]}
+    ]
+    plain = verify_export(await _export(home, zebra, device))
+    assert plain.display_name is None and plain.golden_tasks == []

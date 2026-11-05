@@ -99,6 +99,11 @@ trust_gate = "zebra_tasks.agent.trust_gate:TrustGateAction"
 propose_trust_promotion = "zebra_tasks.agent.propose_trust_promotion:ProposeTrustPromotionAction"
 # Zebra Commons (#229 S2b)
 commons_pii_scan = "zebra_tasks.commons.pii_scan:CommonsPiiScanAction"
+commons_judge_import = "zebra_tasks.commons.importing:CommonsJudgeImportAction"
+commons_import_review = "zebra_tasks.commons.importing:CommonsImportReviewAction"
+commons_adopt = "zebra_tasks.commons.importing:CommonsAdoptAction"
+commons_record_import = "zebra_tasks.commons.importing:CommonsRecordImportAction"
+commons_supervised_run = "zebra_tasks.commons.supervised:CommonsSupervisedRunAction"
 # Agent - Values profile (F18)
 load_values_profile = "zebra_tasks.agent.load_values_profile:LoadValuesProfileAction"
 extract_values_tags = "zebra_tasks.agent.extract_values_tags:ExtractValuesTagsAction"

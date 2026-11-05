@@ -198,6 +198,16 @@ def check_generated_workflow(response: LLMResponse, definition: ProcessDefinitio
                 f"Task '{task_id}' schema must be a JSON Schema object or a "
                 "single {{reference}} to one"
             )
+    # Commons plumbing (adopt, supervised run, judge) runs only in its own system
+    # workflows; a generated workflow naming it could adopt or run unapproved (#230).
+    from zebra_tasks.agent.definition_actions import describe
+    from zebra_tasks.commons.guard import internal_actions_used
+
+    for defined in internal_actions_used(definition):
+        errors.append(
+            f"{describe(defined)} uses '{defined.action}', which only the Commons "
+            "system workflows may run"
+        )
     if errors:
         return "; ".join(errors)
     return None

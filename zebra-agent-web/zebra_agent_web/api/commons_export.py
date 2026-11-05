@@ -37,8 +37,11 @@ def _require_enabled() -> None:
         raise CommonsError("The Commons is off (COMMONS_ENABLED).")
 
 
-async def export_workflow_file(name: str) -> str:
+async def export_workflow_file(name: str, *, with_golden: bool = False) -> str:
     """The signed export file text for workflow *name*.
+
+    The file names this Zebra's display name; *with_golden* adds the workflow's golden
+    tasks so an importer's gym can test it (#230).
 
     Raises:
         CommonsError: Commons off or no Zebra identity yet.
@@ -58,6 +61,8 @@ async def export_workflow_file(name: str) -> str:
         device_secret=device_secret,
         zebra_pubkey=state.zebra_pubkey,
         chain=chain,
+        display_name=state.zebra_display_name or None,
+        with_golden=with_golden,
     )
     logger.info("Exported workflow %r signed by this device", name)
     return text

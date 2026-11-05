@@ -127,7 +127,9 @@ def refusals(monkeypatch) -> list[str]:
     """Make the choke point refuse every launch; record which entry asked."""
     entries: list[str] = []
 
-    async def refuse(definition: ProcessDefinition, *, entry: str, properties: dict) -> None:
+    async def refuse(
+        definition: ProcessDefinition, *, entry: str, properties: dict, **_: object
+    ) -> None:
         entries.append(entry)
         raise LaunchRefused(f"{definition.name} is not approved")
 

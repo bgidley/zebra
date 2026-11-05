@@ -251,6 +251,27 @@ So adoption does two things:
 - Attestations and outcome reports are only ever published for a workflow whose current hash equals
   the offered hash. Runs of a locally modified copy never count against the publisher.
 
+**Judged import and supervised use (S3) as built (#230, OpenSpec `commons-import`).**
+- No relays yet: the import takes a signed export file (S2b), now optionally carrying signed
+  `display_name` and `golden_tasks`. The owner uploads it on `/commons/` (or `manage.py
+  commons_import F --judge`); `commons_judge_import` stands in for the reputation step and does
+  validation + registry check. Rejections are recorded on the run (`commons_import_result`,
+  stage + reason), not attested.
+- Gym import mode scores only the candidate against a pass mark (`pass_score` 0.6), since there
+  is no local version to regress against.
+- Supervised use is a generated *Supervised run* wrapper process created by
+  `create_library_process` when `check_launch` says so, not a check inside
+  `execute_goal_workflow`: every entry point then parks on the same owner-only approval with no
+  change of its own. A rejected goal run routes `supervision_rejected` back to the selector with
+  the workflow excluded. Approved-run counts are local (`.lineage/supervision.json`).
+  `supervision_for` exempts no name: the wrapper is created directly, never through
+  `check_launch`, and `Supervised run: …` is a reserved name the judge and the adopt save refuse.
+- Every safety check sees every action the engine runs: task `action`, task and process-level
+  `construct_action` / `destruct_action` (`definition_actions()`): strict and gate
+  `unsafe_reason`, the judge's registry check and the action list the owner approves.
+- Stops: the kill switch and `COMMONS_ENABLED` off refuse imports, adoption and supervised
+  launches; the emergency override re-supervises every adopted workflow.
+
 ### Commons cache (S4–S7, Django models)
 
 | Model | Purpose |
@@ -304,6 +325,7 @@ about 60 KB we would split the content, which is deferred.
 - `commons_pii_scan`: rule-based plus low-tier LLM scan for personal data in the YAML (prompts, defaults, examples). Fails closed.
 - `commons_publish`, `commons_attest`, `commons_trade`: build, sign and publish an event
 - `commons_judge_import`: validation and registry check, then reputation lookup, giving a `proceed` / `reject` / `escalate` route
+- `commons_adopt` and `commons_supervised_run` trust no process property: each refuses unless it runs in its own system workflow (the shipped *Commons Import*, the regenerated *Supervised run* wrapper) and the step journal records the gates / the owner's answer. Imported and generated workflows may not use the Commons-internal actions (`zebra_tasks/commons/guard.py`).
 - `commons_adopt`: `WorkflowLibrary.save(..., writer="adopt")` keeps the received `commons` block verbatim (hash verified), sets `supervised: true` and renames for display
 
 ### Workflows (`zebra-agent/workflows/`, system)

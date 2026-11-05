@@ -313,6 +313,7 @@ async def workflow_library(request):
             "use_count": w.use_count,
             "success_rate": f"{w.success_rate:.0%}" if w.use_count > 0 else "N/A",
             "continuation_rate": continuation_rates.get(w.name),
+            "supervised": bool((w.commons or {}).get("supervised")),  # #230
         }
         for w in workflows
     ]
@@ -406,6 +407,7 @@ async def workflow_detail(request, workflow_name):
         "yaml_content": yaml_content,
         "description": workflow_info.description if workflow_info else "",
         "tags": workflow_info.tags if workflow_info else [],
+        "supervised": bool((getattr(workflow_info, "commons", None) or {}).get("supervised")),
         "stats": {
             "total_runs": stats.total_runs,
             "successful_runs": stats.successful_runs,
@@ -2369,6 +2371,13 @@ async def human_task_submit(request, task_id):
     definition = await store.load_definition(process.definition_id)
     task_def = definition.tasks.get(task.task_definition_id)
 
+    # #230: Commons approvals (imports, supervised runs) are the owner's alone
+    from zebra_agent_web.api.commons_import import owner_only_refusal
+
+    refusal = await owner_only_refusal(await request.auser(), task_def)
+    if refusal:
+        return HttpResponse(refusal, status=403)
+
     schema = _task_schema(task_def, process.properties or {})
 
     # Coerce and validate form data
@@ -3134,6 +3143,10 @@ async def trust_pause_all_form(request):
         msg = f"Emergency override: reverted {', '.join(reverted)} to SUPERVISED"
     else:
         msg = "Emergency override: all domains were already SUPERVISED"
+    from zebra_agent_web.api.commons_import import resupervise_on_override
+
+    if await resupervise_on_override():
+        msg += "; imported workflows ask before each run again"
     return redirect(f"/trust/?{urlencode({'message': msg})}")
 
 
