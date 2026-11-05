@@ -25,3 +25,6 @@
 - [x] 4.1 Two-device E2E (home + observed work): the seven #236 scenarios
 - [x] 4.2 Genealogy share status and forks; web template text
 - [x] 4.3 Docs: `specs/zebra-commons-design.md`, `specs/zebra-as-is.md`, AGENTS.md files
+- [x] 4.4 Review fix: leak-guard taint fails closed — `save_check` kept in the journal, a crashed
+  save-time check journaled as `error`, `kept` / `error` on any ancestor taints, `send` re-checks;
+  E2E tests for a kept save, a kept ancestor, a merged writer + save record and an `error`

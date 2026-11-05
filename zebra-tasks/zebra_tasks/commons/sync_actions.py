@@ -64,9 +64,10 @@ class SkillSharePrepareAction(TaskAction):
     ``manual``), ``manual``, ``output_key`` (default ``share``).
 
     Routes ``propose`` or ``skip`` (no sync service, may not send, same or unknown sphere,
-    not ``commons_exportable``, already shared, or a leak-guard ``kept`` version, recorded
-    as ``blocked``). Output: ``{name, sphere, own_sphere, observed, tainted_observed,
-    content_sha256, yaml, yaml_sha256, diff, reason, manual, title}``.
+    not ``commons_exportable``, already shared, or a leak-guard ``kept`` / ``error`` result
+    on this version or any ancestor, recorded as ``blocked``). Output: ``{name, sphere,
+    own_sphere, observed, tainted_observed, content_sha256, yaml, yaml_sha256, diff, reason,
+    manual, title}``.
     """
 
     description = "Check whether a workflow may be proposed for sharing with another sphere."
@@ -113,9 +114,9 @@ class SkillSharePrepareAction(TaskAction):
         content_hash = block.get("content_sha256")
         if sphere in (block.get("share_with") or []):
             return skip(f"already shared with {sphere}")
-        if leak_kept(library, content_hash):
+        if leak_kept(library, content_hash, block):
             record_share(library, name, content_hash, sphere, BLOCKED, reason="leak guard kept")
-            return skip("the leak guard kept run specifics in this version")
+            return skip("the leak guard kept run specifics in this version or an ancestor")
         text = info.definition_path.read_text()
         payload = skill_payload(text)
         before = None

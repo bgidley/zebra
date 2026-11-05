@@ -29,13 +29,20 @@ sphere is in the sent `share_with`.
 
 ### Requirement: Suggest-and-approve sharing
 Zebra SHALL propose sharing a workflow with another sphere only after `MIN_RUNS_TO_SHARE` successful
-runs or after the dream cycle, and only if it is `commons_exportable`, its current version has no
-leak-guard `kept` record, and the personal-data, confidentiality and sensitivity checks pass. Every
-check SHALL fail closed. Nothing SHALL be sent before the share is approved.
+runs or after the dream cycle, and only if it is `commons_exportable`, neither its current version
+nor any ancestor has a leak-guard `kept` or `error` result (the writer's status or the save-time
+check), and the personal-data, confidentiality and sensitivity checks pass. Every check SHALL fail
+closed. Nothing SHALL be sent before the share is approved, and the send SHALL refuse a tainted
+version even if approved.
 
 #### Scenario: Not sent until approved
 - **WHEN** a home workflow reaches two successful runs
 - **THEN** a share task waits for a human and no `SKILL` event exists until it is approved
+
+#### Scenario: Leak-guard taint blocks a share
+- **WHEN** the version, or an ancestor it was edited from, was saved with a leak-guard `kept` or
+  `error` result, including a save-time `kept` under a writer's own `generalised` record
+- **THEN** it is recorded as `blocked`, no share task is raised and no `SKILL` event is sent
 
 #### Scenario: Codename blocked
 - **WHEN** a work workflow contains text matching `SYNC_CONFIDENTIAL_PATTERNS`

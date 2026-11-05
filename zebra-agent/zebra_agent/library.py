@@ -754,7 +754,8 @@ class WorkflowLibrary:
     ) -> dict | None:
         """Run the leak guard (#237) at save time; raise when a rejecting writer leaks.
 
-        Returns the ``kept`` leak record when a non-rejecting writer's hits remain.
+        Returns the ``kept`` leak record when a non-rejecting writer's hits remain, and an
+        ``error`` record when the check itself failed for a non-rejecting writer.
         """
         from zebra_tasks.agent.leak_guard import (
             LeakGuard,
@@ -778,7 +779,8 @@ class WorkflowLibrary:
                     {"status": "rejected", "hits": [], "error": str(e)[:500]},
                 ) from e
             logger.exception("Leak guard check failed at save (%s); saving anyway", writer)
-            return None
+            # Journalled as ``error`` so the version is never shared unchecked (#236).
+            return {"status": "error", "hits": [], "error": str(e)[:500]}
         if not hits:
             return None
         if exposure.reject:

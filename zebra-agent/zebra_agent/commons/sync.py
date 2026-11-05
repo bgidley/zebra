@@ -171,12 +171,40 @@ def latest_decision(library: WorkflowLibrary, content_hash: str, sphere: str) ->
     return status
 
 
-def leak_kept(library: WorkflowLibrary, content_hash: str) -> bool:
-    """Whether a save of this version kept leak-guard hits (#237: ``kept`` = tainted)."""
+#: Leak-guard results that taint a version and every descendant (#237: ``kept`` = tainted;
+#: ``error`` = never checked, so fail closed).
+LEAK_TAINTED = frozenset({"kept", "error"})
+
+
+def _leak_tainted_record(leak: dict[str, Any] | None) -> bool:
+    if not isinstance(leak, dict):
+        return False
+    return bool(
+        leak.get("status") in LEAK_TAINTED
+        or leak.get("save_check") in LEAK_TAINTED
+        or leak.get("check_failed")
+    )
+
+
+def leak_kept(
+    library: WorkflowLibrary, content_hash: str | None, block: dict[str, Any] | None = None
+) -> bool:
+    """Whether this version, or any version it descends from, carries leak-guard taint.
+
+    A journal ``saved`` record taints its hash when the writer's status or the save-time
+    check (``save_check``) is ``kept`` or ``error``, or the check failed. The taint passes to
+    every descendant: the leak guard never flags a literal already in the parent, so an edit
+    of a ``kept`` version still carries it. *block* gives the version's lineage
+    (``ancestors``, ``parent_sha256``). A version with no hash is treated as tainted.
+    """
+    if not content_hash:
+        return True
+    lineage = {content_hash} | _lineage(block or {})
     for r in library.journal.read():
-        if r.get("event") == "saved" and r.get("content_sha256") == content_hash:
-            if ((r.get("leak_guard") or {}).get("status")) == "kept":
-                return True
+        if r.get("event") != "saved" or r.get("content_sha256") not in lineage:
+            continue
+        if _leak_tainted_record(r.get("leak_guard")):
+            return True
     return False
 
 
@@ -460,6 +488,8 @@ class SyncService:
             raise SkillRefused("the workflow changed since the share was approved")
         if bytes_sha256(skill_payload(text)) != scanned_bytes_sha256:
             raise SkillRefused("the bytes to send are not the bytes that were scanned")
+        if leak_kept(library, expected_sha256, block):
+            raise SkillRefused("the leak guard kept run specifics in this version or an ancestor")
         own = self.own_cert()
         if own is None:
             raise SkillRefused("this device has no valid DEVICE_CERT")

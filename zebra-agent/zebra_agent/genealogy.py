@@ -101,8 +101,10 @@ def scrub_leak(leak: dict | None) -> dict[str, Any] | None:
         if isinstance(h, dict)
     ]
     out: dict[str, Any] = {"status": str(leak["status"]), "hits": hits}
-    if leak.get("error"):
+    if leak.get("error") or leak.get("check_failed"):
         out["check_failed"] = True  # the error text may quote the content
+    if leak.get("save_check"):
+        out["save_check"] = str(leak["save_check"])  # the save-time result (#236: kept = tainted)
     return out
 
 
@@ -113,7 +115,10 @@ def merge_leak(writer_leak: dict | None, save_leak: dict | None) -> dict[str, An
         return writer_leak or save_leak
     seen = {(h["kind"], h["where"], h["source"]) for h in writer_leak["hits"]}
     extra = [h for h in save_leak["hits"] if (h["kind"], h["where"], h["source"]) not in seen]
-    return {**writer_leak, "hits": writer_leak["hits"] + extra, "save_check": save_leak["status"]}
+    merged = {**writer_leak, "hits": writer_leak["hits"] + extra, "save_check": save_leak["status"]}
+    if save_leak.get("check_failed"):
+        merged["check_failed"] = True
+    return merged
 
 
 def journal_record(

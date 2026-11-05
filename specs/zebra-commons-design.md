@@ -501,7 +501,10 @@ transport only; the relay, NIP-44 and receipts are #246.
   workflow for an unobserved sphere is still asked about, with no autonomy skip.
 - A received workflow keeps its sent `supervised` (same Zebra, normal trust); fast-forward
   retires the old file; a fork is `<name> (from <sphere>)` with `fork_of` on both copies.
-- Leak-guard `kept` (journal) blocks a version from being proposed.
+- Leak-guard taint (journal) blocks a version from being proposed or sent: a `saved` record
+  whose writer status or save-time check (`save_check`) is `kept` or `error` taints that hash
+  and every descendant (`ancestors` / `parent_sha256`), since the guard never re-flags a literal
+  already in the parent. There is no way to clear it yet; a clean rewrite starts a new lineage.
 - Not yet: building the service from the web settings (#246), a Share button on the workflow page
   (`start_share(manual=True)` exists), `after_run` wiring into goal runs (#246, with the service).
 

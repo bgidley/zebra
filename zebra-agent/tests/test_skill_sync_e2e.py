@@ -521,3 +521,113 @@ async def test_earned_autonomy_skips_approval_only_for_unobserved_untainted(zebr
     [rid] = await studio.receive()
     # The receiver's own sharing level governs adoption: SUPERVISED there, so it asks.
     assert [t.task_definition_id for t in await studio.pending(rid)] == ["receive_approval"]
+
+
+# --- leak-guard taint: kept / error results block a share (O2) ------------------------
+
+LEAKY = CHECKLIST.replace(
+    "Review {{goal}} against the team checklist.",
+    "Check Acme Corp's SLA with Jane Smith, then review {{goal}} against the checklist.",
+)
+LEAKY_EDITED = LEAKY.replace("then review", "and then carefully review")
+
+
+def _leak_exposure() -> Exposure:
+    return Exposure(goal_texts=["Ask Jane Smith at Acme Corp"], reject=False)
+
+
+def _last_saved(device: Device) -> dict:
+    return [r for r in device.library.journal.read() if r["event"] == "saved"][-1]
+
+
+async def _assert_blocked(home: Device, relay: InMemoryRelay) -> None:
+    home.stats.runs["Code Review Checklist"] = 2
+    await home.share_all()
+    assert _skill_events(relay) == []
+    statuses = _statuses(home, "Code Review Checklist")
+    assert statuses[-1] == "blocked"
+    assert "approved" not in statuses and "sent" not in statuses
+    assert home.library.commons_block("Code Review Checklist")["share_with"] == []
+    assert await home.share_all() == []  # never proposed again at this hash
+
+
+async def test_leak_kept_version_is_never_sent(zebra):
+    home, _work = zebra("home"), zebra("work")
+    home.library.save(LEAKY, writer="creator", exposure=_leak_exposure())
+    assert _last_saved(home)["leak_guard"]["status"] == "kept"
+    await _assert_blocked(home, zebra.relay)
+
+
+async def test_writer_leak_record_does_not_hide_a_kept_save_check(zebra):
+    home, _work = zebra("home"), zebra("work")
+    home.library.save(
+        LEAKY,
+        writer="creator",
+        exposure=_leak_exposure(),
+        leak={"status": "generalised", "hits": []},
+    )
+    record = _last_saved(home)["leak_guard"]
+    assert record["status"] == "generalised"
+    assert record["save_check"] == "kept"
+    await _assert_blocked(home, zebra.relay)
+
+
+async def test_edit_of_a_kept_version_inherits_the_taint(zebra):
+    home, _work = zebra("home"), zebra("work")
+    home.library.save(LEAKY, writer="creator", exposure=_leak_exposure())
+    kept_hash = home.library.commons_block("Code Review Checklist")["content_sha256"]
+    home.save(LEAKY_EDITED)  # a human edit: the literal is in the parent, so no new hit
+    block = home.library.commons_block("Code Review Checklist")
+    assert block["content_sha256"] != kept_hash
+    assert kept_hash in (block.get("ancestors") or []) + [block.get("parent_sha256")]
+    assert (_last_saved(home)["leak_guard"] or {}).get("status") != "kept"
+    await _assert_blocked(home, zebra.relay)
+
+
+async def test_leak_check_error_fails_closed(zebra, monkeypatch):
+    from zebra_tasks.agent import leak_guard
+
+    def broken(self, yaml_text):
+        raise RuntimeError("guard crashed")
+
+    home, _work = zebra("home"), zebra("work")
+    monkeypatch.setattr(leak_guard.LeakGuard, "check", broken)
+    home.library.save(CHECKLIST, writer="creator", exposure=_leak_exposure())
+    record = _last_saved(home)["leak_guard"]
+    assert record["status"] == "error"
+    assert record["check_failed"] is True
+    await _assert_blocked(home, zebra.relay)
+
+
+async def test_writer_error_status_fails_closed(zebra):
+    home, _work = zebra("home"), zebra("work")
+    home.library.save(CHECKLIST, writer="creator", leak={"status": "error", "hits": []})
+    await _assert_blocked(home, zebra.relay)
+
+
+async def test_clean_save_is_not_tainted(zebra):
+    from zebra_agent.commons.sync import leak_kept
+
+    home, _work = zebra("home"), zebra("work")
+    home.library.save(CHECKLIST, writer="creator", leak={"status": "generalised", "hits": []})
+    block = home.library.commons_block("Code Review Checklist")
+    assert leak_kept(home.library, block["content_sha256"], block) is False
+
+
+async def test_send_refuses_a_tainted_version_even_when_approved(zebra):
+    from zebra_agent.commons.skill import SkillRefused, skill_payload
+    from zebra_agent.commons.sync import bytes_sha256
+
+    home, _work = zebra("home"), zebra("work")
+    path = home.library.save(LEAKY, writer="creator", exposure=_leak_exposure())
+    content_hash = home.library.commons_block("Code Review Checklist")["content_sha256"]
+    assert home.library.approve_share("Code Review Checklist", "work", content_hash)
+    with pytest.raises(SkillRefused, match="leak guard"):
+        await home.sync.send(
+            home.library,
+            "Code Review Checklist",
+            spheres=["work"],
+            expected_sha256=content_hash,
+            scanned_bytes_sha256=bytes_sha256(skill_payload(path.read_text())),
+        )
+    assert _skill_events(zebra.relay) == []
