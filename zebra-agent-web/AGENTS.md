@@ -436,6 +436,8 @@ uv run pytest zebra-agent-web/tests/test_agent_loop_integration.py -v
 DJANGO_SETTINGS_MODULE=zebra_agent_web.settings uv run pytest -v
 ```
 
+Unit settings (`test_settings.py`) strip `LoginRequiredMiddleware` (it also mutates the imported `settings.MIDDLEWARE` list). To prove a page is behind login, set `settings.MIDDLEWARE` to the list read from `settings.py` source, as `_prod_middleware()` in `tests/unit/test_workflow_genealogy.py` does (#274).
+
 `tests/browser/` holds opt-in Playwright tests (#213). They skip unless Playwright and their
 `ZEBRA_BROWSER_*` env vars are set, so CI skips them. Run them in the Playwright container against
 a local server (never port 8000). Login is passkey-only, so pass a `sessionid` made in
