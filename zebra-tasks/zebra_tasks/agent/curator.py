@@ -255,12 +255,17 @@ class WorkflowCuratorAction(TaskAction):
             FAILING: [],
             UNUSED: [],
         }
-        seen: set[str] = set()
-        for wf in files:  # newest first, so the first file per name is current
+        current: dict[str, dict[str, Any] | None] = {}
+        for wf in files:  # the first file per name is current (resolved by lineage, #236)
             if is_protected_workflow(wf):
                 continue
+            block = getattr(wf, "commons", None)
+            if isinstance(block, dict) and block.get("fork_of"):
+                continue  # a sync fork waits for a human choice: never retired automatically
             ws = stats.get(wf.name)
-            if wf.name in seen:
+            if wf.name in current:
+                if not _superseded_by(block, current[wf.name]):
+                    continue  # a diverged copy, not an ancestor: leave it to a human
                 by_rule[SUPERSEDED_COPY].append(
                     _decision(
                         wf,
@@ -271,7 +276,7 @@ class WorkflowCuratorAction(TaskAction):
                     )
                 )
                 continue
-            seen.add(wf.name)
+            current[wf.name] = block if isinstance(block, dict) else None
 
             problem = _definition_problem(wf.content)
             if problem:
@@ -371,6 +376,18 @@ def is_protected_workflow(wf: Any) -> bool:
     The curator never retires them, and the Commons never exports them (#245).
     """
     return is_system_workflow(wf.name, wf.tags)
+
+
+def _superseded_by(old: dict[str, Any] | None, cur: dict[str, Any] | None) -> bool:
+    """Whether an older same-name copy is an ancestor of the current one (#236).
+
+    Without a hash on either side (files from before #229) the newer file wins, as before.
+    """
+    old_hash = (old or {}).get("content_sha256")
+    if not old_hash or not (cur or {}).get("content_sha256"):
+        return True
+    lineage = {cur.get("content_sha256"), cur.get("parent_sha256"), *(cur.get("ancestors") or [])}
+    return old_hash in lineage
 
 
 def _definition_problem(content: str) -> str | None:

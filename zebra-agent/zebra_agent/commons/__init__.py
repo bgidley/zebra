@@ -5,7 +5,9 @@ leave this deployment. Offering, exporting and syncing (S2, S3b, S4) call it.
 
 S1 (#228) provides the Zebra key, certified device keys, local ``DEVICE_CERT`` /
 ``DEVICE_REVOKE`` events and the cert-chain verify helper. Nothing here touches the
-network or Django. See ``specs/zebra-commons-design.md``.
+network or Django. S3b-1 (#236) adds skill sync between own devices: ``client``
+(transport), ``skill`` (SKILL events) and ``sync`` (``SyncService``, merge by lineage).
+See ``specs/zebra-commons-design.md``.
 """
 
 from __future__ import annotations

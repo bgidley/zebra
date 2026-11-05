@@ -545,6 +545,20 @@ class AgentLoop:
                 exc_info=True,
             )
 
+    async def _propose_shares_after_dream(self) -> None:
+        """Skill sync (#236): suggest sharing workflows after the dream cycle.
+
+        Only when this device has a sync service (``extras["__commons_sync__"]``, built
+        with the relay in #246); never fails the dream cycle.
+        """
+        sync = self.engine.extras.get("__commons_sync__")
+        if sync is None:
+            return
+        try:
+            await sync.after_dream(self.engine, self.library, self.metrics)
+        except Exception as e:  # noqa: BLE001 - sharing is advisory
+            logger.warning("Skill sync after the dream cycle failed: %s", e)
+
     async def run_dream_cycle(
         self,
         progress_callback: ProgressCallback | None = None,
@@ -622,6 +636,7 @@ class AgentLoop:
                 }
 
             await emit("dream_cycle_completed", {"run_id": run_id})
+            await self._propose_shares_after_dream()
 
             return {
                 "success": True,

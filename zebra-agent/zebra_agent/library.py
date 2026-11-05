@@ -83,6 +83,7 @@ class WorkflowFile:
     tags: list[str]
     content: str
     modified_at: datetime
+    commons: dict[str, Any] | None = None  # provenance block (#229); None for older files
 
 
 SYSTEM_TAG = "system"
@@ -232,6 +233,44 @@ def _free_path(directory: Path, filename: str) -> Path:
         dest = directory / f"{stem}_{counter}.yaml"
         counter += 1
     return dest
+
+
+def _block_of(path: Path) -> dict[str, Any]:
+    try:
+        return read_commons(path.read_text().split(_RETIRED_MARKER, 1)[0]) or {}
+    except OSError:
+        return {}
+
+
+def lineage_order(paths: list[Path]) -> list[Path]:
+    """Order same-name files (given newest first) so the current version comes first (#236).
+
+    The current version is the newest file that no other file descends from (its hash is
+    in no other file's ``commons.ancestors`` / ``parent_sha256``), preferring files without
+    ``fork_of``: a synced descendant wins over an ancestor whatever the mtimes, and a fork
+    never displaces the version it forked from. Files without a block keep mtime order.
+    """
+    if len(paths) < 2:
+        return list(paths)
+    blocks = {p: _block_of(p) for p in paths}
+
+    def descended(p: Path) -> bool:
+        own = blocks[p].get("content_sha256")
+        if not own:
+            return False
+        for q in paths:
+            if q is p or blocks[q].get("content_sha256") == own:
+                continue
+            lineage = set(blocks[q].get("ancestors") or [])
+            lineage.add(blocks[q].get("parent_sha256"))
+            if own in lineage:
+                return True
+        return False
+
+    heads = [p for p in paths if not descended(p)] or list(paths)
+    unforked = [p for p in heads if not blocks[p].get("fork_of")]
+    current = (unforked or heads)[0]
+    return [current, *(p for p in paths if p is not current)]
 
 
 class WorkflowLibrary:
@@ -456,6 +495,9 @@ class WorkflowLibrary:
         origin_pubkey: str | None = None,
         reason: str | dict | None = None,
         leak: dict | None = None,
+        sync: bool = False,
+        replace: bool = False,
+        fork_of: str | None = None,
     ) -> Path:
         """Write a workflow file: the one save path, which owns the ``commons`` block (#229).
 
@@ -480,6 +522,13 @@ class WorkflowLibrary:
             expected_sha256: ``writer="adopt"`` only: the offered or sent hash
             name: ``writer="adopt"`` only: the local display name
             origin_pubkey: ``writer="adopt"`` only: the publisher's Zebra key
+            sync: ``writer="adopt"`` only: a ``SKILL`` from this Zebra's own device
+                (#236): ``supervised`` is kept as sent (same Zebra, normal trust)
+                and the save is journaled with writer ``sync``
+            replace: ``writer="adopt"`` only: a sync fast-forward (#236); the active
+                file with the name is retired once the descendant is written
+            fork_of: ``writer="adopt"`` only: a sync fork (#236); the local hash the
+                received version forked from, recorded in its block
             reason: Why the writer made this version, only as it recorded it (#238): a
                 string (recorded reasoning) or ``{text, kind: voice|reasoning, source}``
             leak: The writer's own leak-guard record (``leak_record()``), if any
@@ -508,7 +557,13 @@ class WorkflowLibrary:
                 name=name,
                 origin_pubkey=origin_pubkey,
                 filename=filename,
+                sync=sync,
+                replace=replace,
+                fork_of=fork_of,
+                reason=reason,
             )
+        if sync or replace or fork_of is not None:
+            raise ValueError("sync / replace / fork_of are only for writer='adopt'")
         if received is not None or expected_sha256 is not None:
             raise ValueError("received / expected_sha256 are only for writer='adopt'")
         if isinstance(exposure, dict):
@@ -605,6 +660,10 @@ class WorkflowLibrary:
         name: str | None,
         origin_pubkey: str | None,
         filename: str | None,
+        sync: bool = False,
+        replace: bool = False,
+        fork_of: str | None = None,
+        reason: str | dict | None = None,
     ) -> Path:
         """Save a received workflow, keeping its ``commons`` block (#229 S2b).
 
@@ -612,7 +671,10 @@ class WorkflowLibrary:
         stays verbatim once the YAML's hash is checked against it and against the
         offered or sent hash (``provenance.adopted_block``). The received local tags
         are dropped and ``llm-defined`` is never added. A name already used by another
-        active workflow is refused, since a ``_N`` copy would shadow it.
+        active workflow is refused, since a ``_N`` copy would shadow it, unless
+        *replace* is set and the received version descends from it (a sync
+        fast-forward, #236): then the old file is retired once the new one is written.
+        A sync save keeps the sent ``supervised`` and is journaled with writer ``sync``.
         """
         if not isinstance(received, dict):
             raise AdoptionRefused("no received commons block")
@@ -640,12 +702,16 @@ class WorkflowLibrary:
         if is_reserved_name(local_name):
             raise AdoptionRefused(f"the name {local_name!r} is reserved for supervised runs")
         existing = next(iter(self._files_named(local_name)), None)
+        superseded = None
         if existing is not None:
             existing_block = read_commons(existing.read_text()) or {}
-            if existing_block.get("content_sha256") == offered:
+            existing_hash = existing_block.get("content_sha256")
+            if existing_hash == offered:
                 logger.info("Workflow %r (%s) already adopted", local_name, offered[:12])
                 return existing
-            raise AdoptionRefused(f"a different workflow is already named {local_name!r}")
+            if not (replace and existing_hash in (received.get("ancestors") or [])):
+                raise AdoptionRefused(f"a different workflow is already named {local_name!r}")
+            superseded = existing
 
         block = adopted_block(
             received,
@@ -653,8 +719,35 @@ class WorkflowLibrary:
             adopted_at=datetime.now(UTC).isoformat(),
             origin_pubkey=origin_pubkey,
         )
+        if sync:
+            block["supervised"] = bool(received.get("supervised", False))
+        if fork_of is not None:
+            block["fork_of"] = fork_of
         filepath = _free_path(self.library_path, filename or workflow_filename(local_name))
         filepath.write_text(with_commons(yaml_content, block))
+        if superseded is not None:
+            self.retire(
+                local_name,
+                "fast-forwarded by a synced descendant (#236)",
+                superseded_by=local_name,
+                path=superseded,
+            )
+        if sync:
+            self.journal.append(
+                journal_record(
+                    event=SAVED,
+                    name=local_name,
+                    file=filepath.name,
+                    writer="sync",
+                    content_sha256=offered,
+                    parent_sha256=received.get("parent_sha256"),
+                    parent_name=None,
+                    sphere=self.sphere,
+                    device=self.device,
+                    reason=reason,
+                    leak=None,
+                )
+            )
         self._cache.pop(local_name, None)
         logger.info(
             "Adopted workflow %r (%s): sha256 %s, origin %s",
@@ -671,7 +764,8 @@ class WorkflowLibrary:
     ) -> dict | None:
         """Run the leak guard (#237) at save time; raise when a rejecting writer leaks.
 
-        Returns the ``kept`` leak record when a non-rejecting writer's hits remain.
+        Returns the ``kept`` leak record when a non-rejecting writer's hits remain, and an
+        ``error`` record when the check itself failed for a non-rejecting writer.
         """
         from zebra_tasks.agent.leak_guard import (
             LeakGuard,
@@ -695,13 +789,91 @@ class WorkflowLibrary:
                     {"status": "rejected", "hits": [], "error": str(e)[:500]},
                 ) from e
             logger.exception("Leak guard check failed at save (%s); saving anyway", writer)
-            return None
+            # Journalled as ``error`` so the version is never shared unchecked (#236).
+            return {"status": "error", "hits": [], "error": str(e)[:500]}
         if not hits:
             return None
         if exposure.reject:
             raise LeakGuardRejected(rejection_reason(hits), leak_record("rejected", hits))
         logger.warning("Leak guard at save (%s) kept hits: %s", writer, describe_hits(hits))
         return leak_record("kept", hits)
+
+    def _rewrite_block(self, path: Path, changes: dict[str, Any]) -> None:
+        """Change bookkeeping keys of a file's block in place, keeping its mtime (#236).
+
+        Never the content: the hash and lineage stay as they are.
+        """
+        text = path.read_text()
+        block = read_commons(text)
+        if block is None:
+            raise ValueError(f"{path.name} has no commons block")
+        block.update(changes)
+        stat = path.stat()
+        path.write_text(with_commons(text, block))
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+        self._cache.clear()
+
+    def approve_share(self, name: str, sphere: str, expected_sha256: str) -> bool:
+        """Add *sphere* to the current version's ``share_with`` (a human or earned approval).
+
+        Only when the current version's hash is still *expected_sha256*: a version
+        saved since the decision needs its own (every content change resets
+        ``share_with``, #229). Returns whether it was recorded.
+        """
+        path = next(iter(self._files_named(name)), None)
+        block = read_commons(path.read_text()) if path else None
+        if block is None or block.get("content_sha256") != expected_sha256:
+            return False
+        share_with = [s for s in block.get("share_with") or [] if isinstance(s, str)]
+        if sphere not in share_with:
+            self._rewrite_block(path, {"share_with": [*share_with, sphere]})
+        return True
+
+    def set_fork_of(self, name: str, fork_of: str | None) -> bool:
+        """Set (or clear) ``fork_of`` on the current file of *name*; False if none."""
+        path = next(iter(self._files_named(name)), None)
+        if path is None or read_commons(path.read_text()) is None:
+            return False
+        self._rewrite_block(path, {"fork_of": fork_of})
+        return True
+
+    def resolve_fork(self, name: str, fork_name: str, keep: str) -> str:
+        """Resolve a sync fork (#236): ``keep`` is ``mine``, ``theirs`` or ``both``.
+
+        - ``mine``: retire the fork *fork_name*, clear ``fork_of`` on *name*.
+        - ``theirs``: retire *name*'s current file, give the fork's content the name
+          *name* (the name is not hashed) and retire the fork copy.
+        - ``both``: keep both as separate workflows, ``fork_of`` cleared on both.
+
+        Returns the name that is current afterwards.
+
+        Raises:
+            ValueError: Unknown workflow or choice.
+        """
+        mine = next(iter(self._files_named(name)), None)
+        theirs = next(iter(self._files_named(fork_name)), None)
+        if mine is None or theirs is None:
+            raise ValueError(f"no fork pair {name!r} / {fork_name!r}")
+        if keep == "mine":
+            self.retire(fork_name, f"fork resolved: kept {name!r} (#236)", superseded_by=name)
+            self.set_fork_of(name, None)
+            return name
+        if keep == "both":
+            self.set_fork_of(name, None)
+            self.set_fork_of(fork_name, None)
+            return name
+        if keep != "theirs":
+            raise ValueError(f"unknown fork choice {keep!r}")
+        text = theirs.read_text()
+        block = read_commons(text) or {}
+        block["fork_of"] = None
+        renamed = with_commons(relabel(text, name=name), block)
+        self.retire(name, "fork resolved: kept the synced version (#236)", superseded_by=name)
+        dest = _free_path(self.library_path, workflow_filename(name))
+        dest.write_text(renamed)
+        self.retire(fork_name, f"fork resolved: renamed to {name!r} (#236)", superseded_by=name)
+        self._cache.clear()
+        return name
 
     def commons_block(self, name: str) -> dict[str, Any] | None:
         """The provenance of workflow *name* (newest file, retired included).
@@ -898,34 +1070,50 @@ class WorkflowLibrary:
         """Return files for workflow *name*: active (newest first), then retired.
 
         Several active files can share a name (the optimizer saves a modified
-        workflow as ``foo_1.yaml``); the newest is the current version.
+        workflow as ``foo_1.yaml``); the current version is resolved by lineage
+        (``lineage_order``, #236), else the newest wins.
         """
         self.quarantine_unparseable()
-        dirs = [self.library_path, self.retired_path] if include_retired else [self.library_path]
-        return [path for d in dirs for n, path in self._read_named(d) if n == name]
+        active = lineage_order([p for n, p in self._read_named(self.library_path) if n == name])
+        if not include_retired:
+            return active
+        return active + [p for n, p in self._read_named(self.retired_path) if n == name]
 
     def list_workflow_files(self) -> list["WorkflowFile"]:
         """Return every active workflow file, newest first.
 
         Unlike ``list_workflows`` this keeps every file when several share a name,
-        so the curator can retire superseded copies (#148).
+        so the curator can retire superseded copies (#148). The files of one name are
+        adjacent, the current one (``lineage_order``) first.
         """
         self.ensure_initialized()
         self.quarantine_unparseable()
+        named = self._read_named(self.library_path)
+        by_name: dict[str, list[Path]] = {}
+        for name, path in named:
+            by_name.setdefault(name, []).append(path)
+        ordered = {name: lineage_order(paths) for name, paths in by_name.items()}
         files = []
-        for name, path in self._read_named(self.library_path):
-            content = path.read_text()
-            data = yaml.safe_load(content) or {}
-            tags = data.get("tags") or []
-            files.append(
-                WorkflowFile(
-                    name=name,
-                    path=path,
-                    tags=tags if isinstance(tags, list) else [tags],
-                    content=content,
-                    modified_at=datetime.fromtimestamp(path.stat().st_mtime, UTC),
+        seen: set[str] = set()
+        for name, _path in named:  # names in newest-first order, each name's files by lineage
+            if name in seen:
+                continue
+            seen.add(name)
+            for path in ordered[name]:
+                content = path.read_text()
+                data = yaml.safe_load(content) or {}
+                tags = data.get("tags") or []
+                block = data.get("commons")
+                files.append(
+                    WorkflowFile(
+                        name=name,
+                        path=path,
+                        tags=tags if isinstance(tags, list) else [tags],
+                        content=content,
+                        modified_at=datetime.fromtimestamp(path.stat().st_mtime, UTC),
+                        commons=block if isinstance(block, dict) else None,
+                    )
                 )
-            )
         return files
 
     def retire(

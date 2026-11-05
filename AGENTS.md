@@ -743,6 +743,8 @@ See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking fl
 | `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | `ZEBRA_RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | 3 | Recovery fails a process once a task has been interrupted this many times (#130) |
 | `COMMONS_ENABLED` | `ZEBRA_COMMONS_ENABLED` | false | Zebra Commons master switch; off means no Commons keys and `/commons/` actions 404 (#228) |
 | `COMMONS_KEY_DIR` | `ZEBRA_COMMONS_KEY_DIR` | `~/.zebra-agent/commons-keys` | Commons secret keys (Zebra key, device key) in a 0600 file credential store (#228) |
+| — | `ZEBRA_SYNC_DIRECTION` | both | Skill sync direction of this device: `send` / `receive` / `both` / `off` (unknown → `off`); read by `SyncService` (#236) |
+| — | `ZEBRA_SYNC_CONFIDENTIAL_PATTERNS` | — | Extra regexes (codenames, domains; one per line or `;;`-separated) that block sending a workflow from this device (#236) |
 
 ### LLM Model Tiers (OpenRouter only)
 

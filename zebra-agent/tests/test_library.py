@@ -906,7 +906,23 @@ class TestRetireRestore:
 
         assert 'description: "new"' in library.get_workflow_yaml("Flow")
 
-        # mtime decides, not the file name
+        # The new copy descends from the old one, so lineage decides, not mtime (#236)
+        os.utime(new, (time.time() - 200, time.time() - 200))
+        library._cache.clear()
+        assert 'description: "new"' in library.get_workflow_yaml("Flow")
+
+    def test_unrelated_same_name_files_newest_wins(self, library):
+        import os
+        import time
+
+        # Files with no lineage between them (no commons block): mtime decides
+        old = library.library_path / "flow.yaml"
+        new = library.library_path / "flow_1.yaml"
+        library.ensure_initialized()
+        old.write_text(_named_yaml("Flow", description="old"))
+        new.write_text(_named_yaml("Flow", description="new"))
+        os.utime(old, (time.time() - 100, time.time() - 100))
+        assert 'description: "new"' in library.get_workflow_yaml("Flow")
         os.utime(new, (time.time() - 200, time.time() - 200))
         library._cache.clear()
         assert 'description: "old"' in library.get_workflow_yaml("Flow")
