@@ -457,6 +457,27 @@ async def test_edits_on_both_sides_leave_two_versions_and_a_choice(zebra):
     assert not home.library._files_named("Code Review Checklist (from work)")
 
 
+async def test_share_back_shows_the_diff_against_the_copy_received_from_there(zebra):
+    """A workflow that came from work, edited at home, is shown as a change to work's copy."""
+    home, work = zebra("home"), zebra("work")
+    await home.trust.set_trust_level(OWNER, "sharing", TrustLevel.AUTONOMOUS, "test", "test")
+    work.save(CHECKLIST)
+    work.stats.runs["Code Review Checklist"] = 2
+    [pid] = await work.share_all()
+    await work.answer(pid, "observed_share_approval", {"decision": "approve"})
+    [rid] = await home.receive()
+    assert home.library.commons_block("Code Review Checklist") is not None
+
+    home.save(CHECKLIST.replace("team checklist", "home checklist"))
+    home.stats.runs["Code Review Checklist"] = 2
+    [pid] = await home.share_all()
+    assert [t.task_definition_id for t in await home.pending(pid)] == ["observed_share_approval"]
+    diff = (await home.engine.store.load_process(pid)).properties["share"]["diff"]
+    assert "no copy in work" not in diff
+    assert "-" in diff and "+" in diff
+    assert "home checklist" in diff and "team checklist" in diff
+
+
 async def test_fast_forward_replaces_and_stale_is_ignored(zebra):
     home, work = zebra("home"), zebra("work")
     await home.trust.set_trust_level(OWNER, "sharing", TrustLevel.AUTONOMOUS, "test", "test")

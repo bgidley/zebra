@@ -84,6 +84,8 @@ class SkillSharePrepareAction(TaskAction):
         from zebra_agent.commons.sync import (
             BLOCKED,
             PROPOSED,
+            RECEIVED,
+            SENT,
             SKIPPED,
             bytes_sha256,
             diff_text,
@@ -129,10 +131,12 @@ class SkillSharePrepareAction(TaskAction):
             )
         text = info.definition_path.read_text()
         payload = skill_payload(text)
+        # The target's copy is the newest version we sent there or received from there.
         before = None
         for r in share_records(library):
-            if r.get("name") == name and r.get("sphere") == sphere and r.get("status") == "sent":
-                before = r.get("content_sha256")
+            if r.get("name") == name and r.get("sphere") == sphere:
+                if r.get("status") in (SENT, RECEIVED):
+                    before = r.get("content_sha256")
         old = version_yaml(library, before) if before and before != content_hash else None
         observed = sync.is_observed(sphere)
         tainted_observed = any(
