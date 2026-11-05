@@ -325,6 +325,7 @@ about 60 KB we would split the content, which is deferred.
 - `commons_pii_scan`: rule-based plus low-tier LLM scan for personal data in the YAML (prompts, defaults, examples). Fails closed.
 - `commons_publish`, `commons_attest`, `commons_trade`: build, sign and publish an event
 - `commons_judge_import`: validation and registry check, then reputation lookup, giving a `proceed` / `reject` / `escalate` route
+- `commons_adopt` and `commons_supervised_run` trust no process property: each refuses unless it runs in its own system workflow (the shipped *Commons Import*, the regenerated *Supervised run* wrapper) and the step journal records the gates / the owner's answer. Imported and generated workflows may not use the Commons-internal actions (`zebra_tasks/commons/guard.py`).
 - `commons_adopt`: `WorkflowLibrary.save(..., writer="adopt")` keeps the received `commons` block verbatim (hash verified), sets `supervised: true` and renames for display
 
 ### Workflows (`zebra-agent/workflows/`, system)

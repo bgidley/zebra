@@ -36,6 +36,7 @@ from zebra.core.models import (
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.definition_actions import definition_actions
+from zebra_tasks.commons.guard import completed_steps, human_answer
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ WRAPPER_ID_PREFIX = "s:"
 #: Name prefix of the generated wrapper; reserved: no adopted workflow may use it.
 WRAPPER_NAME_PREFIX = "Supervised run: "
 APPROVAL_TASK = "approve_run"
+APPLY_TASK = "apply_decision"
 DECISION_RUN = "run"
 DECISION_REJECT = "reject"
 
@@ -209,7 +211,7 @@ def supervised_run_definition(real: ProcessDefinition) -> ProcessDefinition:
         },
     )
     apply = TaskDefinition(
-        id="apply_decision",
+        id=APPLY_TASK,
         name="Run or Refuse",
         action="commons_supervised_run",
         properties={"idempotent": True},
@@ -219,12 +221,12 @@ def supervised_run_definition(real: ProcessDefinition) -> ProcessDefinition:
         name=f"{WRAPPER_NAME_PREFIX}{real.name}",
         version=real.version,
         first_task_id=APPROVAL_TASK,
-        tasks={APPROVAL_TASK: approval, "apply_decision": apply},
+        tasks={APPROVAL_TASK: approval, APPLY_TASK: apply},
         routings=[
             RoutingDefinition(
-                id="approve_run_to_apply_decision_0",
+                id=f"{APPROVAL_TASK}_to_{APPLY_TASK}_0",
                 source_task_id=APPROVAL_TASK,
-                dest_task_id="apply_decision",
+                dest_task_id=APPLY_TASK,
             )
         ],
         properties=properties,
@@ -238,9 +240,19 @@ def wrapper_properties(
     entry: str,
     properties: dict[str, Any],
 ) -> dict[str, Any]:
-    """The wrapper process's properties: the caller's, plus what to start on approval."""
+    """The wrapper process's properties: the caller's, plus what to start on approval.
+
+    The caller's task outputs and wrapper keys are not carried onto the wrapper: only
+    the owner's answer on ``approve_run`` may set ``__task_output_approve_run``.
+    """
+    carried = {
+        k: v
+        for k, v in properties.items()
+        if not k.startswith("__task_output_")
+        and k not in (SUPERVISED_LAUNCH_KEY, SUPERVISED_SUMMARY_KEY, SUPERVISED_REJECTED_KEY)
+    }
     return {
-        **properties,
+        **carried,
         SUPERVISED_LAUNCH_KEY: {
             "workflow": launch.workflow,
             "definition_id": real.id,
@@ -269,32 +281,31 @@ class CommonsSupervisedRunAction(TaskAction):
     # Starts the approved workflow: whatever it does happens outside this run.
     reversibility_hint = "context_dependent"
 
-    inputs = [
-        ParameterDef(
-            name="approval_task",
-            type="string",
-            description="Human approval task whose output holds the decision",
-            required=False,
-            default=APPROVAL_TASK,
-        ),
-    ]
     outputs = [
         ParameterDef(name="workflow", type="string", description="The workflow", required=True),
         ParameterDef(name="success", type="bool", description="It ran and finished", required=True),
     ]
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
-        """Start the child on approval; on resume pass its result on."""
+        """Start the child on approval; on resume pass its result on.
+
+        Refuses unless this process is the generated wrapper for the workflow it would
+        start, and the owner's ``run`` came from completing ``approve_run`` (step
+        journal), not from a process property any task could write.
+        """
         launch = context.process.properties.get(SUPERVISED_LAUNCH_KEY)
         if not isinstance(launch, dict):
             return TaskResult.fail("Not a supervised run: no launch record")
         workflow = str(launch.get("workflow") or "")
+        real, why = await self._verify_wrapper(context, launch)
+        if real is None:
+            logger.warning("commons_supervised_run refused in %s: %s", context.process.id, why)
+            return TaskResult.fail(f"Not a supervised run: {why}")
         if context.subflow_results is not None:
             return await self._finish(task, context, workflow)
 
-        approval = task.properties.get("approval_task", APPROVAL_TASK)
-        answer = context.process.properties.get(f"__task_output_{approval}")
-        decision = answer.get("decision") if isinstance(answer, dict) else None
+        answer = human_answer(await completed_steps(context), APPROVAL_TASK)
+        decision = answer.get("decision") if answer else None
         if decision != DECISION_RUN:
             return self._reject(context, workflow, "the owner did not approve the run")
         stopped = await commons_stop_reason(context.extras)
@@ -303,11 +314,8 @@ class CommonsSupervisedRunAction(TaskAction):
 
         child_id = task.properties.get(CHILD_KEY)
         if not child_id:
-            definition = await context.store.load_definition(str(launch.get("definition_id")))
-            if definition is None:
-                return TaskResult.fail(f"Supervised workflow {workflow!r} definition is missing")
             child = await context.engine.create_process(  # approved at the choke point
-                definition,
+                real,
                 properties=dict(launch.get("properties") or {}),
                 parent_process_id=context.process.id,
                 parent_task_id=task.id,
@@ -321,6 +329,35 @@ class CommonsSupervisedRunAction(TaskAction):
                 await context.engine.start_process(child_id, start_task_ids=list(start_ids))
             # Otherwise left CREATED: the engine starts it once this task has suspended.
         return TaskResult.suspend([child_id])
+
+    @staticmethod
+    async def _verify_wrapper(
+        context: ExecutionContext, launch: dict[str, Any]
+    ) -> tuple[ProcessDefinition | None, str]:
+        """The workflow to start, if this process really is its *Supervised run* wrapper."""
+        if context.task_definition.id != APPLY_TASK:
+            return None, "the action runs only as the wrapper's apply_decision task"
+        definition_id = launch.get("definition_id")
+        real = await context.store.load_definition(str(definition_id)) if definition_id else None
+        if real is None:
+            return None, f"supervised workflow definition {definition_id!r} is missing"
+        if real.name != launch.get("workflow"):
+            return None, "the launch record names another workflow"
+        expected = supervised_run_definition(real)
+        if context.process.definition_id != expected.id or context.process_definition.model_dump(
+            mode="json"
+        ) != expected.model_dump(mode="json"):
+            return None, "this process is not the generated wrapper of the workflow"
+        actions = workflow_actions(real, getattr(context.engine, "actions", None))
+        summary = approval_summary(
+            real.name, actions, str(launch.get("entry") or ""), launch.get("properties") or {}
+        )
+        if (
+            launch.get("actions") != actions
+            or context.process.properties.get(SUPERVISED_SUMMARY_KEY) != summary
+        ):
+            return None, "what the owner was shown does not match the workflow"
+        return real, ""
 
     async def _finish(
         self, task: TaskInstance, context: ExecutionContext, workflow: str

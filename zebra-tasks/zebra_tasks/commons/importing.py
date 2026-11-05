@@ -25,6 +25,12 @@ from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
 from zebra_tasks.agent.definition_actions import definition_actions, describe
+from zebra_tasks.commons.guard import (
+    completed_steps,
+    human_answer,
+    internal_actions_used,
+    is_import_workflow,
+)
 from zebra_tasks.commons.supervised import (
     commons_stop_reason,
     is_reserved_name,
@@ -161,6 +167,13 @@ class CommonsJudgeImportAction(TaskAction):
                     f"{describe(defined)} uses action '{defined.action}', which I do not have",
                     None,
                 )
+        internal = internal_actions_used(definition)
+        if internal:
+            return (
+                f"{describe(internal[0])} uses '{internal[0].action}', which only my own "
+                "Commons workflows may run",
+                None,
+            )
         publisher = publisher_label(verified.display_name, verified.zebra_pubkey)
         local_name = f"{verified.name} (from {publisher})"
         if is_reserved_name(verified.name) or is_reserved_name(local_name):
@@ -225,6 +238,25 @@ class CommonsImportReviewAction(TaskAction):
         return TaskResult.ok(output={"review": review})
 
 
+#: Gate task -> the route it must have taken before ``commons_adopt`` may write.
+_GATES_TO_OWNER = {"judge": PROCEED, "pii_scan": "clean"}
+_GATES_UNATTENDED = {**_GATES_TO_OWNER, "ethics": PROCEED, "gym": "passed", "trust": PROCEED}
+
+
+def missing_gates(steps: dict[str, Any], *, owner_approved: bool) -> str | None:
+    """The first gate the step journal has no passing record of, or None.
+
+    Every adoption needs the judge and the personal-data scan. Without the owner's
+    approval it also needs ethics, the gym and the ``sharing`` trust gate to proceed.
+    """
+    gates = _GATES_TO_OWNER if owner_approved else _GATES_UNATTENDED
+    for gate, route in gates.items():
+        event = steps.get(gate)
+        if event is None or event.next_route != route:
+            return gate
+    return None
+
+
 class CommonsAdoptAction(TaskAction):
     """Adopt a judged import into the library, supervised; route ``adopted`` / ``refused``."""
 
@@ -247,7 +279,10 @@ class CommonsAdoptAction(TaskAction):
         ParameterDef(
             name="approval_task",
             type="string",
-            description="Owner approval task whose decision must be 'adopt', if any",
+            description=(
+                "Owner approval task whose decision must be 'adopt', if any; read from the "
+                "step journal"
+            ),
             required=False,
         ),
         ParameterDef(
@@ -262,14 +297,26 @@ class CommonsAdoptAction(TaskAction):
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Adopt, or refuse with a reason."""
         key = task.properties.get("output_key", "commons_adoption")
-        approval = task.properties.get("approval_task")
+        if not is_import_workflow(context.process_definition):
+            logger.warning(
+                "commons_adopt refused in %s (%s): not the Commons Import workflow",
+                context.process.id,
+                context.process_definition.name,
+            )
+            return TaskResult.fail("commons_adopt runs only in the Commons Import system workflow")
+        steps = await completed_steps(context)
+        # The task definition, not the instance: what the shipped workflow says.
+        approval = context.task_definition.properties.get("approval_task")
         if approval:
-            answer = context.process.properties.get(f"__task_output_{approval}")
-            decision = answer.get("decision") if isinstance(answer, dict) else None
+            answer = human_answer(steps, approval)
+            decision = answer.get("decision") if answer else None
             if decision != DECISION_ADOPT:
-                note = answer.get("note") if isinstance(answer, dict) else ""
+                note = answer.get("note") if answer else ""
                 reason = "the owner rejected it" + (f": {note}" if note else "")
                 return self._result(context, key, DECLINED, reason)
+        missing = missing_gates(steps, owner_approved=bool(approval))
+        if missing:
+            return self._result(context, key, REFUSED, f"no record that {missing} passed")
         reason, result = await self._adopt(task, context)
         if reason:
             return self._result(context, key, REFUSED, reason)

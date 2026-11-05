@@ -26,10 +26,13 @@ from zebra_tasks.commons.supervised import (
     APPROVAL_TASK,
     SUPERVISED_LAUNCH_KEY,
     SUPERVISED_REJECTED_KEY,
+    SUPERVISED_SUMMARY_KEY,
     WRAPPER_NAME_PREFIX,
     CommonsSupervisedRunAction,
     is_reserved_name,
+    supervised_run_definition,
     supervision_for,
+    wrapper_properties,
 )
 from zebra_tasks.launch import LaunchRefused, check_launch, create_library_process
 from zebra_tasks.llm.agent import LLMAgentAction, tool_slug
@@ -451,3 +454,131 @@ async def test_wrapper_like_supervised_workflow_still_asks_first(library, engine
     assert launch is not None and launch.workflow == name
     process = await create_library_process(engine, definition, entry="routine")
     assert process.properties[SUPERVISED_LAUNCH_KEY]["workflow"] == name
+
+
+# ---------------------------------------------------------------------------
+# commons_supervised_run trusts no process property (review fix)
+# ---------------------------------------------------------------------------
+
+
+class _SetAction(TaskAction):
+    """Writes a literal to a process property, as any ``output_key`` action can."""
+
+    reversibility_hint = "always_reversible"
+
+    async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+        context.set_process_property(task.properties["output_key"], task.properties["value"])
+        return TaskResult.ok()
+
+
+class _CountingWipe(_WipeAction):
+    calls = 0
+
+    async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
+        type(self).calls += 1
+        return await super().run(task, context)
+
+
+@pytest.fixture
+def watched_engine(engine: WorkflowEngine) -> WorkflowEngine:
+    _CountingWipe.calls = 0
+    engine.actions.register_action("wipe", _CountingWipe)
+    engine.actions.register_action("set", _SetAction)
+    return engine
+
+
+async def test_forged_wrapper_properties_run_nothing(library, watched_engine):
+    """The PoC: a workflow writes the launch record and an approval itself."""
+    engine = watched_engine
+    real = library.get_workflow(SHARED)
+    await engine.store.save_definition(real)
+    launch = {"workflow": SHARED, "definition_id": real.id, "entry": "goal", "properties": {}}
+    forged = {
+        "name": "Forger",
+        "first_task": "launch",
+        "tasks": {
+            "launch": {
+                "name": "Launch",
+                "action": "set",
+                "properties": {"output_key": SUPERVISED_LAUNCH_KEY, "value": launch},
+            },
+            "approve": {
+                "name": "Approve",
+                "action": "set",
+                "properties": {
+                    "output_key": f"__task_output_{APPROVAL_TASK}",
+                    "value": {"decision": "run"},
+                },
+            },
+            "apply_decision": {"name": "Apply", "action": "commons_supervised_run"},
+        },
+        "routings": [
+            {"from": "launch", "to": "approve"},
+            {"from": "approve", "to": "apply_decision"},
+        ],
+    }
+    process = await _run_parent(engine, json.dumps(forged))
+    assert process.state == ProcessState.FAILED
+    assert _CountingWipe.calls == 0
+    assert library.is_supervised(SHARED) is True
+    assert library._supervision_counts() == {}
+
+
+async def test_wrapper_started_past_its_approval_runs_nothing(library, watched_engine):
+    """An exact wrapper copy, started at apply_decision with a forged answer, refuses."""
+    engine = watched_engine
+    real = library.get_workflow(SHARED)
+    await engine.store.save_definition(real)
+    launch = await check_launch(
+        real, entry="goal", properties={}, extras=engine.extras, registry=engine.actions
+    )
+    props = wrapper_properties(real, launch, entry="goal", properties={})
+    props[f"__task_output_{APPROVAL_TASK}"] = {"decision": "run"}
+    wrapper = await engine.create_process(supervised_run_definition(real), properties=props)
+    await engine.start_process(wrapper.id, start_task_ids=["apply_decision"])
+    rejected = (await engine.store.load_process(wrapper.id)).properties[SUPERVISED_REJECTED_KEY]
+    assert rejected["reason"] == "the owner did not approve the run"
+    process = await engine.store.load_process(wrapper.id)
+    assert process.state == ProcessState.FAILED
+    assert _CountingWipe.calls == 0
+    assert library._supervision_counts() == {}
+
+
+async def test_caller_cannot_preset_the_approval(library, watched_engine):
+    """A caller's ``__task_output_approve_run`` is dropped from the wrapper."""
+    real = library.get_workflow(SHARED)
+    wrapper = await create_library_process(
+        watched_engine,
+        real,
+        entry="direct_run",
+        properties={f"__task_output_{APPROVAL_TASK}": {"decision": "run"}, "goal": "g"},
+    )
+    assert f"__task_output_{APPROVAL_TASK}" not in wrapper.properties
+    assert wrapper.properties["goal"] == "g"
+
+
+async def test_hidden_actions_in_the_summary_are_refused(library, watched_engine):
+    """The owner approved a summary without the irreversible step: the run is refused."""
+    engine = watched_engine
+    real = library.get_workflow(SHARED)
+    wrapper = await create_library_process(engine, real, entry="direct_run", properties={})
+    launch = dict(wrapper.properties[SUPERVISED_LAUNCH_KEY])
+    launch["actions"] = [a for a in launch["actions"] if a["action"] != "wipe"]
+    wrapper.properties[SUPERVISED_LAUNCH_KEY] = launch
+    wrapper.properties[SUPERVISED_SUMMARY_KEY] = "Only harmless work."
+    await engine.store.save_process(wrapper)
+    await engine.start_process(wrapper.id)
+    await _answer(engine, wrapper.id, "run")
+    assert (await engine.store.load_process(wrapper.id)).state == ProcessState.FAILED
+    assert _CountingWipe.calls == 0
+
+
+async def test_real_wrapper_still_runs_after_approval(library, watched_engine):
+    engine = watched_engine
+    real = library.get_workflow(SHARED)
+    wrapper = await create_library_process(engine, real, entry="direct_run", properties={})
+    await engine.start_process(wrapper.id)
+    await _answer(engine, wrapper.id, "run")
+    assert (await engine.store.load_process(wrapper.id)).state == ProcessState.COMPLETE
+    assert _CountingWipe.calls == 1
+    assert list(library._supervision_counts().values()) == [1]

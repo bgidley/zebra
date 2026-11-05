@@ -96,3 +96,31 @@ emergency override SHALL set `supervised` again on every adopted workflow.
 #### Scenario: Kill switch
 - **WHEN** the kill switch is on and a supervised workflow is launched
 - **THEN** the launch is refused
+
+### Requirement: Commons plumbing runs only in its own workflows
+`commons_adopt` SHALL adopt only when its process runs the shipped *Commons Import* workflow
+(same tasks, routings and hooks) and the step journal records the judge (`proceed`) and the
+personal-data scan (`clean`), plus ethics, the gym (`passed`) and the `sharing` trust gate
+(`proceed`) when no owner approved, or the owner's `adopt` written by completing
+`owner_approval`. `commons_supervised_run` SHALL start a workflow only when its process runs
+the wrapper regenerated from that workflow's definition, the actions and summary the owner was
+shown match it, and the journal records `approve_run` completed with `decision: run`. Neither
+SHALL trust a process property for a gate or an approval. Imported and generated workflows
+SHALL NOT use the Commons-internal actions.
+
+#### Scenario: Forged supervised run
+- **WHEN** an ordinary workflow writes `__supervised_launch__` and `__task_output_approve_run`
+  itself and then runs `commons_supervised_run`
+- **THEN** the task fails, nothing of the supervised workflow runs and no approved run is counted
+
+#### Scenario: Direct adoption
+- **WHEN** a workflow other than *Commons Import* runs `commons_adopt` with a validly signed file
+- **THEN** the task fails and nothing is saved
+
+#### Scenario: Commons Import started past its gates
+- **WHEN** *Commons Import* is started at `adopt` with a forged offer
+- **THEN** the import is rejected at stage `adopt` with "no record that judge passed" and nothing is saved
+
+#### Scenario: Imported workflow uses commons_adopt
+- **WHEN** an imported file's workflow uses a Commons-internal action
+- **THEN** the judge rejects it with the action named

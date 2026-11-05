@@ -43,3 +43,5 @@
 
 - [x] 8.1 No name exempts a workflow from supervision (`supervision_for`); `Supervised run: ` reserved: judge and `save(writer="adopt")` refuse it; tests
 - [x] 8.2 `definition_actions()`: task + process-level `construct_action` / `destruct_action` in `unsafe_reason` (strict and gate), the judge's registry check and `workflow_actions`; gym import-mode test with a `construct_action`
+- [x] 8.3 `commons_supervised_run` refuses unless its process is the generated wrapper of the workflow it starts (definition regenerated and compared, `apply_decision` task, launch actions and summary recomputed) and the `run` came from completing `approve_run` per the step journal; callers' `__task_output_*` are not carried onto the wrapper; PoC tests
+- [x] 8.4 `commons_adopt` refuses outside the shipped *Commons Import* workflow (executable shape) and without the journal's record of its gates (judge, PII scan; plus ethics, gym, trust unattended; the owner's `adopt` from the journal); `COMMONS_INTERNAL_ACTIONS` refused by the judge and `check_generated_workflow` (creator, variant, optimizer) and hidden from the creator prompt; tests

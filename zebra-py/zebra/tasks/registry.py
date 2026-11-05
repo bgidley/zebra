@@ -103,14 +103,19 @@ class ActionRegistry:
         return {name: cls.reversibility_hint for name, cls in self._actions.items()}
 
     # Internal module prefixes whose actions are loop plumbing, not user-composable.
-    _INTERNAL_PREFIXES: tuple[str, ...] = ("zebra_tasks.agent.", "zebra_tasks.knowledge.")
+    _INTERNAL_PREFIXES: tuple[str, ...] = (
+        "zebra_tasks.agent.",
+        "zebra_tasks.knowledge.",
+        "zebra_tasks.commons.",
+    )
 
     def describe_all(self, user_facing_only: bool = False) -> dict[str, ActionMetadata]:
         """Return metadata for all (or only user-facing) registered actions.
 
         Args:
             user_facing_only: When True, exclude internal loop-plumbing actions
-                (those in zebra_tasks.agent.* and zebra_tasks.knowledge.*).
+                (those in zebra_tasks.agent.*, zebra_tasks.knowledge.* and
+                zebra_tasks.commons.*).
 
         Returns:
             Ordered dict of action name → ActionMetadata.
