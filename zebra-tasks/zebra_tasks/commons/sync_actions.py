@@ -63,9 +63,10 @@ class SkillSharePrepareAction(TaskAction):
     Properties: ``workflow_name``, ``target_sphere``, ``trigger`` (``runs`` / ``dream`` /
     ``manual``), ``manual``, ``output_key`` (default ``share``).
 
-    Routes ``propose`` or ``skip`` (no sync service, may not send, same or unknown sphere,
-    not ``commons_exportable``, already shared, or a leak-guard ``kept`` / ``error`` result
-    on this version or any ancestor, recorded as ``blocked``). Output: ``{name, sphere,
+    Routes ``propose`` (recorded ``proposed``) or ``skip`` (recorded ``skipped``: no sync
+    service, may not send, same or unknown sphere, not ``commons_exportable``, already
+    shared; or ``blocked``: leak-guard taint on this version or any ancestor, see
+    ``leak_kept``). Output: ``{name, sphere,
     own_sphere, observed, tainted_observed, content_sha256, yaml, yaml_sha256, diff, reason,
     manual, title}``.
     """
@@ -82,6 +83,8 @@ class SkillSharePrepareAction(TaskAction):
         from zebra_agent.commons.skill import skill_payload
         from zebra_agent.commons.sync import (
             BLOCKED,
+            PROPOSED,
+            SKIPPED,
             bytes_sha256,
             diff_text,
             leak_kept,
@@ -97,26 +100,33 @@ class SkillSharePrepareAction(TaskAction):
         manual = _truthy(_prop(task, context, "manual", False))
         trigger = str(_prop(task, context, "trigger", "runs"))
 
-        def skip(reason: str) -> TaskResult:
+        content_hash = None
+
+        def skip(reason: str, status: str = SKIPPED) -> TaskResult:
             logger.info("Skill share %r → %s skipped: %s", name, sphere, reason)
+            if library is not None:
+                record_share(library, name, content_hash, sphere, status, reason=reason)
             return _done(context, key, {"name": name, "sphere": sphere, "reason": reason}, "skip")
 
         if sync is None or library is None:
             return skip("no sync service or library on this device — failing closed")
+        info = await library.get_workflow_info(name)
+        content_hash = ((info.commons or {}) if info else {}).get("content_sha256")
         if not sync.can_send:
             return skip(f"sync direction {sync.direction!r} does not allow sending")
         if not sphere or sphere == sync.sphere or sphere not in sync.other_spheres():
             return skip(f"{sphere!r} is not another sphere of this Zebra")
-        info = await library.get_workflow_info(name)
         if info is None or not commons_exportable(info):
             return skip("this workflow may not leave this deployment")
         block = info.commons or {}
-        content_hash = block.get("content_sha256")
         if sphere in (block.get("share_with") or []):
             return skip(f"already shared with {sphere}")
         if leak_kept(library, content_hash, block):
-            record_share(library, name, content_hash, sphere, BLOCKED, reason="leak guard kept")
-            return skip("the leak guard kept run specifics in this version or an ancestor")
+            return skip(
+                "the leak guard kept (or never checked) run specifics in this version or "
+                "an ancestor",
+                BLOCKED,
+            )
         text = info.definition_path.read_text()
         payload = skill_payload(text)
         before = None
@@ -167,6 +177,7 @@ class SkillSharePrepareAction(TaskAction):
                 "successful_runs": stats.successful_runs if stats else 0,
             },
         }
+        record_share(library, name, content_hash, sphere, PROPOSED, reason=trigger)
         return _done(context, key, output, "propose")
 
 

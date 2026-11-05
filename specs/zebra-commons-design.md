@@ -504,9 +504,20 @@ transport only; the relay, NIP-44 and receipts are #246.
 - Leak-guard taint (journal) blocks a version from being proposed or sent: a `saved` record
   whose writer status or save-time check (`save_check`) is `kept` or `error` taints that hash
   and every descendant (`ancestors` / `parent_sha256`), since the guard never re-flags a literal
-  already in the parent. There is no way to clear it yet; a clean rewrite starts a new lineage.
+  already in the parent. A version with no `saved` record (written before the #238 journal, when
+  `kept` lived only in process output, or the journal was lost) is tainted too, unless it is an
+  unmodified built-in; so is one with an unrecorded, non-built-in ancestor, unless a version in
+  its lineage arrived by sync (the sending device checked those ancestors). There is no way to
+  clear it yet; a clean rewrite starts a new lineage.
+- Triggers: `assess_and_record` calls `SyncService.after_run` after recording a successful goal
+  run (proposed at `MIN_RUNS_TO_SHARE` successes); `AgentLoop.run_dream_cycle` calls
+  `after_dream`. Both only when `extras["__commons_sync__"]` is set and never fail the run.
+- `SyncService.direction` defaults to `ZEBRA_SYNC_DIRECTION` (`both`; an unknown value is `off`).
+- `skill_share_prepare` records `proposed` only when it routes `propose`; a skip is `skipped`
+  (or `blocked` for leak taint) and a failed process `failed`. Neither of those is a decision,
+  so Zebra may ask again later; the genealogy shows "not proposed" / "share failed".
 - Not yet: building the service from the web settings (#246), a Share button on the workflow page
-  (`start_share(manual=True)` exists), `after_run` wiring into goal runs (#246, with the service).
+  (`start_share(manual=True)` exists).
 
 ### Leak guard (all LLM workflow writers; #237)
 Problem: the dream cycle's evaluator prompt includes raw **sample failed goals**

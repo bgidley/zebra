@@ -631,3 +631,246 @@ async def test_send_refuses_a_tainted_version_even_when_approved(zebra):
             scanned_bytes_sha256=bytes_sha256(skill_payload(path.read_text())),
         )
     assert _skill_events(zebra.relay) == []
+
+
+async def test_version_with_no_journal_record_is_tainted(zebra):
+    """A version saved before the lineage journal (or with the journal lost) fails closed."""
+    from zebra_agent.commons.sync import leak_kept
+
+    home, _work = zebra("home"), zebra("work")
+    home.save(CHECKLIST)
+    block = home.library.commons_block("Code Review Checklist")
+    assert leak_kept(home.library, block["content_sha256"], block) is False
+    home.library.journal.path.unlink()  # no `saved` record of who wrote it
+    assert leak_kept(home.library, block["content_sha256"], block) is True
+    await _assert_blocked(home, zebra.relay)
+
+
+async def test_ancestor_with_no_journal_record_taints_its_descendants(zebra):
+    from zebra_agent.commons.sync import leak_kept
+
+    home, _work = zebra("home"), zebra("work")
+    home.save(CHECKLIST)
+    first = home.library.commons_block("Code Review Checklist")["content_sha256"]
+    home.save(CHECKLIST.replace("team checklist", "better checklist"))
+    block = home.library.commons_block("Code Review Checklist")
+    assert leak_kept(home.library, block["content_sha256"], block) is False
+    # Drop the first version's record, as if it was saved before the journal existed.
+    path = home.library.journal.path
+    kept = [
+        line
+        for line in path.read_text().splitlines()
+        if not (json.loads(line).get("content_sha256") == first and '"saved"' in line)
+    ]
+    path.write_text("\n".join(kept) + "\n")
+    assert leak_kept(home.library, block["content_sha256"], block) is True
+    await _assert_blocked(home, zebra.relay)
+
+
+async def test_unmodified_builtin_needs_no_journal_record(zebra):
+    from zebra_agent.commons.sync import leak_kept
+
+    home = zebra("home")
+    block = home.library.commons_block("Skill Share")
+    assert block["content_sha256"] in home.library.builtin_hashes()
+    assert leak_kept(home.library, block["content_sha256"], block) is False
+
+
+# --- the run-count trigger: a goal run reaching MIN_RUNS_TO_SHARE proposes a share ----
+
+GOAL_RUN = """name: Goal Run
+version: 1
+description: Record one run of a goal workflow, as the Agent Main Loop does.
+first_task: assess_and_record
+tasks:
+  assess_and_record:
+    name: Assess and Record
+    action: assess_and_record
+    properties:
+      run_id: "{{run_id}}"
+      workflow_name: "{{workflow_name}}"
+      goal: "Review my change"
+      success: "{{success}}"
+"""
+
+
+async def _goal_run(device: Device, metrics, n: int, *, success: bool = True) -> None:
+    from zebra.definitions.loader import load_definition_from_yaml
+
+    process = await device.engine.create_process(
+        load_definition_from_yaml(GOAL_RUN),
+        properties={
+            "run_id": f"run-{n}",
+            "workflow_name": "Code Review Checklist",
+            "success": success,
+            "__user_id__": OWNER,
+        },
+    )
+    await device.engine.start_process(process.id)
+    finished = await device.engine.store.load_process(process.id)
+    assert finished.state == ProcessState.COMPLETE
+
+
+async def _share_processes(device: Device) -> list:
+    processes = []
+    for state in (ProcessState.RUNNING, ProcessState.COMPLETE, ProcessState.FAILED):
+        processes += await device.engine.store.get_processes_by_state(state)
+    return [p for p in processes if p.properties.get("target_sphere")]
+
+
+async def test_second_successful_goal_run_proposes_the_share(zebra):
+    from zebra_tasks.agent.assess_and_record import AssessAndRecordAction
+
+    from zebra_agent.storage.metrics import InMemoryMetricsStore
+
+    home, _work = zebra("home"), zebra("work")
+    metrics = InMemoryMetricsStore()
+    home.engine.actions.register_action("assess_and_record", AssessAndRecordAction)
+    home.engine.extras["__metrics_store__"] = metrics
+    home.save(CHECKLIST)
+
+    await _goal_run(home, metrics, 1)
+    await _goal_run(home, metrics, 2, success=False)  # a failed run proposes nothing
+    assert await _share_processes(home) == []
+    assert _statuses(home, "Code Review Checklist") == []
+
+    await _goal_run(home, metrics, 3)  # the second success
+    [share] = await _share_processes(home)
+    assert share.properties["trigger"] == "runs"
+    pending = await home.pending(share.id)
+    assert [t.task_definition_id for t in pending] == ["observed_share_approval"]
+    assert _statuses(home, "Code Review Checklist") == ["proposed"]
+    assert _skill_events(zebra.relay) == []
+
+    await _goal_run(home, metrics, 4)  # never asked twice for the same version
+    assert len(await _share_processes(home)) == 1
+
+
+async def test_goal_run_without_a_sync_service_proposes_nothing(zebra):
+    from zebra_tasks.agent.assess_and_record import AssessAndRecordAction
+
+    from zebra_agent.storage.metrics import InMemoryMetricsStore
+
+    home, _work = zebra("home"), zebra("work")
+    metrics = InMemoryMetricsStore()
+    home.engine.actions.register_action("assess_and_record", AssessAndRecordAction)
+    home.engine.extras["__metrics_store__"] = metrics
+    del home.engine.extras["__commons_sync__"]
+    home.save(CHECKLIST)
+    for n in range(3):
+        await _goal_run(home, metrics, n)
+    assert await _share_processes(home) == []
+
+
+def test_sync_direction_from_the_environment(monkeypatch, zebra):
+    from zebra_agent.commons.sync import configured_direction
+
+    assert configured_direction({}) == "both"
+    assert configured_direction({"ZEBRA_SYNC_DIRECTION": " Receive "}) == "receive"
+    assert configured_direction({"ZEBRA_SYNC_DIRECTION": "sideways"}) == "off"  # fail closed
+
+    monkeypatch.setenv("ZEBRA_SYNC_DIRECTION", "off")
+    sync = SyncService(
+        client=InMemoryCommonsClient(zebra.relay),
+        device_secret=zebra.secrets["work"],
+        zebra_pubkey="0" * 64,
+        sphere="work",
+    )
+    assert sync.direction == "off"
+    assert not sync.can_send and not sync.can_receive
+
+
+# --- proposal records: skips and failures never look like a waiting proposal ---------
+
+
+async def test_skipped_proposal_is_not_waiting_for_approval(zebra):
+    _home, work = zebra("home"), zebra("work", direction="receive")
+    work.save(CHECKLIST)
+    pid = await work.sync.start_share(
+        work.engine, work.library, "Code Review Checklist", "home", manual=True
+    )
+    assert await work.pending(pid) == []
+    assert _statuses(work, "Code Review Checklist") == ["skipped"]
+    block = work.library.commons_block("Code Review Checklist")
+    [status] = share_status(work.library, "Code Review Checklist", block["content_sha256"], block)
+    assert status["label"] == "not proposed"
+
+    # A skip is not a decision: once the device may send, Zebra can ask.
+    work.sync.direction = "both"
+    work.stats.runs["Code Review Checklist"] = 2
+    [pid] = await work.share_all()
+    assert [t.task_definition_id for t in await work.pending(pid)] == ["observed_share_approval"]
+    assert _statuses(work, "Code Review Checklist")[-1] == "proposed"
+
+
+async def test_failed_share_process_is_recorded_and_asked_again(zebra, monkeypatch):
+    home, _work = zebra("home"), zebra("work")
+    home.save(CHECKLIST)
+    home.stats.runs["Code Review Checklist"] = 2
+
+    async def crash(self, task, context):
+        raise RuntimeError("scanner crashed")
+
+    monkeypatch.setattr(CommonsPiiScanAction, "run", crash)
+    [pid] = await home.share_all()
+    assert (await home.engine.store.load_process(pid)).state == ProcessState.FAILED
+    assert _statuses(home, "Code Review Checklist")[-1] == "failed"
+    block = home.library.commons_block("Code Review Checklist")
+    [status] = share_status(home.library, "Code Review Checklist", block["content_sha256"], block)
+    assert status["label"] == "share failed"
+    assert _skill_events(zebra.relay) == []
+
+    monkeypatch.undo()
+    [pid] = await home.share_all()
+    assert [t.task_definition_id for t in await home.pending(pid)] == ["observed_share_approval"]
+
+
+# --- O3: approvals bind to one version; autonomy never covers observed taint ---------
+
+
+async def test_approval_is_void_once_the_content_changes(zebra):
+    home, _work = zebra("home"), zebra("work")
+    home.save(CHECKLIST)
+    home.stats.runs["Code Review Checklist"] = 2
+    [pid] = await home.share_all()
+    proposed = home.library.commons_block("Code Review Checklist")["content_sha256"]
+
+    home.save(CHECKLIST.replace("team checklist", "edited checklist"))  # edit while it waits
+    await home.answer(
+        pid,
+        "observed_share_approval",
+        {"decision": "approve", "visible_on_managed_device": True},
+    )
+
+    assert _skill_events(zebra.relay) == []
+    records = [r for r in share_records(home.library) if r["content_sha256"] == proposed]
+    assert [r["status"] for r in records] == ["proposed", "declined"]
+    assert "changed" in records[-1]["reason"]
+    block = home.library.commons_block("Code Review Checklist")
+    assert block["content_sha256"] != proposed
+    assert block["share_with"] == []
+
+
+async def test_autonomy_on_the_sender_never_skips_observed_taint(zebra_with):
+    """Work → home by sync, then home (AUTONOMOUS) shares it on to an unobserved studio."""
+    make = zebra_with({"home": False, "work": True, "studio": False})
+    home, work, _studio = make("home"), make("work"), make("studio")
+    await home.trust.set_trust_level(OWNER, "sharing", TrustLevel.AUTONOMOUS, "test", "test")
+
+    work.save(CHECKLIST)
+    work.stats.runs["Code Review Checklist"] = 2
+    for pid in await work.share_all():  # to home (and studio): both from observed work
+        share = (await work.engine.store.load_process(pid)).properties
+        if share["target_sphere"] == "home":
+            await work.answer(pid, "observed_share_approval", {"decision": "approve"})
+    [rid] = await home.receive()  # AUTONOMOUS home adopts without asking
+    assert (await home.engine.store.load_process(rid)).state == ProcessState.COMPLETE
+    block = home.library.commons_block("Code Review Checklist")
+    assert block["tainted_by"] == ["work"]
+    sent_before = len(_skill_events(make.relay))
+
+    home.stats.runs["Code Review Checklist"] = 2
+    [pid] = await home.share_all()  # to studio only: work already decided (received)
+    assert (await home.engine.store.load_process(pid)).properties["target_sphere"] == "studio"
+    assert [t.task_definition_id for t in await home.pending(pid)] == ["observed_share_approval"]
+    assert len(_skill_events(make.relay)) == sent_before

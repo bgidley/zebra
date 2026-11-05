@@ -373,6 +373,8 @@ LLM-powered assessment of workflow run + record to metrics store + write memory 
 
 **Store Access:** Reads `__metrics_store__` and `__memory_store__` from `context.extras` (engine-level dependency injection). Gracefully degrades if not available.
 
+**Skill sync (#236):** after recording a successful run it calls `__commons_sync__.after_run(...)` (when a sync service and `__workflow_library__` are injected), which proposes sharing the workflow once it has `MIN_RUNS_TO_SHARE` (2) successes; a failure there is logged, never fails the run.
+
 ### UpdateMemoryAction
 
 Add memory entry for completed workflow run.

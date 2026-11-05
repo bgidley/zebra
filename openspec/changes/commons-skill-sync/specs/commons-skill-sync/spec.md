@@ -31,8 +31,10 @@ sphere is in the sent `share_with`.
 Zebra SHALL propose sharing a workflow with another sphere only after `MIN_RUNS_TO_SHARE` successful
 runs or after the dream cycle, and only if it is `commons_exportable`, neither its current version
 nor any ancestor has a leak-guard `kept` or `error` result (the writer's status or the save-time
-check), and the personal-data, confidentiality and sensitivity checks pass. Every check SHALL fail
-closed. Nothing SHALL be sent before the share is approved, and the send SHALL refuse a tainted
+check) and every version in its lineage has a journal `saved` record (unmodified built-ins and the
+sent ancestors of a synced version excepted), and the personal-data, confidentiality and
+sensitivity checks pass. Every check SHALL fail closed. A successful goal run SHALL check the
+run-count trigger when a sync service is configured. Nothing SHALL be sent before the share is approved, and the send SHALL refuse a tainted
 version even if approved.
 
 #### Scenario: Not sent until approved
@@ -43,6 +45,21 @@ version even if approved.
 - **WHEN** the version, or an ancestor it was edited from, was saved with a leak-guard `kept` or
   `error` result, including a save-time `kept` under a writer's own `generalised` record
 - **THEN** it is recorded as `blocked`, no share task is raised and no `SKILL` event is sent
+
+#### Scenario: No record of who wrote a version
+- **WHEN** a version, or a non-built-in ancestor outside a synced lineage, has no journal `saved`
+  record (written before the journal, or the journal was lost)
+- **THEN** it is recorded as `blocked` and no `SKILL` event is sent
+
+#### Scenario: Second successful goal run
+- **WHEN** `assess_and_record` records a workflow's second successful run on a device with a sync
+  service
+- **THEN** a *Skill Share* process starts and waits for approval, and a later run does not start
+  another for the same version
+
+#### Scenario: A skipped or failed proposal is not waiting
+- **WHEN** the share check routes `skip`, or the *Skill Share* process fails
+- **THEN** the journal records `skipped` or `failed`, not `proposed`, and Zebra may ask again later
 
 #### Scenario: Codename blocked
 - **WHEN** a work workflow contains text matching `SYNC_CONFIDENTIAL_PATTERNS`
@@ -76,7 +93,8 @@ For a target that is not observed and a workflow whose `tainted_by` holds no obs
 
 ### Requirement: Sync direction
 A device SHALL send only when `sync_direction` is `send` or `both` and receive only when it is
-`receive` or `both`.
+`receive` or `both`. The direction SHALL default to `ZEBRA_SYNC_DIRECTION` (`both` when unset; an
+unknown value SHALL mean `off`).
 
 #### Scenario: Receive-only device
 - **WHEN** a device's direction is `receive`

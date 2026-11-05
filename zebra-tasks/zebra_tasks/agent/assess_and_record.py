@@ -26,6 +26,25 @@ def _owner_id(properties: dict) -> int | None:
         return None
 
 
+async def _propose_share_after_run(
+    context: ExecutionContext, metrics_store, workflow_name: str
+) -> None:
+    """Skill sync (#236): suggest sharing a workflow once it has enough successful runs.
+
+    Only when this device has a sync service (``extras["__commons_sync__"]``) and a
+    library; ``SyncService.after_run`` proposes it at ``MIN_RUNS_TO_SHARE`` successes, once
+    per version and sphere. Sharing is advisory: a failure never fails the goal.
+    """
+    sync = context.extras.get("__commons_sync__")
+    library = context.extras.get("__workflow_library__")
+    if sync is None or library is None or not workflow_name or context.engine is None:
+        return
+    try:
+        await sync.after_run(context.engine, library, metrics_store, workflow_name)
+    except Exception as e:  # noqa: BLE001 - sharing is advisory
+        logger.warning("Skill sync after a run of %r failed: %s", workflow_name, e)
+
+
 class AssessAndRecordAction(TaskAction):
     """
     Combine metrics recording + LLM effectiveness assessment + workflow memory write.
@@ -275,6 +294,8 @@ Respond with JSON only:
                 logger.info(f"AssessAndRecordAction: metrics recorded for run {run_id}")
             except Exception as e:
                 logger.warning(f"AssessAndRecordAction: metrics recording failed: {e}")
+            if result["recorded"] and success:
+                await _propose_share_after_run(context, metrics_store, workflow_name)
         else:
             logger.info("AssessAndRecordAction: no metrics store — skipping metrics")
 

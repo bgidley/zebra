@@ -20,10 +20,13 @@ from __future__ import annotations
 import difflib
 import hashlib
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+
+from zebra.core.models import ProcessState
 
 from zebra_agent.commons import commons_exportable, keys
 from zebra_agent.commons.client import SKILL_KIND, CommonsClient, Filter
@@ -68,6 +71,8 @@ BLOCKED = "blocked"  # a scan or the leak guard stopped it
 SENT = "sent"
 RECEIVED = "received"
 REJECTED = "rejected"  # a received event that failed the receive pipeline
+SKIPPED = "skipped"  # the Skill Share check found nothing to propose (may be asked later)
+FAILED = "failed"  # the Skill Share process failed (may be asked later)
 # Statuses after which Zebra does not propose the same version to the same sphere again.
 DECIDED = frozenset({PROPOSED, APPROVED, DECLINED, SENSITIVE, BLOCKED, SENT, RECEIVED})
 STATUS_LABELS = {
@@ -79,9 +84,33 @@ STATUS_LABELS = {
     SENT: "shared",
     RECEIVED: "received from there",
     REJECTED: "rejected on arrival",
+    SKIPPED: "not proposed",
+    FAILED: "share failed",
 }
 
 NEW, NOOP, FAST_FORWARD, STALE, FORK = "new", "noop", "fast_forward", "stale", "fork"
+
+
+SYNC_DIRECTION_ENV = "ZEBRA_SYNC_DIRECTION"
+DEFAULT_SYNC_DIRECTION = "both"
+
+
+def configured_direction(env: dict[str, str] | None = None) -> str:
+    """This device's ``SYNC_DIRECTION`` from ``ZEBRA_SYNC_DIRECTION`` (default ``both``).
+
+    The employer switch: ``off`` or ``receive`` stop a device sending. An unknown value
+    fails closed to ``off``.
+    """
+    raw = (os.environ if env is None else env).get(SYNC_DIRECTION_ENV)
+    if raw is None or not raw.strip():
+        return DEFAULT_SYNC_DIRECTION
+    value = raw.strip().lower()
+    if value not in SYNC_DIRECTIONS:
+        logger.warning(
+            "%s=%r is not one of %s: sync is off", SYNC_DIRECTION_ENV, raw, SYNC_DIRECTIONS
+        )
+        return "off"
+    return value
 
 
 def can_send(direction: str | None) -> bool:
@@ -189,23 +218,39 @@ def _leak_tainted_record(leak: dict[str, Any] | None) -> bool:
 def leak_kept(
     library: WorkflowLibrary, content_hash: str | None, block: dict[str, Any] | None = None
 ) -> bool:
-    """Whether this version, or any version it descends from, carries leak-guard taint.
+    """Whether this version, or any version it descends from, may carry run specifics.
 
-    A journal ``saved`` record taints its hash when the writer's status or the save-time
-    check (``save_check``) is ``kept`` or ``error``, or the check failed. The taint passes to
-    every descendant: the leak guard never flags a literal already in the parent, so an edit
-    of a ``kept`` version still carries it. *block* gives the version's lineage
-    (``ancestors``, ``parent_sha256``). A version with no hash is treated as tainted.
+    Fails closed. A version is tainted when:
+
+    - a journal ``saved`` record of it or of an ancestor has a ``kept`` or ``error`` leak
+      result (the writer's status or the save-time ``save_check``) or a failed check. The
+      taint passes to every descendant: the leak guard never flags a literal already in the
+      parent, so an edit of a ``kept`` version still carries it;
+    - it has no hash, or no ``saved`` record at all (written before the lineage journal,
+      #238, when ``kept`` results lived only in process output, or the journal was lost),
+      unless it is an unmodified built-in;
+    - an ancestor has no ``saved`` record, is not a built-in, and no version in the lineage
+      arrived by sync (a synced version's ancestors were checked by the sending device).
+
+    *block* gives the version's lineage (``ancestors``, ``parent_sha256``).
     """
     if not content_hash:
         return True
     lineage = {content_hash} | _lineage(block or {})
+    saved: dict[str, list[dict[str, Any]]] = {}
     for r in library.journal.read():
-        if r.get("event") != "saved" or r.get("content_sha256") not in lineage:
-            continue
-        if _leak_tainted_record(r.get("leak_guard")):
-            return True
-    return False
+        if r.get("event") == "saved" and r.get("content_sha256") in lineage:
+            saved.setdefault(r["content_sha256"], []).append(r)
+    if any(_leak_tainted_record(r.get("leak_guard")) for rs in saved.values() for r in rs):
+        return True
+    builtin = library.builtin_hashes()
+    if content_hash in builtin:
+        return False
+    if content_hash not in saved:
+        return True
+    synced = any(r.get("writer") == "sync" for rs in saved.values() for r in rs)
+    unknown = [h for h in lineage if h not in saved and h not in builtin]
+    return bool(unknown) and not synced
 
 
 def share_status(
@@ -271,7 +316,8 @@ class SyncService:
         device_secret: This device's secret key (never logged)
         zebra_pubkey: This device's Zebra key
         sphere: This device's sphere; ``observed`` whether it is managed by someone else
-        direction: ``send`` / ``receive`` / ``both`` / ``off``
+        direction: ``send`` / ``receive`` / ``both`` / ``off`` (default
+            ``ZEBRA_SYNC_DIRECTION``, else ``both``)
         certs: The ``DEVICE_CERT`` / ``DEVICE_REVOKE`` events of this Zebra held here
         confidential_patterns: ``SYNC_CONFIDENTIAL_PATTERNS`` of this device
         device_label: This device's label
@@ -283,7 +329,7 @@ class SyncService:
     zebra_pubkey: str
     sphere: str
     observed: bool = False
-    direction: str = "both"
+    direction: str = field(default_factory=configured_direction)
     certs: list[Event] = field(default_factory=list)
     confidential_patterns: list[str] = field(default_factory=list)
     device_label: str = ""
@@ -401,6 +447,10 @@ class SyncService:
 
         ``manual`` is a human's share from the workflow page: it may reach an observed
         sphere even when sensitive, after the managed-device confirmation.
+
+        ``skill_share_prepare`` records ``proposed`` (or ``skipped`` / ``blocked``) once it
+        has checked the share; a process that fails is recorded ``failed``, so the
+        genealogy never shows a proposal with no task behind it.
         """
         info = await library.get_workflow_info(name)
         content_hash = ((info.commons or {}) if info else {}).get("content_sha256")
@@ -413,10 +463,17 @@ class SyncService:
         }
         if owner is not None:
             properties["__user_id__"] = owner
-        record_share(library, name, content_hash, sphere, PROPOSED, reason=trigger)
         definition = library.get_workflow(SKILL_SHARE_WORKFLOW)
         process = await engine.create_process(definition, properties=properties)
-        await engine.start_process(process.id)
+        try:
+            await engine.start_process(process.id)
+        except Exception as e:
+            record_share(library, name, content_hash, sphere, FAILED, reason=str(e))
+            raise
+        current = await engine.store.load_process(process.id)
+        if current is not None and current.state == ProcessState.FAILED:
+            reason = (current.properties or {}).get("__error__") or "the share process failed"
+            record_share(library, name, content_hash, sphere, FAILED, reason=str(reason))
         return process.id
 
     async def propose(

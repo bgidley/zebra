@@ -28,3 +28,11 @@
 - [x] 4.4 Review fix: leak-guard taint fails closed — `save_check` kept in the journal, a crashed
   save-time check journaled as `error`, `kept` / `error` on any ancestor taints, `send` re-checks;
   E2E tests for a kept save, a kept ancestor, a merged writer + save record and an `error`
+- [x] 4.5 Review fix: a version (or a non-built-in ancestor outside a synced lineage) with no
+  journal `saved` record is tainted; tests for a lost journal, an unrecorded ancestor, a built-in
+- [x] 4.6 Review fix: `after_run` wired into `assess_and_record` (successful runs, sync service
+  present); `ZEBRA_SYNC_DIRECTION` read by `SyncService`; E2E goal runs reach the share
+- [x] 4.7 Review fix: `proposed` recorded by prepare on `propose` only; `skipped` / `failed`
+  records; tests for a skipped manual share and a failed share process
+- [x] 4.8 Review fix: workflow tests for an approval voided by an edit and for AUTONOMOUS
+  sharing on the sender with an unobserved target and observed `tainted_by`

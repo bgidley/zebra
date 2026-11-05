@@ -29,7 +29,10 @@ the workflow page (needs that service; the manual path exists as `start_share(ma
    sender's sphere comes from its cert, never from the event body.
 4. **Share decisions are journal records** (`event: "share"` in the #238 lineage journal) keyed on
    (content hash, sphere) with status `proposed`, `approved`, `declined`, `sensitive`, `blocked`,
-   `sent`, `received`. Candidates skip any (hash, sphere) already decided, so Zebra never nags,
+   `sent`, `received`, plus `skipped` / `failed` (not decisions: Zebra may ask again).
+   `skill_share_prepare` writes `proposed` only when it routes `propose`, so a skipped or failed
+   process never shows as "waiting for approval". Candidates skip any (hash, sphere) already
+   decided, so Zebra never nags,
    and a new hash (every content change resets `share_with`) is a new decision. Approval writes
    the sphere into `share_with` in place (mtime kept) only if the current hash is still the
    approved one.
@@ -42,8 +45,10 @@ the workflow page (needs that service; the manual path exists as `start_share(ma
      `share_approval`.
 6. **Triggers.** `SyncService.after_run(library, metrics, name)` proposes one workflow once it has
    `MIN_RUNS_TO_SHARE` successful runs; `after_dream(...)` proposes every eligible workflow (the
-   dream cycle resets `share_with` when it rewrites one). `AgentLoop.run_dream_cycle` calls
-   `after_dream` when a service is in the engine extras. `receive_pending()` starts one *Skill
+   dream cycle resets `share_with` when it rewrites one). `assess_and_record` calls `after_run`
+   after recording a successful goal run and `AgentLoop.run_dream_cycle` calls `after_dream`,
+   both only when a service is in the engine extras. `SyncService.direction` defaults to
+   `ZEBRA_SYNC_DIRECTION` (`both`; unknown → `off`). `receive_pending()` starts one *Skill
    Receive* per new event addressed to this device.
 7. **Lineage merge.** `merge_decision(local_block, incoming_block)`: `new`, `noop`, `fast_forward`
    (local hash in incoming ancestors), `stale` (incoming hash in local ancestors), `fork`.
@@ -60,4 +65,5 @@ the workflow page (needs that service; the manual path exists as `start_share(ma
 - Plaintext events until #246: acceptable because nothing publishes outside tests.
 - Confidentiality rules are heuristic (the design says "not proof"); URLs other than reserved
   example domains block, which will catch some harmless public links: fail closed by choice.
-- Share decisions live in the journal, a local file: losing it only means Zebra may ask again.
+- Share decisions live in the journal, a local file. Losing it means Zebra may ask again, and
+  (leak taint fails closed) that versions with no `saved` record are never shared until rewritten.
