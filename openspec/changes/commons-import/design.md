@@ -52,6 +52,8 @@ import process (`commons_import_result`) only.
    `engine.create_process`, allowlisted: approved at the choke point), suspends, and on resume
    copies the child's non-`__` properties, `__output__` and cost, records the run with the library
    and succeeds or fails like the child. Anything but `run` fails with `__supervised_rejected__`.
+   `supervision_for` exempts no name (the wrapper never reaches `check_launch`); the
+   `Supervised run: ` prefix is reserved and refused by the judge and `save(writer="adopt")`.
    Every caller already starts and suspends on (or watches) the process it gets back, so goals,
    routines, direct runs, sub-workflows and tools all park on the approval.
 5. **Failover**: `execute_goal_workflow` sees a wrapper that failed with `__supervised_rejected__`,

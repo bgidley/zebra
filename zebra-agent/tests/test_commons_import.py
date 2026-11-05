@@ -139,19 +139,21 @@ def publisher_keys():
     return keys.public_key(zebra_secret), device_secret, cert
 
 
-async def _export(tmp_path: Path, publisher_keys, yaml_text: str, golden=GOLDEN) -> str:
+async def _export(
+    tmp_path: Path, publisher_keys, yaml_text: str, golden=GOLDEN, name: str = "Capital Facts"
+) -> str:
     zebra_pub, device_secret, cert = publisher_keys
     pub = WorkflowLibrary(tmp_path / f"pub-{len(list(tmp_path.iterdir()))}", owner_user_id=1)
     pub.add_workflow(yaml_text)
     golden_dir = pub.library_path.parent / "golden-pub"
     golden_dir.mkdir(exist_ok=True)
     for i, task in enumerate(golden or []):
-        data = {"id": f"g{i}", "workflow": "Capital Facts", **task}
+        data = {"id": f"g{i}", "workflow": name, **task}
         (golden_dir / f"g{i}.yaml").write_text(json.dumps(data))
     pub.golden_path = golden_dir
     return await export_workflow(
         pub,
-        "Capital Facts",
+        name,
         device_secret=device_secret,
         zebra_pubkey=zebra_pub,
         chain=[cert],
@@ -321,6 +323,53 @@ async def test_file_delete_never_runs_in_the_gym_and_escalates(
         "owner_approval"
     ]
     assert "`file_delete` — **may be irreversible**" in process.properties["import_review"]
+    assert _adopted(library) == []
+
+
+async def test_file_delete_in_a_construct_action_never_runs_and_escalates(
+    tmp_path, publisher_keys, engine, library, llm, created
+):
+    """O3/O4: a top-level construct_action is checked, listed and flagged like a task's."""
+    yaml_text = _workflow().replace(
+        "first_task: answer", "construct_action: file_delete\nfirst_task: answer"
+    )
+    text = await _export(tmp_path, publisher_keys, yaml_text)
+    process = await _import(engine, library, text)
+    gym = process.properties["golden_gym"]["import"]
+    assert gym["decision"] == "escalate"
+    assert "construct_action 'file_delete'" in gym["reason"]
+    assert "Capital Facts" not in created  # never run in the gym
+    assert (
+        "workflow start: `file_delete` — **may be irreversible**"
+        in (process.properties["import_review"])
+    )
+    assert _adopted(library) == []
+
+
+async def test_unregistered_construct_action_is_rejected_by_the_judge(
+    tmp_path, publisher_keys, engine, library
+):
+    yaml_text = _workflow().replace(
+        "first_task: answer", "destruct_action: teleport\nfirst_task: answer"
+    )
+    text = await _export(tmp_path, publisher_keys, yaml_text)
+    process = await _import(engine, library, text)
+    result = process.properties["commons_import_result"]
+    assert result["stage"] == "judge"
+    assert "the workflow destruct_action uses action 'teleport'" in result["reason"]
+
+
+async def test_wrapper_like_name_is_rejected_by_the_judge(
+    tmp_path, publisher_keys, engine, library, llm
+):
+    """A publisher cannot name a workflow like the Supervised run wrapper."""
+    name = "Supervised run: Capital Facts"
+    yaml_text = _workflow().replace('name: "Capital Facts"', f'name: "{name}"')
+    text = await _export(tmp_path, publisher_keys, yaml_text, name=name)
+    process = await _import(engine, library, text)
+    result = process.properties["commons_import_result"]
+    assert (result["status"], result["stage"]) == ("rejected", "judge")
+    assert "reserved for supervised runs" in result["reason"]
     assert _adopted(library) == []
 
 

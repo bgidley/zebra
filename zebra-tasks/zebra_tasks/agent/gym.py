@@ -37,6 +37,7 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_agent.gym import GoldenTask, parse_golden_task
 from zebra_agent.metrics import GymScore
 
+from zebra_tasks.agent.definition_actions import definition_actions, describe
 from zebra_tasks.agent.execute_workflow import extract_workflow_output
 from zebra_tasks.agent.optimizer import evaluator_reason, save_workflow_file
 from zebra_tasks.agent.stuck import _parse_json
@@ -726,15 +727,22 @@ def unsafe_reason(
     for task_id, task_def in definition.tasks.items():
         if not task_def.auto:
             return f"task '{task_id}' needs a human"
-        if not task_def.action:
-            continue
-        if registry is None or not registry.has_action(task_def.action):
-            return f"action '{task_def.action}' is not registered"
-        hint = getattr(registry.get_action_class(task_def.action), "reversibility_hint", None)
+    # Every action the engine can run: task actions, task and process-level
+    # construct / destruct actions (#230), so none can hide from the check.
+    for defined in definition_actions(definition):
+        action = defined.action
+        what = (
+            f"action '{action}'"
+            if defined.slot == "action"
+            else (f"{describe(defined)} '{action}'")
+        )
+        if registry is None or not registry.has_action(action):
+            return f"{what} is not registered"
+        hint = getattr(registry.get_action_class(action), "reversibility_hint", None)
         if hint == "always_irreversible":
-            return f"action '{task_def.action}' is irreversible"
+            return f"{what} is irreversible"
         if strict and hint != "always_reversible":
-            return f"action '{task_def.action}' is not always reversible ({hint})"
+            return f"{what} is not always reversible ({hint})"
     return None
 
 

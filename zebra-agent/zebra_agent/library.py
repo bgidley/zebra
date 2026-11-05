@@ -635,6 +635,10 @@ class WorkflowLibrary:
                 f"the offered {offered[:16]}"
             )
         local_name = parse_workflow_yaml(yaml_content).get("name", "untitled")
+        from zebra_tasks.commons.supervised import is_reserved_name
+
+        if is_reserved_name(local_name):
+            raise AdoptionRefused(f"the name {local_name!r} is reserved for supervised runs")
         existing = next(iter(self._files_named(local_name)), None)
         if existing is not None:
             existing_block = read_commons(existing.read_text()) or {}

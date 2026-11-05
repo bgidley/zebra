@@ -35,6 +35,8 @@ from zebra.core.models import (
 )
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.agent.definition_actions import definition_actions
+
 logger = logging.getLogger(__name__)
 
 #: Wrapper process property: what the approval is for and how to start it.
@@ -47,6 +49,7 @@ SUPERVISED_SUMMARY_KEY = "supervised_summary"
 CHILD_KEY = "__supervised_child__"
 #: Definition id prefix of the generated wrapper.
 WRAPPER_ID_PREFIX = "s:"
+#: Name prefix of the generated wrapper; reserved: no adopted workflow may use it.
 WRAPPER_NAME_PREFIX = "Supervised run: "
 APPROVAL_TASK = "approve_run"
 DECISION_RUN = "run"
@@ -90,20 +93,22 @@ async def commons_stop_reason(extras: dict[str, Any]) -> str | None:
 
 
 def workflow_actions(definition: ProcessDefinition, registry: Any) -> list[dict[str, Any]]:
-    """Each task's action with its reversibility hint and a flag for the approval form."""
+    """Every action *definition* runs, with its reversibility hint and an approval flag.
+
+    Includes task and process-level ``construct_action`` / ``destruct_action``: the
+    engine runs them too, so the owner must see them.
+    """
     actions = []
-    for task_id, task_def in definition.tasks.items():
-        if not task_def.action:
-            continue
+    for defined in definition_actions(definition):
         hint = "unregistered"
-        if registry is not None and registry.has_action(task_def.action):
+        if registry is not None and registry.has_action(defined.action):
             hint = getattr(
-                registry.get_action_class(task_def.action), "reversibility_hint", None
+                registry.get_action_class(defined.action), "reversibility_hint", None
             ) or ("context_dependent")
         actions.append(
             {
-                "task": task_def.name or task_id,
-                "action": task_def.action,
+                "task": defined.label,
+                "action": defined.action,
                 "hint": hint,
                 "flag": _FLAGS.get(hint, "" if hint == "always_reversible" else "unknown"),
             }
@@ -111,15 +116,29 @@ def workflow_actions(definition: ProcessDefinition, registry: Any) -> list[dict[
     return actions
 
 
+def is_reserved_name(name: str | None) -> bool:
+    """Whether *name* looks like a generated *Supervised run* wrapper's name.
+
+    Such names are reserved: an adopted workflow named like a wrapper would confuse the
+    owner's task list and run history, so the import judge and the library refuse it.
+    """
+    if not isinstance(name, str):
+        return False
+    return " ".join(name.split()).casefold().startswith(WRAPPER_NAME_PREFIX.strip().casefold())
+
+
 def supervision_for(definition: ProcessDefinition, extras: dict[str, Any]) -> bool:
     """Whether the library marks *definition*'s workflow ``supervised``.
 
     Asks the ``__workflow_library__`` in *extras* by name; a workflow the library does
-    not hold (an inline sub-workflow, a gym candidate) is not supervised.
+    not hold (an inline sub-workflow, a gym candidate) is not supervised. No name is
+    exempt: the generated wrapper is never in the library and never passes through
+    ``check_launch`` (``create_library_process`` creates it directly), so a publisher
+    cannot dodge supervision by naming a workflow like the wrapper.
     """
     library = extras.get("__workflow_library__")
     checker = getattr(library, "is_supervised", None)
-    if not callable(checker) or definition.name.startswith(WRAPPER_NAME_PREFIX):
+    if not callable(checker):
         return False
     try:
         return checker(definition.name) is True

@@ -21,19 +21,30 @@ clash), `commons_pii_scan`, the ethics gate, the gym in import mode, the `sharin
 - **THEN** the import is rejected at stage `judge` with the verification reason
 
 #### Scenario: Unregistered action
-- **WHEN** the workflow uses an action this deployment does not have
+- **WHEN** the workflow uses an action this deployment does not have, as a task action or as a
+  task or process-level `construct_action` / `destruct_action`
 - **THEN** the import is rejected at stage `judge`
+
+#### Scenario: Reserved name
+- **WHEN** the workflow is named like a *Supervised run* wrapper (`Supervised run: …`)
+- **THEN** the import is rejected at stage `judge` and the library refuses to adopt that name
 
 ### Requirement: Gym import mode
 In import mode the gym SHALL run only the candidate workflow, on the offer's golden tasks plus
 local golden tasks for the same capability, scored against their criteria, and SHALL never save
 to the library. It SHALL escalate to the owner, without running anything, when the workflow uses
-any action that is not `always_reversible`, when there are no runnable golden tasks, or when it
+any action that is not `always_reversible` (task actions and task or process-level
+`construct_action` / `destruct_action`), when there are no runnable golden tasks, or when it
 cannot judge; it SHALL never pass a workflow as ungated.
 
 #### Scenario: Irreversible-capable action
 - **WHEN** the imported workflow uses `file_delete`
 - **THEN** no gym child process is created and the gym routes `escalate` with the reason
+
+#### Scenario: Irreversible-capable construct action
+- **WHEN** the imported workflow's top-level `construct_action` is `file_delete`
+- **THEN** no gym child process is created, the gym routes `escalate`, and the owner's review
+  lists `file_delete` flagged
 
 #### Scenario: No golden tasks
 - **WHEN** neither the offer nor the library has golden tasks for the workflow
@@ -48,8 +59,13 @@ cannot judge; it SHALL never pass a workflow as ungated.
 approval, whatever the entry point (goal, agent loop, direct run, routine, `subworkflow`,
 `parallel_subworkflows`, `llm_agent` tool). The launch SHALL then create a *Supervised run*
 process whose first task is an owner-only human task "Run imported workflow X for this goal?"
-listing the workflow's actions and flagging those that are not always reversible; nothing of the
-imported workflow SHALL run before it is approved.
+listing every action the workflow runs (including construct / destruct actions) and flagging
+those that are not always reversible; nothing of the imported workflow SHALL run before it is
+approved. No workflow name SHALL exempt a supervised workflow from this check.
+
+#### Scenario: Workflow named like the wrapper
+- **WHEN** a supervised library workflow is named `Supervised run: X`
+- **THEN** its launch still raises the pre-run approval
 
 #### Scenario: First goal run of an imported workflow
 - **WHEN** a goal selects a supervised workflow

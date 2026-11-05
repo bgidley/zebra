@@ -28,6 +28,8 @@ from zebra_tasks.commons.supervised import (
     SUPERVISED_REJECTED_KEY,
     WRAPPER_NAME_PREFIX,
     CommonsSupervisedRunAction,
+    is_reserved_name,
+    supervision_for,
 )
 from zebra_tasks.launch import LaunchRefused, check_launch, create_library_process
 from zebra_tasks.llm.agent import LLMAgentAction, tool_slug
@@ -36,7 +38,7 @@ from zebra_tasks.llm.client import set_llm_factory
 from zebra_tasks.subtasks import ParallelSubworkflowsAction, SubworkflowAction
 
 from zebra_agent.direct_run import run_named_workflow
-from zebra_agent.library import SUPERVISED_RUNS, WorkflowLibrary
+from zebra_agent.library import SUPERVISED_RUNS, AdoptionRefused, WorkflowLibrary
 from zebra_agent.provenance import read_commons, relabel
 from zebra_agent.scheduler.loop import SchedulerLoop
 from zebra_agent.scheduler.registry import RoutineRegistry
@@ -399,3 +401,53 @@ def test_owner_clear_and_emergency_resupervise(library):
     assert library.is_supervised(SHARED) is True
     assert library.is_supervised("Local Tool") is False
     assert library._supervision_counts() == {}
+
+
+# ---------------------------------------------------------------------------
+# No name dodges supervision
+# ---------------------------------------------------------------------------
+
+
+class _AlwaysSupervised:
+    def is_supervised(self, name: str) -> bool:
+        return True
+
+
+@pytest.mark.parametrize("name", ["Foo (from Bob)", WRAPPER_NAME_PREFIX + "Foo (from Bob)"])
+def test_supervision_for_exempts_no_name(name):
+    """A workflow named like the wrapper is still supervised (the reviewer's repro)."""
+    definition = load_definition_from_yaml(
+        f'name: "{name}"\nfirst_task: work\ntasks:\n  work: {{name: Work, action: ok}}\n'
+    )
+    extras = {"__workflow_library__": _AlwaysSupervised()}
+    assert supervision_for(definition, extras) is True
+
+
+@pytest.mark.parametrize(
+    ("name", "reserved"),
+    [
+        ("Supervised run: Foo", True),
+        ("  supervised   RUN: Foo", True),
+        ("Supervised running club", False),
+        ("Foo (from Supervised run: Bob)", False),
+    ],
+)
+def test_reserved_names(name, reserved):
+    assert is_reserved_name(name) is reserved
+
+
+def test_library_refuses_to_adopt_a_wrapper_like_name(library, tmp_path):
+    with pytest.raises(AdoptionRefused, match="reserved"):
+        adopt(library, tmp_path / "other", LOCAL_YAML, WRAPPER_NAME_PREFIX + "Local (from Pub)")
+    assert library.commons_block(WRAPPER_NAME_PREFIX + "Local (from Pub)") is None
+
+
+async def test_wrapper_like_supervised_workflow_still_asks_first(library, engine, created):
+    """Were one in the library, its launch still goes through the wrapper."""
+    name = WRAPPER_NAME_PREFIX + SHARED
+    definition = library.get_workflow(SHARED).model_copy(update={"name": name})
+    library.is_supervised = lambda n: n in (SHARED, name)
+    launch = await check_launch(definition, entry="routine", properties={}, extras=engine.extras)
+    assert launch is not None and launch.workflow == name
+    process = await create_library_process(engine, definition, entry="routine")
+    assert process.properties[SUPERVISED_LAUNCH_KEY]["workflow"] == name

@@ -264,6 +264,11 @@ So adoption does two things:
   `execute_goal_workflow`: every entry point then parks on the same owner-only approval with no
   change of its own. A rejected goal run routes `supervision_rejected` back to the selector with
   the workflow excluded. Approved-run counts are local (`.lineage/supervision.json`).
+  `supervision_for` exempts no name: the wrapper is created directly, never through
+  `check_launch`, and `Supervised run: …` is a reserved name the judge and the adopt save refuse.
+- Every safety check sees every action the engine runs: task `action`, task and process-level
+  `construct_action` / `destruct_action` (`definition_actions()`): strict and gate
+  `unsafe_reason`, the judge's registry check and the action list the owner approves.
 - Stops: the kill switch and `COMMONS_ENABLED` off refuse imports, adoption and supervised
   launches; the emergency override re-supervises every adopted workflow.
 

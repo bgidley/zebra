@@ -151,6 +151,19 @@ async def test_non_reversible_action_escalates_without_running(engine):
     assert process.properties["answer"] == "escalate"
 
 
+@pytest.mark.parametrize("hook", ["construct_action", "destruct_action"])
+async def test_process_level_hook_action_escalates_without_running(engine, hook):
+    """A non-reversible action hidden in a top-level hook never runs in the gym."""
+    yaml = _yaml().replace("first_task: think", f"{hook}: write\nfirst_task: think")
+    assert getattr(load_definition_from_yaml(yaml), hook) == "write"
+    process = await _gym(engine, _offer(yaml))  # _WriteAction raises if it ever runs
+    imp = process.properties["golden_gym"]["import"]
+    assert imp["decision"] == "escalate"
+    assert f"the workflow {hook} 'write' is not always reversible" in imp["reason"]
+    assert process.properties["golden_gym"]["scores"] == []
+    assert process.properties["answer"] == "escalate"
+
+
 async def test_no_golden_tasks_is_never_ungated(engine, library):
     for path in library.golden_path.glob("*.yaml"):
         path.unlink()

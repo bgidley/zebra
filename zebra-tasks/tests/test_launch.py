@@ -341,3 +341,66 @@ def test_strict_mode_passes_exactly_the_always_reversible_actions(registry, name
         assert reason is None
     else:
         assert reason is not None and name in reason
+
+
+# ---------------------------------------------------------------------------
+# Construct / destruct actions are actions too (#230)
+# ---------------------------------------------------------------------------
+
+
+def _with_hooks(**hooks: str) -> ProcessDefinition:
+    """An ``llm_call``-only workflow with process- or task-level construct / destruct."""
+    task_hooks = {k[5:]: v for k, v in hooks.items() if k.startswith("task_")}
+    task = TaskDefinition(id="t0", name="T0", action="llm_call", **task_hooks)
+    return ProcessDefinition(
+        id="wf",
+        name="Wf",
+        first_task_id="t0",
+        tasks={"t0": task},
+        routings=[],
+        construct_action=hooks.get("construct_action"),
+        destruct_action=hooks.get("destruct_action"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("hooks", "where"),
+    [
+        ({"construct_action": "file_delete"}, "the workflow construct_action"),
+        ({"destruct_action": "file_delete"}, "the workflow destruct_action"),
+        ({"task_construct_action": "file_delete"}, "task 't0' construct_action"),
+        ({"task_destruct_action": "file_delete"}, "task 't0' destruct_action"),
+    ],
+)
+def test_strict_mode_checks_construct_and_destruct_actions(registry, hooks, where):
+    definition = _with_hooks(**hooks)
+    assert unsafe_reason(definition, registry) is None
+    assert unsafe_reason(definition, registry, strict=True) == (
+        f"{where} 'file_delete' is not always reversible (context_dependent)"
+    )
+
+
+def test_gate_mode_checks_construct_and_destruct_actions(registry):
+    assert unsafe_reason(_with_hooks(construct_action="http_request"), registry) == (
+        "the workflow construct_action 'http_request' is irreversible"
+    )
+    assert unsafe_reason(_with_hooks(destruct_action="teleport"), registry) == (
+        "the workflow destruct_action 'teleport' is not registered"
+    )
+
+
+def test_workflow_actions_lists_and_flags_construct_and_destruct(registry):
+    from zebra_tasks.commons.supervised import workflow_actions
+
+    definition = _with_hooks(
+        construct_action="file_delete",
+        destruct_action="http_request",
+        task_construct_action="file_read",
+    )
+    listed = [(a["task"], a["action"], a["flag"]) for a in workflow_actions(definition, registry)]
+    assert listed == [
+        ("workflow start", "file_delete", "may be irreversible"),
+        ("T0 (before)", "file_read", ""),
+        ("T0", "llm_call", ""),
+        ("workflow end", "http_request", "irreversible"),
+    ]

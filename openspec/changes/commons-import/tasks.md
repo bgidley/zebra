@@ -38,3 +38,8 @@
 ## 7. Docs
 
 - [x] 7.1 `specs/zebra-as-is.md`, `specs/zebra-commons-design.md` (as built), AGENTS.md files
+
+## 8. Review fixes
+
+- [x] 8.1 No name exempts a workflow from supervision (`supervision_for`); `Supervised run: ` reserved: judge and `save(writer="adopt")` refuse it; tests
+- [x] 8.2 `definition_actions()`: task + process-level `construct_action` / `destruct_action` in `unsafe_reason` (strict and gate), the judge's registry check and `workflow_actions`; gym import-mode test with a `construct_action`

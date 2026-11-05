@@ -24,7 +24,12 @@ from zebra.core.models import TaskInstance, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
-from zebra_tasks.commons.supervised import commons_stop_reason, workflow_actions
+from zebra_tasks.agent.definition_actions import definition_actions, describe
+from zebra_tasks.commons.supervised import (
+    commons_stop_reason,
+    is_reserved_name,
+    workflow_actions,
+)
 from zebra_tasks.knowledge.extract import resolve_raw
 
 logger = logging.getLogger(__name__)
@@ -150,12 +155,16 @@ class CommonsJudgeImportAction(TaskAction):
         except Exception as e:  # noqa: BLE001
             return f"the workflow is not valid: {e}", None
         registry = context.engine.actions
-        for task_id, task_def in definition.tasks.items():
-            for action in (task_def.action, task_def.construct_action, task_def.destruct_action):
-                if action and not registry.has_action(action):
-                    return f"task '{task_id}' uses action '{action}', which I do not have", None
+        for defined in definition_actions(definition):
+            if not registry.has_action(defined.action):
+                return (
+                    f"{describe(defined)} uses action '{defined.action}', which I do not have",
+                    None,
+                )
         publisher = publisher_label(verified.display_name, verified.zebra_pubkey)
         local_name = f"{verified.name} (from {publisher})"
+        if is_reserved_name(verified.name) or is_reserved_name(local_name):
+            return f"the name {verified.name!r} is reserved for supervised runs", None
         library = context.extras.get("__workflow_library__")
         if library is not None:
             block = library.commons_block(local_name)
