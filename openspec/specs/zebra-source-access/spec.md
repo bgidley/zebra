@@ -1,3 +1,11 @@
+# zebra-source-access Specification
+
+## Purpose
+How Zebra's read-only source tools (`zebra_source` and the List, Read and Search Zebra Source
+workflows) find, read and refuse paths, and how they report failures.
+
+## Requirements
+
 ### Requirement: Source access failures carry a reason
 
 Every failed `zebra_source` request SHALL fail the task with an error that starts with

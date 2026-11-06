@@ -143,9 +143,11 @@ def _inputs() -> dict:
     }
 
 
-async def _run(engine, library, model: ReviewModel) -> dict:
+async def _run(engine, library, model: ReviewModel, **inputs) -> dict:
     set_llm_factory(lambda m: model)
-    return await run_named_workflow(engine, library, "Outcome Review", _inputs(), model="medium")
+    return await run_named_workflow(
+        engine, library, "Outcome Review", {**_inputs(), **inputs}, model="medium"
+    )
 
 
 @pytest.mark.parametrize(
@@ -192,6 +194,81 @@ async def test_review_can_list_source_and_recover_from_a_bad_path(engine, librar
     assert "class CompareOutcomeReviewsAction" in typo_read
     assert "zebra-tasks/zebra_tasks/agent/outcome_review.py" in bad_read.split("Did you mean: ")[1]
     assert "list_zebra_source" in bad_read
+
+
+async def test_read_tool_returns_exactly_the_requested_range(engine, library):
+    """Read Zebra Source passes start_line / end_line through (#285: dream v10 did not)."""
+    model = ReviewModel(
+        _verdicts(("O1", "met"), ("O2", "partial")),
+        calls=[
+            ToolCall(
+                "r1",
+                "read_zebra_source",
+                {"path": f"{AGENT_DIR}/outcome_review.py", "start_line": 20, "end_line": 25},
+            )
+        ],
+    )
+
+    status = await _run(engine, library, model)
+
+    assert status["status"] == "complete"
+    (read,) = model.tool_results
+    numbers = [int(line.split("|", 1)[0]) for line in read.splitlines() if "|" in line]
+    assert numbers == list(range(20, 26))
+
+
+async def test_list_tool_takes_brace_globs_and_a_glob_as_path(engine, library):
+    model = ReviewModel(
+        _verdicts(("O1", "met"), ("O2", "partial")),
+        calls=[
+            ToolCall("l1", "list_zebra_source", {"path": f"{AGENT_DIR}/outcome_*.py"}),
+            ToolCall(
+                "l2",
+                "list_zebra_source",
+                {"path": ".", "glob": f"{AGENT_DIR}/{{outcome_review,zebra_source}}.py"},
+            ),
+        ],
+    )
+
+    status = await _run(engine, library, model)
+
+    assert status["status"] == "complete"
+    as_path, braces = model.tool_results
+    assert f"{AGENT_DIR}/outcome_review.py" in as_path
+    assert braces.splitlines() == [f"{AGENT_DIR}/outcome_review.py", f"{AGENT_DIR}/zebra_source.py"]
+
+
+async def test_review_prompt_shows_the_change_map_before_the_diff(engine, library):
+    model = ReviewModel(_verdicts(("O1", "met"), ("O2", "partial")))
+    change_map = "Files changed (1):\n- a.py (+1 -0)"
+
+    await _run(engine, library, model, change_map=change_map)
+
+    prompt = model.review_prompts[0]
+    assert f"## Change map\n{change_map}" in prompt
+    assert prompt.index("## Change map") < prompt.index("## Diff")
+
+
+@pytest.mark.parametrize(
+    ("filename", "prod_copy"),
+    [
+        ("read_zebra_source.yaml", 10),
+        ("list_zebra_source.yaml", 3),
+        ("search_zebra_source.yaml", 2),
+    ],
+)
+def test_source_tools_ship_above_the_prod_dream_copies(filename, prod_copy):
+    """Only a higher version replaces the broken dream copies on prod (#224, #285)."""
+    assert load_definition(WORKFLOWS / filename).version > prod_copy
+
+
+def test_review_tool_budget_is_tight():
+    tasks = load_definition(WORKFLOWS / "outcome_review.yaml").tasks
+
+    assert tasks["zebra_review"].properties["max_tool_turns"] == 8
+    assert tasks["zebra_reconsider"].properties["max_tool_turns"] == 5
+    assert tasks["zebra_review"].properties["answer_on_budget"] is True
+    assert tasks["zebra_reconsider"].properties["answer_on_budget"] is True
 
 
 async def test_agreement_completes_without_a_human(engine, library):

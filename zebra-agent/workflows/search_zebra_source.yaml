@@ -2,7 +2,8 @@ name: "Search Zebra Source"
 description: "Search Zebra's own deployed source code for a regex; returns path:line: text hits. Covers zebra-py/, zebra-tasks/, zebra-agent/, zebra-agent-web/, specs/, docs/, openspec/, scripts/, deploy/ and the root *.md files."
 tags: ["code", "source", "search"]
 use_when: "You need to find where something is defined or used in Zebra's own codebase."
-version: 2
+# v3 (#285): brace alternatives in glob, documented. Replaces the installed v2.
+version: 3
 first_task: search
 result_key: source
 # Requires a pattern, so it is a tool for llm_agent and never selected for a goal (#190).
@@ -15,7 +16,7 @@ inputs:
       description: "Python regex matched against each line, e.g. 'class \\w+Action'"
     glob:
       type: string
-      description: "Files to search, relative to the repository root, e.g. 'zebra-tasks/**/*.py' (default: all source)"
+      description: "Files to search, relative to the repository root: * ? [..], ** for any depth and {a,b} alternatives, e.g. 'zebra-tasks/**/*.py' or 'zebra-*/**/*.{py,yaml}' (default: all source)"
 
 tasks:
   search:

@@ -59,10 +59,52 @@ case "${1:-}" in
     python3 - "$ISSUE" "$TITLE" "$OUTCOMES" "$CLAUDE" "$TMP/diff.patch" "${HASH:-unknown}" \
       "$MAX_DIFF_CHARS" >"$TMP/in.json" <<'PY' || exit 1
 import json
+import re
 import sys
+
+MAX_MAP_CHARS = 8000
+TEST_DEF = re.compile(r"^\+\s*(?:async\s+)?def\s+(test_\w+)")
+
+
+def change_map(diff: str) -> str:
+    """Changed files with +/- counts, then the tests the diff adds or changes (#285).
+
+    Built from the whole diff, so it names every file even when the diff is cut.
+    """
+    files: dict[str, list[int]] = {}
+    tests: dict[str, list[str]] = {}
+    current, in_hunk = None, False
+    for line in diff.splitlines():
+        if line.startswith("diff --git "):
+            current, in_hunk = line.split(" b/", 1)[-1], False
+            files[current] = [0, 0]
+        elif current is not None and line.startswith("@@"):
+            in_hunk = True
+        elif not in_hunk:
+            continue
+        elif line.startswith("+"):
+            files[current][0] += 1
+            name = current.rsplit("/", 1)[-1]
+            is_test = "/tests/" in f"/{current}" or name.startswith("test_")
+            match = TEST_DEF.match(line) if is_test else None
+            if match:
+                tests.setdefault(current, []).append(match.group(1))
+        elif line.startswith("-"):
+            files[current][1] += 1
+    lines = [f"Files changed ({len(files)}):"]
+    lines += [f"- {path} (+{added} -{removed})" for path, (added, removed) in files.items()]
+    if tests:
+        lines += ["", "Tests added or changed:"]
+        lines += [f"- {path}: {', '.join(names)}" for path, names in tests.items()]
+    text = "\n".join(lines)
+    if len(text) > MAX_MAP_CHARS:
+        text = text[:MAX_MAP_CHARS] + "\n... change map truncated; list the source for the rest"
+    return text
+
 
 issue, title, outcomes, claude, diff_path, deployed, cap = sys.argv[1:]
 diff = open(diff_path).read()
+changes = change_map(diff)
 if len(diff) > int(cap):
     diff = diff[: int(cap)] + f"\n... diff truncated at {cap} characters; read the source for the rest"
 try:
@@ -77,6 +119,7 @@ json.dump(
         "outcomes": open(outcomes).read(),
         "claude_review": claude_review,
         "diff": diff,
+        "change_map": changes,
         "deployed_hash": deployed,
     },
     sys.stdout,

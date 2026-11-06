@@ -2,7 +2,8 @@ name: "Outcome Review"
 description: "Review a shipped Zebra change against its agreed outcomes, compare with Claude's independent review, and ask a human to rule where the two still disagree."
 tags: ["review", "outcomes", "process", "code", "system"]
 use_when: "Run by the delivery process after a deploy, with the outcomes, the diff and Claude's verdicts."
-version: 4
+# v5 (#285): change map ahead of the diff, 8 / 5 tool turns, read ranges and batch calls.
+version: 5
 first_task: zebra_review
 result_key: review_result
 # Requires inputs, so it is never selected for a goal; run it with
@@ -23,6 +24,9 @@ inputs:
     diff:
       type: string
       description: "Unified diff of the merged change"
+    change_map:
+      type: string
+      description: "Changed files with +/- line counts, then the test functions added or changed, by file"
     claude_review:
       type: object
       description: "Claude's verdicts: {verdicts: [{id, verdict: met|partial|missed, evidence}]}"
@@ -54,9 +58,11 @@ tasks:
         Use the tools to check what the diff alone does not show: callers, tests,
         configuration. Be strict; "probably" is partial. Cite file:line or a test name
         as evidence. Another reviewer is judging the same outcomes independently.
-        You have about 10 tool turns: search first, read only what you need, and
-        ask for several reads in one turn. When the budget runs out you must answer
-        from what you have.
+        Start from the change map: it names every changed file and the tests the
+        change adds, so you need not search for them. You have 8 tool turns. Ask for
+        several calls in one turn, read line ranges (start_line / end_line) rather
+        than whole files, and do not re-read lines you already have. When the budget
+        runs out you must answer from what you have.
 
         Reply with JSON only:
         {"verdicts": [{"id": "O1", "verdict": "met|partial|missed",
@@ -70,10 +76,13 @@ tasks:
         ## Outcomes
         {{outcomes}}
 
+        ## Change map
+        {{change_map}}
+
         ## Diff
         {{diff}}
       tools: ["List Zebra Source", "Read Zebra Source", "Search Zebra Source"]
-      max_tool_turns: 12
+      max_tool_turns: 8
       answer_on_budget: true
       max_tokens: 4000
       response_format: json
@@ -100,7 +109,8 @@ tasks:
         and another reviewer (Claude) disagreed with you on some of them. For each
         disputed outcome, re-check the code with your tools and decide again:
         met, partial or missed. Change your verdict only if the evidence supports it;
-        holding your position is fine when you can show why.
+        holding your position is fine when you can show why. You have 5 tool turns:
+        batch your calls and read line ranges, not whole files.
 
         Reply with JSON only, covering the disputed outcomes:
         {"verdicts": [{"id": "O1", "verdict": "met|partial|missed",
@@ -117,7 +127,7 @@ tasks:
         ## Diff
         {{diff}}
       tools: ["List Zebra Source", "Read Zebra Source", "Search Zebra Source"]
-      max_tool_turns: 6
+      max_tool_turns: 5
       answer_on_budget: true
       max_tokens: 3000
       response_format: json

@@ -66,8 +66,13 @@ merge → deploy green → fresh Claude subagent writes `claude.json` → `zebra
   task, not a false pass.
 - Claude's side has no rebuttal round inside the workflow; the human sees both positions.
 - Cost: up to two medium-tier `llm_agent` passes per feature. Both set `answer_on_budget`, so a review
-  that spends its tool turns (12, then 6) still answers instead of failing (#191; the first real
-  run, of #190, failed after 8 turns).
+  that spends its tool turns still answers instead of failing (#191; the first real
+  run, of #190, failed after 8 turns). Since #285 the budget is 8, then 5: the #236 review spent
+  12 turns ($1.42, 594k input tokens) mostly on a broken range read (dream copy of *Read Zebra
+  Source*), empty brace globs and searching for tests the diff already held.
+- A `change_map` input (from the script: every changed file with +/- counts, then the test
+  functions added or changed, capped at 8000 chars) comes before the diff in the prompt, so the
+  agent starts from the tests and still sees every file when the diff is truncated (#285).
 - Since #212 the image also ships `specs/`, `docs/`, `openspec/`, `scripts/`, `deploy/` and the
   root `*.md` files, so Zebra can read the docs and scripts an outcome names. Before that every
   failed source read on prod (18 of 171) was for one of these paths.
