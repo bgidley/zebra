@@ -82,6 +82,21 @@ def _wait_port(port: int, timeout: float = 20.0) -> None:
     raise TimeoutError(f"port {port} did not come up")
 
 
+async def _ready(client: RelayCommonsClient, timeout: float = 20.0) -> None:
+    """Wait until strfry answers a query (podman forwards the port before strfry listens)."""
+    from zebra_agent.commons.relay import RelayUnavailable
+
+    deadline = time.time() + timeout
+    while True:
+        try:
+            await client.fetch([Filter(kinds=(kinds.OFFER_KIND,))])
+            return
+        except RelayUnavailable:
+            if time.time() > deadline:
+                raise
+            await asyncio.sleep(0.5)
+
+
 @pytest.fixture
 def relay(tmp_path):
     operator = keys.generate_secret_key()
@@ -142,6 +157,7 @@ async def test_offer_on_a_real_public_relay_has_a_receipt_and_verifies(relay):
         receipt_wait=15,
     )
     try:
+        await _ready(reader)
         content = offer_content(
             name="Capital Facts",
             summary="Answers capital-city questions.",
