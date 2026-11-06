@@ -1,0 +1,3 @@
+{
+  "operator_pubkey": "<hex printed as ZEBRA_COMMONS_RECEIPT_PUBKEY by: python -m zebra_agent.commons.receipts --keygen --secret-env ZEBRA_COMMONS_OPERATOR_SECRET>"
+}

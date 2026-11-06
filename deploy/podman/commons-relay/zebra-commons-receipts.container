@@ -1,0 +1,30 @@
+# Receipt signer for the public Commons relay — rootless Podman Quadlet unit (#231).
+#
+# NOT installed by scripts/deploy-podman.sh. Install by hand: specs/commons-public-relay-runbook.md.
+#
+# The same sidecar as the private relay's (python -m zebra_agent.commons.receipts), with its own
+# journal, state and operator key: it publishes a RECEIPT {seq, event_id} for each journal line.
+# The secret is only in commons-operator.env (0600, written by the owner from the
+# ZEBRA_COMMONS_OPERATOR_SECRET CI variable); it is never in prod.env.
+[Unit]
+Description=Zebra public Commons relay receipt signer
+Requires=zebra-commons-relay.service
+After=zebra-commons-relay.service
+
+[Container]
+Image=localhost/zebra-web:prod
+ContainerName=zebra-commons-receipts
+Network=zebra-commons.network
+Entrypoint=python
+Exec=-m zebra_agent.commons.receipts --secret-env ZEBRA_COMMONS_OPERATOR_SECRET
+EnvironmentFile=%h/.config/zebra/commons-operator.env
+Environment=ZEBRA_SYNC_RELAY_LOCAL=ws://zebra-commons-relay:7777 ZEBRA_SYNC_JOURNAL=/receipts/journal.jsonl ZEBRA_SYNC_RECEIPT_STATE=/receipts/signer.json
+Volume=zebra-commons-receipts:/receipts
+PodmanArgs=--memory=256m --memory-swap=256m
+
+[Service]
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

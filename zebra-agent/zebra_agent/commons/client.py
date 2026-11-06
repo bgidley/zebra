@@ -6,7 +6,8 @@ strfry relay; ``InMemoryCommonsClient`` over a shared ``InMemoryRelay`` carries 
 devices in tests.
 
 The hard filter lives here so no implementation can skip it: a ``SKILL`` event is refused
-on any relay that is not private.
+on any relay that is not private, and a public relay takes only the public Commons kinds
+(``kinds.PUBLIC_KINDS``) tagged ``zebra-commons`` (#231).
 """
 
 from __future__ import annotations
@@ -16,10 +17,10 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
-from zebra_agent.commons.events import Event, verify_event
+from zebra_agent.commons.events import COMMONS_TAG, Event, verify_event
+from zebra_agent.commons.kinds import PUBLIC_KINDS, SKILL_KIND, kind_name
 
-# Provisional until #246/S4 fix the kinds (nothing is published outside tests).
-SKILL_KIND = 4236
+__all__ = ["SKILL_KIND", "CommonsClient", "Filter", "InMemoryCommonsClient", "InMemoryRelay"]
 
 
 class PublishRefused(ValueError):
@@ -96,9 +97,18 @@ class CommonsClient(ABC):
         """Release any connection."""
 
     def check_publish(self, event: Event) -> None:
-        """The hard filter every implementation applies before sending."""
+        """The hard filter every implementation applies before sending.
+
+        ``SKILL`` only to the private sync relay; a public relay gets only events of the public
+        Commons kinds (``kinds.PUBLIC_KINDS``) tagged ``["t","zebra-commons"]`` (#231).
+        """
         if event.kind == SKILL_KIND and not self.private:
             raise PublishRefused("SKILL events may only go to the private sync relay")
+        if not self.private:
+            if event.kind not in PUBLIC_KINDS:
+                raise PublishRefused(f"{kind_name(event.kind)} events may not go to a public relay")
+            if COMMONS_TAG not in event.tags:
+                raise PublishRefused("a public relay takes only events tagged zebra-commons")
         if not verify_event(event):
             raise PublishRefused("event id or signature is invalid")
 

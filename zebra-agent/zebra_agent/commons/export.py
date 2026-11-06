@@ -41,6 +41,7 @@ from zebra_agent.commons.identity import (
     verify_attributed,
     verify_device_chain,
 )
+from zebra_agent.commons.kinds import WORKFLOW_EXPORT_KIND
 from zebra_agent.provenance import NotHashableError, content_sha256, read_commons, relabel
 
 if TYPE_CHECKING:
@@ -48,8 +49,6 @@ if TYPE_CHECKING:
 
 EXPORT_FORMAT = "zebra-workflow-export"
 EXPORT_VERSION = 1
-# Provisional until S4 fixes the Commons kinds (nothing is published).
-WORKFLOW_EXPORT_KIND = 31229
 _FILE_KEYS = {"format", "version", "event", "chain"}
 _LOWER_HEX = re.compile(r"^[0-9a-f]+$")
 

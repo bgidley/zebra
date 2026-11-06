@@ -271,6 +271,10 @@ ZEBRA_AGENT_SETTINGS = {
     # The relay operator's public key orders revocations by its signed receipts.
     "SYNC_RELAY": os.environ.get("ZEBRA_SYNC_RELAY", ""),
     "SYNC_RECEIPT_PUBKEY": os.environ.get("ZEBRA_SYNC_RECEIPT_PUBKEY", ""),
+    # Public Commons relays (#231, off by default): comma- or space-separated wss:// URLs, the
+    # first canonical (its operator key signs receipts), the rest mirrors. Unset = no publishing.
+    "COMMONS_RELAYS": os.environ.get("ZEBRA_COMMONS_RELAYS", ""),
+    "COMMONS_RECEIPT_PUBKEY": os.environ.get("ZEBRA_COMMONS_RECEIPT_PUBKEY", ""),
 }
 
 # Logging

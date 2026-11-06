@@ -1,0 +1,35 @@
+# Public Zebra Commons relay (strfry) — rootless Podman Quadlet unit (#231).
+#
+# NOT installed by scripts/deploy-podman.sh (it copies only deploy/podman/quadlet/*.container).
+# Install by hand: specs/commons-public-relay-runbook.md. Separate from the private sync relay
+# (deploy/podman/sync-relay/): its own network, volumes, port and operator key.
+#
+# Config, write policy and policy.json (operator key) come from ~/.config/zebra-commons-relay/
+# (a directory mount, so editing policy.json is picked up without a restart). Bound to
+# loopback; the reverse proxy (Cloudflare Tunnel) routes wss://<host>/commons here. No NIP-42:
+# anyone may read; the write policy accepts only zebra-commons events of the public kinds.
+[Unit]
+Description=Zebra public Commons relay (strfry)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=docker.io/dockurr/strfry@sha256:91c19ac7a361e1b5147ca5cababf135b4efdc3d107496072eda50da9b59038be
+ContainerName=zebra-commons-relay
+Network=zebra-commons.network
+PublishPort=127.0.0.1:7779:7777
+Entrypoint=/app/strfry
+Exec=--config=/etc/zebra-commons/strfry.conf relay
+Volume=%h/.config/zebra-commons-relay:/etc/zebra-commons:ro,Z
+Volume=zebra-commons-relay-db:/app/strfry-db
+# The write policy appends one line per accepted event; the receipt sidecar reads it.
+Volume=zebra-commons-receipts:/receipts
+Environment=ZEBRA_COMMONS_POLICY=/etc/zebra-commons/policy.json ZEBRA_COMMONS_JOURNAL=/receipts/journal.jsonl
+PodmanArgs=--memory=256m --memory-swap=256m
+
+[Service]
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

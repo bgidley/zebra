@@ -35,10 +35,12 @@ behaves exactly as today, and the public relay is in the repo but not installed 
   `approve_share` and `share` journal records as skill sync); observed taint always needs the
   owner, whatever the trust level or freeing.
 - **Wiring**: `__commons_publisher__` is injected only when the Commons is on, relays are set and
-  the device has an identity; `manage.py commons_offer NAME` starts an offer.
+  the device has an identity; `manage.py commons_offer NAME` starts an offer; each daemon tick
+  fetches late receipts (`publish_tick`, nothing without a publisher).
 - **Public relay infrastructure, not deployed**: `deploy/podman/commons-relay/` (strfry Quadlet on
   `127.0.0.1:7779`, config with no NIP-42, write policy accepting only `zebra-commons` events of
-  public kinds and operator receipts, receipt sidecar reusing `zebra_agent.commons.receipts`).
+  public kinds and operator receipts, receipt sidecar reusing `zebra_agent.commons.receipts` with
+  `--secret-env ZEBRA_COMMONS_OPERATOR_SECRET`).
 - **Runbook** `specs/commons-public-relay-runbook.md`.
 
 ## Capabilities
