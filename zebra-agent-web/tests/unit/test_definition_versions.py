@@ -121,7 +121,7 @@ async def test_parked_v3_ruling_renders_from_v3_after_v4_ships(
 ):
     process_id, task_id = await _park_v3_ruling(wf_engine)
     v4 = load_definition_from_yaml(V4_YAML.read_text())
-    assert v4.version == 4
+    assert v4.version > 3  # the shipped built-in (v4 or later) is newer than the parked v3
     process = await wf_engine.store.load_process(process_id)
     assert v4.id != process.definition_id
 
