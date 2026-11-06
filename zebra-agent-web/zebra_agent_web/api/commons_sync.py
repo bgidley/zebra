@@ -63,6 +63,24 @@ def _direction(stored: str | None) -> str:
     )
 
 
+def sync_status(stored_direction: str | None) -> dict:
+    """What the `/commons/` page shows about skill sync on this device.
+
+    Args:
+        stored_direction: The direction stored for this device (`SystemStateModel`).
+
+    Returns:
+        ``on`` (Commons on and a relay set), ``relay`` URL, effective ``direction``
+        and whether relay ``receipts`` are verified.
+    """
+    return {
+        "on": sync_configured(),
+        "relay": sync_relay_url(),
+        "direction": _direction(stored_direction),
+        "receipts": sync_receipt_pubkey() is not None,
+    }
+
+
 async def build_sync_service(library: WorkflowLibrary) -> SyncService | None:
     """This device's ``SyncService`` over the private relay, or None when sync is off."""
     if not sync_configured():

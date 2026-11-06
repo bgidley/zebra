@@ -1,0 +1,55 @@
+{% comment %}
+How to set up skill sync between two deployments of one Zebra (#228 pairing, #236/#246 sync).
+Shown on /commons/ whether the Commons is on or off; open until sync is on for this device.
+Operator detail lives in specs/commons-sync-relay-runbook.md. Parameters: sync (sync_status()).
+{% endcomment %}
+<details class="panel group" data-testid="sync-guide" {% if not sync.on %}open{% endif %}>
+    <summary class="px-6 py-4 cursor-pointer list-none flex items-center justify-between gap-3">
+        <span class="text-base font-semibold text-ink">Set up skill sync between your devices</span>
+        <span class="text-sm text-faint group-open:hidden">Show steps</span>
+        <span class="text-sm text-faint hidden group-open:inline">Hide steps</span>
+    </summary>
+    <div class="px-6 pb-5 space-y-4 text-sm text-muted max-w-[75ch]">
+        <p>Skill sync lets the skills you build with me at home and at work follow you. Two deployments of one Zebra (say a home server and a work laptop) share <strong class="text-ink">workflows only</strong>. Memories, knowledge, values, runs and anything about you never leave the device. I scan every workflow for personal and confidential data before it is sent, and ask you before I send or adopt it.</p>
+
+        <ol class="list-decimal pl-5 space-y-3 marker:text-faint">
+            <li>
+                <p class="text-ink font-medium">Set up the private relay (once, on your home host)</p>
+                <p>The relay passes encrypted workflows between your devices. Whoever runs the host follows <span class="font-mono text-ink">specs/commons-sync-relay-runbook.md</span>: steps 1 to 3 now (operator key, relay containers, the <span class="font-mono text-ink">/sync</span> route), and step 4, registering your Zebra key on the relay, once you have started your Zebra in step 3 below. You get two values: the relay URL <span class="font-mono text-ink">wss://&lt;host&gt;/sync</span> and the receipt key.</p>
+            </li>
+            <li>
+                <p class="text-ink font-medium">Turn sync on for each deployment</p>
+                <p>Add these to its site env file (<span class="font-mono text-ink">~/.config/zebra/site.env</span> on the Podman host), then restart <span class="font-mono text-ink">zebra-web</span> and <span class="font-mono text-ink">zebra-daemon</span>:</p>
+                <pre class="mt-2 font-mono text-xs bg-ground border border-line text-ink rounded-md px-3 py-2 overflow-x-auto">ZEBRA_COMMONS_ENABLED=1
+ZEBRA_SYNC_RELAY=wss://&lt;host&gt;/sync
+ZEBRA_SYNC_RECEIPT_PUBKEY=&lt;receipt key&gt;
+# optional
+ZEBRA_SYNC_DIRECTION=both          # send / receive / both / off
+ZEBRA_SYNC_CONFIDENTIAL_PATTERNS=  # regexes that block a send</pre>
+            </li>
+            <li>
+                <p class="text-ink font-medium">Home: start your Zebra and back up its key</p>
+                <p>On this page choose <em>Start a new Zebra</em>, then <em>Show backup key</em> and store it offline. The device that starts the Zebra holds its key and is the only one that can pair or revoke devices.</p>
+            </li>
+            <li>
+                <p class="text-ink font-medium">Work: copy the pairing code</p>
+                <p>Open Commons on the work deployment and copy its pairing code (<span class="font-mono text-ink">npub1…</span>). Note its fingerprint. Do <strong class="text-ink">not</strong> start a new Zebra there: a device that has its own Zebra cannot join another.</p>
+            </li>
+            <li>
+                <p class="text-ink font-medium">Home: pair the work device</p>
+                <p>Under <em>Pair a device</em>, paste the code and check the fingerprint matches. Choose sphere <span class="font-mono text-ink">work</span>, and <em>Someone else</em> if your employer manages that machine; I then ask you before each skill it shares. Copy the certificate code (<span class="font-mono text-ink">zcert1…</span>) I show you.</p>
+            </li>
+            <li>
+                <p class="text-ink font-medium">Work: join</p>
+                <p>Paste the certificate code under <em>Join this Zebra to an existing one</em>. The work page now shows the same Zebra key as home. Within a daemon tick or two both devices publish their certificates and find each other on the relay.</p>
+            </li>
+            <li>
+                <p class="text-ink font-medium">Check it works</p>
+                <p>At work, run a workflow you want at home and approve the share in <a href="/tasks/" class="text-ink underline">Tasks</a> when I ask. Soon after it appears in the home <a href="/workflows/" class="text-ink underline">Workflows</a> library, and its genealogy shows where it came from. If the relay is down, shares wait in a queue and go when it is back.</p>
+            </li>
+        </ol>
+
+        <p><span class="text-ink font-medium">Lost or retired a device?</span> Revoke it under <em>Devices</em> on the home deployment. Skills it shared earlier stay; anything new from it is refused.</p>
+        <p><span class="text-ink font-medium">Turning it off:</span> remove <span class="font-mono text-ink">ZEBRA_SYNC_RELAY</span> and restart, or set <span class="font-mono text-ink">ZEBRA_SYNC_DIRECTION=off</span>. Nothing is lost; queued shares wait for next time.</p>
+    </div>
+</details>
