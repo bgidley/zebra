@@ -90,6 +90,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
 - `ProcessDefinition` / `TaskDefinition` are **frozen** Pydantic models. YAML or JSON loaders produce them.
 - Top-level `result_key` and `inputs` (JSON Schema of the workflow's arguments when called as a tool, #146) are copied into `ProcessDefinition.properties`.
 - Template resolution is regex-based: `{{var}}` and `{{task_id.output.key}}`. No arithmetic, no conditionals, no loops inside templates.
+- **Workflow contracts (#271):** `zebra.definitions.contracts.validate_contracts` statically flags `{{...}}` references that cannot resolve (unknown task or an output no path produces = error; produced on only some paths = warning), `WorkflowLibrary.save` refuses definitions with errors (`WorkflowContractError`), and at run time `resolve_template` records unresolved references in `__contract_violations__` (raising under `strict_templates`). `llm_call` `output_schema` and `subworkflow` `expects` validate structured results. See [workflow-contracts-design.md](workflow-contracts-design.md).
 
 ### Human tasks & forms
 

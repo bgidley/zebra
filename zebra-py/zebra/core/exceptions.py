@@ -94,3 +94,9 @@ class SerializationError(StateError):
     """
 
     pass
+
+
+class TemplateResolutionError(ActionError):
+    """Raised by ``resolve_template`` under ``strict_templates`` for an unresolved reference."""
+
+    pass
