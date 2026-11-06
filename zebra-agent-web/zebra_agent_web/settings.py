@@ -267,6 +267,10 @@ ZEBRA_AGENT_SETTINGS = {
     "COMMONS_ENABLED": os.environ.get("ZEBRA_COMMONS_ENABLED", "0").lower()
     in ("1", "true", "yes", "on"),
     "COMMONS_KEY_DIR": os.environ.get("ZEBRA_COMMONS_KEY_DIR", "~/.zebra-agent/commons-keys"),
+    # Skill sync over the private relay (#246, off by default): unset means no device sync.
+    # The relay operator's public key orders revocations by its signed receipts.
+    "SYNC_RELAY": os.environ.get("ZEBRA_SYNC_RELAY", ""),
+    "SYNC_RECEIPT_PUBKEY": os.environ.get("ZEBRA_SYNC_RECEIPT_PUBKEY", ""),
 }
 
 # Logging

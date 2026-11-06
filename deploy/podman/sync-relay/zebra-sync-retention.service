@@ -1,0 +1,12 @@
+# 90-day retention for the private sync relay (#246): deletes SKILL events and their receipts
+# older than 90 days. Certs, revokes and their receipts are kept (revocation order needs them).
+# NOT installed by the deploy job: copy to ~/.config/systemd/user/ with the .timer.
+[Unit]
+Description=Zebra sync relay 90-day retention
+Requires=zebra-sync-relay.service
+After=zebra-sync-relay.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/podman exec zebra-sync-relay /app/strfry --config=/etc/zebra-sync/strfry.conf delete --age=7776000 '--filter={"kinds":[4236]}'
+ExecStart=/usr/bin/podman exec zebra-sync-relay /app/strfry --config=/etc/zebra-sync/strfry.conf delete --age=7776000 '--filter={"kinds":[1246],"#k":["4236"]}'

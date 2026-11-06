@@ -1,0 +1,29 @@
+# Receipt signer for the private sync relay — rootless Podman Quadlet unit (#246).
+#
+# NOT installed by scripts/deploy-podman.sh. Install by hand: specs/commons-sync-relay-runbook.md.
+#
+# Reads the write policy's journal and publishes a RECEIPT {seq, event_id} signed by the relay
+# operator key for each line. The operator secret is only in sync-operator.env (0600, written by
+# the owner from the ZEBRA_SYNC_OPERATOR_SECRET CI variable); it is never in prod.env.
+[Unit]
+Description=Zebra sync relay receipt signer
+Requires=zebra-sync-relay.service
+After=zebra-sync-relay.service
+
+[Container]
+Image=localhost/zebra-web:prod
+ContainerName=zebra-sync-receipts
+Network=zebra-sync.network
+Entrypoint=python
+Exec=-m zebra_agent.commons.receipts
+EnvironmentFile=%h/.config/zebra/sync-operator.env
+Environment=ZEBRA_SYNC_RELAY_LOCAL=ws://zebra-sync-relay:7777 ZEBRA_SYNC_JOURNAL=/receipts/journal.jsonl ZEBRA_SYNC_RECEIPT_STATE=/receipts/signer.json
+Volume=zebra-sync-receipts:/receipts
+PodmanArgs=--memory=256m --memory-swap=256m
+
+[Service]
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

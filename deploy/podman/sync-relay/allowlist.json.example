@@ -1,0 +1,6 @@
+{
+  "zebra_pubkeys": [
+    "<64-hex Zebra public key from /commons/ (the Zebra npub, decoded)>"
+  ],
+  "operator_pubkey": "<64-hex public key of the receipt operator key (ZEBRA_SYNC_RECEIPT_PUBKEY)>"
+}

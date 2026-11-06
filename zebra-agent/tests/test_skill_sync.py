@@ -16,9 +16,11 @@ from zebra_agent.commons.client import (
 )
 from zebra_agent.commons.events import Event, sign_event
 from zebra_agent.commons.identity import make_device_cert, make_device_revoke, parse_cert
+from zebra_agent.commons.nostr import nip44_encrypt
 from zebra_agent.commons.skill import (
     SkillRefused,
     build_skill_events,
+    decrypt_skill,
     skill_recipients,
     verify_skill,
 )
@@ -65,9 +67,9 @@ def zebra():
     return zebra_secret, devices, certs
 
 
-def _shared_file(tmp_path, share_with):
+def _shared_file(tmp_path, share_with, text=FLOW):
     library = WorkflowLibrary(tmp_path / "lib", sphere="home", owner_user_id=1)
-    path = library.save(FLOW, writer="human")
+    path = library.save(text, writer="human")
     block = read_commons(path.read_text())
     block["share_with"] = share_with
     path.write_text(with_commons(path.read_text(), block))
@@ -143,7 +145,7 @@ def _verify(zebra, event, sphere="studio", held=None):
     zebra_secret, devices, certs = zebra
     return verify_skill(
         event,
-        device_pubkey=keys.public_key(devices[sphere]),
+        device_secret=devices[sphere],
         zebra_pubkey=keys.public_key(zebra_secret),
         sphere=sphere,
         held_events=certs if held is None else held,
@@ -158,10 +160,45 @@ def test_verify_accepts_and_reads_sender_sphere_from_cert(tmp_path, zebra):
 
 
 def _resigned(zebra, event, mutate):
+    """Decrypt, change and re-encrypt (to studio) and re-sign the home device's event."""
     _, devices, _ = zebra
-    content = json.loads(event.content)
+    content = decrypt_skill(event, devices["studio"])
     tags = mutate(content, [list(t) for t in event.tags])
-    return sign_event(devices["home"], event.kind, tags, json.dumps(content))
+    studio = keys.public_key(devices["studio"])
+    ciphertext = nip44_encrypt(devices["home"], studio, json.dumps(content))
+    return sign_event(devices["home"], event.kind, tags, ciphertext)
+
+
+def test_skill_is_nip44_ciphertext_only_its_recipient_reads(tmp_path, zebra):
+    _, devices, _ = zebra
+    [event] = _events(zebra, _shared_file(tmp_path, ["studio"]), ["studio"])
+    assert event.tag_values("enc") == ["nip44"]
+    assert ["-"] in event.tags  # NIP-70: the relay makes the publisher authenticate
+    assert "Flow" not in event.content and event.json_content() is None
+    assert decrypt_skill(event, devices["studio"])["name"] == "Flow"
+    assert decrypt_skill(event, devices["work"]) is None
+    assert decrypt_skill(event, devices["home"]) is None  # not even the sender's own key
+
+
+def test_verify_rejects_plaintext_and_undecryptable(tmp_path, zebra):
+    _, devices, _ = zebra
+    [event] = _events(zebra, _shared_file(tmp_path, ["studio"]), ["studio"])
+    content = decrypt_skill(event, devices["studio"])
+
+    def plaintext(tags):
+        return [["enc", "none"] if t[0] == "enc" else t for t in tags]
+
+    plain = sign_event(devices["home"], event.kind, plaintext(event.tags), json.dumps(content))
+    assert _verify(zebra, plain).reason == "not_encrypted"
+    to_work = nip44_encrypt(devices["home"], keys.public_key(devices["work"]), json.dumps(content))
+    wrong_key = sign_event(devices["home"], event.kind, event.tags, to_work)
+    assert _verify(zebra, wrong_key).reason == "not_decryptable"
+
+
+def test_build_refuses_a_payload_too_large_for_nip44(tmp_path, zebra):
+    huge = FLOW.replace("A flow.", "A flow. " + "x" * 70_000)
+    with pytest.raises(SkillRefused, match="too large"):
+        _events(zebra, _shared_file(tmp_path, ["studio"], text=huge), ["studio"])
 
 
 def test_verify_rejections(tmp_path, zebra):
@@ -170,7 +207,10 @@ def test_verify_rejections(tmp_path, zebra):
 
     assert _verify(zebra, event, sphere="work").reason == "not_addressed"
 
-    tampered = Event.from_dict({**event.to_dict(), "content": event.content.replace("Do", "Rm")})
+    flipped = ("B" if event.content[10] == "A" else "A").join(
+        (event.content[:10], event.content[11:])
+    )
+    tampered = Event.from_dict({**event.to_dict(), "content": flipped})
     assert _verify(zebra, tampered).reason == "bad_signature"
 
     def edit_yaml(content, tags):
@@ -199,7 +239,7 @@ def test_verify_rejections(tmp_path, zebra):
     other_zebra = keys.generate_secret_key()
     stranger = verify_skill(
         event,
-        device_pubkey=keys.public_key(devices["studio"]),
+        device_secret=devices["studio"],
         zebra_pubkey=keys.public_key(other_zebra),
         sphere="studio",
         held_events=certs,

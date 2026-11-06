@@ -1,0 +1,4 @@
+# Private network for the sync relay and its receipt sidecar (#246). NOT installed by the
+# deploy job: copy to ~/.config/containers/systemd/ by hand (specs/commons-sync-relay-runbook.md).
+[Network]
+NetworkName=zebra-sync

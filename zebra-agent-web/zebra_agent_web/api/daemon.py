@@ -254,7 +254,8 @@ async def _tick(
     a fresh one is used (single-tick callers such as tests). With a workflow
     *library*, a goal that failed before it could write its own postmortem (a
     timeout or crash) gets one from the *Postmortem* workflow (#175). A *builder_watcher*
-    hands host-builder answers to workflows waiting on them (#98).
+    hands host-builder answers to workflows waiting on them (#98). With a skill-sync service
+    (``ZEBRA_SYNC_RELAY``, #246) each tick resends queued events and receives pending skills.
     """
     from zebra_agent.scheduler.goal_tracker import GoalTracker
 
@@ -277,6 +278,12 @@ async def _tick(
             await builder_watcher.tick()
         except Exception:
             logger.exception("[daemon:builder] Builder watcher tick failed")
+
+    # 0c. Skill sync over the private relay (#246): only when a sync service was built
+    if library is not None:
+        from zebra_agent_web.api.commons_sync import sync_tick
+
+        await sync_tick(engine, library)
 
     # 1. Record goals that finished since the last tick (e.g. after a human answered)
     for finished in await tracker.reconcile():
