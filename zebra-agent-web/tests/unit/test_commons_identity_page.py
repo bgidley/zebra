@@ -396,3 +396,55 @@ async def test_import_rejects_replayed_tampered_expired_and_foreign_certs(
     )
     assert "another Zebra" in unquote_plus(response["Location"])
     assert _commons_snapshot() == joined
+
+
+def _guide(html: str) -> str:
+    """The opening tag of the skill sync guide."""
+    return re.search(r'<details[^>]*data-testid="sync-guide"[^>]*>', html).group(0)
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_sync_guide_shows_while_commons_is_off(authenticated_async_client):
+    html = (await authenticated_async_client.get("/commons/")).content.decode()
+
+    assert 'data-testid="commons-off"' in html
+    assert " open" in _guide(html)
+    assert "ZEBRA_SYNC_RELAY=wss://" in html
+    assert "commons-sync-relay-runbook.md" in html
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_sync_status_off_without_a_relay(authenticated_async_client, commons, monkeypatch):
+    monkeypatch.delenv("ZEBRA_SYNC_DIRECTION", raising=False)
+    commons("a")
+    await _start(authenticated_async_client)
+
+    html = (await authenticated_async_client.get("/commons/")).content.decode()
+
+    assert 'data-sync="off"' in html
+    assert "no sync relay set" in html
+    assert " open" in _guide(html)
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_sync_status_on_with_a_relay(
+    authenticated_async_client, commons, settings, monkeypatch
+):
+    monkeypatch.setenv("ZEBRA_SYNC_DIRECTION", "send")
+    commons("a")
+    await _start(authenticated_async_client)
+    settings.ZEBRA_AGENT_SETTINGS = {
+        **settings.ZEBRA_AGENT_SETTINGS,
+        "SYNC_RELAY": "wss://zebra.example.com/sync",
+        "SYNC_RECEIPT_PUBKEY": "",
+    }
+
+    html = (await authenticated_async_client.get("/commons/")).content.decode()
+    status = re.search(r'data-testid="sync-status".*?</dd>', html, re.S).group(0)
+
+    assert 'data-sync="on"' in status
+    assert "wss://zebra.example.com/sync" in status
+    # The stricter of the env (send) and the stored device direction (both).
+    assert "· send" in status
+    assert "receipts off" in status
+    assert " open" not in _guide(html)  # collapsed once sync is on

@@ -5,12 +5,14 @@ routing conditions must implement. Corresponds to Java ITaskAction and
 IConditionAction interfaces.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel, Field
 
+from zebra.core.exceptions import TemplateResolutionError
 from zebra.core.models import (
     ProcessDefinition,
     ProcessInstance,
@@ -19,6 +21,8 @@ from zebra.core.models import (
     TaskInstance,
     TaskResult,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from zebra.core.engine import WorkflowEngine
@@ -177,6 +181,11 @@ class ExecutionContext:
         - ``{{task_id.output}}`` — legacy task output shorthand
         - ``{{property_name.key}}`` — dict key access on a process property
         - ``{{property_name.key.subkey}}`` — nested dict key access
+
+        A reference that resolves to nothing becomes ``""`` but is logged and recorded in
+        the process property ``__contract_violations__`` (#271). When the process property
+        ``strict_templates`` (process, else definition) is true it raises
+        ``TemplateResolutionError`` instead, which fails the task.
         """
         import re
 
@@ -188,6 +197,10 @@ class ExecutionContext:
                 else:
                     return None
             return obj
+
+        def unresolved(var: str) -> str:
+            self._record_unresolved(var)
+            return ""
 
         def replace_var(match: re.Match) -> str:
             var = match.group(1)
@@ -209,13 +222,33 @@ class ExecutionContext:
                         return str(result)
 
                 # Fall back to full var as a flat process property key
-                return str(self.get_process_property(var, ""))
+                if var not in self.process.properties:
+                    return unresolved(var)
+                return str(self.process.properties[var])
 
             # Simple process property
-            return str(self.get_process_property(var, ""))
+            if var not in self.process.properties:
+                return unresolved(var)
+            return str(self.process.properties[var])
 
         # Allow dots and multiple segments in the variable name
         return re.sub(r"\{\{(\w+(?:\.\w+)*)\}\}", replace_var, template)
+
+    def _record_unresolved(self, ref: str) -> None:
+        """Log an unresolved template reference and record it on the process (#271)."""
+        task_id = self.task_definition.id
+        logger.warning("Task %s: template {{%s}} resolved to nothing", task_id, ref)
+        strict = self.process.properties.get(
+            "strict_templates", self.process_definition.properties.get("strict_templates")
+        )
+        if strict is True:
+            raise TemplateResolutionError(
+                f"Task '{task_id}': template reference {{{{{ref}}}}} resolved to nothing"
+            )
+        violations = self.process.properties.setdefault("__contract_violations__", [])
+        entry = {"task": task_id, "ref": ref}
+        if entry not in violations:
+            violations.append(entry)
 
 
 class TaskAction(ABC):

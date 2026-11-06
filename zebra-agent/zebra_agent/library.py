@@ -12,7 +12,8 @@ from typing import Any
 
 import yaml
 from zebra.core.models import ProcessDefinition
-from zebra.definitions.loader import load_definition
+from zebra.definitions.contracts import ERROR, validate_contracts
+from zebra.definitions.loader import load_definition, load_definition_from_dict
 
 from zebra_agent.genealogy import REJECTED, SAVED, LineageJournal, journal_record, merge_leak
 from zebra_agent.gym import GoldenTask, golden_dir, load_golden_tasks
@@ -104,6 +105,10 @@ _RETIRED_MARKER = "\n# --- retired by zebra (#148) ---\n"
 # ``retired/`` wrapped in a parseable stub that keeps the raw text (#158).
 UNPARSEABLE_TAG = "unparseable"
 _UNPARSEABLE_SUFFIX = ".unparseable.yaml"
+
+
+class WorkflowContractError(ValueError):
+    """A workflow to save has template references that cannot resolve (#271)."""
 
 
 def parse_workflow_yaml(yaml_content: str) -> dict[str, Any]:
@@ -542,6 +547,8 @@ class WorkflowLibrary:
 
         Raises:
             ValueError: If the YAML does not parse or is not a mapping (#158).
+            WorkflowContractError: A ``ValueError`` when ``validate_contracts`` finds errors
+                (#271); a definition that does not load is left to the loader's own checks.
             LeakGuardRejected: If the exposure rejects hits and the guard found some.
             AdoptionRefused: ``writer="adopt"`` with a hash mismatch, a taken name or
                 a block that must not be shared.
@@ -575,6 +582,7 @@ class WorkflowLibrary:
             yaml_content = tag_llm_defined(yaml_content)
         data = parse_workflow_yaml(yaml_content)
         name = data.get("name", "untitled")
+        self._check_contracts(name, data)
 
         parent_name = parent or name
         parent_path = next(iter(self._files_named(parent_name)), None)
@@ -757,6 +765,23 @@ class WorkflowLibrary:
             (block.get("origin_pubkey") or "-")[:12],
         )
         return filepath
+
+    @staticmethod
+    def _check_contracts(name: str, data: dict[str, Any]) -> None:
+        """Refuse a workflow whose template references cannot resolve (#271)."""
+        try:
+            definition = load_definition_from_dict(data, source=name)
+        except Exception:
+            return  # the loader reports a malformed definition where it is used
+        findings = validate_contracts(definition)
+        for finding in findings:
+            if finding.severity != ERROR:
+                logger.warning("Workflow %r: %s", name, finding)
+        errors = [str(f) for f in findings if f.severity == ERROR]
+        if errors:
+            raise WorkflowContractError(
+                f"Workflow {name!r} breaks its contracts: " + "; ".join(errors)
+            )
 
     @staticmethod
     def _check_leaks(

@@ -6,12 +6,13 @@
 {% block content %}
 {% comment %}
 Zebra Commons identity (#228): the Zebra npub, the owner, this device and the devices
-certified by the Zebra key. Actions are owner-only. Nothing here is published yet (#246).
+certified by the Zebra key, skill sync status and how to set it up. Actions are owner-only.
+With skill sync on, certificates and shared workflows go only to the private relay (#246).
 {% endcomment %}
 <div class="space-y-6 max-w-5xl" data-testid="commons-page">
     <div class="min-w-0">
         <h1 class="text-xl font-semibold text-ink">Commons identity</h1>
-        <p class="text-muted mt-1 max-w-[65ch]">Your Zebra has its own key, separate from yours. Each deployment it runs on (home, work…) has a device key certified by it. Nothing here is published yet.</p>
+        <p class="text-muted mt-1 max-w-[65ch]">Your Zebra has its own key, separate from yours. Each deployment it runs on (home, work…) has a device key certified by it. Nothing is published to the public Commons yet; with skill sync on, workflows go only to your private relay.</p>
     </div>
 
     {% if message %}
@@ -26,6 +27,7 @@ certified by the Zebra key. Actions are owner-only. Nothing here is published ye
         <p class="text-ink font-medium">Commons is off.</p>
         <p class="text-muted text-sm mt-1">Set <span class="font-mono">ZEBRA_COMMONS_ENABLED=1</span> to give this Zebra an identity. No keys are created while it is off.</p>
     </section>
+    {% include "partials/commons_sync_guide.html" %}
     {% else %}
 
     <section class="panel" aria-labelledby="identity-title" data-testid="commons-identity">
@@ -52,10 +54,19 @@ certified by the Zebra key. Actions are owner-only. Nothing here is published ye
                 {% if device.label %}{{ device.label }} · {{ device.sphere }}{% if device.observed %} (observed){% endif %} · {% endif %}<span class="text-muted">{{ device.status }}</span>
                 <span class="block font-mono text-xs text-faint break-all mt-0.5">{{ device.pairing_code }} · {{ device.fingerprint }}</span>
             </dd>
-            <dt class="text-faint">Sync direction</dt>
-            <dd class="text-ink">{{ sync_direction }}</dd>
+            <dt class="text-faint">Skill sync</dt>
+            <dd class="min-w-0 text-ink" data-testid="sync-status" data-sync="{% if sync.on %}on{% else %}off{% endif %}">
+                {% if sync.on %}
+                <span class="text-ok">On</span> · {{ sync.direction }}{% if not sync.receipts %} · <span class="text-needs">receipts off</span>{% endif %}
+                <span class="block font-mono text-xs text-faint break-all mt-0.5">{{ sync.relay }}</span>
+                {% else %}
+                <span class="text-muted">Off: no sync relay set (<span class="font-mono">ZEBRA_SYNC_RELAY</span>). See the steps below.</span>
+                {% endif %}
+            </dd>
         </dl>
     </section>
+
+    {% include "partials/commons_sync_guide.html" %}
 
     {% if has_identity %}
     <section class="panel" aria-labelledby="devices-title" data-testid="commons-devices">

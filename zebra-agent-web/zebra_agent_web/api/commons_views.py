@@ -16,6 +16,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
 from zebra_agent_web.api import commons_identity as ci
+from zebra_agent_web.api.commons_sync import sync_status
 from zebra_agent_web.api.identity import goal_identity
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ async def _page(request, extra: dict | None = None, status: int = 200):
     context = {
         **await goal_identity(),
         **data,
+        "sync": sync_status(data.get("sync_direction")),
         "is_owner": await ci.is_owner(user),
         "message": request.GET.get("message", ""),
         "error": request.GET.get("error", ""),
