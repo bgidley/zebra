@@ -14,6 +14,7 @@ search, so an agent can recover. Every failure starts with a ``[reason]`` tag
 
 import difflib
 import fnmatch
+import functools
 import logging
 import os
 import re
@@ -234,12 +235,51 @@ def missing_path_error(root: Path, path: str, resolved: Path) -> SourceAccessErr
     return SourceAccessError(message, reason)
 
 
+_BRACE_GROUP = re.compile(r"\{([^{}]*)\}")
+#: Most plain globs one braced glob may expand to, so a pathological pattern stays cheap.
+MAX_BRACE_EXPANSIONS = 64
+_GLOB_CHARS = set("*?[{")
+
+
+@functools.lru_cache(maxsize=256)
+def expand_braces(glob: str) -> tuple[str, ...]:
+    """Expand ``{a,b}`` alternatives (nested or several) into plain globs (#285).
+
+    ``fnmatch`` has no braces, so ``*.{py,yaml}`` would otherwise match nothing. A group
+    without a comma is kept as literal text; at most MAX_BRACE_EXPANSIONS are returned.
+    """
+    pending, done = [glob], []
+    while pending and len(done) < MAX_BRACE_EXPANSIONS:
+        current = pending.pop(0)
+        group = next(
+            (m for m in _BRACE_GROUP.finditer(current) if "," in m.group(1)),
+            None,
+        )
+        if group is None:
+            done.append(current)
+            continue
+        head, tail = current[: group.start()], current[group.end() :]
+        pending.extend(head + option + tail for option in group.group(1).split(","))
+    return tuple(dict.fromkeys(done))
+
+
+def _is_glob(text: str) -> bool:
+    """Whether ``text`` uses glob syntax rather than naming one path."""
+    return any(c in _GLOB_CHARS for c in text)
+
+
 def _glob_match(rel: Path, glob: str) -> bool:
-    """Match a root-relative path against a glob; ``**/`` also matches top-level files."""
+    """Match a root-relative path against a glob; ``**/`` also matches top-level files.
+
+    ``{a,b}`` alternatives match when any expansion does.
+    """
     text = rel.as_posix()
-    if fnmatch.fnmatch(text, glob):
-        return True
-    return glob.startswith("**/") and fnmatch.fnmatch(text, glob[3:])
+    for plain in expand_braces(glob):
+        if fnmatch.fnmatch(text, plain):
+            return True
+        if plain.startswith("**/") and fnmatch.fnmatch(text, plain[3:]):
+            return True
+    return False
 
 
 def _checked_glob(glob: str) -> str:
@@ -433,6 +473,10 @@ class ZebraSourceAction(TaskAction):
 
     def _list(self, root: Path, props: dict) -> str:
         raw = (props.get("path") or "").strip()
+        if not props.get("glob") and _is_glob(raw):
+            # A glob given as the path is what an agent means, not a missing directory (#285).
+            props = {**props, "glob": raw}
+            raw = ""
         directory = root if raw in ("", ".", "./") else resolve_source_path(root, raw)
         label = raw or "the source root"
         if directory.is_file():

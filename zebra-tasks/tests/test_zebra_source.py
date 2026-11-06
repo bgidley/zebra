@@ -9,9 +9,11 @@ from zebra.core.models import ProcessDefinition, ProcessInstance, TaskDefinition
 from zebra.tasks.base import ExecutionContext
 
 from zebra_tasks.agent.zebra_source import (
+    MAX_BRACE_EXPANSIONS,
     REASONS,
     RECOVERY_HINT,
     ZebraSourceAction,
+    expand_braces,
     is_expected_miss,
     source_root,
 )
@@ -257,6 +259,67 @@ async def test_list_of_a_hidden_file_is_still_refused(root, context):
 
     assert not result.success
     assert "never reads" in result.error
+
+
+# Brace globs and a glob given as list's path (#285).
+
+
+@pytest.mark.parametrize(
+    ("glob", "expected"),
+    [
+        ("*.py", ("*.py",)),
+        ("*.{py,yaml}", ("*.py", "*.yaml")),
+        ("{a,b}/{c,d}", ("a/c", "a/d", "b/c", "b/d")),
+        ("x{a,{b,c}}", ("xa", "xb", "xc")),
+        ("{single}.py", ("{single}.py",)),
+    ],
+)
+def test_expand_braces(glob, expected):
+    assert sorted(expand_braces(glob)) == sorted(expected)
+
+
+def test_expand_braces_is_capped():
+    assert len(expand_braces("{a,b}" * 10)) == MAX_BRACE_EXPANSIONS
+
+
+async def test_search_with_a_brace_glob(root, context):
+    (root / "zebra-tasks" / "zebra_tasks" / "other.yaml").write_text("ThingAction: yes\n")
+    (root / "zebra-tasks" / "zebra_tasks" / "skip.txt").write_text("ThingAction: no\n")
+
+    result = await ZebraSourceAction().run(
+        _task(operation="search", pattern="ThingAction", glob="zebra-tasks/**/*.{py,yaml}"),
+        context,
+    )
+
+    files = {line.split(":", 1)[0] for line in result.output["text"].splitlines()}
+    assert files == {"zebra-tasks/zebra_tasks/thing.py", "zebra-tasks/zebra_tasks/other.yaml"}
+
+
+async def test_list_with_a_brace_glob(root, context):
+    (root / "zebra-tasks" / "zebra_tasks" / "other.yaml").write_text("x")
+
+    result = await ZebraSourceAction().run(_list(glob="**/{thing,other}.{py,yaml}"), context)
+
+    assert result.output["text"].splitlines() == [
+        "zebra-tasks/zebra_tasks/other.yaml",
+        "zebra-tasks/zebra_tasks/thing.py",
+    ]
+
+
+async def test_list_takes_a_glob_given_as_path(root, context):
+    result = await ZebraSourceAction().run(_list(path="zebra-tasks/**/th*.py"), context)
+
+    assert result.success
+    assert result.output["text"] == "zebra-tasks/zebra_tasks/thing.py"
+
+
+async def test_a_glob_path_never_lists_hidden_or_outside(root, context):
+    hidden = await ZebraSourceAction().run(_list(path="**/*"), context)
+    outside = await ZebraSourceAction().run(_list(path="../*"), context)
+
+    assert not any(h in hidden.output["text"] for h in HIDDEN)
+    assert not outside.success
+    assert outside.error.startswith("[invalid] ")
 
 
 async def test_ambiguous_typo_suggests_the_right_one(root, context):

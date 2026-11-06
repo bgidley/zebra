@@ -250,6 +250,46 @@ def test_run_caps_the_diff(fake, repo, tmp_path):
     )
 
 
+def _sent_change_map(fake: Path) -> str:
+    return json.loads((fake / "stdin.json").read_text())["change_map"]
+
+
+def test_run_sends_a_change_map_of_files_and_tests(fake, repo, tmp_path):
+    (repo / "tests").mkdir()
+    (repo / "a.txt").write_text("one\ntwo\nthree\n")
+    (repo / "tests" / "test_a.py").write_text(
+        "def helper():\n    pass\n\n\ndef test_one():\n    pass\n\n\n"
+        "async def test_two():\n    --x\n"
+    )
+    (repo / "lib.py").write_text("def test_not_a_test():\n    pass\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "change")
+
+    result = _run_review(fake, repo, tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _sent_change_map(fake) == (
+        "Files changed (3):\n"
+        "- a.txt (+2 -0)\n"
+        "- lib.py (+2 -0)\n"
+        "- tests/test_a.py (+10 -0)\n"
+        "\n"
+        "Tests added or changed:\n"
+        "- tests/test_a.py: test_one, test_two"
+    )
+
+
+def test_change_map_names_every_file_when_the_diff_is_cut(fake, repo, tmp_path):
+    _commit(repo, "big.txt", "x" * (MAX_DIFF_CHARS * 2) + "\n")
+    _commit(repo, "late.txt", "late\n")
+
+    result = _run_review(fake, repo, tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "- late.txt (+1 -0)" in _sent_change_map(fake)
+    assert "late.txt" not in json.loads((fake / "stdin.json").read_text())["diff"]
+
+
 def test_run_rejects_a_non_json_claude_review(fake, repo, tmp_path):
     result = _run_review(fake, repo, tmp_path, claude="O1: met")
 
