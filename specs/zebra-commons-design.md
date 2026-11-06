@@ -95,8 +95,8 @@ so reputation and market balance attach to the Zebra, not to a device.
     backdate. Both relays sign receipts (see Infrastructure).
   - An event from the revoked device is accepted only if a receipt shows it was stored before the
     revoke's receipt. Events with no receipt are rejected.
-  - Until the relays exist (S3b-2), there are no receipts: a revoked device's signatures are
-    rejected outright.
+  - With no relay (or no receipt key) configured there are no receipts: a revoked device's
+    signatures are rejected outright. The private relay's receipts arrived in S3b-2 (#246).
   - The Zebra's reputation survives.
 - **Owner.** Each deployment has one owner user (`commons_owner_user_id`, defaulting to its first
   user). Commons and sync act only for the owner: the owner's `sharing` trust level governs, and
@@ -395,6 +395,9 @@ A family tree of skills, in two views built from data Zebra already keeps:
 - `strfry` relay as a Quadlet unit on the prod host, rootless Podman, a few MB of RAM, behind the
   existing reverse proxy on `wss://…/commons`. It accepts only events tagged `zebra-commons`.
 - The operator key signs `RECEIPT`s.
+- The private sync relay (S3b-2, #246) is a second strfry on `wss://…/sync` (loopback
+  `127.0.0.1:7778`), with its own write policy, receipt sidecar and operator key; files in
+  `deploy/podman/sync-relay/`, installed by hand ([commons-sync-relay-runbook.md](commons-sync-relay-runbook.md)).
 - Mirroring to 2–3 public relays is configured in `ZEBRA_COMMONS_RELAYS`.
 
 ---
@@ -538,8 +541,52 @@ transport only; the relay, NIP-44 and receipts are #246.
 - `skill_share_prepare` records `proposed` only when it routes `propose`; a skip is `skipped`
   (or `blocked` for leak taint) and a failed process `failed`. Neither of those is a decision,
   so Zebra may ask again later; the genealogy shows "not proposed" / "share failed".
-- Not yet: building the service from the web settings (#246), a Share button on the workflow page
+- Not yet: a Share button on the workflow page
   (`start_share(manual=True)` exists).
+
+**Skill sync (S3b-2) as built (#246, OpenSpec `commons-sync-relay`). Off by default.** Owner
+steps: [commons-sync-relay-runbook.md](commons-sync-relay-runbook.md).
+- Transport: `commons/nostr.py` is the only importer of `nostr-sdk` 0.45 (alpha; abi3 wheels work
+  on CPython 3.14 aarch64): `NostrSdkTransport` (NIP-42 by the device key; sets
+  `uniffi_set_event_loop` before each call, rebuilds the client after an outage, always shuts it
+  down) and NIP-44 v2. `commons/relay.py`: `RelayCommonsClient` over a `RelayTransport`
+  (`send` / `query`), re-verifies every fetched event, polls for `subscribe`, and queues publishes
+  in `Outbox` (`<library>/.sync/outbox.jsonl`, flock, fsync) while the relay is unreachable or
+  answers a transient refusal; `flush()` resends in order; `blocked:` / `invalid:` /
+  `restricted:` raise `PublishRefused` (queued ones move to `outbox.rejected.jsonl`).
+- `SKILL`: NIP-44 ciphertext to its one recipient device, `["enc","nip44"]`, NIP-70 `["-"]`;
+  plaintext is rejected (`not_encrypted`), a wrong key `not_decryptable`; over 65535 bytes is
+  refused at build time.
+- strfry 1.1.3 asks for NIP-42 AUTH only for NIP-70 protected events and has no read restriction,
+  so: `SKILL`s are protected and the write policy accepts one only when `authed == pubkey` and that
+  device holds a valid, unrevoked cert from a registered Zebra key; certs and revokes are accepted
+  by author (a registered Zebra key; strfry checks signatures); reads are open (ciphertext, but
+  sender / recipient / timing and cert labels are visible).
+- Receipts (`commons/receipts.py`, `RECEIPT` kind 1246, provisional): the write policy
+  (`deploy/podman/sync-relay/write_policy.py`, stdlib, in the strfry container) gives each
+  accepted event the next `seq` and journals it before accepting; the sidecar
+  (`python -m zebra_agent.commons.receipts`, operator secret only from
+  `ZEBRA_SYNC_OPERATOR_SECRET`) signs `{seq, event_id}` (tags `e`, `k`, `seq`) per journal line.
+  `receipt_order()` keeps receipts signed by `SYNC_RECEIPT_PUBKEY` whose content matches the tags.
+- Revocation: `verify_device_chain(..., receipt_seq=, event_id=)`; with receipts a revoked
+  device's event passes only with a receipt `seq` below every revoke's (no receipt:
+  `no_receipt`; a revoke without one: `revoked`); without receipts the S1 rule. Recipient choice
+  never uses receipts.
+- `SyncService`: `receipt_pubkey`, `receipts`, `refresh()` (this Zebra's certs and revokes from
+  the relay, receipts for revokes and for events of revoked senders; never raises),
+  `publish_identity()`, `flush()`, `merge_certs()`; `send` refreshes and publishes identity first;
+  `receive_pending` refreshes with the pending events.
+- Web: `api/commons_sync.py` `build_sync_service()` (Commons on + `SYNC_RELAY` + identity + device
+  key, else None; direction is the stricter of `ZEBRA_SYNC_DIRECTION` and the stored one) and
+  `sync_tick()` (daemon: DB certs, flush, refresh, identity, receive; each step logged, never
+  fatal). nostr-sdk is never imported while sync is off.
+- Infrastructure in `deploy/podman/sync-relay/` (not deployed): strfry Quadlet (pinned digest,
+  `127.0.0.1:7778`), `strfry.conf`, `write_policy.py`, `allowlist.json.example`, receipt sidecar
+  Quadlet, `zebra-sync.network`, 90-day retention service + timer (`SKILL`s and their receipts;
+  certs, revokes and their receipts are kept).
+- Tests: `test_commons_relay.py`, `test_sync_relay_policy.py`, the web wiring, and
+  `test_sync_relay_integration.py` (throwaway strfry container; skips without podman or the image
+  and in CI unless `ZEBRA_SYNC_RELAY_IT=1`).
 
 ### Leak guard (all LLM workflow writers; #237)
 Problem: the dream cycle's evaluator prompt includes raw **sample failed goals**
@@ -700,7 +747,8 @@ my work machine?"**
 | `SYNC_CONFIDENTIAL_PATTERNS` | `ZEBRA_SYNC_CONFIDENTIAL_PATTERNS` | — | Extra per-device regexes, such as codenames or domains, that block sending |
 | `MIN_RUNS_TO_SHARE` | — | 2 | Successful runs before Zebra suggests sharing a workflow with another sphere |
 | `ANCESTOR_WINDOW` | — | 32 | Ancestor hashes carried per version for lineage merges |
-| `SYNC_RECEIPT_PUBKEY` | `ZEBRA_SYNC_RECEIPT_PUBKEY` | — | Private-relay operator key trusted for sync receipts |
+| `SYNC_RECEIPT_PUBKEY` | `ZEBRA_SYNC_RECEIPT_PUBKEY` | — | Private-relay operator key trusted for sync receipts; unset keeps the S1 revocation rule |
+| — | `ZEBRA_SYNC_OPERATOR_SECRET` | — | Receipt sidecar only: the operator secret (hex or nsec); a secret env file / CI variable, never `prod.env` |
 | `SUPERVISED_RUNS` | — | 3 | Approved successful runs before an imported workflow runs without the pre-run approval |
 | `MIN_RUNS_TO_OFFER` | — | 5 | Effectiveness evidence needed before offering |
 | `IMPORT_SCORE_THRESHOLD` | — | 0.5 | Minimum import score to try judging |

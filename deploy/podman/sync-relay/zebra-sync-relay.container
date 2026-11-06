@@ -1,0 +1,33 @@
+# Zebra private sync relay (strfry) — rootless Podman Quadlet unit (#246).
+#
+# NOT installed by scripts/deploy-podman.sh (it copies only deploy/podman/quadlet/*.container).
+# Install by hand: specs/commons-sync-relay-runbook.md.
+#
+# Config, write policy and allow-list come from ~/.config/zebra-sync-relay/ (a directory mount,
+# so editing allowlist.json is picked up without a restart). Bound to loopback; the reverse
+# proxy (Cloudflare Tunnel) routes wss://<host>/sync here.
+[Unit]
+Description=Zebra private sync relay (strfry)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=docker.io/dockurr/strfry@sha256:91c19ac7a361e1b5147ca5cababf135b4efdc3d107496072eda50da9b59038be
+ContainerName=zebra-sync-relay
+Network=zebra-sync.network
+PublishPort=127.0.0.1:7778:7777
+Entrypoint=/app/strfry
+Exec=--config=/etc/zebra-sync/strfry.conf relay
+Volume=%h/.config/zebra-sync-relay:/etc/zebra-sync:ro,Z
+Volume=zebra-sync-relay-db:/app/strfry-db
+# The write policy appends one line per accepted event; the receipt sidecar reads it.
+Volume=zebra-sync-receipts:/receipts
+Environment=ZEBRA_SYNC_ALLOWLIST=/etc/zebra-sync/allowlist.json ZEBRA_SYNC_JOURNAL=/receipts/journal.jsonl
+PodmanArgs=--memory=256m --memory-swap=256m
+
+[Service]
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

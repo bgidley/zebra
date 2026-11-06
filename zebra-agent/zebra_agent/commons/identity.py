@@ -5,7 +5,9 @@ key. The Zebra key signs a ``DEVICE_CERT`` per device and a ``DEVICE_REVOKE`` fo
 or retired one. Readers accept an event when its signer has a valid, unexpired, unrevoked
 cert chain to the Zebra key (S1, #228).
 
-Until relays sign receipts (#246), a revoked device's events are rejected outright.
+Revocation order: with no relay, a revoked device's events are rejected outright (S1). With
+verified relay receipts (#246), an event from a revoked device is accepted only if its receipt
+shows it was stored before the revoke's.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import binascii
 import hashlib
 import json
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -158,19 +161,47 @@ def parse_cert(event: Event) -> DeviceCert | None:
     )
 
 
+def revoked_by_order(
+    revokes: list[Event], event_id: str | None, receipt_seq: Mapping[str, int] | None
+) -> str | None:
+    """Why the revokes in *revokes* reject the event *event_id*, or None if they do not.
+
+    No receipts (or no event id): any revoke rejects (``revoked``, the S1 rule). With
+    receipts: the event needs a receipt (``no_receipt``) whose ``seq`` precedes the receipt of
+    every revoke; a revoke with no receipt still rejects.
+    """
+    if not revokes:
+        return None
+    if receipt_seq is None or event_id is None:
+        return "revoked"
+    seq = receipt_seq.get(event_id)
+    if seq is None:
+        return "no_receipt"
+    revoke_seqs = [receipt_seq.get(r.id) for r in revokes]
+    if any(s is None for s in revoke_seqs) or seq >= min(revoke_seqs):
+        return "revoked"
+    return None
+
+
 def verify_device_chain(
     device_pubkey: str,
     zebra_pubkey: str,
     events: list[Event],
     *,
     now: int | None = None,
+    receipt_seq: Mapping[str, int] | None = None,
+    event_id: str | None = None,
 ) -> ChainResult:
     """Check that ``device_pubkey`` holds a valid, unexpired, unrevoked cert from ``zebra_pubkey``.
 
     ``events`` is every cert and revoke the reader knows of; others are ignored, as are
     events with a bad id or signature or signed by any key but the Zebra key.
 
-    Reasons: ``ok``, ``revoked``, ``no_cert``, ``bad_cert``, ``expired``.
+    ``receipt_seq`` (event id → relay receipt ``seq``, from verified receipts) and
+    ``event_id`` judge one event of the device by receipt order (``revoked_by_order``).
+    Without them a revoke rejects the device outright: use that for "may I send to it now".
+
+    Reasons: ``ok``, ``revoked``, ``no_receipt``, ``no_cert``, ``bad_cert``, ``expired``.
     """
     now = int(time.time()) if now is None else now
     trusted = [
@@ -180,9 +211,12 @@ def verify_device_chain(
         and e.kind in (DEVICE_CERT_KIND, DEVICE_REVOKE_KIND)
         and verify_event(e)
     ]
-    # No receipts yet (#246): any revoke rejects the device outright.
-    if any(e.kind == DEVICE_REVOKE_KIND and device_pubkey in e.tag_values("p") for e in trusted):
-        return ChainResult(False, "revoked")
+    revokes = [
+        e for e in trusted if e.kind == DEVICE_REVOKE_KIND and device_pubkey in e.tag_values("p")
+    ]
+    reason = revoked_by_order(revokes, event_id, receipt_seq)
+    if reason is not None:
+        return ChainResult(False, reason)
     certs = [
         e for e in trusted if e.kind == DEVICE_CERT_KIND and e.tag_values("d") == [device_pubkey]
     ]
@@ -203,18 +237,26 @@ def verify_attributed(
     chain_events: list[Event],
     *,
     now: int | None = None,
+    receipt_seq: Mapping[str, int] | None = None,
 ) -> ChainResult:
     """Accept ``event`` as coming from the Zebra ``zebra_pubkey``.
 
     It must carry a valid signature, and be signed either by the Zebra key itself or by a
-    device key with a valid chain (``verify_device_chain``). Reason ``bad_signature``
-    when its own signature fails.
+    device key with a valid chain (``verify_device_chain``, judged by receipt order when
+    *receipt_seq* is given). Reason ``bad_signature`` when its own signature fails.
     """
     if not verify_event(event):
         return ChainResult(False, "bad_signature")
     if event.pubkey == zebra_pubkey:
         return ChainResult(True, "ok")
-    return verify_device_chain(event.pubkey, zebra_pubkey, chain_events, now=now)
+    return verify_device_chain(
+        event.pubkey,
+        zebra_pubkey,
+        chain_events,
+        now=now,
+        receipt_seq=receipt_seq,
+        event_id=event.id,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,9 +1,9 @@
 """The Commons transport interface and an in-memory implementation (#236, S3b-1).
 
 Everything outside ``commons/`` talks to relays through ``CommonsClient``: ``publish``,
-``subscribe`` and ``fetch``. The Nostr implementation (``nostr-sdk``, private strfry relay,
-NIP-44, receipts) is #246; until then ``InMemoryCommonsClient`` over a shared
-``InMemoryRelay`` carries events between devices in tests.
+``subscribe`` and ``fetch``. ``relay.RelayCommonsClient`` (#246) is the real one, over a private
+strfry relay; ``InMemoryCommonsClient`` over a shared ``InMemoryRelay`` carries events between
+devices in tests.
 
 The hard filter lives here so no implementation can skip it: a ``SKILL`` event is refused
 on any relay that is not private.
@@ -34,6 +34,8 @@ class Filter:
     authors: tuple[str, ...] = ()
     recipients: tuple[str, ...] = ()  # values of ``p`` tags
     since: int | None = None
+    events: tuple[str, ...] = ()  # values of ``e`` tags
+    limit: int | None = None  # a hint for the relay; ``matches`` ignores it
 
     def matches(self, event: Event) -> bool:
         if self.kinds and event.kind not in self.kinds:
@@ -44,7 +46,26 @@ class Filter:
             return False
         if self.since is not None and event.created_at < self.since:
             return False
+        if self.events and not set(event.tag_values("e")) & set(self.events):
+            return False
         return True
+
+    def to_nostr(self) -> dict:
+        """The NIP-01 JSON filter."""
+        out: dict = {}
+        if self.kinds:
+            out["kinds"] = list(self.kinds)
+        if self.authors:
+            out["authors"] = list(self.authors)
+        if self.recipients:
+            out["#p"] = list(self.recipients)
+        if self.events:
+            out["#e"] = list(self.events)
+        if self.since is not None:
+            out["since"] = self.since
+        if self.limit is not None:
+            out["limit"] = self.limit
+        return out
 
 
 def _matches_any(filters: list[Filter], event: Event) -> bool:
@@ -70,6 +91,9 @@ class CommonsClient(ABC):
     @abstractmethod
     async def fetch(self, filters: list[Filter]) -> list[Event]:
         """Stored events matching *filters*, oldest first."""
+
+    async def close(self) -> None:  # noqa: B027 - optional hook
+        """Release any connection."""
 
     def check_publish(self, event: Event) -> None:
         """The hard filter every implementation applies before sending."""

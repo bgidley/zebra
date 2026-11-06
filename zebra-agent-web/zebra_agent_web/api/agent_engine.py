@@ -175,6 +175,12 @@ async def _async_init() -> None:
     from zebra_agent_web.api.commons_import import WebCommonsServices
 
     engine.extras["__commons__"] = WebCommonsServices()
+    # Skill sync over the private relay (#246): only with COMMONS_ENABLED + ZEBRA_SYNC_RELAY.
+    from zebra_agent_web.api.commons_sync import SYNC_KEY, build_sync_service
+
+    sync = await build_sync_service(_library)
+    if sync is not None:
+        engine.extras[SYNC_KEY] = sync
 
     # Initialize agent loop with memory and personal knowledge store
     _agent_loop = AgentLoop(

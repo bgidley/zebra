@@ -12,7 +12,10 @@ between own devices (S3b)".
   sphere), so Zebra asks once per version and the genealogy shows each sphere's status.
 - ``merge_decision`` places a received version by ``commons.ancestors``.
 
-The transport here is any ``CommonsClient``; until #246 only ``InMemoryCommonsClient``.
+The transport is any ``CommonsClient``: ``relay.RelayCommonsClient`` over the private strfry
+relay (#246, built only when ``ZEBRA_SYNC_RELAY`` is set), or ``InMemoryCommonsClient`` in
+tests. With a relay, ``refresh()`` pulls this Zebra's certs, revokes and the receipts that order
+them (``receipt_pubkey``), and ``publish_identity()`` puts the held certs and revokes there.
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ from zebra.core.models import ProcessState
 
 from zebra_agent.commons import commons_exportable, keys
 from zebra_agent.commons.client import SKILL_KIND, CommonsClient, Filter
-from zebra_agent.commons.events import Event
+from zebra_agent.commons.events import Event, verify_event
 from zebra_agent.commons.identity import (
     DEVICE_CERT_KIND,
     DEVICE_REVOKE_KIND,
@@ -38,6 +41,7 @@ from zebra_agent.commons.identity import (
     parse_cert,
     verify_device_chain,
 )
+from zebra_agent.commons.receipts import RECEIPT_KIND, receipt_order
 from zebra_agent.commons.skill import (
     SkillRefused,
     SkillVerification,
@@ -322,6 +326,9 @@ class SyncService:
         confidential_patterns: ``SYNC_CONFIDENTIAL_PATTERNS`` of this device
         device_label: This device's label
         min_runs: Successful runs before Zebra suggests sharing (``MIN_RUNS_TO_SHARE``)
+        receipt_pubkey: The relay operator key trusted for receipts (``SYNC_RECEIPT_PUBKEY``);
+            None keeps the S1 rule (a revoked device's events are rejected outright)
+        receipts: Event id → receipt ``seq`` from verified receipts (filled by ``refresh``)
     """
 
     client: CommonsClient
@@ -334,7 +341,10 @@ class SyncService:
     confidential_patterns: list[str] = field(default_factory=list)
     device_label: str = ""
     min_runs: int = MIN_RUNS_TO_SHARE
+    receipt_pubkey: str | None = None
+    receipts: dict[str, int] = field(default_factory=dict, repr=False)
     _started_events: set[str] = field(default_factory=set, repr=False)
+    _published: set[str] = field(default_factory=set, repr=False)
 
     @property
     def device_pubkey(self) -> str:
@@ -385,6 +395,79 @@ class SyncService:
 
     def held_events(self) -> list[Event]:
         return [e for e in self.certs if e.kind in (DEVICE_CERT_KIND, DEVICE_REVOKE_KIND)]
+
+    # -- identity and receipts on the relay (#246) ------------------------------------
+
+    def merge_certs(self, events: list[Event]) -> int:
+        """Add this Zebra's correctly signed certs and revokes not held yet; returns how many."""
+        held = {e.id for e in self.certs}
+        added = 0
+        for event in events:
+            if event.id in held or event.pubkey != self.zebra_pubkey:
+                continue
+            if event.kind not in (DEVICE_CERT_KIND, DEVICE_REVOKE_KIND) or not verify_event(event):
+                continue
+            self.certs.append(event)
+            held.add(event.id)
+            added += 1
+        return added
+
+    def _revoked_devices(self) -> set[str]:
+        return {
+            p for e in self.held_events() if e.kind == DEVICE_REVOKE_KIND for p in e.tag_values("p")
+        }
+
+    async def refresh(self, events: list[Event] | None = None) -> None:
+        """Pull this Zebra's certs and revokes from the relay, and the receipts that order them.
+
+        Receipts are fetched for every revoke and for those of *events* signed by a revoked
+        device (the only ones receipt order decides). Never raises: a relay that cannot be
+        read leaves what this device already holds.
+        """
+        try:
+            found = await self.client.fetch(
+                [Filter(kinds=(DEVICE_CERT_KIND, DEVICE_REVOKE_KIND), authors=(self.zebra_pubkey,))]
+            )
+            if self.merge_certs(found):
+                logger.info("Skill sync: learnt certs or revokes of this Zebra from the relay")
+            if not self.receipt_pubkey:
+                return
+            revoked = self._revoked_devices()
+            ids = [e.id for e in self.held_events() if e.kind == DEVICE_REVOKE_KIND]
+            ids += [e.id for e in events or [] if e.pubkey in revoked]
+            ids = [i for i in dict.fromkeys(ids) if i not in self.receipts]
+            for start in range(0, len(ids), 50):
+                batch = tuple(ids[start : start + 50])
+                found = await self.client.fetch(
+                    [Filter(kinds=(RECEIPT_KIND,), authors=(self.receipt_pubkey,), events=batch)]
+                )
+                self.receipts.update(receipt_order(found, self.receipt_pubkey))
+        except Exception as e:  # noqa: BLE001 - a relay outage never fails sync
+            logger.warning("Skill sync: could not refresh from the relay: %s", e)
+
+    async def publish_identity(self) -> int:
+        """Publish the held certs and revokes of this Zebra not yet published by this process.
+
+        The relay accepts a ``SKILL`` only from a device whose cert it has seen, so ``send``
+        calls this first. Returns how many were handed to the client (queued counts).
+        """
+        count = 0
+        for event in self.held_events():
+            if event.pubkey != self.zebra_pubkey or event.id in self._published:
+                continue
+            try:
+                await self.client.publish(event)
+            except Exception as e:  # noqa: BLE001 - retried on the next call
+                logger.warning("Skill sync: could not publish %s: %s", event.id[:12], e)
+                continue
+            self._published.add(event.id)
+            count += 1
+        return count
+
+    async def flush(self) -> int:
+        """Resend events the client queued while the relay was down (0 without a queue)."""
+        flush = getattr(self.client, "flush", None)
+        return await flush() if flush is not None else 0
 
     # -- proposing ---------------------------------------------------------------------
 
@@ -550,6 +633,8 @@ class SyncService:
         own = self.own_cert()
         if own is None:
             raise SkillRefused("this device has no valid DEVICE_CERT")
+        await self.refresh()
+        await self.publish_identity()
         wanted = [s for s in spheres if s in (block.get("share_with") or [])]
         recipients = skill_recipients(
             wanted,
@@ -580,16 +665,23 @@ class SyncService:
         if not self.can_receive:
             return []
         handled = {r.get("event_id") for r in share_records(library) if r.get("event_id")}
-        events = await self.client.fetch(
-            [Filter(kinds=(SKILL_KIND,), recipients=(self.device_pubkey,))]
-        )
+        try:
+            events = await self.client.fetch(
+                [Filter(kinds=(SKILL_KIND,), recipients=(self.device_pubkey,))]
+            )
+        except Exception as e:  # noqa: BLE001 - received later, when the relay is back
+            logger.warning("Skill sync: could not read the relay: %s", e)
+            return []
         return [e for e in events if e.id not in handled and e.id not in self._started_events]
 
     async def receive_pending(self, engine: WorkflowEngine, library: WorkflowLibrary) -> list[str]:
         """Start one *Skill Receive* process per new event; returns the process ids."""
         started = []
         owner = await library.refresh_owner()
-        for event in await self.pending_events(library):
+        pending = await self.pending_events(library)
+        if pending:
+            await self.refresh(pending)
+        for event in pending:
             properties: dict[str, Any] = {"skill_event": event.to_dict()}
             if owner is not None:
                 properties["__user_id__"] = owner
@@ -663,12 +755,13 @@ class SyncService:
         }
 
     def verify(self, event: Event, now: int | None = None) -> SkillVerification:
-        """``verify_skill`` with this device's identity."""
+        """``verify_skill`` with this device's identity (by receipt order with a receipt key)."""
         return verify_skill(
             event,
-            device_pubkey=self.device_pubkey,
+            device_secret=self.device_secret,
             zebra_pubkey=self.zebra_pubkey,
             sphere=self.sphere,
             held_events=self.held_events(),
             now=int(time.time()) if now is None else now,
+            receipt_seq=self.receipts if self.receipt_pubkey else None,
         )
