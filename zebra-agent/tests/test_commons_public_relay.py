@@ -159,16 +159,39 @@ def test_plugin_speaks_strfry_jsonl(tmp_path):
 # --- receipt sidecar ---------------------------------------------------------------------
 
 
-def test_sidecar_reads_its_secret_from_the_named_variable(capsys):
+def test_sidecar_reads_its_secret_from_the_named_variable():
     secret = keys.generate_secret_key()
     env = {"ZEBRA_COMMONS_OPERATOR_SECRET": keys.nsec_encode(secret)}
     assert operator_secret_from_env(env, "ZEBRA_COMMONS_OPERATOR_SECRET") == secret
     with pytest.raises(ValueError, match="ZEBRA_SYNC_OPERATOR_SECRET is not set"):
         operator_secret_from_env(env)
-    receipts_main(["--keygen", "--secret-env", "ZEBRA_COMMONS_OPERATOR_SECRET"])
-    out = capsys.readouterr().out.splitlines()
-    assert out[0].startswith("ZEBRA_COMMONS_OPERATOR_SECRET=nsec1")
-    assert re.fullmatch(r"ZEBRA_COMMONS_RECEIPT_PUBKEY=[0-9a-f]{64}", out[1])
+
+
+def test_keygen_writes_the_secret_to_a_private_file_and_never_prints_it(tmp_path, capsys):
+    out_file = tmp_path / "commons-operator.env"
+    receipts_main(
+        ["--keygen", "--secret-env", "ZEBRA_COMMONS_OPERATOR_SECRET", "--out", str(out_file)]
+    )
+    printed = capsys.readouterr().out
+    assert "nsec1" not in printed
+    pubkey = re.search(r"ZEBRA_COMMONS_RECEIPT_PUBKEY=([0-9a-f]{64})", printed).group(1)
+
+    assert out_file.stat().st_mode & 0o777 == 0o600
+    name, value = out_file.read_text().strip().split("=", 1)
+    assert name == "ZEBRA_COMMONS_OPERATOR_SECRET"
+    secret = operator_secret_from_env({name: value}, name)
+    assert keys.public_key(secret) == pubkey
+
+
+def test_keygen_refuses_to_overwrite_or_to_print(tmp_path, capsys):
+    out_file = tmp_path / "sync-operator.env"
+    out_file.write_text("ZEBRA_SYNC_OPERATOR_SECRET=existing\n")
+    with pytest.raises(SystemExit):
+        receipts_main(["--keygen", "--out", str(out_file)])
+    assert out_file.read_text() == "ZEBRA_SYNC_OPERATOR_SECRET=existing\n"
+    with pytest.raises(SystemExit):
+        receipts_main(["--keygen"])
+    assert "nsec1" not in capsys.readouterr().out
 
 
 # --- not deployed ------------------------------------------------------------------------

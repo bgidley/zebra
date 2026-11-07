@@ -24,19 +24,18 @@ Pieces (all in `deploy/podman/sync-relay/`):
 ## 1. Generate the operator key and set the CI variables
 
 ```bash
-podman run --rm --entrypoint python localhost/zebra-web:prod -m zebra_agent.commons.receipts --keygen
-# ZEBRA_SYNC_OPERATOR_SECRET=nsec1…      <- secret
-# ZEBRA_SYNC_RECEIPT_PUBKEY=<64 hex>     <- public
+podman run --rm -v ~/.config/zebra:/out:Z --entrypoint python localhost/zebra-web:prod \
+  -m zebra_agent.commons.receipts --keygen --out /out/sync-operator.env
+# Wrote ZEBRA_SYNC_OPERATOR_SECRET to /out/sync-operator.env (mode 600)
+# ZEBRA_SYNC_RECEIPT_PUBKEY=<64 hex>     <- public: note it for steps 4 and 5
 ```
+
+The secret goes straight into the sidecar's env file (`~/.config/zebra/sync-operator.env`,
+mode 600) and is never printed; keygen refuses to overwrite an existing file.
 
 - GitLab → Settings → CI/CD → Variables: add `ZEBRA_SYNC_OPERATOR_SECRET` (masked, protected,
   not expanded) as the backup of record. The deploy job does **not** read it (it is not in
   `SECRET_VARS`), so it never reaches `prod.env` or the web containers.
-- Write it to the sidecar's env file on the host:
-  ```bash
-  install -m 600 /dev/null ~/.config/zebra/sync-operator.env
-  echo 'ZEBRA_SYNC_OPERATOR_SECRET=nsec1…' >> ~/.config/zebra/sync-operator.env
-  ```
 - Never commit it, paste it in an issue, or put it in `site.env`.
 
 ## 2. Install and start the relay (Quadlets)
@@ -115,10 +114,10 @@ ZEBRA_SYNC_RECEIPT_PUBKEY=<operator pubkey hex>
 # optional: ZEBRA_SYNC_DIRECTION=both|send|receive|off
 ```
 
-Restart: `systemctl --user restart zebra-web zebra-daemon` (or the next deploy rewrites
-`prod.env` from `site.env`). Check: `podman logs zebra-daemon 2>&1 | grep "Skill sync on"` shows
-the relay, sphere, direction and `receipts verified`. Unset `ZEBRA_SYNC_RELAY` and restart to turn
-it off again; queued events stay in `<library>/.sync/outbox.jsonl` for next time.
+Apply it: `site.env` reaches the containers only through `prod.env`, which only the deploy job rebuilds (with the CI secrets), so a restart alone changes nothing. In GitLab open the **latest** master pipeline and retry its `deploy` job (never an older pipeline: it would roll prod back). Do not run `scripts/deploy-podman.sh` by hand: without the CI variables it would write a `prod.env` without the secrets.
+Check: `podman logs zebra-daemon 2>&1 | grep "Skill sync on"` shows
+the relay, sphere, direction and `receipts verified`. Unset `ZEBRA_SYNC_RELAY` and retry the latest deploy job
+to turn it off again; queued events stay in `<library>/.sync/outbox.jsonl` for next time.
 
 ## 6. Pair a second deployment (work)
 

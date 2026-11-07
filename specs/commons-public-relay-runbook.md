@@ -25,20 +25,19 @@ Pieces (all in `deploy/podman/commons-relay/`):
 ## 1. Generate the operator key and set the CI variable
 
 ```bash
-podman run --rm --entrypoint python localhost/zebra-web:prod -m zebra_agent.commons.receipts \
-  --keygen --secret-env ZEBRA_COMMONS_OPERATOR_SECRET
-# ZEBRA_COMMONS_OPERATOR_SECRET=nsec1…      <- secret
-# ZEBRA_COMMONS_RECEIPT_PUBKEY=<64 hex>     <- public
+podman run --rm -v ~/.config/zebra:/out:Z --entrypoint python localhost/zebra-web:prod \
+  -m zebra_agent.commons.receipts --keygen --secret-env ZEBRA_COMMONS_OPERATOR_SECRET \
+  --out /out/commons-operator.env
+# Wrote ZEBRA_COMMONS_OPERATOR_SECRET to /out/commons-operator.env (mode 600)
+# ZEBRA_COMMONS_RECEIPT_PUBKEY=<64 hex>     <- public: note it for steps 2 and 5
 ```
+
+The secret goes straight into the sidecar's env file (`~/.config/zebra/commons-operator.env`,
+mode 600) and is never printed; keygen refuses to overwrite an existing file.
 
 - GitLab → Settings → CI/CD → Variables: add `ZEBRA_COMMONS_OPERATOR_SECRET` (masked, protected,
   not expanded) as the backup of record. The deploy job does not read it, so it never reaches
   `prod.env` or the web containers.
-- Write it to the sidecar's env file:
-  ```bash
-  install -m 600 /dev/null ~/.config/zebra/commons-operator.env
-  echo 'ZEBRA_COMMONS_OPERATOR_SECRET=nsec1…' >> ~/.config/zebra/commons-operator.env
-  ```
 - Use a different key from the sync relay's. Never commit it or paste it in an issue.
 
 ## 2. Install and start the relay (Quadlets)
@@ -101,10 +100,11 @@ ZEBRA_COMMONS_RELAYS=wss://<host>/commons, wss://relay.example.org   # canonical
 ZEBRA_COMMONS_RECEIPT_PUBKEY=<operator pubkey hex>
 ```
 
-Restart: `systemctl --user restart zebra-web zebra-daemon` (or the next deploy rewrites
-`prod.env`). Check: `podman logs zebra-web 2>&1 | grep "Commons publishing on"` shows the
+Apply it: `site.env` reaches the containers only through `prod.env`, which only the deploy job rebuilds (with the CI secrets), so a restart alone changes nothing. In GitLab open the **latest** master pipeline and retry its `deploy` job (never an older pipeline: it would roll prod back). Do not run `scripts/deploy-podman.sh` by hand: without the CI variables it would write a `prod.env` without the secrets.
+
+Check: `podman logs zebra-web 2>&1 | grep "Commons publishing on"` shows the
 canonical relay, the mirror count and `receipts verified`. Unset `ZEBRA_COMMONS_RELAYS` and
-restart to turn it off.
+retry the latest deploy job again to turn it off.
 
 ## 6. Manual check (closes #231)
 
@@ -115,7 +115,7 @@ restart to turn it off.
    stats, actions, golden tasks and YAML. Approve with **Publish it**.
 3. The run ends `published` (`commons_offer_result`). Check the relay from anywhere:
    ```bash
-   podman exec zebra-web python - <<'PY'
+   podman exec -i zebra-web python - <<'PY'
    import asyncio
    from zebra_agent.commons import keys, kinds
    from zebra_agent.commons.client import Filter
