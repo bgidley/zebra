@@ -19,7 +19,7 @@ Operator detail lives in specs/commons-sync-relay-runbook.md. Parameters: sync (
             </li>
             <li>
                 <p class="text-ink font-medium">Turn sync on for each deployment</p>
-                <p>Add these to its site env file (<span class="font-mono text-ink">~/.config/zebra/site.env</span> on the Podman host), then restart <span class="font-mono text-ink">zebra-web</span> and <span class="font-mono text-ink">zebra-daemon</span>:</p>
+                <p>Add these to its site env file (<span class="font-mono text-ink">~/.config/zebra/site.env</span> on the Podman host), then retry the <strong class="text-ink">latest</strong> master pipeline's <span class="font-mono text-ink">deploy</span> job. Only a deploy copies the site env into what the containers read; a restart alone changes nothing:</p>
                 <pre class="mt-2 font-mono text-xs bg-ground border border-line text-ink rounded-md px-3 py-2 overflow-x-auto">ZEBRA_COMMONS_ENABLED=1
 ZEBRA_SYNC_RELAY=wss://&lt;host&gt;/sync
 ZEBRA_SYNC_RECEIPT_PUBKEY=&lt;receipt key&gt;
@@ -50,6 +50,6 @@ ZEBRA_SYNC_CONFIDENTIAL_PATTERNS=  # regexes that block a send</pre>
         </ol>
 
         <p><span class="text-ink font-medium">Lost or retired a device?</span> Revoke it under <em>Devices</em> on the home deployment. Skills it shared earlier stay; anything new from it is refused.</p>
-        <p><span class="text-ink font-medium">Turning it off:</span> remove <span class="font-mono text-ink">ZEBRA_SYNC_RELAY</span> and restart, or set <span class="font-mono text-ink">ZEBRA_SYNC_DIRECTION=off</span>. Nothing is lost; queued shares wait for next time.</p>
+        <p><span class="text-ink font-medium">Turning it off:</span> remove <span class="font-mono text-ink">ZEBRA_SYNC_RELAY</span> from the site env file and retry the latest deploy job, or set <span class="font-mono text-ink">ZEBRA_SYNC_DIRECTION=off</span>. Nothing is lost; queued shares wait for next time.</p>
     </div>
 </details>

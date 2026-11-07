@@ -87,6 +87,17 @@ def receipt_order(events: Iterable[Event], operator_pubkey: str) -> dict[str, in
     return order
 
 
+def write_secret_file(path: Path, text: str) -> None:
+    """Create *path* with mode 0600 and write *text*; never overwrite an existing file.
+
+    Raises:
+        FileExistsError: If *path* already exists.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+
+
 def operator_secret_from_env(
     env: dict[str, str] | None = None, name: str = OPERATOR_SECRET_ENV
 ) -> str:
@@ -202,13 +213,20 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--keygen",
         action="store_true",
-        help="print a new operator key (nsec, then public key hex) and exit",
+        help="write a new operator key to --out (0600, never overwritten), print its public key",
     )
+    parser.add_argument("--out", help="--keygen: new env file for the operator secret")
     args = parser.parse_args(argv)
     if args.keygen:
+        if not args.out:
+            parser.error("--keygen needs --out FILE: the secret is never printed")
         secret = keys.generate_secret_key()
+        try:
+            write_secret_file(Path(args.out), f"{args.secret_env}={keys.nsec_encode(secret)}\n")
+        except FileExistsError:
+            parser.error(f"{args.out} already exists; refusing to overwrite an operator key")
         pubkey_env = args.secret_env.replace("OPERATOR_SECRET", "RECEIPT_PUBKEY")
-        print(f"{args.secret_env}={keys.nsec_encode(secret)}")
+        print(f"Wrote {args.secret_env} to {args.out} (mode 600)")
         print(f"{pubkey_env}={keys.public_key(secret)}")
         return
     if not args.relay:
