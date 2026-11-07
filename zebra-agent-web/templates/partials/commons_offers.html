@@ -1,0 +1,94 @@
+{% comment %}
+Public Commons offers on /commons/ (#232, S5). Parameters: commons_offers (api.commons_exchange
+.offers_overview), is_owner, zebra_npub.
+
+Frame: offers, publishers, counts and the owner's "Import this". Voice: Zebra's own line about
+its verdict (a fixed first-person sentence per outcome), with the gate's recorded reasoning
+quoted beneath it in muted text. Nothing here contacts a relay.
+{% endcomment %}
+{% with offers=commons_offers %}
+<section class="panel" aria-labelledby="offers-title" data-testid="commons-offers" data-publishing="{% if offers.publishing_on %}on{% else %}off{% endif %}">
+    <div class="px-6 py-4 border-b border-line">
+        <h2 id="offers-title" class="text-base font-semibold text-ink">Public Commons</h2>
+        {% if offers.publishing_on %}
+        <p class="text-sm text-muted mt-1 max-w-[65ch]">I read other Zebras' offers from the public relay and keep the ones whose signatures check out. I never import one on my own: you choose. When I judge an offer, or run one I adopted, I publish a signed attestation of what happened. It never says what the goal was or who asked.</p>
+        {% else %}
+        <p class="text-sm text-muted mt-1 max-w-[65ch]" data-testid="commons-offers-off">Publishing is off: no public relay is set (<span class="font-mono">ZEBRA_COMMONS_RELAYS</span>). I fetch no offers and publish no attestations while it is off.</p>
+        {% endif %}
+    </div>
+
+    <div class="px-6 py-4 space-y-3">
+        <h3 class="text-sm font-semibold text-ink">Offers I have seen</h3>
+        {% for o in offers.offers_seen %}
+        <article class="rounded-md border border-line bg-surface-2/40 px-4 py-3 space-y-2" data-offer="{{ o.content_sha256 }}" data-status="{{ o.status }}">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="font-medium text-ink">{{ o.name }}</p>
+                    <p class="text-xs text-faint mt-0.5">
+                        <span class="{% if o.status == 'adopted' %}text-ok{% elif o.status == 'rejected' or o.status == 'delisted' %}text-fail{% elif o.status == 'judging' %}text-needs{% else %}text-muted{% endif %}" data-testid="offer-status">{{ o.status }}</span>
+                        · from <span class="font-mono">{{ o.publisher.fingerprint }}</span>
+                        {% if o.offered_on %}· offered {{ o.offered_on|date:"Y-m-d" }}{% endif %}
+                    </p>
+                    <p class="font-mono text-xs text-faint break-all">{{ o.publisher.npub }}</p>
+                </div>
+                {% if is_owner and offers.publishing_on and o.importable %}
+                <form method="post" action="/commons/offers/{{ o.content_sha256 }}/import/" class="shrink-0">
+                    {% csrf_token %}
+                    <button class="btn btn-sm" data-testid="offer-import">Import this</button>
+                </form>
+                {% endif %}
+            </div>
+            {% if o.summary %}<p class="text-sm text-muted">{{ o.summary }}</p>{% endif %}
+            <dl class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
+                <div><dt class="inline">Runs</dt> <dd class="inline font-mono text-ink">{{ o.stats.runs|default:"0" }}</dd></div>
+                <div><dt class="inline">Success</dt> <dd class="inline font-mono text-ink">{% widthratio o.stats.success_rate|default:0 1 100 %}%</dd></div>
+                {% if o.stats.avg_rating is not None %}<div><dt class="inline">Rating</dt> <dd class="inline font-mono text-ink">{{ o.stats.avg_rating }}</dd></div>{% endif %}
+                {% if o.stats.gym_score is not None %}<div><dt class="inline">Gym</dt> <dd class="inline font-mono text-ink">{{ o.stats.gym_score }}</dd></div>{% endif %}
+                <div data-testid="offer-attestations"><dt class="inline">Zebras say</dt> <dd class="inline font-mono text-ink">{{ o.attestations.worked }} worked · {{ o.attestations.failed }} failed · {{ o.attestations.adopted }} adopted · {{ o.attestations.rejected }} rejected</dd></div>
+            </dl>
+            {% if o.voice %}
+            <div class="flex gap-3 pt-1" data-thought="offer-judgement">
+                <span class="w-1.5 shrink-0 self-stretch rounded-sm bg-voice/35" aria-hidden="true"></span>
+                <div class="min-w-0">
+                    <p class="text-[15px] leading-relaxed text-ink">{{ o.voice }}</p>
+                    <p class="mt-1 text-xs text-faint">{% if o.process_id %}<a href="/processes/{{ o.process_id }}/trace/" class="font-medium text-voice hover:underline">Zebra's verdict</a>{% else %}<span class="font-medium text-voice">Zebra's verdict</span>{% endif %}</p>
+                    {% if o.recorded_reason %}
+                    <p class="text-sm leading-relaxed text-muted mt-2">{{ o.recorded_reason }}</p>
+                    <p class="mt-1 text-xs text-faint">recorded reasoning · stays on this device</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </article>
+        {% empty %}
+        <p class="text-sm text-muted" data-testid="offers-seen-empty">{% if offers.publishing_on %}No offers seen yet. I check the relay on every daemon tick.{% else %}None: publishing is off.{% endif %}</p>
+        {% endfor %}
+    </div>
+
+    <div class="px-6 py-4 border-t border-line space-y-3">
+        <h3 class="text-sm font-semibold text-ink">My offers</h3>
+        {% for o in offers.my_offers %}
+        <article class="rounded-md border border-line bg-surface-2/40 px-4 py-3 space-y-2" data-my-offer="{{ o.content_sha256 }}">
+            <p class="font-medium text-ink">{{ o.name }} <span class="font-mono text-xs text-faint">{{ o.short_hash }}</span></p>
+            <p class="text-xs text-faint" data-testid="my-offer-attestations">Other Zebras: <span class="font-mono text-ink">{{ o.attestations.worked }} worked · {{ o.attestations.failed }} failed · {{ o.attestations.adopted }} adopted · {{ o.attestations.rejected }} rejected</span></p>
+            {% if o.attestations.items %}
+            <ul class="divide-y divide-line text-sm">
+                {% for a in o.attestations.items|slice:":10" %}
+                <li class="py-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span class="{% if a.label == 'worked' or a.label == 'adopted' %}text-ok{% elif a.label == 'failed' %}text-fail{% else %}text-needs{% endif %}">{{ a.label }}</span>
+                    <span class="font-mono text-xs text-faint self-center">{{ a.zebra.fingerprint }}</span>
+                    <span class="text-muted">{{ a.reason }}</span>
+                    {% if a.created_on %}<span class="font-mono text-xs text-faint self-center">{{ a.created_on|date:"Y-m-d H:i" }}</span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-sm text-muted">No other Zebra has reported on it yet.</p>
+            {% endif %}
+        </article>
+        {% empty %}
+        <p class="text-sm text-muted" data-testid="my-offers-empty">I have not offered any workflow publicly{% if not offers.publishing_on %}, and publishing is off{% endif %}.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endwith %}

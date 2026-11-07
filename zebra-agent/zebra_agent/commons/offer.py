@@ -277,3 +277,86 @@ def publish_refusal(
     if PUBLIC_SPHERE not in (block.get("share_with") or []):
         return "'public' is not in this version's share_with (no current approval)"
     return None
+
+
+# -- importing an offer (#232, S5) -----------------------------------------------------------
+
+OFFER_INPUT_FORMAT = "zebra-commons-offer"
+
+
+def offer_input(event: Event, chain: list[Event]) -> str:
+    """The *Commons Import* run input for an ``OFFER``: the event and its certs / revokes."""
+    return json.dumps(
+        {
+            "format": OFFER_INPUT_FORMAT,
+            "event": event.to_dict(),
+            "chain": [e.to_dict() for e in chain],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
+def received_block(check: OfferVerification) -> dict[str, Any]:
+    """The ``commons`` block an adopted offer keeps: hash, public parent, publisher."""
+    parent = check.parent
+    return {
+        "content_sha256": check.content_sha256,
+        "parent_sha256": parent,
+        "ancestors": [parent] if parent else [],
+        "origin_pubkey": check.zebra_pubkey,
+        "tainted_by": [],
+        "share_with": [],
+        "foreign_users": False,
+    }
+
+
+def offer_as_export(
+    text: str | bytes,
+    *,
+    expected_zebra: str | None = None,
+    held: list[Event] | None = None,
+    now: int | None = None,
+) -> Any:
+    """Verify an ``offer_input`` and return it as an ``ExportVerification``.
+
+    The judged import then treats an offer exactly like a signed export file: the same
+    fields, a received block synthesized from the offer (``received_block``) and the
+    offer's golden tasks. *held* adds the certs and revokes this deployment holds.
+    """
+    from zebra_agent.commons.export import ExportVerification
+    from zebra_agent.commons.kinds import DEVICE_CERT_KIND, DEVICE_REVOKE_KIND
+
+    try:
+        if isinstance(text, bytes):
+            text = text.decode("utf-8")
+        data = json.loads(text)
+        if not isinstance(data, dict) or data.get("format") != OFFER_INPUT_FORMAT:
+            return ExportVerification(False, "wrong_format")
+        event = Event.from_dict(data.get("event"))
+        chain = [Event.from_dict(e) for e in data.get("chain") or []]
+    except (UnicodeDecodeError, ValueError, TypeError):
+        return ExportVerification(False, "malformed")
+    known = [e for e in [*chain, *(held or [])] if e.kind in (DEVICE_CERT_KIND, DEVICE_REVOKE_KIND)]
+    try:
+        check = verify_offer(event, known, expected_zebra=expected_zebra, now=now)
+    except (ValueError, TypeError):
+        return ExportVerification(False, "bad_signature")
+    if not check.ok:
+        return ExportVerification(False, check.reason, check.zebra_pubkey, event.pubkey)
+    golden = check.content.get("golden_tasks") or []
+    if not all(isinstance(t, dict) for t in golden):
+        return ExportVerification(False, "malformed", check.zebra_pubkey, event.pubkey)
+    return ExportVerification(
+        True,
+        "ok",
+        zebra_pubkey=check.zebra_pubkey,
+        signer_pubkey=event.pubkey,
+        name=_text(check.content.get("name"), 200) or "untitled",
+        yaml=check.content["yaml"],
+        commons=received_block(check),
+        content_sha256=check.content_sha256,
+        display_name=None,
+        golden_tasks=[golden_payload(t) for t in golden],
+    )

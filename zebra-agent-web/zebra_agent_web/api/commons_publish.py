@@ -106,10 +106,16 @@ async def build_commons_publisher(library: WorkflowLibrary) -> CommonsPublisher 
 
 
 async def publish_tick(engine: object) -> None:
-    """One daemon tick: fetch receipts that arrived late. Does nothing without a publisher."""
+    """One daemon tick: read offers and attestations (#232), then fetch late receipts.
+
+    Does nothing without a publisher (no relay contacted).
+    """
     publisher = getattr(engine, "extras", {}).get(PUBLISHER_KEY)
     if not isinstance(publisher, CommonsPublisher):
         return
+    from zebra_agent_web.api.commons_exchange import exchange_tick
+
+    await exchange_tick(engine)
     try:
         found = await publisher.refresh_receipts()
         if found:

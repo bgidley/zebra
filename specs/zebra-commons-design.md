@@ -279,7 +279,7 @@ So adoption does two things:
 | `CommonsEventModel` | A verified copy of every Commons event this Zebra relies on: `event_id`, `kind`, `pubkey`, `created_at`, `relay_seq`, `content` (JSON), `sig`. Append-only. It is the local mirror. **Built in S4 (#231)**: table `zebra_commons_events` (migration 0034) with the full NIP-01 `event` JSON too (re-verifiable); `save` of an existing row, `update()` and `delete()` raise. |
 | `PeerModel` | A known Zebra: `pubkey`, `display_name`, `vouched_by_user` (bool), `local_trust` (computed), `last_seen`. |
 | `TrustEdgeModel` | The latest edge per (`from_pubkey`, `to_pubkey`): `weight` (-1..1), `reason`, `event_id`. |
-| `WorkflowOfferModel` | One per content hash: `content_sha256`, `name`, `summary`, `stats`, `publisher_pubkey`, `status` (`seen` / `judging` / `adopted` / `rejected` / `delisted`), `judgement` JSON. |
+| `WorkflowOfferModel` | One per content hash: `content_sha256`, `name`, `summary`, `stats`, `publisher_pubkey`, `status` (`seen` / `judging` / `adopted` / `rejected` / `delisted`), `judgement` JSON. **Built in S5 (#232)**: table `zebra_workflow_offers` (migration 0035) with `use_when`, `event_id`, `offered_at`; transitions enforced by `zebra_agent/commons/offers.py`; `judgement` is local (stage, label, voice, the gate's recorded reason, process id) and never published. |
 | `MarketStateModel` | A rebuildable projection of the replayed ledger: balances per pubkey, holdings per (pubkey, hash), price per hash, the last `relay_seq` applied. |
 
 All rows carry `user_id` per REQ-USR-002. Commons state is per instance, so it uses the instance's
@@ -311,7 +311,7 @@ change (`v` 2). The relay write policies repeat the numbers; a test keeps them e
 | Event | Kind type | Content and tags |
 |---|---|---|
 | `OFFER` | addressable (`d` = content hash) | `{name, summary, use_when, stats:{runs, success_rate, avg_rating, gym_score}, actions:[…], golden_tasks:[…], yaml}` · tags `x`=sha256, `zebra`=publisher Zebra pubkey, `parent`=sha256? (only a publicly offered parent) · signed by a device key, attributed by its `DEVICE_CERT`. `golden_tasks` are 1–3 sample goals with pass criteria, written by the publisher and scanned for personal data like the YAML. They let an importer test the workflow. |
-| `ATTEST` | regular | NIP-32 style: `L`=`zebra-commons`, `l`=`adopted\|rejected-ethics\|rejected-gym\|worked\|failed\|pii-found`, `x`=sha256, `{rating?, reason}` |
+| `ATTEST` | regular | NIP-32 style: `L`=`zebra-commons`, `l`=`adopted\|rejected-ethics\|rejected-gym\|rejected-pii\|pii-found\|worked\|failed`, `x`=sha256, `zebra`=attesting Zebra, `{reason (fixed vocabulary), rating?}` |
 | `TRUST` | addressable (`d` = target pubkey) | `{weight, reason}` · tag `p`=target pubkey |
 | `GRANT` | regular | Vouch-and-stake for a newcomer: `{stake}` · `p`=newcomer |
 | `TRADE` | regular | `{side:"buy"\|"sell", shares, max_cost}` · `x`=sha256 |
@@ -370,6 +370,7 @@ about 60 KB we would split the content, which is deferred.
   - offers seen, adopted and rejected, with Zebra's reasons in its own voice
   - market prices and holdings (S7)
 - Human vouching: "I know this Zebra" on a peer, which sets `vouched_by_user` and publishes `TRUST`.
+- **Built in S5 (#232)**: the "Public Commons" section (`partials/commons_offers.html`): offers seen (status, publisher npub and fingerprint, stats, worked / failed / adopted / rejected counts, Zebra's verdict as a fixed first-person line plus the gate's recorded reasoning), this Zebra's own offers with other Zebras' attestations, owner-only **Import this**; empty states while publishing is off. Peers and trust are S6.
 
 ### Genealogy view
 A family tree of skills, in two views built from data Zebra already keeps:
@@ -491,6 +492,36 @@ steps: [commons-public-relay-runbook.md](commons-public-relay-runbook.md).
      (`scheduler/loop.py:162-176`) and `subworkflow` / `parallel_subworkflows` children. A test
      proves nothing starts a library workflow around it.
 5. After each run, `ATTEST worked|failed` is published. In S7, an `OUTCOME` is published too.
+
+**Offers in, attestations out (S5) as built (#232, OpenSpec `commons-attestations`). Code only,
+off by default.** Second-Zebra check: [commons-public-relay-runbook.md](commons-public-relay-runbook.md) §7.
+
+- **Exchange** (`commons/exchange.py` `CommonsExchange`, `extras["__commons_exchange__"]`): built
+  only alongside the publisher, so with `ZEBRA_COMMONS_RELAYS` unset nothing is fetched or attested.
+- **Step 1, intake**: each daemon tick (`publish_tick` → `exchange_tick` → `poll()`) fetches
+  `OFFER`s since the last poll, the publishers' certs / revokes and the operator's receipts, and
+  stores an offer only when `verify_offer` accepts it (signature, `DEVICE_CERT` attribution,
+  receipt-ordered revocation, hash). One `WorkflowOfferModel` per hash (duplicates ignored), own
+  offers skipped; a revoked publisher device delists `seen` offers. Mirrored in `CommonsEventModel`.
+- **Step 2, candidates**: not in S5. The owner chooses: **Import this** on `/commons/`
+  (`start_offer_import`): `seen` / `rejected` → `judging`, *Commons Import* on the mirrored offer.
+- **Step 3, judged import of an offer**: `commons_import.yaml` v2 takes `offer_event` (the `OFFER`
+  + certs, `offer_input`); `offer_as_export` turns it into the same `ExportVerification` as a file
+  (received block: hash, public parent, `origin_pubkey`, `foreign_users: false`), so every gate is
+  unchanged; judge and adopt both re-verify. The last step, `commons_attest_import`, reads the
+  outcome from the step journal and moves the row: `adopted` → `ATTEST adopted`; the
+  personal-data scan → `pii-found` (findings) or `rejected-pii` (failed closed); ethics →
+  `rejected-ethics`; gym → `rejected-gym`. Judge rejections, the owner's "no" and refused
+  adoptions are local (not about the workflow) and never attested; neither is any file import.
+- **Step 5, runs**: `assess_and_record` → `exchange.after_run(library, name, success)` attests
+  `worked` / `failed` only when the workflow is an adoption whose row is `adopted` and the hash of
+  its current YAML equals the offered hash: a locally changed copy never attests.
+- **`ATTEST` shape** (`commons/attest.py`): tags exactly `L`, `l` (label + namespace), `x`,
+  `zebra`, `t`, `v`; content `{reason, rating?}` with `reason` from a fixed table per label and
+  `rating` 1–5. No free text exists in the API, so goal text, outputs, names and LLM text cannot
+  reach an attestation; `verify_attest` refuses anything else. Readers filter by `#x`.
+- **Counts**: `adopted` / rejections are distinct Zebras, `worked` / `failed` are events (trust
+  weighting is S6). Two identical attestations in the same second share an id and count once.
 
 ### Skill sync between own devices (S3b)
 Example: you and your Zebra build a "Code review checklist" workflow at work, and it should also be
@@ -906,7 +937,7 @@ then merged to master one at a time.
 | 3 | #236 S3b-1 Sync logic | `CommonsClient` ABC + in-memory client, spheres, suggest-and-approve, sensitivity and confidentiality scans, `observed_share_approval`, `SKILL` events, lineage merge and forks, `SYNC_DIRECTION` | S1, S2b, #237 |
 | 4 | #246 S3b-2 Private relay | `nostr-sdk` client, private strfry Quadlet (NIP-42), publishing certs and revokes, receipts, encryption, offline queue. Human gate: keys, CI vars, proxy | S3b-1 |
 | 5 | #231 S4 Commons relay + publish | Public strfry Quadlet, `commons_offer.yaml`, receipts, mirroring. Human gate: relay key | S3, S3b-2 |
-| 5 | #232 S5 Attestations + subscribe | Subscription, `WorkflowOfferModel`, automatic attestations, `/commons/` page. Needs a second Zebra instance for its E2E test | S4 |
+| 5 | #232 S5 Attestations + subscribe (**code shipped, off by default**) | Subscription, `WorkflowOfferModel`, automatic attestations, `/commons/` page. Needs a second Zebra instance for its E2E test | S4 |
 | 6 | #233 S6 Web of trust | Trust edges, human vouching, transitive local trust, import score (no market term) | S5 |
 | 6 | #235 S8 Dream-cycle integration | Zebra proposes offers and imports; `sharing` promotion requests; no trades | S5, S6 |
 | 6 | #247 Public genealogy | Commons lineage, adoptions, attestations, vouching tree, trust paths; no price history | S5, #238 |

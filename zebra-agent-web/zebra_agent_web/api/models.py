@@ -540,6 +540,46 @@ class CommonsEventModel(models.Model):
         return f"CommonsEvent({self.kind}, {self.event_id[:12]})"
 
 
+class WorkflowOfferModel(models.Model):
+    """One public ``OFFER`` this Zebra has seen, per content hash (#232, S5).
+
+    Written only by ``DjangoOfferStore`` (``zebra_agent.commons.offers.OfferStore``), which
+    enforces the status table. ``judgement`` is this Zebra's local verdict (stage, label,
+    voice, the gate's recorded reason, process id); it is never published. ``user_id`` is
+    the Commons owner (REQ-USR-002: Commons state is per instance).
+    """
+
+    STATUS_CHOICES = [
+        ("seen", "Seen"),
+        ("judging", "Judging"),
+        ("adopted", "Adopted"),
+        ("rejected", "Rejected"),
+        ("delisted", "Delisted"),
+    ]
+
+    content_sha256 = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=255)
+    summary = models.TextField(blank=True, default="")
+    use_when = models.TextField(blank=True, default="")
+    stats = models.JSONField(default=dict)
+    publisher_pubkey = models.CharField(max_length=64, db_index=True)
+    event_id = models.CharField(max_length=64)
+    offered_at = models.BigIntegerField(default=0, help_text="The OFFER's created_at")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="seen", db_index=True)
+    judgement = models.JSONField(default=dict, blank=True)
+    user_id = models.IntegerField(null=True, blank=True, db_index=True, help_text="Commons owner")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "zebra_workflow_offers"
+        verbose_name = "Commons workflow offer"
+        ordering = ["-offered_at"]
+
+    def __str__(self):
+        return f"WorkflowOffer({self.name!r}, {self.status})"
+
+
 # =============================================================================
 # ProfileStore Models (Values Profile - F18 / REQ-ETH-002)
 # =============================================================================

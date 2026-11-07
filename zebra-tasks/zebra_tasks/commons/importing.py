@@ -16,6 +16,7 @@ the existing ``commons_pii_scan``, ``ethics_gate``, ``run_golden_gym`` and ``tru
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any
@@ -72,15 +73,72 @@ def publisher_label(display_name: str | None, zebra_pubkey: str | None) -> str:
     return fingerprint(zebra_pubkey) if zebra_pubkey else "unknown Zebra"
 
 
-def _verify(text: Any, expected_zebra: Any, held: list) -> Any:
+def _given(value: Any) -> str | None:
+    """A run input's text, or None when it is unset (empty or an unresolved template).
+
+    Only a value that *is* one template counts as unresolved: an offer's YAML is full of
+    ``{{...}}`` templates of its own.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    if re.fullmatch(r"\s*\{\{\s*[\w.]+\s*\}\}\s*", value):
+        return None
+    return value
+
+
+def _verify(text: Any, expected_zebra: Any, held: list, offer_event: Any = None) -> Any:
+    """Verify the import's input: an ``OFFER`` (#232) when given, else the export file.
+
+    Both give an ``ExportVerification``, so every later gate treats them alike.
+    """
     from zebra_agent.commons.export import verify_export
+    from zebra_agent.commons.offer import offer_as_export
 
     expected = expected_zebra.strip().lower() if isinstance(expected_zebra, str) else ""
     if not expected or "{{" in expected:  # unset run input
         expected = None
+    offer_text = _given(offer_event)
+    if offer_text is not None:
+        return offer_as_export(offer_text, expected_zebra=expected, held=held)
     return verify_export(
         text if isinstance(text, str | bytes) else "", expected_zebra=expected, revocations=held
     )
+
+
+def import_source(verified: Any, offer_event: Any) -> dict[str, Any]:
+    """Where an import came from: a public ``OFFER`` (attested) or a file (never attested)."""
+    offer_text = _given(offer_event)
+    source: dict[str, Any] = {
+        "source": "offer" if offer_text else "file",
+        "verified": True,
+        "content_sha256": verified.content_sha256,
+        "zebra_pubkey": verified.zebra_pubkey,
+    }
+    if offer_text:
+        try:
+            source["offer_event_id"] = json.loads(offer_text)["event"]["id"]
+        except (ValueError, KeyError, TypeError):
+            source["offer_event_id"] = None
+    return source
+
+
+def claimed_offer(offer_event: Any) -> dict[str, Any] | None:
+    """The hash an offer input that did not verify claims (its ``d`` tag), unverified.
+
+    Lets a judge rejection move the offer's row out of ``judging``; ``verified: False``
+    means it is never attested.
+    """
+    offer_text = _given(offer_event)
+    if offer_text is None:
+        return None
+    try:
+        event = json.loads(offer_text)["event"]
+        sha = next(t[1] for t in event["tags"] if t[0] == "d" and len(t) > 1)
+    except (ValueError, KeyError, TypeError, StopIteration, IndexError):
+        return None
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha):
+        return None
+    return {"source": "offer", "verified": False, "content_sha256": sha}
 
 
 def offer_summary(offer: dict[str, Any]) -> str:
@@ -113,7 +171,16 @@ class CommonsJudgeImportAction(TaskAction):
 
     inputs = [
         ParameterDef(
-            name="export_file", type="string", description="The file's text", required=True
+            name="export_file",
+            type="string",
+            description="The file's text (unless offer_event is given)",
+            required=False,
+        ),
+        ParameterDef(
+            name="offer_event",
+            type="string",
+            description="An OFFER and its certs (offer_input, #232) instead of a file",
+            required=False,
         ),
         ParameterDef(
             name="expected_zebra",
@@ -140,6 +207,9 @@ class CommonsJudgeImportAction(TaskAction):
         if reason:
             logger.info("Commons import rejected by the judge: %s", reason)
             context.set_process_property("import_judgement", {"stage": "judge", "reason": reason})
+            claimed = claimed_offer(resolve_raw(context, task.properties.get("offer_event")))
+            if claimed is not None:  # so the offer's row leaves `judging`; never attested
+                context.set_process_property("import_source", claimed)
             return TaskResult(success=True, output={"reason": reason}, next_route=REJECT)
         context.set_process_property(task.properties.get("output_key", "offer"), offer)
         context.set_process_property("import_judgement", {"stage": "judge", "reason": "ok"})
@@ -152,10 +222,12 @@ class CommonsJudgeImportAction(TaskAction):
         if stopped:
             return f"the Commons is stopped: {stopped}", None
         text = resolve_raw(context, task.properties.get("export_file"))
+        offer_event = resolve_raw(context, task.properties.get("offer_event"))
         expected = resolve_raw(context, task.properties.get("expected_zebra"))
-        verified = _verify(text, expected, await _held_events(context.extras))
+        verified = _verify(text, expected, await _held_events(context.extras), offer_event)
         if not verified.ok:
-            return f"the file did not verify ({verified.reason})", None
+            what = "offer" if _given(offer_event) else "file"
+            return f"the {what} did not verify ({verified.reason})", None
         try:
             definition = load_definition_from_yaml(verified.yaml)
         except Exception as e:  # noqa: BLE001
@@ -197,6 +269,8 @@ class CommonsJudgeImportAction(TaskAction):
             "actions": workflow_actions(definition, registry),
         }
         offer["summary"] = offer_summary(offer)
+        # Small and separate, so the attest step can read it from the step journal (#232)
+        context.set_process_property("import_source", import_source(verified, offer_event))
         return None, offer
 
 
@@ -274,7 +348,13 @@ class CommonsAdoptAction(TaskAction):
             name="export_file",
             type="string",
             description="The file's text, verified again before adopting",
-            required=True,
+            required=False,
+        ),
+        ParameterDef(
+            name="offer_event",
+            type="string",
+            description="Or the OFFER input (#232), verified again before adopting",
+            required=False,
         ),
         ParameterDef(
             name="approval_task",
@@ -350,9 +430,13 @@ class CommonsAdoptAction(TaskAction):
         if library is None:
             return "no workflow library to adopt into", None
         text = resolve_raw(context, task.properties.get("export_file"))
-        verified = _verify(text, offer.get("zebra_pubkey"), await _held_events(context.extras))
+        offer_event = resolve_raw(context, task.properties.get("offer_event"))
+        verified = _verify(
+            text, offer.get("zebra_pubkey"), await _held_events(context.extras), offer_event
+        )
         if not verified.ok or verified.content_sha256 != offer.get("content_sha256"):
-            return f"the file no longer verifies as the judged offer ({verified.reason})", None
+            what = "offer" if _given(offer_event) else "file"
+            return f"the {what} no longer verifies as the judged offer ({verified.reason})", None
         try:
             path = adopt_export(library, verified, name=offer["local_name"])
         except ValueError as e:  # AdoptionRefused, ExportRefused

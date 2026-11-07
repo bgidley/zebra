@@ -29,6 +29,7 @@ from zebra_agent.commons.client import CommonsClient, Filter
 from zebra_agent.commons.events import Event
 from zebra_agent.commons.identity import parse_cert, verify_device_chain
 from zebra_agent.commons.kinds import (
+    ATTEST_KIND,
     DEVICE_CERT_KIND,
     DEVICE_REVOKE_KIND,
     OFFER_KIND,
@@ -149,6 +150,28 @@ class CommonsPublisher:
         offered until the canonical relay has it.
         """
         event = await self.build(content, block)
+        result = await self.publish_event(event)
+        logger.info(
+            "Commons: published OFFER %s of %r (%s…)",
+            event.id[:12],
+            content.get("name"),
+            event.tag_values("d")[0][:12],
+        )
+        parents = event.tag_values("parent")
+        return {
+            **result,
+            "content_sha256": event.tag_values("d")[0],
+            "parent": parents[0] if parents else None,
+        }
+
+    async def publish_event(self, event: Event) -> dict[str, Any]:
+        """Publish a signed public event (``OFFER``, ``ATTEST``) the way every one goes out.
+
+        The signing device's cert and this Zebra's revokes first, then the event, to the
+        canonical relay (errors propagate: nothing counts as published until it has it), into
+        the local mirror, then to the mirrors best effort; then a short wait for the receipt.
+        Returns ``{event_id, receipt_seq, mirrors}``.
+        """
         identity = self.identity_events()
         for cert in identity:
             await self.canonical.publish(cert)
@@ -156,12 +179,6 @@ class CommonsPublisher:
         for cert in identity:
             await self.mirror.add(cert)
         await self.mirror.add(event)
-        logger.info(
-            "Commons: published OFFER %s of %r (%s…)",
-            event.id[:12],
-            content.get("name"),
-            event.tag_values("d")[0][:12],
-        )
         mirrors: dict[str, str] = {}
         for client in self.mirrors:
             label = repr(client)
@@ -171,17 +188,10 @@ class CommonsPublisher:
                 await client.publish(event)
                 mirrors[label] = "ok"
             except Exception as e:  # noqa: BLE001 - mirrors are best effort
-                logger.warning("Commons: mirror %s did not take the offer: %s", label, e)
+                logger.warning("Commons: mirror %s did not take %s: %s", label, event.id[:12], e)
                 mirrors[label] = str(e)[:200]
         seq = await self.wait_for_receipt(event.id)
-        parents = event.tag_values("parent")
-        return {
-            "event_id": event.id,
-            "content_sha256": event.tag_values("d")[0],
-            "parent": parents[0] if parents else None,
-            "receipt_seq": seq,
-            "mirrors": mirrors,
-        }
+        return {"event_id": event.id, "receipt_seq": seq, "mirrors": mirrors}
 
     async def _fetch_receipts(self, event_ids: list[str]) -> dict[str, int]:
         if not self.receipt_pubkey or not event_ids:
@@ -214,7 +224,7 @@ class CommonsPublisher:
             await asyncio.sleep(self.receipt_poll)
 
     async def refresh_receipts(self) -> int:
-        """Fetch receipts for this Zebra's published events that have none yet; returns how many."""
+        """Fetch receipts for mirrored events that have none yet; returns how many."""
         if not self.receipt_pubkey:
             return 0
         have = await self.mirror.receipt_seq(self.receipt_pubkey)
@@ -222,7 +232,7 @@ class CommonsPublisher:
         ours = [
             m.event.id
             for m in rows
-            if m.event.kind in (OFFER_KIND, DEVICE_CERT_KIND, DEVICE_REVOKE_KIND)
+            if m.event.kind in (OFFER_KIND, ATTEST_KIND, DEVICE_CERT_KIND, DEVICE_REVOKE_KIND)
             and m.event.id not in have
         ]
         found = 0

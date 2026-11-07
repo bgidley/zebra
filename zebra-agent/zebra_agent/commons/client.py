@@ -36,6 +36,7 @@ class Filter:
     recipients: tuple[str, ...] = ()  # values of ``p`` tags
     since: int | None = None
     events: tuple[str, ...] = ()  # values of ``e`` tags
+    hashes: tuple[str, ...] = ()  # values of ``x`` tags (content hashes, #232)
     limit: int | None = None  # a hint for the relay; ``matches`` ignores it
 
     def matches(self, event: Event) -> bool:
@@ -48,6 +49,8 @@ class Filter:
         if self.since is not None and event.created_at < self.since:
             return False
         if self.events and not set(event.tag_values("e")) & set(self.events):
+            return False
+        if self.hashes and not set(event.tag_values("x")) & set(self.hashes):
             return False
         return True
 
@@ -62,6 +65,8 @@ class Filter:
             out["#p"] = list(self.recipients)
         if self.events:
             out["#e"] = list(self.events)
+        if self.hashes:
+            out["#x"] = list(self.hashes)
         if self.since is not None:
             out["since"] = self.since
         if self.limit is not None:

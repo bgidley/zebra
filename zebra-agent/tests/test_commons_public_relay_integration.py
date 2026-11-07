@@ -192,3 +192,71 @@ async def test_offer_on_a_real_public_relay_has_a_receipt_and_verifies(relay):
         signing.cancel()
         for client in (publisher_client, reader, signer_client):
             await client.close()
+
+
+async def test_two_zebras_offer_seen_attested_on_a_real_relay(relay):
+    """#232: A offers, B's exchange sees it and attests, A reads the attestation by ``#x``."""
+    from zebra_agent.commons.attest import verify_attest
+    from zebra_agent.commons.exchange import CommonsExchange, own_offers
+    from zebra_agent.commons.nostr import NostrSdkTransport
+    from zebra_agent.commons.offers import SEEN, InMemoryOfferStore
+
+    operator = keys.public_key(relay["operator"])
+    clients = []
+
+    def zebra() -> CommonsExchange:
+        zebra_secret, device = keys.generate_secret_key(), keys.generate_secret_key()
+        cert = make_device_cert(
+            zebra_secret, keys.public_key(device), label="Home", sphere="home", observed=False
+        )
+        client = RelayCommonsClient(NostrSdkTransport(relay["url"], timeout=5), private=False)
+        clients.append(client)
+        publisher = CommonsPublisher(
+            canonical=client,
+            device_secret=device,
+            zebra_pubkey=keys.public_key(zebra_secret),
+            mirror=InMemoryCommonsMirror(),
+            certs=[cert],
+            receipt_pubkey=operator,
+            receipt_wait=15,
+        )
+        return CommonsExchange(publisher=publisher, offers=InMemoryOfferStore())
+
+    signer_client = RelayCommonsClient(NostrSdkTransport(relay["url"], timeout=5), private=False)
+    clients.append(signer_client)
+    signer = ReceiptSigner(relay["journal"], relay["state"], signer_client, relay["operator"])
+    signing = asyncio.create_task(signer.run(interval=0.2))
+    a, b = zebra(), zebra()
+    try:
+        await _ready(a.publisher.canonical)
+        content = offer_content(
+            name="Capital Facts",
+            summary="Answers capital-city questions.",
+            use_when="A capital-city question",
+            stats=offer_stats(WorkflowStats("Capital Facts", 5, 5), None),
+            actions=["llm_call"],
+            golden_tasks=[{"goal": "Capital of Australia?", "criteria": ["Canberra"]}],
+            yaml=YAML,
+        )
+        sha = (await a.publisher.publish_offer(content, {}))["content_sha256"]
+
+        assert (await b.poll())["ok"] == 1
+        row = await b.offers.get(sha)
+        assert row.status == SEEN and row.publisher_pubkey == a.zebra_pubkey
+        assert (await b.mirror.get(row.event_id)).relay_seq is not None  # receipt kept
+
+        result = await b.attest("adopted", sha)
+        assert result["receipt_seq"] is not None
+        [event] = await a.publisher.canonical.fetch(
+            [Filter(kinds=(kinds.ATTEST_KIND,), hashes=(sha,))]
+        )
+        certs = await a.publisher.canonical.fetch([Filter(kinds=(kinds.DEVICE_CERT_KIND,))])
+        assert verify_attest(event, certs).zebra_pubkey == b.zebra_pubkey
+
+        await a.poll()
+        [mine] = await own_offers(a.mirror, a.zebra_pubkey)
+        assert mine["attestations"]["adopted"] == 1
+    finally:
+        signing.cancel()
+        for client in clients:
+            await client.close()
