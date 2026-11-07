@@ -26,7 +26,6 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 from zebra_tasks.commons.pii_scan import (
     _CRED_URL_RE,
     _SECRET_RES,
-    _TEMPLATE_RE,
     DEFAULT_MAX_CHARS,
     ScanText,
     _llm_payload,
@@ -38,6 +37,7 @@ from zebra_tasks.knowledge.extract import resolve_raw
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.client import get_llm, model_for
 from zebra_tasks.llm.structured import complete_json
+from zebra_tasks.templating import strip_templates
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ def confidential_rule_findings(
         findings.append({"source": "rule", "kind": kind, "path": item.path, "text": _mask(match)})
 
     for item in texts:
-        text = _TEMPLATE_RE.sub(" ", item.text)
+        text = strip_templates(item.text)
         for m in _INTERNAL_HOST_RE.finditer(text):
             hit("internal_host", item, m.group(0))
         for m in _URL_RE.finditer(text):

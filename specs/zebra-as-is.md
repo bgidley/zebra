@@ -469,6 +469,19 @@ until it is ruled. The script also sends a `change_map` (changed files, tests ad
 shown before the diff, and the review has 8 tool turns, the reconsideration 5 (#285). See
 [outcome-review-design.md](outcome-review-design.md).
 
+### Security alert review (#288)
+
+The GitHub mirror runs Dependabot, CodeQL (default setup: master pushes and PRs, Python and
+JS/TS) and secret scanning; GitLab CI does not. After each master merge,
+`scripts/github-security-alerts.sh <merge sha>` waits for CodeQL on the merge commit and lists
+every open alert (exit 0 none / 2 open / 1 cannot check), from the `cicd-manager` agent and
+`/cicd`. Baseline is zero open alerts: a change's own alerts are fixed before sign-off, others
+fixed, filed (`security` label) or dismissed with a reason. Dependency alerts are fixed with a
+targeted `uv lock -P <pkg>`. Code rules from the first sweep: web views never return exception
+text in 5xx responses (logged; generic message), escape it in 4xx HTML, and WebAuthn failures say
+only "Verification failed"; template stripping before scans uses the linear
+`zebra_tasks.templating.strip_templates()`.
+
 ### Ethics gate change (F111)
 
 `ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`. This unblocked autonomous daemon processing. (Since v10 / #143 it runs after `update_conceptual_memory` and is followed by `record_ethics_review`.)

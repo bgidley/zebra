@@ -230,4 +230,4 @@ def test_export_endpoint_error_returns_500(authenticated_client):
     assert response.status_code == 500
     body = response.json()
     assert "error" in body
-    assert "store unavailable" in body["error"]
+    assert "store unavailable" not in body["error"]  # detail is logged, not returned

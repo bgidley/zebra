@@ -141,9 +141,9 @@ def complete_register(request):
             expected_origin=_get_origin(),
             require_user_verification=False,
         )
-    except Exception as e:
+    except Exception:
         logger.exception("Registration verification failed")
-        return JsonResponse({"error": f"Verification failed: {e}"}, status=400)
+        return JsonResponse({"error": "Verification failed"}, status=400)
 
     # Get or create user
     user, created = User.objects.get_or_create(
@@ -235,9 +235,9 @@ def complete_authenticate(request):
             credential_current_sign_count=cred.sign_count,
             require_user_verification=False,
         )
-    except Exception as e:
+    except Exception:
         logger.exception("Authentication verification failed")
-        return JsonResponse({"error": f"Verification failed: {e}"}, status=400)
+        return JsonResponse({"error": "Verification failed"}, status=400)
 
     # Update sign count and last used
     cred.sign_count = auth_result.new_sign_count

@@ -33,6 +33,8 @@ from urllib.parse import urlparse
 
 import yaml
 
+from zebra_tasks.templating import strip_templates
+
 logger = logging.getLogger(__name__)
 
 RUN_PHRASE_TOKENS = 4
@@ -44,7 +46,6 @@ MAX_REPORTED_HITS = 12
 RUN = "run"
 GOAL = "goal"
 
-_TEMPLATE_RE = re.compile(r"\{\{.*?\}\}", re.DOTALL)
 _TOKEN_RE = re.compile(r"[^\W_]+")
 _WORD_RE = re.compile(r"[^\W\d_][\w'’&-]*")
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
@@ -249,7 +250,7 @@ class LeakGuard:
         for where, literal in _literals(yaml_text):
             if literal in self._parent_literals:
                 continue
-            text = _TEMPLATE_RE.sub(" ", literal)
+            text = strip_templates(literal)
             lower = text.lower()
             tokens = _tokens(text)
             words = set(tokens)
