@@ -168,6 +168,22 @@ async def test_web_queue_passes_identity(owner):
     assert queue.call_args.kwargs["identity"]["user_display_name"] == "Ben"
 
 
+@pytest.mark.django_db(transaction=True)
+async def test_web_queue_failure_hides_exception_text(owner):
+    """A failed queue is a generic 500: the exception text stays in the log (#288)."""
+    request = RequestFactory().post("/run/queue/", {"goal": "Plan my week"})
+    request.user = owner
+    queue = AsyncMock(side_effect=RuntimeError("<script>alert(1)</script> at /srv/db"))
+
+    with patch("zebra_agent_web.api.goals.queue_goal", queue):
+        response = await web_views.run_goal_queue(request)
+
+    assert response.status_code == 500
+    body = response.content.decode()
+    assert "script" not in body
+    assert "/srv/db" not in body
+
+
 # --- CLI ------------------------------------------------------------------------
 
 

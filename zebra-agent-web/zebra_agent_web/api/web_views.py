@@ -458,7 +458,7 @@ async def workflow_create(request):
         return redirect("workflow_detail", workflow_name=workflow_name)
     except Exception as e:
         logger.exception("Failed to create workflow")
-        return HttpResponse(f"Error: {e}", status=400)
+        return HttpResponse(f"Error: {escape(str(e))}", status=400)
 
 
 @require_http_methods(["POST"])
@@ -470,7 +470,7 @@ async def workflow_retire(request, workflow_name):
     try:
         await sync_to_async(library.retire)(workflow_name, reason)
     except ValueError as e:
-        return HttpResponse(str(e), status=404)
+        return HttpResponse(escape(str(e)), status=404)
     return _hx_redirect(request, "workflow_library")
 
 
@@ -482,7 +482,7 @@ async def workflow_restore(request, workflow_name):
     try:
         await sync_to_async(library.restore)(workflow_name)
     except ValueError as e:
-        return HttpResponse(str(e), status=409)
+        return HttpResponse(escape(str(e)), status=409)
     return _hx_redirect(request, "workflow_detail", workflow_name=workflow_name)
 
 
@@ -526,7 +526,7 @@ async def workflow_delete(request, workflow_name):
         return redirect("workflow_library")
     except Exception as e:
         logger.exception("Failed to delete workflow")
-        return HttpResponse(f"Error: {e}", status=400)
+        return HttpResponse(f"Error: {escape(str(e))}", status=400)
 
 
 # =============================================================================
@@ -764,9 +764,9 @@ async def run_continue(request, run_id):
                 previous_run_context=previous_run_context,
                 continuation_comment=comment,
             )
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to queue continuation of run %s", run_id)
-            return HttpResponse(f"Failed to queue continuation: {e}", status=500)
+            return HttpResponse("Failed to queue continuation; see the server log", status=500)
         return HttpResponse(_queued_html(process.id, priority, None))
 
     from zebra_tasks.llm.models import normalize_model
@@ -816,8 +816,9 @@ async def values_profile_wizard(request):
 
     try:
         definition = library.get_workflow("Values Profile Wizard")
-    except ValueError as e:
-        return HttpResponse(f"Cannot load Values Profile Wizard workflow: {e}", status=500)
+    except ValueError:
+        logger.exception("Cannot load Values Profile Wizard workflow")
+        return HttpResponse("Cannot load Values Profile Wizard workflow", status=500)
 
     user_id = request.user.id
     current = await profile_store.get_current(user_id=user_id)
@@ -833,9 +834,9 @@ async def values_profile_wizard(request):
     try:
         process = await wf_engine.create_process(definition, properties=properties)
         await wf_engine.start_process(process.id)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to start values-profile wizard")
-        return HttpResponse(f"Failed to start values-profile wizard: {e}", status=500)
+        return HttpResponse("Failed to start values-profile wizard; see the server log", status=500)
 
     # Redirect to the first pending human task.
     pending = await wf_engine.get_pending_tasks(process.id)
@@ -889,11 +890,12 @@ async def run_goal_queue(request):
             identity=await goal_identity(),
             previous_run_context=previous_run_context,
         )
-    except ValueError as e:
-        return HttpResponse(f"Cannot load Agent Main Loop workflow: {e}", status=500)
-    except Exception as e:
+    except ValueError:
+        logger.exception("Cannot load Agent Main Loop workflow")
+        return HttpResponse("Cannot load Agent Main Loop workflow", status=500)
+    except Exception:
         logger.exception("Failed to queue goal")
-        return HttpResponse(f"Failed to queue goal: {e}", status=500)
+        return HttpResponse("Failed to queue goal; see the server log", status=500)
 
     return HttpResponse(_queued_html(process.id, priority, deadline))
 
@@ -1517,7 +1519,7 @@ async def run_rate(request, run_id):
         return HttpResponse("Invalid rating", status=400)
     except Exception as e:
         logger.exception("Failed to rate run")
-        return HttpResponse(f"Error: {e}", status=400)
+        return HttpResponse(f"Error: {escape(str(e))}", status=400)
 
 
 @require_http_methods(["POST"])
@@ -1545,7 +1547,7 @@ async def run_feedback(request, run_id):
         return redirect("run_detail", run_id=run_id)
     except Exception as e:
         logger.exception("Failed to save feedback for run %s", run_id)
-        return HttpResponse(f"Error: {e}", status=400)
+        return HttpResponse(f"Error: {escape(str(e))}", status=400)
 
 
 # =============================================================================
@@ -1578,9 +1580,9 @@ async def _review_action(request, task_id: str, action) -> HttpResponse | None:
         return _review_response(request, "Task not found", "text-fail", status=404)
     except InvalidStateTransitionError as e:
         return _review_response(request, str(e), "text-fail", status=409)
-    except Exception as e:
+    except Exception:
         logger.exception("Manual review action failed for task %s", task_id)
-        return _review_response(request, f"Error: {e}", "text-fail", status=500)
+        return _review_response(request, "Error; see the server log", "text-fail", status=500)
     return None
 
 
@@ -2440,7 +2442,7 @@ async def human_task_submit(request, task_id):
         new_tasks = await wf_engine.complete_task(task_id, result)
     except Exception as e:
         logger.exception("Failed to complete task %s", task_id)
-        return HttpResponse(f"Error completing task: {e}", status=500)
+        return HttpResponse("Error completing task; see the server log", status=500)
 
     # Return success partial
     new_tasks_data = [

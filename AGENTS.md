@@ -189,7 +189,8 @@ git push github --delete fN/short-description
 4. **Check it's all done and tidy, then say so.** Re-read the ask and confirm every part is
    delivered: merged to `master` on both remotes, master pipeline green, issue closed, OpenSpec
    change archived, outcome review complete (agreed or ruled, posted on the issue, follow-ups
-   filed), no stray worktree, branch, temp file or running local server left behind.
+   filed), GitHub security alerts reviewed (none new from this change; the rest fixed, filed or
+   dismissed with a reason, see below), no stray worktree, branch, temp file or running local server left behind.
    Then end your final report with this exact line, on its own:
    `I'm done please delete me`
    Only say it when everything is genuinely finished. If anything is outstanding or you are
@@ -225,6 +226,29 @@ After every push to `master`, you MUST verify the pipeline succeeded. Pick which
 
 If any stage fails, **fix it before moving on** — do not leave `master` red. Treat pipeline failure
 as part of the task: diagnose from the logs, push a fix, and re-verify until green.
+
+### GitHub security alerts (MUST after every merge to master)
+
+The GitHub mirror runs Dependabot, CodeQL and secret scanning; GitLab CI does not. After the master
+pipeline is green, review them (#288):
+```bash
+bash scripts/github-security-alerts.sh <merge sha>
+```
+It waits (up to 15 min) for CodeQL to analyse the merge commit, then lists every open alert.
+The baseline is **zero open alerts**.
+- Exit 0: nothing open.
+- Exit 2: alerts are open. One your change introduced (a CodeQL finding in code you touched, a
+  dependency you added or pinned) is fixed before sign-off, on a new branch through the normal
+  flow. Anything else gets a follow-up issue (`Refs #N`, label `security`), or is dismissed on
+  GitHub with a reason when it is a false positive
+  (`gh api -X PATCH repos/bgidley/zebra/code-scanning/alerts/<n> -f state=dismissed
+  -f dismissed_reason="false positive" -f dismissed_comment="<why>"`; Dependabot alerts take
+  `dismissed_reason=not_used|tolerable_risk|inaccurate`). Never dismiss a real finding to get to
+  zero.
+- Exit 1: the check could not run (`gh` not authenticated, API error). Report it; do not skip it.
+
+Dependency alerts are fixed with a targeted `uv lock -P <package>` (not a blanket `--upgrade`,
+which pulls unrelated major versions), then the full test suite.
 
 ## Plan Tracking
 

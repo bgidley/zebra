@@ -31,6 +31,7 @@ from zebra_tasks.knowledge.extract import resolve_raw
 from zebra_tasks.llm.base import Message
 from zebra_tasks.llm.client import get_llm, model_for
 from zebra_tasks.llm.structured import complete_json
+from zebra_tasks.templating import strip_templates
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,6 @@ ROUTE_CLEAN = "clean"
 ROUTE_REJECTED = "rejected"
 DEFAULT_MAX_CHARS = 60_000
 
-_TEMPLATE_RE = re.compile(r"\{\{.*?\}\}", re.DOTALL)
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})")
 _PHONE_RE = re.compile(r"(?<![\w.])\+?\(?\d[\d\s().-]{7,}\d(?![\w])")
 _CARD_RE = re.compile(r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")
@@ -153,7 +153,7 @@ def rule_findings(texts: list[ScanText]) -> list[dict[str, str]]:
         findings.append({"source": "rule", "kind": kind, "path": item.path, "text": _mask(match)})
 
     for item in texts:
-        text = _TEMPLATE_RE.sub(" ", item.text)
+        text = strip_templates(item.text)
         for m in _EMAIL_RE.finditer(text):
             if not _reserved_domain(m.group(1)):
                 hit("email", item, m.group(0))

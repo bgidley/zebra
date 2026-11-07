@@ -81,9 +81,8 @@ class ApplyResolutionAction(TaskAction):
                     entry.last_verified = datetime.now(UTC)
                     entry.updated_at = datetime.now(UTC)
                     await knowledge_store.update_entry(entry)
-                    logger.info(
-                        "ApplyResolutionAction: updated entry %s to %r", entry_id, proposed_value
-                    )
+                    # Never log the value: it is the user's personal knowledge (#288).
+                    logger.info("ApplyResolutionAction: updated entry %s", entry_id)
                 return TaskResult.ok(output={"resolution": "updated"})
 
             elif resolution == "keep_both":

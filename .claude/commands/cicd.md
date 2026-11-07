@@ -47,6 +47,14 @@ bash scripts/zebra-outcome-review.sh run <N> "<title>" outcomes.md claude.json <
 - Exit 2: a human must rule. Tell the user and poll `status <process_id>` until it exits 0.
 - Exit 1: fix the review or report it. Never sign off without one.
 
+## Step 3b — GitHub security alerts (#288)
+
+Act on the `SECURITY ALERTS` line in the agent's report, following CLAUDE.md **GitHub security
+alerts**. An alert this branch introduced is fixed before sign-off, on a new branch through this
+same flow. Any other alert gets a follow-up issue (`security` label), or is dismissed on GitHub
+with a reason if it is a false positive. If the agent couldn't run the check, run
+`bash scripts/github-security-alerts.sh <merge sha>` yourself.
+
 ## Step 4 — Clean up
 
 Follow CLAUDE.md **After the master pipeline is green, clean up**:
@@ -61,6 +69,7 @@ Follow CLAUDE.md **After the master pipeline is green, clean up**:
 
 - Branch merged, issue `#N` closed, master pipeline ID, prod `short_hash`.
 - Outcome review: agreed / ruled / pending (with the task link), follow-ups filed.
+- GitHub security alerts: none open, or what was fixed, filed or dismissed.
 - Anything left behind and why.
 
 End with `I'm done please delete me` on its own line only if every part is genuinely finished.

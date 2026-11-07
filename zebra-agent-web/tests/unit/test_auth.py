@@ -300,6 +300,26 @@ class TestCompleteRegister:
         expected_id = base64.urlsafe_b64encode(b"cred-id").decode("ascii").rstrip("=")
         assert user.webauthn_credentials.first().credential_id == expected_id
 
+    @patch("zebra_agent_web.api.auth_views.verify_registration_response")
+    @patch("zebra_agent_web.api.auth_views.parse_registration_credential_json")
+    async def test_verification_failure_hides_exception_text(self, mock_parse, mock_verify, client):
+        """A failed verification says so without echoing the library's exception (#288)."""
+        await client.post(
+            "/auth/begin-register/",
+            {"username": "newuser"},
+            content_type="application/json",
+        )
+        mock_verify.side_effect = Exception("internal detail at /srv/secret")
+
+        response = await client.post(
+            "/auth/complete-register/",
+            {"username": "newuser", "credential": {"id": "x", "rawId": "x"}},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert json.loads(response.content) == {"error": "Verification failed"}
+
 
 # ===========================================================================
 # WebAuthn Authentication (API)

@@ -170,6 +170,10 @@ Then:
 - **Issue closed**: `glab issue view N --repo gidley/zebra`. If still open, close it with
   `glab issue close N --repo gidley/zebra`.
 - **PR merged**: `gh pr view <branch> --repo bgidley/zebra --json state`.
+- **GitHub security alerts** (#288): `bash scripts/github-security-alerts.sh <merge sha>`
+  (waits up to 15 min for CodeQL on the merge). Exit 0: none open. Exit 2: copy the listed
+  alerts into your report, marking any in files or dependencies this branch touched. Exit 1:
+  report that the check could not run. Do not fix or dismiss alerts yourself: the caller does.
 
 If the master pipeline fails, **report immediately**: surface the failing job and a log
 excerpt; do not attempt blind fixes on master.
@@ -177,7 +181,9 @@ excerpt; do not attempt blind fixes on master.
 ### 12. Report
 Your final message is all the caller sees. End with one of:
 - **SUCCESS**: branch merged, issue `#N` closed, PR merged, master pipeline `<id>` green
-  (all five jobs), prod `short_hash`, the master base and merge sha, and these two lines:
+  (all five jobs), prod `short_hash`, the master base and merge sha, the GitHub security
+  alert result (`SECURITY ALERTS: none open`, or the open alerts with those this branch
+  touched marked), and these two lines:
   - `OUTCOME REVIEW PENDING` (the caller runs it before signing off; skip for trivial changes).
   - `CLEANUP PENDING: <worktree path>, local branch <branch>` (the caller removes the
     worktree, fast-forwards the main checkout and deletes the local branch, per CLAUDE.md).

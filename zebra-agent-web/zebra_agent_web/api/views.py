@@ -43,6 +43,9 @@ from zebra_agent_web.api.version import _VERSION
 
 logger = logging.getLogger(__name__)
 
+# Returned instead of exception text, which can leak internals (#288).
+_INTERNAL_ERROR = "Internal error; see the server log"
+
 # run_ids for goals started via POST /api/goals/ that are still in flight
 _active_api_runs: set[str] = set()
 
@@ -417,9 +420,9 @@ def execute_goal(request):
             user_id=user_id,
             identity=goal_identity_sync(),
         )
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to start goal execution")
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": _INTERNAL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     from zebra_agent_web.api.metrics import goals_submitted
 
@@ -455,9 +458,9 @@ def dream_cycle(request):
 
     try:
         _run_dream_cycle_in_background(run_id)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to start dream cycle")
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": _INTERNAL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return Response(
         {
@@ -612,9 +615,9 @@ def run_continue(request, run_id):
 
     try:
         process = async_to_sync(_continue)()
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to continue run %s", run_id)
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": _INTERNAL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     if process is None:
         return Response(
@@ -1118,7 +1121,7 @@ def _review_error_response(e: Exception, task_id: str) -> Response:
     if isinstance(e, InvalidStateTransitionError):
         return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
     logger.exception("Manual review action failed for task %s", task_id)
-    return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response({"error": _INTERNAL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
@@ -1246,7 +1249,7 @@ def process_cancel(request, process_id):
                 status=status.HTTP_409_CONFLICT,
             )
         logger.exception("Failed to cancel process")
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": _INTERNAL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ===========================================================================
@@ -1369,9 +1372,9 @@ def delete_user_data(request):
 
     try:
         report = _run()
-    except Exception as e:
+    except Exception:
         logger.exception("User data deletion failed for user %s", user_id)
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": _INTERNAL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return Response(report.as_dict())
 
@@ -1557,9 +1560,9 @@ def export_data(request):
 
     try:
         archive_bytes = _export_data_impl(user_id)
-    except Exception as exc:
+    except Exception:
         logger.exception("Data export failed for user %s", user_id)
-        return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": _INTERNAL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     filename = f"zebra-export-{date.today().isoformat()}.zip"
     response = HttpResponse(archive_bytes, content_type="application/zip")
