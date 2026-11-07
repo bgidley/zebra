@@ -285,6 +285,11 @@ async def _tick(
 
         await sync_tick(engine, library)
 
+    # 0d. Public Commons (#231): late receipts for published offers; nothing without a publisher
+    from zebra_agent_web.api.commons_publish import publish_tick
+
+    await publish_tick(engine)
+
     # 1. Record goals that finished since the last tick (e.g. after a human answered)
     for finished in await tracker.reconcile():
         await _record_finished(finished, engine, library)

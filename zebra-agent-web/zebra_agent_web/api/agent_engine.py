@@ -181,6 +181,12 @@ async def _async_init() -> None:
     sync = await build_sync_service(_library)
     if sync is not None:
         engine.extras[SYNC_KEY] = sync
+    # Public Commons offers (#231): only with COMMONS_ENABLED + ZEBRA_COMMONS_RELAYS.
+    from zebra_agent_web.api.commons_publish import PUBLISHER_KEY, build_commons_publisher
+
+    publisher = await build_commons_publisher(_library)
+    if publisher is not None:
+        engine.extras[PUBLISHER_KEY] = publisher
 
     # Initialize agent loop with memory and personal knowledge store
     _agent_loop = AgentLoop(

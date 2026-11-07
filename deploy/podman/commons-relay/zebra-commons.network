@@ -1,0 +1,5 @@
+# Private network for the public Commons relay and its receipt sidecar (#231). NOT installed by
+# the deploy job: copy to ~/.config/containers/systemd/ by hand
+# (specs/commons-public-relay-runbook.md).
+[Network]
+NetworkName=zebra-commons

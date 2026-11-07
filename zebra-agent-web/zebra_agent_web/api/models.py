@@ -487,6 +487,59 @@ class CommonsDeviceModel(models.Model):
         return f"CommonsDevice({self.label}, {self.sphere})"
 
 
+class AppendOnlyError(RuntimeError):
+    """A Commons mirror row may not be changed or deleted (#231)."""
+
+
+class _AppendOnlyQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise AppendOnlyError("the Commons event mirror is append-only")
+
+    def delete(self):
+        raise AppendOnlyError("the Commons event mirror is append-only")
+
+
+class CommonsEventModel(models.Model):
+    """The local mirror: one row per Commons event this Zebra publishes or relies on (#231).
+
+    Append-only: saving an existing row, ``update()`` and ``delete()`` raise
+    ``AppendOnlyError``. ``event`` is the full NIP-01 JSON (re-verifiable); ``content`` is its
+    content parsed as JSON (or ``{"text": ...}``). ``relay_seq`` is the canonical relay's
+    receipt ``seq`` when it was known at insert (receipts are rows of their own).
+    ``user_id`` is the Commons owner (REQ-USR-002: Commons state is per instance).
+    """
+
+    event_id = models.CharField(max_length=64, unique=True)
+    kind = models.IntegerField(db_index=True)
+    pubkey = models.CharField(max_length=64, db_index=True)
+    created_at = models.BigIntegerField(help_text="The event's created_at (Unix seconds)")
+    relay_seq = models.BigIntegerField(null=True, blank=True)
+    content = models.JSONField()
+    sig = models.CharField(max_length=128)
+    event = models.JSONField()
+    user_id = models.IntegerField(null=True, blank=True, db_index=True, help_text="Commons owner")
+    stored_at = models.DateTimeField(auto_now_add=True)
+
+    objects = _AppendOnlyQuerySet.as_manager()
+
+    class Meta:
+        db_table = "zebra_commons_events"
+        verbose_name = "Commons event"
+        verbose_name_plural = "Commons events"
+        ordering = ["id"]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise AppendOnlyError("the Commons event mirror is append-only")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise AppendOnlyError("the Commons event mirror is append-only")
+
+    def __str__(self):
+        return f"CommonsEvent({self.kind}, {self.event_id[:12]})"
+
+
 # =============================================================================
 # ProfileStore Models (Values Profile - F18 / REQ-ETH-002)
 # =============================================================================

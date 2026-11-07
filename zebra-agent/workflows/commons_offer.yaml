@@ -1,0 +1,188 @@
+name: "Commons Offer"
+description: "Offer one of my learnt workflows to the public Zebra Commons: check it may leave, scan it, review it, and publish a signed OFFER once approved"
+tags: ["agent", "internal", "system", "commons"]
+use_when: "INTERNAL USE ONLY - started by the owner with `manage.py commons_offer NAME` (#231)"
+version: 1
+first_task: prepare
+result_key: commons_offer_result
+# Run inputs (process properties):
+#   workflow_name: the library workflow to offer
+#
+# Every gate fails closed with a recorded reason (commons_offer_result). This workflow is the
+# public suggest-and-approve step: an approval adds 'public' to the version's share_with and
+# commons_publish refuses unless it is still there. A workflow shaped on an observed (or
+# unknown) sphere goes to the owner, never to the trust gate, so no trust level or freeing
+# skips that approval. commons_offer_record and commons_publish run only in this shipped
+# workflow and read the gates and the owner's answer from the step journal.
+inputs:
+  type: object
+  required: [workflow_name]
+  properties:
+    workflow_name:
+      type: string
+      description: "The workflow to offer"
+
+tasks:
+  prepare:
+    name: "Prepare Offer"
+    action: commons_prepare_offer
+    properties:
+      workflow_name: "{{workflow_name}}"
+      model: low
+      output_key: offer
+
+  pii_scan:
+    name: "Scan for Personal Data"
+    action: commons_pii_scan
+    properties:
+      yaml: "{{offer.yaml}}"
+      golden_tasks: "{{offer.listing}}"
+      output_key: pii_scan
+
+  ethics:
+    name: "Ethics Review"
+    action: ethics_gate
+    properties:
+      goal: "Publish one of my workflows to the public Zebra Commons, where other people's Zebras can find, test and adopt it"
+      check_type: plan_review
+      plan_context: "{{offer.yaml}}"
+      output_key: offer_ethics
+
+  route:
+    name: "Choose Approval"
+    action: commons_offer_route
+    properties:
+      output_key: offer_route
+
+  trust:
+    name: "Trust Gate (sharing)"
+    action: trust_gate
+    properties:
+      domain: sharing
+      target_task_id: publish
+      action_description: "Publish the workflow {{offer.name}} to the public Zebra Commons"
+      output_key: offer_trust
+
+  owner_approval:
+    name: "Offer workflow publicly?"
+    auto: false
+    properties:
+      owner_only: true
+      show_prior_outputs: false
+      schema:
+        type: object
+        title: "Offer {{offer.name}} to the public Commons?"
+        description: "Only the Commons owner can answer. Publishing is public and cannot be taken back: anyone's Zebra can read this workflow, its summary and its golden tasks."
+        required: [decision]
+        properties:
+          review:
+            type: string
+            title: "What I would publish"
+            readOnly: true
+            default: "{{offer.review}}"
+          decision:
+            type: string
+            title: "Decision"
+            enum: [publish, keep]
+            enumLabels: ["Publish it", "Keep it private"]
+          note:
+            type: string
+            title: "Note"
+            format: multiline
+
+  record_auto:
+    name: "Record Approval"
+    action: commons_offer_record
+    properties:
+      auto: true
+      output_key: offer_decision
+
+  record_asked:
+    name: "Record Decision"
+    action: commons_offer_record
+    properties:
+      approval_task: owner_approval
+      output_key: offer_decision
+
+  publish:
+    name: "Publish Offer"
+    action: commons_publish
+    properties:
+      output_key: offer_published
+
+  published:
+    name: "Record Publication"
+    action: commons_record_offer
+    properties:
+      status: published
+      stage: publish
+      reason: "published as {{offer_published.event_id}}"
+
+  refused_prepare:
+    name: "Record Refusal (preconditions)"
+    action: commons_record_offer
+    properties:
+      status: refused
+      stage: prepare
+      reason: "{{offer.reason}}"
+
+  refused_pii:
+    name: "Record Refusal (personal data)"
+    action: commons_record_offer
+    properties:
+      status: refused
+      stage: pii
+      reason: "{{pii_scan.reason}}"
+
+  refused_ethics:
+    name: "Record Refusal (ethics)"
+    action: commons_record_offer
+    properties:
+      status: refused
+      stage: ethics
+      reason: "{{offer_ethics.overall_reasoning}}"
+
+  declined:
+    name: "Record Decline"
+    action: commons_record_offer
+    properties:
+      status: declined
+      stage: approval
+      reason: "{{offer_decision.reason}}"
+
+  refused_publish:
+    name: "Record Refusal (publish)"
+    action: commons_record_offer
+    properties:
+      status: refused
+      stage: publish
+      reason: "{{offer_published.reason}}"
+
+routings:
+  - {from: prepare, to: pii_scan, condition: route_name, name: propose}
+  - {from: prepare, to: refused_prepare, condition: route_name, name: refuse}
+
+  - {from: pii_scan, to: ethics, condition: route_name, name: clean}
+  - {from: pii_scan, to: refused_pii, condition: route_name, name: rejected}
+
+  - {from: ethics, to: route, condition: route_name, name: proceed}
+  - {from: ethics, to: refused_ethics, condition: route_name, name: reject}
+  # A values dilemma is the owner's call
+  - {from: ethics, to: owner_approval, condition: route_name, name: escalate}
+
+  # Observed (or unknown) taint: always the owner, never the trust gate
+  - {from: route, to: trust, condition: route_name, name: trusted}
+  - {from: route, to: owner_approval, condition: route_name, name: owner}
+
+  - {from: trust, to: record_auto, condition: route_name, name: proceed}
+  - {from: trust, to: owner_approval, condition: route_name, name: approve}
+
+  - {from: owner_approval, to: record_asked}
+
+  - {from: record_auto, to: publish, condition: route_name, name: approved}
+  - {from: record_auto, to: declined, condition: route_name, name: declined}
+  - {from: record_asked, to: publish, condition: route_name, name: approved}
+  - {from: record_asked, to: declined, condition: route_name, name: declined}
+
+  - {from: publish, to: published, condition: route_name, name: published}
+  - {from: publish, to: refused_publish, condition: route_name, name: not_published}

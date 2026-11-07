@@ -276,7 +276,7 @@ So adoption does two things:
 
 | Model | Purpose |
 |---|---|
-| `CommonsEventModel` | A verified copy of every Commons event this Zebra relies on: `event_id`, `kind`, `pubkey`, `created_at`, `relay_seq`, `content` (JSON), `sig`. Append-only. It is the local mirror. |
+| `CommonsEventModel` | A verified copy of every Commons event this Zebra relies on: `event_id`, `kind`, `pubkey`, `created_at`, `relay_seq`, `content` (JSON), `sig`. Append-only. It is the local mirror. **Built in S4 (#231)**: table `zebra_commons_events` (migration 0034) with the full NIP-01 `event` JSON too (re-verifiable); `save` of an existing row, `update()` and `delete()` raise. |
 | `PeerModel` | A known Zebra: `pubkey`, `display_name`, `vouched_by_user` (bool), `local_trust` (computed), `last_seen`. |
 | `TrustEdgeModel` | The latest edge per (`from_pubkey`, `to_pubkey`): `weight` (-1..1), `reason`, `event_id`. |
 | `WorkflowOfferModel` | One per content hash: `content_sha256`, `name`, `summary`, `stats`, `publisher_pubkey`, `status` (`seen` / `judging` / `adopted` / `rejected` / `delisted`), `judgement` JSON. |
@@ -291,12 +291,26 @@ default user.
 
 ### Event kinds
 All events are standard Nostr events (NIP-01), tagged `["t","zebra-commons"]` and a protocol version
-`["v","1"]`. They use the addressable or regular app-data kind ranges (exact numbers to be fixed in
-S4).
+`["v","1"]`. Kind numbers are **fixed in S4 (#231)** in one table, `zebra_agent/commons/kinds.py`:
+each number ends in the slice that introduced it, addressable kinds sit in 30000–39999 and regular
+ones in 1000–9999, none clashes with the NIP kind registry. Changing one is a protocol version
+change (`v` 2). The relay write policies repeat the numbers; a test keeps them equal.
+
+| Event | Kind | Public relay |
+|---|---|---|
+| `DEVICE_CERT` | 30228 (addressable) | yes |
+| `DEVICE_REVOKE` | 1228 | yes |
+| workflow export file | 31229 (never on a relay) | no |
+| `OFFER` | 30231 (addressable) | yes |
+| `ATTEST` | 1232 | yes |
+| `TRUST` | 30233 (addressable) | yes |
+| `GRANT` / `TRADE` / `OUTCOME` | 1234 / 1235 / 1236 | yes |
+| `SKILL` | 4236 | no: private relay only |
+| `RECEIPT` | 1246 | yes (operator key only) |
 
 | Event | Kind type | Content and tags |
 |---|---|---|
-| `OFFER` | addressable (`d` = content hash) | `{name, summary, use_when, stats:{runs, success_rate, avg_rating, gym_score}, actions:[…], golden_tasks:[…], yaml}` · tags `x`=sha256, `parent`=sha256? `golden_tasks` are 1–3 sample goals with pass criteria, written by the publisher and scanned for personal data like the YAML. They let an importer test the workflow. |
+| `OFFER` | addressable (`d` = content hash) | `{name, summary, use_when, stats:{runs, success_rate, avg_rating, gym_score}, actions:[…], golden_tasks:[…], yaml}` · tags `x`=sha256, `zebra`=publisher Zebra pubkey, `parent`=sha256? (only a publicly offered parent) · signed by a device key, attributed by its `DEVICE_CERT`. `golden_tasks` are 1–3 sample goals with pass criteria, written by the publisher and scanned for personal data like the YAML. They let an importer test the workflow. |
 | `ATTEST` | regular | NIP-32 style: `L`=`zebra-commons`, `l`=`adopted\|rejected-ethics\|rejected-gym\|worked\|failed\|pii-found`, `x`=sha256, `{rating?, reason}` |
 | `TRUST` | addressable (`d` = target pubkey) | `{weight, reason}` · tag `p`=target pubkey |
 | `GRANT` | regular | Vouch-and-stake for a newcomer: `{stake}` · `p`=newcomer |
@@ -308,7 +322,9 @@ S4).
 | `SKILL` | regular, **private relay only** | NIP-44 encrypted **only to the certified devices of the spheres listed in the workflow's `share_with`**, one copy per device. Devices in other spheres, e.g. an observed work laptop for a home-only workflow, never receive a decryptable copy. Plaintext: `{yaml, commons block incl. ancestors, stats, sending_device}`. |
 
 **Hard filter:** the publisher refuses to send any event to a public relay unless its kind is on the
-public list, and refuses to send `SKILL` anywhere but the private relay.
+public list, and refuses to send `SKILL` anywhere but the private relay. Built in
+`CommonsClient.check_publish` (#231): every client applies it, a public client (`private=False`)
+also refuses any event not tagged `zebra-commons`, and the public relay's write policy repeats it.
 
 Workflow YAML sits inside `OFFER`. Typical workflows are 2–20 KB, inside common relay limits. Above
 about 60 KB we would split the content, which is deferred.
@@ -399,6 +415,10 @@ A family tree of skills, in two views built from data Zebra already keeps:
   `127.0.0.1:7778`), with its own write policy, receipt sidecar and operator key; files in
   `deploy/podman/sync-relay/`, installed by hand ([commons-sync-relay-runbook.md](commons-sync-relay-runbook.md)).
 - Mirroring to 2–3 public relays is configured in `ZEBRA_COMMONS_RELAYS`.
+- **Built in #231 (not deployed):** `deploy/podman/commons-relay/` (strfry Quadlet on loopback
+  `7779`, config without NIP-42, public-kinds write policy, receipt sidecar, network); installed by
+  hand ([commons-public-relay-runbook.md](commons-public-relay-runbook.md)), route
+  `wss://<host>/commons` (exact path; `/commons/` stays the web page).
 
 ---
 
@@ -409,6 +429,45 @@ A family tree of skills, in two views built from data Zebra already keeps:
 2. `commons_offer` runs. A personal-data or ethics failure ends it with the reason recorded. Under
    SUPERVISED, the `trust_gate` makes it a human task showing the YAML and the summary.
 3. The `OFFER` is published. In S7 it is followed by an opening `TRADE` buy (publisher stake).
+
+**Offers (S4) as built (#231, OpenSpec `commons-offers`). Code only, off by default.** Owner
+steps: [commons-public-relay-runbook.md](commons-public-relay-runbook.md).
+
+- **Start:** `manage.py commons_offer NAME` starts *Commons Offer* (`commons_offer.yaml`, system)
+  as the owner. No dream-cycle proposals yet (S8).
+- **Steps:** `commons_prepare_offer` (preconditions; canonical YAML via `relabel`, its hash, stats
+  from the `MetricsStore` incl. the gym mean, the actions, one low-tier `complete_json` that sees
+  only the YAML and numbers and writes `summary`, `use_when` and 1–3 golden tasks, the library's
+  own golden tasks preferred) → `commons_pii_scan` over the YAML and everything else published
+  (golden tasks, summary, use_when; fails closed) → `ethics_gate` (plan_review; `escalate` → owner)
+  → `commons_offer_route` → `trust_gate` (`sharing`, owner-governed) or the owner's approval
+  (`owner_only`) → `commons_offer_record` → `commons_publish` → `commons_record_offer`
+  (`commons_offer_result`: `published` / `refused` / `declined`, stage and reason).
+- **Preconditions (all fail closed with a recorded reason):** `commons_exportable` (not protected,
+  no `foreign_users`, has a block); the leak guard not `kept` / `error` on the version or an
+  ancestor (`leak_kept`); ≥ `MIN_RUNS_TO_OFFER` (5) recorded runs; not already offered; a
+  publisher configured; the Commons not stopped. Checked at prepare and again at publish.
+- **`public` in `share_with`:** the workflow is the public suggest-and-approve step. Approval calls
+  `library.approve_share(name, "public", hash)` and journals a `share` record (sphere `public`);
+  `commons_publish` refuses unless `public` is in the current version's `share_with`, so a save
+  after approval voids it. Observed taint (a `tainted_by` sphere a cert marks observed, or one no
+  cert describes) routes to the owner, never to the trust gate, and an unattended approval
+  re-checks it.
+- **What is published is what was scanned:** `commons_offer_record` and `commons_publish` run only
+  in the shipped workflow (`guard.is_offer_workflow`), take the offer from the step-journal entry
+  of `prepare` and check the journal for the gates and the owner's answer.
+- **Publisher** (`commons/publisher.py`, `extras["__commons_publisher__"]`): the canonical relay
+  (first of `COMMONS_RELAYS`) and mirrors, all public clients. It publishes the signing device's
+  `DEVICE_CERT` and the Zebra's revokes (never other devices' certs), then the `OFFER`
+  (`commons/offer.py`: `build_offer`, `verify_offer`, `public_parent`); mirrors are best effort.
+  It waits briefly for the operator's receipt (`COMMONS_RECEIPT_PUBKEY`); the daemon tick's
+  `refresh_receipts()` picks up late ones. Every event and receipt goes into the local mirror
+  (`CommonsEventModel`, append-only, `user_id` = owner; `CommonsMirror` interface).
+- **Public relay** (`deploy/podman/commons-relay/`, not deployed): a second strfry on loopback
+  `7779`, no NIP-42, write policy accepting any Zebra's `zebra-commons` events of the public kinds
+  (`OFFER` needs `d` = `x` and one `zebra` tag), never `SKILL` or NIP-70 protected events,
+  `RECEIPT` only from the operator key; journals each event for the same receipt sidecar
+  (`--secret-env ZEBRA_COMMONS_OPERATOR_SECRET`).
 
 ### Import
 1. A subscription to the Commons relay receives `OFFER`s and stores them as `WorkflowOfferModel(status=seen)`.
@@ -740,7 +799,7 @@ my work machine?"**
 |---|---|---|---|
 | `COMMONS_ENABLED` | `ZEBRA_COMMONS_ENABLED` | false | Master switch |
 | `COMMONS_KEY_DIR` | `ZEBRA_COMMONS_KEY_DIR` | `~/.zebra-agent/commons-keys` | Where the Zebra and device secret keys are kept (`FileCredentialStore`, 0600; prod volume `zebra-commons-keys`) |
-| `COMMONS_RELAYS` | `ZEBRA_COMMONS_RELAYS` | our relay plus 2 public | Read and write relays; the first is canonical (receipts) |
+| `COMMONS_RELAYS` | `ZEBRA_COMMONS_RELAYS` | — (unset: no publishing) | Public relays, comma- or space-separated; the first is canonical (receipts), the rest mirrors. Runbook suggests ours plus 1–2 public |
 | `COMMONS_RECEIPT_PUBKEY` | `ZEBRA_COMMONS_RECEIPT_PUBKEY` | — | The relay operator key trusted for `RECEIPT`s |
 | `SYNC_RELAY` | `ZEBRA_SYNC_RELAY` | — | The private relay for `SKILL` events. Unset means no device sync. |
 | `SYNC_DIRECTION` | `ZEBRA_SYNC_DIRECTION` | `both` | `send` / `receive` / `both` / `off`, set per device (e.g. a work device that may only receive) |
@@ -748,6 +807,7 @@ my work machine?"**
 | `MIN_RUNS_TO_SHARE` | — | 2 | Successful runs before Zebra suggests sharing a workflow with another sphere |
 | `ANCESTOR_WINDOW` | — | 32 | Ancestor hashes carried per version for lineage merges |
 | `SYNC_RECEIPT_PUBKEY` | `ZEBRA_SYNC_RECEIPT_PUBKEY` | — | Private-relay operator key trusted for sync receipts; unset keeps the S1 revocation rule |
+| — | `ZEBRA_COMMONS_OPERATOR_SECRET` | — | Public relay's receipt sidecar only: its operator secret (a different key from the sync relay's); never `prod.env` |
 | — | `ZEBRA_SYNC_OPERATOR_SECRET` | — | Receipt sidecar only: the operator secret (hex or nsec); a secret env file / CI variable, never `prod.env` |
 | `SUPERVISED_RUNS` | — | 3 | Approved successful runs before an imported workflow runs without the pre-run approval |
 | `MIN_RUNS_TO_OFFER` | — | 5 | Effectiveness evidence needed before offering |
@@ -823,7 +883,7 @@ replay with different values compute different markets.
   imported workflow may replace a local one.
 - **Golden gym cost:** judging every import with the gym costs LLM spend. It should be bounded by
   the import score threshold and a daily import budget.
-- **Open:** the exact event kind numbers; whether trust edges should be public or encrypted to their
+- **Open:** whether trust edges should be public or encrypted to their
   target (NIP-44); and whether humans should see each other's Zebras' public keys only, or a
   profile.
 

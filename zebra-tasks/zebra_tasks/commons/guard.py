@@ -6,7 +6,8 @@ them. They must not trust process properties (any task with an ``output_key`` ca
 write those), so they check:
 
 - **the running definition**: ``commons_adopt`` only inside the shipped, protected
-  *Commons Import* workflow; ``commons_supervised_run`` only inside the generated
+  *Commons Import* workflow; ``commons_offer_record`` and ``commons_publish`` (#231) only
+  inside the shipped *Commons Offer*; ``commons_supervised_run`` only inside the generated
   *Supervised run* wrapper for the workflow it starts. Compared by executable shape
   (tasks, routings, construct / destruct actions), not by name.
 - **the step journal** (#184): which tasks completed in this process and which route
@@ -39,9 +40,16 @@ COMMONS_INTERNAL_ACTIONS = frozenset(
         "commons_judge_import",
         "commons_import_review",
         "commons_record_import",
+        # Commons Offer (#231)
+        "commons_prepare_offer",
+        "commons_offer_route",
+        "commons_offer_record",
+        "commons_publish",
+        "commons_record_offer",
     }
 )
 IMPORT_WORKFLOW_FILE = "commons_import.yaml"
+OFFER_WORKFLOW_FILE = "commons_offer.yaml"
 
 
 def internal_actions_used(definition: ProcessDefinition) -> list[DefinedAction]:
@@ -63,28 +71,38 @@ def executable_shape(definition: ProcessDefinition) -> dict[str, Any]:
 
 
 @functools.cache
-def _import_workflow_text() -> str | None:
+def _shipped_workflow_text(filename: str) -> str | None:
     from zebra_agent.library import BUILTIN_WORKFLOWS_DIR
 
-    path = Path(BUILTIN_WORKFLOWS_DIR) / IMPORT_WORKFLOW_FILE
+    path = Path(BUILTIN_WORKFLOWS_DIR) / filename
     try:
         return path.read_text()
     except OSError as e:
-        logger.error("Cannot read the shipped Commons Import workflow %s: %s", path, e)
+        logger.error("Cannot read the shipped workflow %s: %s", path, e)
         return None
 
 
-def is_import_workflow(definition: ProcessDefinition) -> bool:
-    """Whether *definition* runs exactly the shipped *Commons Import* workflow."""
-    text = _import_workflow_text()
+def is_shipped_workflow(definition: ProcessDefinition, filename: str) -> bool:
+    """Whether *definition* runs exactly the shipped built-in workflow *filename*."""
+    text = _shipped_workflow_text(filename)
     if text is None:
         return False
     try:
         shipped = load_definition_from_yaml(text)
     except Exception as e:  # noqa: BLE001 - an unreadable original fails closed
-        logger.error("The shipped Commons Import workflow does not load: %s", e)
+        logger.error("The shipped workflow %s does not load: %s", filename, e)
         return False
     return executable_shape(definition) == executable_shape(shipped)
+
+
+def is_import_workflow(definition: ProcessDefinition) -> bool:
+    """Whether *definition* runs exactly the shipped *Commons Import* workflow."""
+    return is_shipped_workflow(definition, IMPORT_WORKFLOW_FILE)
+
+
+def is_offer_workflow(definition: ProcessDefinition) -> bool:
+    """Whether *definition* runs exactly the shipped *Commons Offer* workflow (#231)."""
+    return is_shipped_workflow(definition, OFFER_WORKFLOW_FILE)
 
 
 async def completed_steps(context: Any) -> dict[str, ProcessEvent]:

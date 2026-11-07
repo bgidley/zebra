@@ -29,10 +29,7 @@ from zebra_agent.commons.events import (
     sign_event,
     verify_event,
 )
-
-# Provisional kind numbers until S4 fixes the Commons kinds (nothing is published yet).
-DEVICE_CERT_KIND = 30228  # addressable: d = device pubkey
-DEVICE_REVOKE_KIND = 1228  # regular
+from zebra_agent.commons.kinds import DEVICE_CERT_KIND, DEVICE_REVOKE_KIND
 
 CERT_CODE_PREFIX = "zcert1"
 MAX_LABEL_LENGTH = 100

@@ -1,4 +1,4 @@
-"""Relay receipts: the canonical order of events on the private sync relay (#246, S3b-2).
+"""Relay receipts: the canonical order of events on a Zebra relay (#246, S3b-2; #231).
 
 A ``RECEIPT`` is signed by the relay operator key (``SYNC_RECEIPT_PUBKEY``) and says "event
 ``event_id`` was stored as number ``seq``". Readers order revocations by it, never by the
@@ -8,7 +8,9 @@ The relay's write-policy plugin (``deploy/podman/sync-relay/write_policy.py``) a
 in the order it accepts events and appends one line per event to a journal. ``ReceiptSigner``
 (run as ``python -m zebra_agent.commons.receipts``, a sidecar next to strfry) signs a receipt
 for each journal line and publishes it. Its secret comes only from
-``ZEBRA_SYNC_OPERATOR_SECRET`` (hex or ``nsec``); it is never logged.
+``ZEBRA_SYNC_OPERATOR_SECRET`` (hex or ``nsec``); it is never logged. The public Commons
+relay (#231, ``deploy/podman/commons-relay/``) runs the same sidecar with
+``--secret-env ZEBRA_COMMONS_OPERATOR_SECRET`` and its own operator key.
 """
 
 from __future__ import annotations
@@ -30,11 +32,10 @@ from zebra_agent.commons.events import (
     sign_event,
     verify_event,
 )
+from zebra_agent.commons.kinds import RECEIPT_KIND
 
 logger = logging.getLogger(__name__)
 
-# Provisional until S4 fixes the Commons kinds (regular range).
-RECEIPT_KIND = 1246
 OPERATOR_SECRET_ENV = "ZEBRA_SYNC_OPERATOR_SECRET"
 
 
@@ -86,15 +87,20 @@ def receipt_order(events: Iterable[Event], operator_pubkey: str) -> dict[str, in
     return order
 
 
-def operator_secret_from_env(env: dict[str, str] | None = None) -> str:
-    """The operator secret (hex or ``nsec``) from ``ZEBRA_SYNC_OPERATOR_SECRET``.
+def operator_secret_from_env(
+    env: dict[str, str] | None = None, name: str = OPERATOR_SECRET_ENV
+) -> str:
+    """The operator secret (hex or ``nsec``) from the variable *name*.
+
+    ``ZEBRA_SYNC_OPERATOR_SECRET`` for the private sync relay; the public Commons relay's
+    sidecar passes ``--secret-env ZEBRA_COMMONS_OPERATOR_SECRET`` (#231).
 
     Raises:
         ValueError: Unset or not a valid secret key.
     """
-    raw = ((os.environ if env is None else env).get(OPERATOR_SECRET_ENV) or "").strip()
+    raw = ((os.environ if env is None else env).get(name) or "").strip()
     if not raw:
-        raise ValueError(f"{OPERATOR_SECRET_ENV} is not set")
+        raise ValueError(f"{name} is not set")
     secret = keys.nsec_decode(raw) if raw.startswith("nsec1") else raw
     keys.public_key(secret)  # raises InvalidKeyError (a ValueError) when malformed
     return secret
@@ -178,7 +184,7 @@ def main(argv: list[str] | None = None) -> None:
     from zebra_agent.commons.nostr import NostrSdkTransport
     from zebra_agent.commons.relay import RelayCommonsClient
 
-    parser = argparse.ArgumentParser(description="Sign RECEIPTs for the private sync relay")
+    parser = argparse.ArgumentParser(description="Sign RECEIPTs for a Zebra relay")
     parser.add_argument("--relay", default=os.environ.get("ZEBRA_SYNC_RELAY_LOCAL"))
     parser.add_argument(
         "--journal", default=os.environ.get("ZEBRA_SYNC_JOURNAL", "/receipts/journal.jsonl")
@@ -188,6 +194,12 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--interval", type=float, default=1.0)
     parser.add_argument(
+        "--secret-env",
+        default=OPERATOR_SECRET_ENV,
+        help="variable holding the operator secret (ZEBRA_COMMONS_OPERATOR_SECRET for the "
+        "public Commons relay, #231)",
+    )
+    parser.add_argument(
         "--keygen",
         action="store_true",
         help="print a new operator key (nsec, then public key hex) and exit",
@@ -195,13 +207,14 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.keygen:
         secret = keys.generate_secret_key()
-        print(f"ZEBRA_SYNC_OPERATOR_SECRET={keys.nsec_encode(secret)}")
-        print(f"ZEBRA_SYNC_RECEIPT_PUBKEY={keys.public_key(secret)}")
+        pubkey_env = args.secret_env.replace("OPERATOR_SECRET", "RECEIPT_PUBKEY")
+        print(f"{args.secret_env}={keys.nsec_encode(secret)}")
+        print(f"{pubkey_env}={keys.public_key(secret)}")
         return
     if not args.relay:
         parser.error("--relay or ZEBRA_SYNC_RELAY_LOCAL is required")
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(asctime)s %(message)s")
-    secret = operator_secret_from_env()
+    secret = operator_secret_from_env(name=args.secret_env)
     client = RelayCommonsClient(NostrSdkTransport(args.relay))
     signer = ReceiptSigner(Path(args.journal), Path(args.state), client, secret)
     asyncio.run(signer.run(args.interval))
