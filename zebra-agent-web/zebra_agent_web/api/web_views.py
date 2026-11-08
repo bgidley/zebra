@@ -3009,12 +3009,12 @@ async def bug_report_submit(request):
         definition = library.get_workflow(bug_reports.BUG_REPORT_WORKFLOW)
         process = await wf_engine.create_process(definition, properties=properties)
         await wf_engine.start_process(process.id)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to record bug report")
         return render(
             request,
             "partials/bug_report_result.html",
-            {"error": f"Could not record the report: {e}"},
+            {"error": "Could not record the report; see the server log"},
             status=500,
         )
 
