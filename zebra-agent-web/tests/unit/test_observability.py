@@ -42,6 +42,8 @@ class TestHealthEndpoint:
 
         assert response.status_code == 503
         assert response.json()["status"] == "unhealthy"
+        # Unauthenticated endpoint: the exception text stays in the log (#288).
+        assert "db down" not in response.content.decode()
 
 
 # ---------------------------------------------------------------------------

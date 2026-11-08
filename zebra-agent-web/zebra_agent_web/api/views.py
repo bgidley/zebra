@@ -105,9 +105,11 @@ def health_check(request):
                 "queue_depth": queue_depth,
             }
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Health check failed")
         return Response(
-            {"status": "unhealthy", "error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE
+            {"status": "unhealthy", "error": _INTERNAL_ERROR},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
 
