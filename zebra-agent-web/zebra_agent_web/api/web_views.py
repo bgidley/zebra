@@ -596,7 +596,11 @@ async def _run_chain(metrics, run: WorkflowRun) -> list[dict[str, Any]]:
 
 
 def _queued_html(process_id: str, priority: int, deadline: str | None) -> str:
-    """Success partial shown after a goal is queued for the daemon."""
+    """Success partial shown after a goal is queued for the daemon.
+
+    ``deadline`` comes straight from the form, so it is escaped (#288).
+    """
+    deadline_html = f" | Deadline: {escape(deadline)}" if deadline else ""
     return (
         f'<div class="bg-ok/15 border border-ok/40 rounded-lg p-6 text-center">'
         f'<svg class="mx-auto h-10 w-10 text-ok mb-3" fill="none"'
@@ -606,8 +610,8 @@ def _queued_html(process_id: str, priority: int, deadline: str | None) -> str:
         f"</svg>"
         f'<h3 class="text-lg font-semibold text-ok">Goal Queued</h3>'
         f'<p class="text-sm text-gray-400 mt-1">Priority {priority}'
-        f"{' | Deadline: ' + deadline if deadline else ''}</p>"
-        f'<p class="text-xs text-gray-500 mt-2">Process ID: {process_id[:12]}... '
+        f"{deadline_html}</p>"
+        f'<p class="text-xs text-gray-500 mt-2">Process ID: {escape(process_id[:12])}... '
         f"The budget daemon will start this goal when budget allows.</p>"
         f'<a href="/activity/" class="inline-block mt-3 text-ink'
         f' hover:underline text-sm">View Activity</a>'

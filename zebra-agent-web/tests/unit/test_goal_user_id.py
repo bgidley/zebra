@@ -169,6 +169,24 @@ async def test_web_queue_passes_identity(owner):
 
 
 @pytest.mark.django_db(transaction=True)
+async def test_web_queue_escapes_deadline(owner):
+    """The deadline is echoed in the success partial, escaped (#288)."""
+    request = RequestFactory().post(
+        "/run/queue/", {"goal": "Plan my week", "deadline": "<script>alert(1)</script>"}
+    )
+    request.user = owner
+    process = MagicMock()
+    process.id = "proc-1234567890ab"
+
+    with patch("zebra_agent_web.api.goals.queue_goal", AsyncMock(return_value=process)):
+        response = await web_views.run_goal_queue(request)
+
+    body = response.content.decode()
+    assert "<script>" not in body
+    assert "&lt;script&gt;" in body
+
+
+@pytest.mark.django_db(transaction=True)
 async def test_web_queue_failure_hides_exception_text(owner):
     """A failed queue is a generic 500: the exception text stays in the log (#288)."""
     request = RequestFactory().post("/run/queue/", {"goal": "Plan my week"})
