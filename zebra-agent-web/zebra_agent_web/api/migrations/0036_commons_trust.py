@@ -64,6 +64,13 @@ class Migration(migrations.Migration):
                 ("relay_seq", models.BigIntegerField(blank=True, null=True)),
                 ("published_weight", models.FloatField(blank=True, null=True)),
                 (
+                    "pending",
+                    models.BooleanField(
+                        default=False,
+                        help_text="Own edge: an owner change not yet published (always retried)",
+                    ),
+                ),
+                (
                     "user_id",
                     models.IntegerField(
                         blank=True, db_index=True, help_text="Commons owner", null=True

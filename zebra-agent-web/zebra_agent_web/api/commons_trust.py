@@ -159,7 +159,7 @@ async def peers_overview(zebra_pubkey: str | None, *, publishing_on: bool) -> di
             "weight": e.weight,
             "reason": e.reason,
             "fixed_reason": e.reason in REASONS,
-            "published": bool(e.event_id) and e.published_weight is not None,
+            "published": bool(e.event_id) and e.published_weight is not None and not e.pending,
         }
 
     for peer in sorted(peers, key=lambda p: (not p.vouched_by_user, -p.local_trust, p.pubkey)):

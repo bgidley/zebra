@@ -42,6 +42,16 @@ Each SHALL publish a `TRUST` event when publishing is on. No LLM SHALL set trust
 - **WHEN** the owner chooses "I know this Zebra" for Zebra A
 - **THEN** A is a vouched seed with edge weight 0.8 and a `TRUST` event for A is published
 
+#### Scenario: Relay down during an owner change
+- **WHEN** the relay refuses the owner's vouch, withdraw or distrust, and the new weight is within
+  0.1 of the weight last published
+- **THEN** the edge stays pending and the next `publish_pending` publishes it
+
+#### Scenario: Owner acts during a recompute
+- **WHEN** the owner distrusts Zebra X while a recompute holding X as vouched is in progress
+- **THEN** X stays distrusted (not vouched, owner weight negative) and a later attestation cannot
+  raise this Zebra's edge to X above the distrust
+
 #### Scenario: Someone else tries
 - **WHEN** a signed-in user who is not the owner posts a vouch
 - **THEN** the response is 403 and nothing changes

@@ -612,7 +612,8 @@ class TrustEdgeModel(models.Model):
     """The latest trust edge per ``(from_pubkey, to_pubkey)`` (#233, S6).
 
     From a verified ``TRUST`` event (``event_id``), or this Zebra's own edge
-    (``published_weight``: the weight last published; ``event_id`` empty until published).
+    (``published_weight``: the weight last published; ``event_id`` empty until published;
+    ``pending``: an owner change the relay has not yet accepted).
     Written only by ``DjangoPeerTrustStore``; ``user_id`` is the Commons owner.
     """
 
@@ -624,6 +625,9 @@ class TrustEdgeModel(models.Model):
     created_at = models.BigIntegerField(default=0, help_text="The event's created_at (Unix)")
     relay_seq = models.BigIntegerField(null=True, blank=True)
     published_weight = models.FloatField(null=True, blank=True)
+    pending = models.BooleanField(
+        default=False, help_text="Own edge: an owner change not yet published (always retried)"
+    )
     user_id = models.IntegerField(null=True, blank=True, db_index=True, help_text="Commons owner")
     updated_at = models.DateTimeField(auto_now=True)
 

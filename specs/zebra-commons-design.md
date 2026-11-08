@@ -783,7 +783,10 @@ Live check: [commons-public-relay-runbook.md](commons-public-relay-runbook.md) �
 - **Experience**: EWMA rate 0.2 on this Zebra's own `ATTEST`s (worked +1; failed, rejected-ethics,
   rejected-gym, pii-found -1; adopted and rejected-pii nothing); the owner's vouch is a floor and a
   distrust a ceiling; published at a 0.1 change from the last published weight (`publish_pending`
-  retries each tick).
+  retries each tick). Owner changes are `pending` until a relay accepts them and are always
+  retried, whatever the threshold.
+- **Concurrency**: all `WebOfTrust` mutations run under one lock, and peer writers touch only their
+  own columns, so a recompute can never undo an owner's vouch or distrust.
 - **Import score**: α = 0.7, γ = 0.3, β = 0; `attestation_signal` counts only reporters with positive
   local trust, never the publisher or this Zebra. Below 0.5 an offer is never judged automatically
   (S8) and **Import this** shows the score with a warning (the owner may still import).

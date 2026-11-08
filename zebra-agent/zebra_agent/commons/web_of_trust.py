@@ -11,19 +11,26 @@ fetched, and local trust is still computed from what is held.
   ``recompute`` refreshes every peer's local trust and best path.
 
 No LLM is involved anywhere here.
+
+Concurrency (#233 review): the daemon tick, goal tasks and the owner's POST share one
+``WebOfTrust`` in one event loop. Every mutation runs under ``_lock``, and the store's peer
+writers touch only their own columns, so a recompute or an experience update can never put back
+an owner field it read before the owner changed it. An owner change stays ``pending`` until the
+relay accepts it, and ``publish_pending`` retries it whatever the experience threshold.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from zebra_agent.commons.events import Event
-from zebra_agent.commons.peers import PeerRecord, TrustEdge, TrustStore
+from zebra_agent.commons.peers import TrustEdge, TrustStore
 from zebra_agent.commons.trust import (
     DISTRUST_WEIGHT,
     DISTRUSTED,
@@ -71,6 +78,7 @@ class WebOfTrust:
     zebra_pubkey: str
     publisher: CommonsPublisher | None = None
     clock: Callable[[], int] = field(default=_now, repr=False)
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False, compare=False)
 
     @property
     def publishing(self) -> bool:
@@ -86,7 +94,10 @@ class WebOfTrust:
             raise TrustRefused("a Zebra cannot vouch for itself")
         return pubkey
 
-    async def _set_own_edge(self, target: str, weight: float, reason: str) -> TrustEdge:
+    async def _set_own_edge(
+        self, target: str, weight: float, reason: str, *, pending: bool | None = None
+    ) -> TrustEdge:
+        """Store this Zebra's edge to *target*; *pending* None keeps the old edge's flag."""
         old = await self.store.get_edge(self.zebra_pubkey, target)
         edge = TrustEdge(
             from_pubkey=self.zebra_pubkey,
@@ -98,6 +109,7 @@ class WebOfTrust:
             created_at=max(self.clock(), old.created_at + 1 if old else 0),
             relay_seq=None,
             published_weight=old.published_weight if old else None,
+            pending=pending if pending is not None else bool(old and old.pending),
         )
         await self.store.save_edge(edge)
         return edge
@@ -121,15 +133,15 @@ class WebOfTrust:
         except Exception as e:  # noqa: BLE001 - kept locally, retried next tick
             logger.warning("Commons: TRUST for %s… not published: %s", edge.to_pubkey[:12], e)
             return None
-        await self.store.save_edge(
-            replace(
-                edge,
-                event_id=event.id,
-                created_at=event.created_at,
-                relay_seq=result.get("receipt_seq"),
-                published_weight=canonical_weight(edge.weight),
-            )
+        recorded = await self.store.mark_published(
+            edge,
+            event_id=event.id,
+            created_at=event.created_at,
+            relay_seq=result.get("receipt_seq"),
+            published_weight=canonical_weight(edge.weight),
         )
+        if not recorded:  # a later change replaced it while the relay answered; that one is sent
+            logger.info("Commons: TRUST for %s… superseded while publishing", edge.to_pubkey[:12])
         logger.info("Commons: published TRUST %+.2f for %s…", edge.weight, edge.to_pubkey[:12])
         return result
 
@@ -145,14 +157,17 @@ class WebOfTrust:
     ) -> dict[str, Any]:
         target = self._check_target(pubkey)
         reason = clean_reason(reason)
-        peer = await self.store.get_peer(target) or PeerRecord(pubkey=target)
-        name = (display_name or "").strip()[:80] or peer.display_name
-        await self.store.save_peer(
-            replace(peer, display_name=name, vouched_by_user=vouched, owner_weight=owner_weight)
-        )
-        edge = await self._set_own_edge(target, weight, reason)
-        result = await self._publish(edge)
-        await self.recompute()
+        async with self._lock:
+            await self.store.set_owner_fields(
+                target,
+                vouched_by_user=vouched,
+                owner_weight=owner_weight,
+                display_name=(display_name or "").strip()[:80] or None,
+            )
+            # pending until the relay accepts it: publish_pending retries owner changes always
+            edge = await self._set_own_edge(target, weight, reason, pending=True)
+            result = await self._publish(edge)
+            await self._recompute()
         return {
             "pubkey": target,
             "weight": edge.weight,
@@ -204,6 +219,10 @@ class WebOfTrust:
         """
         if not publisher_pubkey or publisher_pubkey == self.zebra_pubkey:
             return None
+        async with self._lock:
+            return await self._record_experience(publisher_pubkey, label)
+
+    async def _record_experience(self, publisher_pubkey: str, label: str) -> dict[str, Any] | None:
         old = await self.store.get_edge(self.zebra_pubkey, publisher_pubkey)
         peer = await self.store.touch_peer(publisher_pubkey)
         weight = experience_update(
@@ -216,7 +235,7 @@ class WebOfTrust:
         published = False
         if should_publish(edge.weight, edge.published_weight):
             published = await self._publish(edge) is not None
-        await self.recompute()
+        await self._recompute()
         logger.info(
             "Commons: experience %s moved trust in %s… to %.2f",
             label,
@@ -226,21 +245,24 @@ class WebOfTrust:
         return {"weight": edge.weight, "published": published}
 
     async def publish_pending(self) -> int:
-        """Publish own edges whose change since the last published weight is meaningful."""
+        """Publish own edges not yet on the relay: every pending owner change, and experience
+        changes meaningful since the last published weight."""
         if self.publisher is None:
             return 0
         sent = 0
-        for edge in await self.store.list_edges():
-            if edge.from_pubkey != self.zebra_pubkey:
-                continue
-            if edge.published_weight is None and edge.weight == 0:
-                continue
-            if edge.published_weight is not None and not should_publish(
-                edge.weight, edge.published_weight
-            ):
-                continue
-            if await self._publish(edge) is not None:
-                sent += 1
+        async with self._lock:
+            for edge in await self.store.list_edges():
+                if edge.from_pubkey != self.zebra_pubkey:
+                    continue
+                if not edge.pending:
+                    if edge.published_weight is None and edge.weight == 0:
+                        continue
+                    if edge.published_weight is not None and not should_publish(
+                        edge.weight, edge.published_weight
+                    ):
+                        continue
+                if await self._publish(edge) is not None:
+                    sent += 1
         return sent
 
     # -- other Zebras' edges -------------------------------------------------------------------
@@ -262,16 +284,27 @@ class WebOfTrust:
             relay_seq=relay_seq,
             published_weight=float(check.weight or 0.0) if own else None,
         )
-        if not own:
-            await self.store.touch_peer(check.from_pubkey, event.created_at)
-        if check.to_pubkey != self.zebra_pubkey:
-            await self.store.touch_peer(check.to_pubkey)
-        return await self.store.put_if_newer(edge)
+        async with self._lock:
+            if not own:
+                await self.store.touch_peer(check.from_pubkey, event.created_at)
+            if check.to_pubkey != self.zebra_pubkey:
+                await self.store.touch_peer(check.to_pubkey)
+            if own:
+                # never let our own echo from the relay clear an unpublished owner change
+                held = await self.store.get_edge(check.from_pubkey, check.to_pubkey)
+                if held is not None and held.pending:
+                    return False
+            return await self.store.put_if_newer(edge)
 
     # -- local trust ---------------------------------------------------------------------------
 
     async def recompute(self) -> dict[str, float]:
         """Recompute every peer's local trust and best path; returns ``{pubkey: trust}``."""
+        async with self._lock:
+            return await self._recompute()
+
+    async def _recompute(self) -> dict[str, float]:
+        """``recompute`` with ``_lock`` held; writes only the computed columns."""
         edges = await self.store.list_edges()
         peers = {p.pubkey: p for p in await self.store.list_peers()}
         seeds = {k for k, p in peers.items() if p.vouched_by_user}
@@ -284,9 +317,9 @@ class WebOfTrust:
             path = paths.get(key)
             value = path.value if path else 0.0
             best = path.to_dict() if path else {}
-            peer = peers.get(key) or PeerRecord(pubkey=key)
-            if key not in peers or peer.local_trust != value or peer.best_path != best:
-                await self.store.save_peer(replace(peer, local_trust=value, best_path=best))
+            peer = peers.get(key)
+            if peer is None or peer.local_trust != value or peer.best_path != best:
+                await self.store.set_computed(key, value, best)
         return {k: p.value for k, p in paths.items()}
 
     async def trust_map(self) -> dict[str, float]:

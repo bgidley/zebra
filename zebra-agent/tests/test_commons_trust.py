@@ -7,6 +7,7 @@ arrives with its path; an offer from an unconnected Zebra scores 0.
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -437,6 +438,126 @@ async def test_failed_publish_is_retried():
     assert await wot.publish_pending() == 0
     [event] = [e for e in relay.events if e.kind == TRUST_KIND]
     assert verify_trust(event, [me["cert"]]).to_pubkey == other["zebra"]
+
+
+class _PausingStore(InMemoryTrustStore):
+    """Pauses the next ``list_peers`` after taking its snapshot until ``go`` is set, so a
+    recompute holds a stale copy of every peer while the owner acts (#233 review)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.armed = False
+        self.paused = asyncio.Event()
+        self.go = asyncio.Event()
+
+    async def list_peers(self):
+        snapshot = await super().list_peers()
+        if self.armed:
+            self.armed = False
+            self.paused.set()
+            await self.go.wait()
+        return snapshot
+
+
+async def test_recompute_never_undoes_a_distrust_made_meanwhile():
+    """The owner distrusts X while a recompute holds X as vouched: the distrust stays, and the
+    next experience cannot lift the edge above it."""
+    store = _PausingStore()
+    tick = WebOfTrust(store, ME)  # e.g. the daemon's
+    owner = WebOfTrust(store, ME)  # e.g. a request's: only the store is shared
+    await owner.vouch(A)
+    store.armed = True
+    recompute = asyncio.create_task(tick.recompute())
+    await store.paused.wait()  # the recompute holds the vouched peer
+    await owner.distrust(A)
+    store.go.set()
+    await recompute
+    peer = await store.get_peer(A)
+    assert peer.owner_weight == -0.8 and not peer.vouched_by_user
+    await tick.recompute()
+    assert (await store.get_peer(A)).local_trust == pytest.approx(-0.8)
+    await tick.record_experience(A, WORKED)
+    assert (await store.get_edge(ME, A)).weight == pytest.approx(-0.8)
+
+
+async def test_shared_web_of_trust_serialises_owner_and_tick():
+    """One shared ``WebOfTrust`` (publishing on): a vouch made during a tick's recompute waits
+    for it, so the vouched peer ends with its trust, not the tick's stale 0."""
+    store = _PausingStore()
+    wot = WebOfTrust(store, ME)
+    await store.touch_peer(A)
+    store.armed = True
+    recompute = asyncio.create_task(wot.recompute())
+    await store.paused.wait()
+    vouch = asyncio.create_task(wot.vouch(A))
+    await asyncio.sleep(0)
+    assert not vouch.done()  # waits for the lock
+    store.go.set()
+    await recompute
+    await vouch
+    peer = await store.get_peer(A)
+    assert peer.vouched_by_user and peer.local_trust == pytest.approx(VOUCH_WEIGHT)
+
+
+async def test_touch_peer_keeps_owner_fields():
+    store = InMemoryTrustStore()
+    await store.set_owner_fields(A, vouched_by_user=True, owner_weight=0.8, display_name="A")
+    await store.set_computed(A, 0.8, {"value": 0.8})
+    peer = await store.touch_peer(A, 50)
+    assert peer.vouched_by_user and peer.owner_weight == 0.8 and peer.display_name == "A"
+    assert peer.local_trust == 0.8 and peer.last_seen == 50
+
+
+@pytest.mark.parametrize(
+    "published, action, expected",
+    [(0.75, "vouch", VOUCH_WEIGHT), (0.05, "withdraw", 0.0), (-0.75, "distrust", -0.8)],
+)
+async def test_owner_change_is_retried_below_the_experience_threshold(published, action, expected):
+    """An owner change the relay missed is retried even when it is within 0.1 of the weight
+    last published (the threshold only throttles experience)."""
+    relay = InMemoryRelay(private=False)
+    me, other = _zebra(), _zebra()
+    publisher = _publisher(me, relay)
+    wot = WebOfTrust(InMemoryTrustStore(), me["zebra"], publisher=publisher)
+    x = other["zebra"]
+    await wot.store.save_edge(
+        TrustEdge(me["zebra"], x, published, "experience", "e" * 64, 1, published_weight=published)
+    )
+    publisher.canonical = _DownClient(relay)
+    owner_action = {"vouch": wot.vouch, "withdraw": wot.withdraw, "distrust": wot.distrust}
+    assert (await owner_action[action](x))["published"] is False
+    assert (await wot.store.get_edge(me["zebra"], x)).pending
+    publisher.canonical = InMemoryCommonsClient(relay)
+    assert await wot.publish_pending() == 1
+    edge = await wot.store.get_edge(me["zebra"], x)
+    assert not edge.pending and edge.published_weight == expected
+    [event] = [e for e in relay.events if e.kind == TRUST_KIND]
+    assert json.loads(event.content)["weight"] == expected
+    assert await wot.publish_pending() == 0
+
+
+async def test_experience_keeps_an_unpublished_owner_change_pending():
+    relay = InMemoryRelay(private=False)
+    me, other = _zebra(), _zebra()
+    publisher = _publisher(me, relay)
+    publisher.canonical = _DownClient(relay)
+    wot = WebOfTrust(InMemoryTrustStore(), me["zebra"], publisher=publisher)
+    await wot.vouch(other["zebra"])
+    await wot.record_experience(other["zebra"], WORKED)
+    assert (await wot.store.get_edge(me["zebra"], other["zebra"])).pending
+
+
+async def test_superseded_publish_does_not_overwrite_the_newer_change():
+    store = InMemoryTrustStore()
+    first = TrustEdge(ME, A, 0.8, "vouched", created_at=10, pending=True)
+    await store.save_edge(first)
+    await store.save_edge(TrustEdge(ME, A, -0.8, "distrusted", created_at=11, pending=True))
+    recorded = await store.mark_published(
+        first, event_id="e" * 64, created_at=10, relay_seq=None, published_weight=0.8
+    )
+    assert not recorded
+    edge = await store.get_edge(ME, A)
+    assert edge.weight == -0.8 and edge.pending and edge.published_weight is None
 
 
 # -- several Zebras over one relay -----------------------------------------------------------

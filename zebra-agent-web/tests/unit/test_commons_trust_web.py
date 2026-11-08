@@ -146,6 +146,35 @@ async def test_django_store_round_trip_and_latest_wins(clean):
 
 
 @pytest.mark.django_db(transaction=True)
+async def test_django_store_writers_touch_only_their_columns(clean):
+    """A recompute or a touch holding an older peer never puts back owner fields (#233 review)."""
+    store = DjangoPeerTrustStore(owner_user_id=7)
+    a, b = "a" * 64, "b" * 64
+    await store.set_owner_fields(a, vouched_by_user=True, owner_weight=0.8, display_name="A")
+    await store.set_computed(a, 0.8, {"value": 0.8})
+    await store.set_owner_fields(a, vouched_by_user=False, owner_weight=-0.8)  # distrust
+    await store.set_computed(a, 0.5, {"value": 0.5})  # a stale recompute's write
+    peer = await store.touch_peer(a, 40)
+    assert not peer.vouched_by_user and peer.owner_weight == -0.8 and peer.display_name == "A"
+    assert peer.local_trust == 0.5 and peer.last_seen == 40
+    assert (await store.touch_peer(a, 10)).last_seen == 40
+    assert (await store.touch_peer(b)).last_seen == 0
+    assert (await PeerModel.objects.aget(pubkey=b)).user_id == 7
+
+    first = TrustEdge(a, b, 0.8, "vouched", created_at=10, pending=True)
+    await store.save_edge(first)
+    assert (await store.get_edge(a, b)).pending
+    await store.save_edge(TrustEdge(a, b, 0.0, "withdrawn", created_at=11, pending=True))
+    kwargs = {"event_id": "e" * 64, "created_at": 12, "relay_seq": 3}
+    assert not await store.mark_published(first, published_weight=0.8, **kwargs)
+    newer = await store.get_edge(a, b)
+    assert newer.pending and newer.published_weight is None
+    assert await store.mark_published(newer, published_weight=0.0, **kwargs)
+    edge = await store.get_edge(a, b)
+    assert not edge.pending and edge.published_weight == 0.0 and edge.relay_seq == 3
+
+
+@pytest.mark.django_db(transaction=True)
 async def test_exchange_carries_the_web_of_trust(configure, clean, tmp_path):
     await ci.start_zebra(display_name="Z", label="Home box", sphere="home", observed=False)
     publisher = await commons_publish.build_commons_publisher(

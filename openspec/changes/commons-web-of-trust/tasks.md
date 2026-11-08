@@ -17,6 +17,11 @@
 - [x] 2.4 Tests: wiring off, page (off, empty, peers, best path, owner-only, score warning)
 - [x] 2.5 Playwright container check (phone width), recorded
 
+## 2b. Review fixes
+
+- [x] 2b.1 Column-only peer writers (`set_owner_fields`, `set_computed`, `touch_peer`) and one `asyncio.Lock` over `WebOfTrust` mutations; test interleaving an owner distrust / vouch with a recompute
+- [x] 2b.2 `TrustEdge.pending` (+ `TrustEdgeModel.pending`): owner changes retried by `publish_pending` whatever the threshold; `mark_published` only for the unchanged edge; tests
+
 ## 3. Integration + docs
 
 - [x] 3.1 Gated podman strfry test: TRUST published, fetched by another Zebra, local trust computed

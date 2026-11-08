@@ -44,6 +44,19 @@ held edges is still computed).
   then clamped to `[owner_weight, 1]` when vouched and `[-1, owner_weight]` when distrusted.
   Published when `|w' - published_weight| >= 0.1` (or never published); `publish_pending()` on
   each tick retries unpublished changes.
+- **Owner changes are pending until published**: vouch / withdraw / distrust save the own edge with
+  `pending = True`; only a relay-accepted publish clears it (`TrustStore.mark_published`, which
+  also refuses to mark a change that a later one replaced meanwhile). `publish_pending()` always
+  retries a pending edge, whatever the 0.1 threshold (that throttles experience only), and an
+  experience update keeps the flag. The own `TRUST` echoed back by the relay never replaces a
+  pending edge.
+- **Concurrency**: the daemon tick, goal tasks and the owner's POST share one `WebOfTrust` in one
+  event loop. Every mutation (owner actions, `record_experience`, `ingest`, `recompute`,
+  `publish_pending`) runs under one `asyncio.Lock`, and the store's peer writers touch only their
+  own columns (`set_owner_fields`: `vouched_by_user` / `owner_weight` / `display_name`;
+  `set_computed`: `local_trust` / `best_path`; `touch_peer`: `last_seen`), each a single `UPDATE`
+  on the web, so a recompute or a touch holding an older peer can never put back an owner field
+  (a distrust is never turned back into a vouch).
 - **Local trust** (`trust.compute_trust(me, edges, seeds)`): enumerate simple paths from `me` of
   1–3 edges whose first edge goes to a human-vouched seed; interior edges must be positive (a
   negative edge is only ever the last hop). Value `∏ weights × 0.9^(hops-1)`, so a direct vouch
