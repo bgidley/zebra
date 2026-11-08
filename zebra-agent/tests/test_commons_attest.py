@@ -288,6 +288,29 @@ async def test_revoked_device_delists_a_seen_offer(relay):
     assert (await exchange.offers.get(SHA)).status == DELISTED
 
 
+async def test_revoked_third_party_copy_does_not_delist(relay):
+    """Mallory copies A's YAML (same hash), revokes her own device and offers the copy."""
+    a, b, mallory = _zebra(), _zebra(), _zebra()
+    offer = _offer(a)
+    await _publish(relay, a["cert"], offer)
+    exchange = _exchange(b, relay)
+    assert (await exchange.poll())["ok"] == 1
+
+    copy = _offer(mallory)
+    assert content_sha256(json.loads(copy.content)["yaml"]) == SHA
+    revoke = make_device_revoke(mallory["zebra_secret"], keys.public_key(mallory["device"]))
+    await _publish(relay, mallory["cert"], revoke, copy)
+    counts = await exchange.poll()
+    assert counts.get("delisted", 0) == 0
+    row = await exchange.offers.get(SHA)
+    assert (row.status, row.event_id, row.publisher_pubkey) == (SEEN, offer.id, a["zebra"])
+
+    # Fed in directly too: a failing event that is not the row's own leaves it alone
+    result = await exchange.intake(copy, [mallory["cert"], revoke])
+    assert result.reason == "revoked"
+    assert (await exchange.offers.get(SHA)).status == SEEN
+
+
 async def test_poll_uses_receipts(relay):
     a, b = _zebra(), _zebra()
     operator = keys.generate_secret_key()

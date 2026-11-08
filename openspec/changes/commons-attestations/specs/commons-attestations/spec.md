@@ -29,6 +29,12 @@ automatically.
 - **WHEN** a second `OFFER` with an already stored content hash arrives
 - **THEN** no second row is created and the existing row is unchanged
 
+#### Scenario: Revoked device delists only its own offer
+- **WHEN** the stored row's own `OFFER` event no longer verifies because its device was revoked
+- **THEN** the `seen` row is delisted
+- **WHEN** another Zebra offers a copy with the same hash signed by a device it revoked itself
+- **THEN** the stored row stays `seen` (only the row's own event can delist it)
+
 ### Requirement: Offer status transitions
 Offer status SHALL change only along `seen → judging | delisted`, `judging → adopted | rejected |
 seen | delisted`, `rejected → judging | delisted`, `adopted → delisted`.

@@ -502,7 +502,8 @@ off by default.** Second-Zebra check: [commons-public-relay-runbook.md](commons-
   `OFFER`s since the last poll, the publishers' certs / revokes and the operator's receipts, and
   stores an offer only when `verify_offer` accepts it (signature, `DEVICE_CERT` attribution,
   receipt-ordered revocation, hash). One `WorkflowOfferModel` per hash (duplicates ignored), own
-  offers skipped; a revoked publisher device delists `seen` offers. Mirrored in `CommonsEventModel`.
+  offers skipped; a revoked publisher device delists `seen` offers (only when the row's own
+  `OFFER` event fails, never a third party's copy of the same hash). Mirrored in `CommonsEventModel`.
 - **Step 2, candidates**: not in S5. The owner chooses: **Import this** on `/commons/`
   (`start_offer_import`): `seen` / `rejected` → `judging`, *Commons Import* on the mirrored offer.
 - **Step 3, judged import of an offer**: `commons_import.yaml` v2 takes `offer_event` (the `OFFER`

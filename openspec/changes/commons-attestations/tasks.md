@@ -9,7 +9,7 @@
 - [x] 1.4 `offer.py` `offer_as_export()` (an `OFFER` as an `ExportVerification`)
 - [x] 1.5 `CommonsPublisher.publish_event`; `publish_offer` uses it
 - [x] 1.6 `commons/exchange.py` `CommonsExchange`: `poll`, `intake`, `record_import`, `after_run`, `attestation_summary`
-- [x] 1.7 Tests: intake (bad sig, wrong cert, tampered YAML, duplicate, revoked → delisted), transitions, attest build/verify, hash-equality rule
+- [x] 1.7 Tests: intake (bad sig, wrong cert, tampered YAML, duplicate, revoked → delisted, revoked third-party copy of the same hash leaves the row `seen`), transitions, attest build/verify, hash-equality rule
 
 ## 2. Import from an offer + attestation step
 

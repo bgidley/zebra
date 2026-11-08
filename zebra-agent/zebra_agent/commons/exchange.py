@@ -179,15 +179,23 @@ class CommonsExchange:
         """Verify one ``OFFER`` and record it as ``seen`` once per content hash.
 
         Reasons: ``ok``, ``own`` (this Zebra's), ``duplicate`` (hash already stored),
-        ``delisted`` (a stored ``seen`` offer whose device was revoked) and every
-        ``verify_offer`` refusal (``bad_signature``, ``no_cert``, ``hash_mismatch``, ...).
+        ``delisted`` (the stored ``seen`` offer's own event no longer verifies because
+        its device was revoked) and every ``verify_offer`` refusal (``bad_signature``,
+        ``no_cert``, ``hash_mismatch``, ...).
         """
         d = event.tag_values("d")
         sha = d[0] if len(d) == 1 else None
         existing = await self.offers.get(sha) if sha else None
         check = verify_offer(event, chain, receipt_seq=receipt_seq)
         if not check.ok:
-            if existing and existing.status == SEEN and check.reason in ("revoked", "no_receipt"):
+            # Only the stored row's own event can delist it: anyone can copy the YAML
+            # (same ``d`` hash) and sign it with a device they revoked themselves.
+            if (
+                existing
+                and existing.status == SEEN
+                and existing.event_id == event.id
+                and check.reason in ("revoked", "no_receipt")
+            ):
                 await self.offers.set_status(existing.content_sha256, DELISTED)
                 logger.info("Commons: delisted offer %s… (device revoked)", sha[:12])
                 return IntakeResult("delisted", sha)

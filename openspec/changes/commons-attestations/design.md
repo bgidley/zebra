@@ -24,7 +24,8 @@ attestations (S6), `OUTCOME` / market (S7), public genealogy (#247), deletion (N
 - **Intake verifies everything before storing**: `verify_offer` with the publishers' certs and
   revokes fetched from the same relay and the operator's receipts (revocation order). Own offers
   are skipped (they show under "my offers"). A second `OFFER` with a stored hash is a duplicate and
-  changes nothing; one that no longer verifies because the device was revoked delists a `seen` row.
+  changes nothing; the row's own event (`event_id`) no longer verifying because its device was revoked delists a
+  `seen` row; any other failing event with the same hash (a revoked third-party copy) changes nothing.
 - **`OfferStore`** (`zebra_agent/commons/offers.py`) with `InMemoryOfferStore` and the web's
   `DjangoOfferStore` over `WorkflowOfferModel`. Transitions are a fixed table: `seen → judging |
   delisted`, `judging → adopted | rejected | seen | delisted`, `rejected → judging | delisted`,
