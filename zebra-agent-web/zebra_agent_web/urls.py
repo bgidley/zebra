@@ -33,6 +33,7 @@ urlpatterns = [
         commons_views.commons_offer_import,
         name="commons_offer_import",
     ),
+    path("commons/peers/", commons_views.commons_trust, name="commons_trust"),
     path("commons/restore/", commons_views.commons_restore, name="commons_restore"),
     # Judged import and supervised use (#230)
     path(

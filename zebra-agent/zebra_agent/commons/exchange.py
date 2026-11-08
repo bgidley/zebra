@@ -42,6 +42,7 @@ from zebra_agent.commons.kinds import (
     DEVICE_REVOKE_KIND,
     OFFER_KIND,
     RECEIPT_KIND,
+    TRUST_KIND,
 )
 from zebra_agent.commons.offer import offer_input, verify_offer
 from zebra_agent.commons.offers import (
@@ -56,9 +57,11 @@ from zebra_agent.commons.offers import (
 )
 from zebra_agent.commons.publisher import CommonsPublisher
 from zebra_agent.commons.receipts import receipt_order
+from zebra_agent.commons.trust import verify_trust
 from zebra_agent.provenance import try_content_sha256
 
 if TYPE_CHECKING:
+    from zebra_agent.commons.web_of_trust import WebOfTrust
     from zebra_agent.library import WorkflowLibrary
 
 logger = logging.getLogger(__name__)
@@ -90,6 +93,9 @@ class CommonsExchange:
         offers: The offers seen (``WorkflowOfferModel`` on the web)
         since: ``created_at`` of the newest ``OFFER`` read so far (kept in memory)
         attest_since: The same for ``ATTEST``s
+        trust: This Zebra's web of trust (#233): ``TRUST`` fetched each poll, experience
+            recorded after each of its own attestations; None leaves trust alone
+        trust_since: ``created_at`` of the newest ``TRUST`` read so far
     """
 
     publisher: CommonsPublisher
@@ -98,6 +104,8 @@ class CommonsExchange:
     attest_since: int | None = None
     revoke_since: int | None = None
     last_poll: dict[str, int] = field(default_factory=dict)
+    trust: WebOfTrust | None = None
+    trust_since: int | None = None
 
     @property
     def zebra_pubkey(self) -> str:
@@ -238,6 +246,8 @@ class CommonsExchange:
             self.since = max(e.created_at for e in events)
         counts["delisted"] = counts.get("delisted", 0) + await self.check_revocations()
         counts["attestations"] = await self.fetch_attestations()
+        if self.trust is not None:
+            counts["trust"] = await self.fetch_trust()
         self.last_poll = counts
         return counts
 
@@ -313,6 +323,35 @@ class CommonsExchange:
             kept += 1
         return kept
 
+    async def fetch_trust(self) -> int:
+        """Verify, mirror and store new ``TRUST`` events as edges (#233); returns how many
+        changed an edge. Recomputes local trust when any did, then publishes this Zebra's own
+        pending edges."""
+        if self.trust is None:
+            return 0
+        found = await self._fetch(
+            [Filter(kinds=(TRUST_KIND,), since=self.trust_since, limit=POLL_LIMIT)]
+        )
+        if found:
+            self.trust_since = max(e.created_at for e in found)
+        new = [e for e in found if await self.mirror.get(e.id) is None]
+        changed = 0
+        if new:
+            chain = await self._identity(z for e in new for z in e.tag_values("zebra"))
+            seq, receipts = await self._receipts([e.id for e in new])
+            for event in new:
+                check = verify_trust(event, chain, receipt_seq=seq)
+                if not check.ok:
+                    logger.info("Commons: refused TRUST %s (%s)", event.id[:12], check.reason)
+                    continue
+                await self._keep(event, chain, check.from_pubkey, receipts, seq)
+                if await self.trust.ingest(check, event, (seq or {}).get(event.id)):
+                    changed += 1
+        if changed:
+            await self.trust.recompute()
+        await self.trust.publish_pending()
+        return changed
+
     # -- importing -------------------------------------------------------------------------
 
     async def begin_import(self, content_sha256: str) -> str:
@@ -363,7 +402,20 @@ class CommonsExchange:
         )
         result = await self.publisher.publish_event(event)
         logger.info("Commons: attested %s on %s…", label, content_sha256[:12])
+        await self._experience(label, content_sha256)
         return {**result, "label": label}
+
+    async def _experience(self, label: str, content_sha256: str) -> None:
+        """Let this attestation move this Zebra's trust in the offer's publisher (#233)."""
+        if self.trust is None:
+            return
+        row = await self.offers.get(content_sha256)
+        if row is None:
+            return
+        try:
+            await self.trust.record_experience(row.publisher_pubkey, label)
+        except Exception:  # noqa: BLE001 - trust never breaks an attestation
+            logger.exception("Commons: recording experience of %s failed", label)
 
     async def record_import(
         self,

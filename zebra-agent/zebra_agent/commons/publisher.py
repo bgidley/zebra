@@ -34,6 +34,7 @@ from zebra_agent.commons.kinds import (
     DEVICE_REVOKE_KIND,
     OFFER_KIND,
     RECEIPT_KIND,
+    TRUST_KIND,
 )
 from zebra_agent.commons.mirror import CommonsMirror
 from zebra_agent.commons.offer import (
@@ -165,7 +166,7 @@ class CommonsPublisher:
         }
 
     async def publish_event(self, event: Event) -> dict[str, Any]:
-        """Publish a signed public event (``OFFER``, ``ATTEST``) the way every one goes out.
+        """Publish a signed public event (``OFFER``, ``ATTEST``, ``TRUST``) like every other.
 
         The signing device's cert and this Zebra's revokes first, then the event, to the
         canonical relay (errors propagate: nothing counts as published until it has it), into
@@ -232,7 +233,8 @@ class CommonsPublisher:
         ours = [
             m.event.id
             for m in rows
-            if m.event.kind in (OFFER_KIND, ATTEST_KIND, DEVICE_CERT_KIND, DEVICE_REVOKE_KIND)
+            if m.event.kind
+            in (OFFER_KIND, ATTEST_KIND, TRUST_KIND, DEVICE_CERT_KIND, DEVICE_REVOKE_KIND)
             and m.event.id not in have
         ]
         found = 0

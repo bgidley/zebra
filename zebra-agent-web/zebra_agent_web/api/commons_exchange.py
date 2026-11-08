@@ -30,6 +30,8 @@ from zebra_agent.commons.identity import fingerprint
 from zebra_agent.commons.kinds import ATTEST_KIND
 from zebra_agent.commons.offers import IMPORTABLE, InvalidOfferTransition
 from zebra_agent.commons.publisher import CommonsPublisher
+from zebra_agent.commons.trust import IMPORT_SCORE_THRESHOLD
+from zebra_agent.commons.web_of_trust import offer_score
 
 from zebra_agent_web.api.commons_identity import CommonsError, get_owner_id
 
@@ -50,9 +52,17 @@ async def build_commons_exchange(publisher: CommonsPublisher | None) -> CommonsE
     """The exchange over *publisher*, or None when there is no publisher (publishing off)."""
     if publisher is None:
         return None
-    from zebra_agent_web.commons_offer_store import DjangoOfferStore
+    from zebra_agent.commons.web_of_trust import WebOfTrust
 
-    return CommonsExchange(publisher=publisher, offers=DjangoOfferStore(await get_owner_id()))
+    from zebra_agent_web.commons_offer_store import DjangoOfferStore
+    from zebra_agent_web.commons_peer_store import DjangoPeerTrustStore
+
+    owner = await get_owner_id()
+    return CommonsExchange(
+        publisher=publisher,
+        offers=DjangoOfferStore(owner),
+        trust=WebOfTrust(DjangoPeerTrustStore(owner), publisher.zebra_pubkey, publisher=publisher),
+    )
 
 
 async def exchange_tick(engine: object) -> None:
@@ -134,17 +144,27 @@ def _zebra_label(pubkey: str) -> dict[str, str]:
 async def offers_overview(zebra_pubkey: str | None, *, publishing_on: bool) -> dict[str, Any]:
     """The ``/commons/`` offers section: offers seen and this Zebra's own offers.
 
-    Read from the local mirror and ``WorkflowOfferModel`` only: no relay is contacted here.
+    Read from the local mirror, ``WorkflowOfferModel`` and ``PeerModel`` only: no relay is
+    contacted here. Each offer carries its import score (#233).
     """
     from zebra_agent_web.commons_mirror_store import DjangoCommonsMirror
     from zebra_agent_web.commons_offer_store import DjangoOfferStore
+    from zebra_agent_web.commons_peer_store import DjangoPeerTrustStore
 
     owner = await get_owner_id()
     mirror = DjangoCommonsMirror(owner)
     attests = attestation_summary([m.event for m in await mirror.events(kind=ATTEST_KIND)])
+    trust = {p.pubkey: p.local_trust for p in await DjangoPeerTrustStore(owner).list_peers()}
     seen = []
     for record in await DjangoOfferStore(owner).list():
         judgement = record.judgement or {}
+        summary = attests.get(record.content_sha256, empty_summary())
+        score = offer_score(
+            record.publisher_pubkey,
+            [(i["zebra_pubkey"], i["label"]) for i in summary["items"]],
+            trust,
+            zebra_pubkey,
+        )
         seen.append(
             {
                 "content_sha256": record.content_sha256,
@@ -157,8 +177,9 @@ async def offers_overview(zebra_pubkey: str | None, *, publishing_on: bool) -> d
                 "publisher": _zebra_label(record.publisher_pubkey),
                 "offered_at": record.offered_at,
                 "offered_on": _when(record.offered_at),
-                "attestations": attests.get(record.content_sha256, empty_summary()),
+                "attestations": summary,
                 "importable": record.status in IMPORTABLE,
+                "score": score,
                 "voice": judgement.get("voice") or "",
                 "recorded_reason": judgement.get("reason") or "",
                 "process_id": judgement.get("process_id") or "",
@@ -171,4 +192,9 @@ async def offers_overview(zebra_pubkey: str | None, *, publishing_on: bool) -> d
         for item in offer["attestations"]["items"]:
             item["zebra"] = _zebra_label(item["zebra_pubkey"])
             item["created_on"] = _when(item["created_at"])
-    return {"publishing_on": publishing_on, "offers_seen": seen, "my_offers": mine}
+    return {
+        "publishing_on": publishing_on,
+        "offers_seen": seen,
+        "my_offers": mine,
+        "threshold": IMPORT_SCORE_THRESHOLD,
+    }

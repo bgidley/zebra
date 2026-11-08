@@ -580,6 +580,65 @@ class WorkflowOfferModel(models.Model):
         return f"WorkflowOffer({self.name!r}, {self.status})"
 
 
+class PeerModel(models.Model):
+    """A Zebra this Zebra knows of, in its web of trust (#233, S6).
+
+    Written only by ``DjangoPeerTrustStore`` (``zebra_agent.commons.peers.TrustStore``).
+    ``vouched_by_user`` and ``owner_weight`` are the owner's (never an LLM's); ``local_trust`` and
+    ``best_path`` are computed by ``trust.compute_trust``. ``user_id`` is the Commons owner.
+    """
+
+    pubkey = models.CharField(max_length=64, unique=True)
+    display_name = models.CharField(max_length=80, blank=True, default="")
+    vouched_by_user = models.BooleanField(default=False)
+    owner_weight = models.FloatField(null=True, blank=True)
+    local_trust = models.FloatField(default=0.0)
+    best_path = models.JSONField(default=dict, blank=True)
+    last_seen = models.BigIntegerField(default=0, help_text="Newest event seen from it (Unix)")
+    user_id = models.IntegerField(null=True, blank=True, db_index=True, help_text="Commons owner")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "zebra_commons_peers"
+        verbose_name = "Commons peer"
+        ordering = ["-local_trust", "pubkey"]
+
+    def __str__(self):
+        return f"Peer({self.pubkey[:12]}, {self.local_trust:.2f})"
+
+
+class TrustEdgeModel(models.Model):
+    """The latest trust edge per ``(from_pubkey, to_pubkey)`` (#233, S6).
+
+    From a verified ``TRUST`` event (``event_id``), or this Zebra's own edge
+    (``published_weight``: the weight last published; ``event_id`` empty until published).
+    Written only by ``DjangoPeerTrustStore``; ``user_id`` is the Commons owner.
+    """
+
+    from_pubkey = models.CharField(max_length=64, db_index=True)
+    to_pubkey = models.CharField(max_length=64, db_index=True)
+    weight = models.FloatField()
+    reason = models.CharField(max_length=160)
+    event_id = models.CharField(max_length=64, blank=True, default="")
+    created_at = models.BigIntegerField(default=0, help_text="The event's created_at (Unix)")
+    relay_seq = models.BigIntegerField(null=True, blank=True)
+    published_weight = models.FloatField(null=True, blank=True)
+    user_id = models.IntegerField(null=True, blank=True, db_index=True, help_text="Commons owner")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "zebra_commons_trust_edges"
+        verbose_name = "Commons trust edge"
+        ordering = ["from_pubkey", "to_pubkey"]
+        constraints = [
+            models.UniqueConstraint(fields=["from_pubkey", "to_pubkey"], name="uniq_trust_edge")
+        ]
+
+    def __str__(self):
+        return f"TrustEdge({self.from_pubkey[:8]}→{self.to_pubkey[:8]}, {self.weight:+.2f})"
+
+
 # =============================================================================
 # ProfileStore Models (Values Profile - F18 / REQ-ETH-002)
 # =============================================================================

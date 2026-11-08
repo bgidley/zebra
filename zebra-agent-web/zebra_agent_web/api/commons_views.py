@@ -72,18 +72,21 @@ def _expiry(request) -> int | None:
 async def _page(request, extra: dict | None = None, status: int = 200):
     from zebra_agent_web.api.commons_exchange import offers_overview
     from zebra_agent_web.api.commons_publish import publishing_configured
+    from zebra_agent_web.api.commons_trust import peers_overview
 
     user = await request.auser()
     data = await ci.overview()
     offers: dict = {"publishing_on": False, "offers_seen": [], "my_offers": []}
+    peers: dict = {"publishing_on": False, "peers": [], "my_edges": []}
     if data.get("enabled"):
-        offers = await offers_overview(
-            data.get("zebra_pubkey"), publishing_on=publishing_configured()
-        )
+        publishing_on = publishing_configured()
+        offers = await offers_overview(data.get("zebra_pubkey"), publishing_on=publishing_on)
+        peers = await peers_overview(data.get("zebra_pubkey"), publishing_on=publishing_on)
     context = {
         **await goal_identity(),
         **data,
         "commons_offers": offers,
+        "commons_peers": peers,
         "sync": sync_status(data.get("sync_direction")),
         "is_owner": await ci.is_owner(user),
         "message": request.GET.get("message", ""),
@@ -193,3 +196,17 @@ async def commons_clear_supervision(request, name: str):
     if agent_engine.get_library().clear_supervision(name):
         logger.info("Owner cleared supervision of %r", name)
     return redirect("/workflows/")
+
+
+@_owner_action
+async def commons_trust(request):
+    """The owner vouches for, withdraws from or distrusts a Zebra (#233). Never an LLM."""
+    from zebra_agent_web.api.commons_trust import owner_action
+
+    message = await owner_action(
+        request.POST.get("action", ""),
+        request.POST.get("zebra", ""),
+        display_name=request.POST.get("display_name", ""),
+        note=request.POST.get("note", ""),
+    )
+    return _redirect(message=message)
