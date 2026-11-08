@@ -1,20 +1,24 @@
 name: "Commons Import"
-description: "Judge a signed workflow file from another Zebra and, if it passes and the owner agrees, adopt it as a supervised workflow"
+description: "Judge a signed workflow file or public offer from another Zebra and, if it passes and the owner agrees, adopt it as a supervised workflow"
 tags: ["agent", "internal", "system", "commons"]
-use_when: "INTERNAL USE ONLY - started by the owner uploading a workflow file on /commons/ or `manage.py commons_import FILE --judge` (#230)"
-version: 1
+use_when: "INTERNAL USE ONLY - started by the owner uploading a workflow file or choosing Import this on an offer on /commons/, or `manage.py commons_import FILE --judge` (#230, #232)"
+version: 2
 first_task: judge
 result_key: commons_import_result
 # Run inputs (process properties):
-#   export_file:    the signed export file's text (zebra-workflow-export)
+#   export_file:    the signed export file's text (zebra-workflow-export), or
+#   offer_event:    a public OFFER and its certs (zebra-commons-offer, #232)
 #   expected_zebra: optional hex Zebra pubkey the file must come from
+# An import of a public offer ends by attesting its outcome (attest, #232); a file never.
 inputs:
   type: object
-  required: [export_file]
   properties:
     export_file:
       type: string
       description: "The signed workflow export file"
+    offer_event:
+      type: string
+      description: "A public OFFER and its certs, instead of a file"
     expected_zebra:
       type: string
       description: "Accept only this publisher (hex Zebra pubkey)"
@@ -25,6 +29,7 @@ tasks:
     action: commons_judge_import
     properties:
       export_file: "{{export_file}}"
+      offer_event: "{{offer_event}}"
       expected_zebra: "{{expected_zebra}}"
       output_key: offer
 
@@ -105,6 +110,7 @@ tasks:
     properties:
       offer: "{{offer}}"
       export_file: "{{export_file}}"
+      offer_event: "{{offer_event}}"
       output_key: commons_adoption
 
   adopt_approved:
@@ -113,6 +119,7 @@ tasks:
     properties:
       offer: "{{offer}}"
       export_file: "{{export_file}}"
+      offer_event: "{{offer_event}}"
       approval_task: owner_approval
       output_key: commons_adoption
 
@@ -172,6 +179,10 @@ tasks:
       stage: adopt
       reason: "{{commons_adoption.reason}}"
 
+  attest:
+    name: "Attest Outcome"
+    action: commons_attest_import
+
 routings:
   - {from: judge, to: pii_scan, condition: route_name, name: proceed}
   - {from: judge, to: rejected_judge, condition: route_name, name: reject}
@@ -200,3 +211,12 @@ routings:
   - {from: adopt_approved, to: record_adopted, condition: route_name, name: adopted}
   - {from: adopt_approved, to: rejected_owner, condition: route_name, name: declined}
   - {from: adopt_approved, to: rejected_adopt, condition: route_name, name: refused}
+
+  # Every outcome ends at the attest step; it attests only an import of a public offer (#232)
+  - {from: record_adopted, to: attest}
+  - {from: rejected_judge, to: attest}
+  - {from: rejected_pii, to: attest}
+  - {from: rejected_ethics, to: attest}
+  - {from: rejected_gym, to: attest}
+  - {from: rejected_owner, to: attest}
+  - {from: rejected_adopt, to: attest}

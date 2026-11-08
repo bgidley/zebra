@@ -45,6 +45,24 @@ async def _propose_share_after_run(
         logger.warning("Skill sync after a run of %r failed: %s", workflow_name, e)
 
 
+async def _attest_after_run(context: ExecutionContext, workflow_name: str, success: bool) -> None:
+    """Commons S5 (#232): attest ``worked`` / ``failed`` after a run of an adopted offer.
+
+    Only when this device has a Commons exchange (``extras["__commons_exchange__"]``, i.e.
+    public relays are configured); it attests only while the workflow's hash equals the
+    offered hash. It is given the workflow name and the success flag only, never the goal or
+    the output. A failure never fails the goal.
+    """
+    exchange = context.extras.get("__commons_exchange__")
+    library = context.extras.get("__workflow_library__")
+    if exchange is None or library is None or not workflow_name:
+        return
+    try:
+        await exchange.after_run(library, workflow_name, bool(success))
+    except Exception as e:  # noqa: BLE001 - attesting is advisory
+        logger.warning("Commons attestation after a run of %r failed: %s", workflow_name, e)
+
+
 class AssessAndRecordAction(TaskAction):
     """
     Combine metrics recording + LLM effectiveness assessment + workflow memory write.
@@ -298,6 +316,7 @@ Respond with JSON only:
                 await _propose_share_after_run(context, metrics_store, workflow_name)
         else:
             logger.info("AssessAndRecordAction: no metrics store — skipping metrics")
+        await _attest_after_run(context, workflow_name, success)
 
         # ── 2. LLM effectiveness assessment ────────────────────────────────────
         effectiveness_notes = ""

@@ -12,7 +12,7 @@ With skill sync on, certificates and shared workflows go only to the private rel
 <div class="space-y-6 max-w-5xl" data-testid="commons-page">
     <div class="min-w-0">
         <h1 class="text-xl font-semibold text-ink">Commons identity</h1>
-        <p class="text-muted mt-1 max-w-[65ch]">Your Zebra has its own key, separate from yours. Each deployment it runs on (home, work…) has a device key certified by it. Nothing is published to the public Commons yet; with skill sync on, workflows go only to your private relay.</p>
+        <p class="text-muted mt-1 max-w-[65ch]">Your Zebra has its own key, separate from yours. Each deployment it runs on (home, work…) has a device key certified by it. With skill sync on, workflows go only to your private relay. The public Commons is off unless a public relay is set.</p>
     </div>
 
     {% if message %}
@@ -67,6 +67,8 @@ With skill sync on, certificates and shared workflows go only to the private rel
     </section>
 
     {% include "partials/commons_sync_guide.html" %}
+
+    {% include "partials/commons_offers.html" %}
 
     {% if has_identity %}
     <section class="panel" aria-labelledby="devices-title" data-testid="commons-devices">

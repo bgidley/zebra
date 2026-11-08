@@ -1,4 +1,4 @@
-# Public Zebra Commons relay — owner runbook (#231, S4)
+# Public Zebra Commons relay — owner runbook (#231, S4; #232, S5)
 
 How to bring up the public Commons relay and offer a first workflow from prod. The code shipped
 off by default: until step 5, prod behaves exactly as before. The deploy job never installs or
@@ -141,6 +141,61 @@ retry the latest deploy job again to turn it off.
    with fewer than 5 runs is refused at `prepare`; `podman logs zebra-commons-relay | grep
    "blocked:"` shows nothing from this Zebra.
 5. Post the output on #231 and close it.
+
+## 7. Second-Zebra check: offers seen, import, attestations (closes #232)
+
+S5 (#232) needs a second Zebra: a dev instance with its **own** identity and database, never prod's
+Oracle, never port 8000. Prod (Zebra A) keeps its offer from step 6; the dev instance is Zebra B.
+
+1. **Start Zebra B** (any machine that can reach `wss://<host>/commons`; a checkout of master):
+   ```bash
+   export DJANGO_SETTINGS_MODULE=zebra_agent_web.e2e_settings   # file SQLite, not Oracle
+   export ZEBRA_COMMONS_ENABLED=1 ZEBRA_COMMONS_KEY_DIR=$HOME/.zebra-b/keys
+   export ZEBRA_COMMONS_RELAYS=wss://<host>/commons
+   export ZEBRA_COMMONS_RECEIPT_PUBKEY=<operator pubkey hex>
+   export OPENROUTER_API_KEY=<a dev key>        # the import's scans, ethics gate and gym
+   cd zebra-agent-web && uv run python manage.py migrate
+   uv run python scripts/build_css.py            # from the repo root
+   uv run daphne -b 127.0.0.1 -p 8233 zebra_agent_web.asgi:application &
+   uv run python manage.py run_daemon &          # polls the relay every tick
+   ```
+   Open `http://127.0.0.1:8233/`, finish setup, then `/commons/` → **Start a new Zebra**. The
+   "Public Commons" section says publishing is on.
+2. **B sees A's offer.** Within a daemon tick (`ZEBRA_DAEMON_POLL_INTERVAL`, 30 s) "Offers I have
+   seen" lists A's workflow as `seen`, from A's fingerprint and npub (compare with A's
+   `/commons/`), with its stats. The daemon log shows `Commons: saw offer`.
+3. **B imports it.** Press **Import this**: the trace of *Commons Import* opens; it runs the
+   personal-data scan, ethics review and the golden gym, then parks on "Adopt this imported
+   workflow?" in `/tasks/` (the owner). Choose **adopt**. The offer turns `adopted` and shows
+   Zebra's verdict ("I adopted it…"); `/workflows/` lists `<name> (from <A fingerprint>)`,
+   supervised.
+4. **A sees the attestation.** On prod's `/commons/` "My offers" shows `1 adopted` from B's
+   fingerprint within a tick (prod's daemon must run with `ZEBRA_COMMONS_RELAYS` set, step 5).
+5. **A run attests `worked`.** On B, run a goal the adopted workflow fits (or `/run/` choosing
+   it), approve its supervised pre-run task, and let it finish. Within a tick A shows
+   `1 worked`. Check the relay holds only labels, hashes and fixed reasons:
+   ```bash
+   podman exec -i zebra-web python - <<'PY'
+   import asyncio
+   from zebra_agent.commons import kinds
+   from zebra_agent.commons.client import Filter
+   from zebra_agent.commons.nostr import NostrSdkTransport
+   from zebra_agent.commons.relay import RelayCommonsClient
+
+   async def main():
+       c = RelayCommonsClient(NostrSdkTransport("wss://<host>/commons"), private=False)
+       for e in await c.fetch([Filter(kinds=(kinds.ATTEST_KIND,))]):
+           print(e.tag_values("l"), e.tag_values("x")[0][:12], e.content)
+       await c.close()
+   asyncio.run(main())
+   PY
+   ```
+   Expect `['adopted'] … {"reason":"owner-approved"}` and `['worked'] … {"reason":"run-succeeded"}`,
+   nothing else: no goal, output or name.
+6. **Hash rule.** Edit the adopted workflow on B (any saved change), run it again: no new
+   attestation appears (the new version has a new hash, which matches no adopted offer).
+7. Post the `/commons/` screenshots and the output on #232 and close it. Stop Zebra B and delete
+   `$HOME/.zebra-b` and its `db.sqlite3` if it was only for the check.
 
 ## Operations
 

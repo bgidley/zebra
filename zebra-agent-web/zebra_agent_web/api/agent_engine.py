@@ -187,6 +187,12 @@ async def _async_init() -> None:
     publisher = await build_commons_publisher(_library)
     if publisher is not None:
         engine.extras[PUBLISHER_KEY] = publisher
+    # Reading offers + attestations (#232): only alongside a publisher.
+    from zebra_agent_web.api.commons_exchange import EXCHANGE_KEY, build_commons_exchange
+
+    exchange = await build_commons_exchange(publisher)
+    if exchange is not None:
+        engine.extras[EXCHANGE_KEY] = exchange
 
     # Initialize agent loop with memory and personal knowledge store
     _agent_loop = AgentLoop(

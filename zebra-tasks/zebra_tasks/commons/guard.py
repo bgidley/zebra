@@ -40,6 +40,7 @@ COMMONS_INTERNAL_ACTIONS = frozenset(
         "commons_judge_import",
         "commons_import_review",
         "commons_record_import",
+        "commons_attest_import",  # #232
         # Commons Offer (#231)
         "commons_prepare_offer",
         "commons_offer_route",

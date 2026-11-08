@@ -70,11 +70,20 @@ def _expiry(request) -> int | None:
 
 
 async def _page(request, extra: dict | None = None, status: int = 200):
+    from zebra_agent_web.api.commons_exchange import offers_overview
+    from zebra_agent_web.api.commons_publish import publishing_configured
+
     user = await request.auser()
     data = await ci.overview()
+    offers: dict = {"publishing_on": False, "offers_seen": [], "my_offers": []}
+    if data.get("enabled"):
+        offers = await offers_overview(
+            data.get("zebra_pubkey"), publishing_on=publishing_configured()
+        )
     context = {
         **await goal_identity(),
         **data,
+        "commons_offers": offers,
         "sync": sync_status(data.get("sync_direction")),
         "is_owner": await ci.is_owner(user),
         "message": request.GET.get("message", ""),
@@ -162,6 +171,16 @@ async def commons_workflow_import(request):
         raise ci.CommonsError("The file is not a workflow export (not UTF-8).") from exc
     user = await request.auser()
     process_id = await start_judged_import(text, user_id=user.id)
+    return redirect(f"/processes/{process_id}/trace/")
+
+
+@_owner_action
+async def commons_offer_import(request, content_sha256: str):
+    """The owner's "Import this" on an offer seen (#232): judged import; show its trace."""
+    from zebra_agent_web.api.commons_exchange import start_offer_import
+
+    user = await request.auser()
+    process_id = await start_offer_import(content_sha256, user_id=user.id)
     return redirect(f"/processes/{process_id}/trace/")
 
 
