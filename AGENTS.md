@@ -247,8 +247,10 @@ The baseline is **zero open alerts**.
   zero.
 - Exit 1: the check could not run (`gh` not authenticated, API error). Report it; do not skip it.
 
-Dependency alerts are fixed with a targeted `uv lock -P <package>` (not a blanket `--upgrade`,
-which pulls unrelated major versions), then the full test suite.
+Dependency alerts are fixed with a targeted `uv lock -P "<package>>=<fixed version>"` (not a
+blanket `--upgrade`, which pulls unrelated major versions), then the full test suite. Give the
+minimum version: a bare `-P <package>` can keep the old version on a lock forked by platform
+markers (autobahn stayed on 26.7.1 for CPython that way).
 
 ## Plan Tracking
 
