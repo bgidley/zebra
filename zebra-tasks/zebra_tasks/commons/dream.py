@@ -240,7 +240,7 @@ class CommonsDreamAction(TaskAction):
     ) -> list[dict[str, Any]]:  # fmt: skip
         from zebra_agent.commons import commons_exportable
         from zebra_agent.commons.offer import MIN_RUNS_TO_OFFER, PUBLIC_SPHERE, offer_refusal
-        from zebra_agent.commons.sync import DECIDED, latest_decision
+        from zebra_agent.commons.sync import latest_decision
 
         if metrics is None:
             report.skip("offer", "-", "no metrics store, so I can't judge any workflow")
@@ -288,7 +288,7 @@ class CommonsDreamAction(TaskAction):
                 report.skip("offer", name, "an offer of it is already waiting for an answer")
                 continue
             shared = PUBLIC_SPHERE in (block.get("share_with") or [])
-            if not shared and latest_decision(library, digest, PUBLIC_SPHERE) in DECIDED:
+            if already_asked(latest_decision(library, digest, PUBLIC_SPHERE), shared=shared):
                 continue  # this version was already asked about
             out.append(
                 {
@@ -317,7 +317,13 @@ class CommonsDreamAction(TaskAction):
         publisher: Any, library: Any, metrics: Any, owner: int | None,
     ) -> None:  # fmt: skip
         from zebra_agent.commons.offer import PUBLIC_SPHERE
-        from zebra_agent.commons.sync import FAILED, PROPOSED, record_share
+        from zebra_agent.commons.sync import (
+            BLOCKED,
+            FAILED,
+            PROPOSED,
+            latest_decision,
+            record_share,
+        )
 
         candidates = await self._offer_candidates(
             task, context, report, publisher, library, metrics
@@ -369,6 +375,14 @@ class CommonsDreamAction(TaskAction):
                 )
             else:
                 reason = (result or {}).get("reason") or f"the offer ended {state}"
+                digest = candidate["content_sha256"]
+                latest = latest_decision(library, digest, PUBLIC_SPHERE)
+                if candidate["kind"] == "publish" and not already_asked(latest, shared=True):
+                    # Stopped before the offer recorded a decision: still once per version.
+                    record_share(
+                        library, name, digest, PUBLIC_SPHERE, BLOCKED,
+                        reason=f"the dream cycle's offer stopped: {reason}"[:300],
+                    )  # fmt: skip
                 report.skip("offer", name, f"the offer stopped: {reason}"[:300])
                 report.voice.append(f"I tried to offer {name}, but it stopped: {reason}"[:300])
         if not report.offers_proposed and not candidates:
@@ -616,14 +630,18 @@ class CommonsDreamAction(TaskAction):
         marks = [s.created_at for s in suggestions]
         marks += [c.changed_at for c in await store.list_trust_changes(owner, SHARING)]
         since = max(marks) if marks else None
-        approvals, total = sharing_approvals(library, since)
+        approvals, total, declined = sharing_approvals(library, since)
         needed = max(1, setting(task, "promotion_approvals"))
         if approvals < needed:
             return
+        if declined:
+            refusals = f"{declined} declined" if declined > 1 else "1 declined"
+        else:
+            refusals = "none declined"
         evidence = (
             f"Since the last change to my sharing trust, you approved my last {approvals} "
-            f"sharing proposals without changing anything ({total} decided in all, none "
-            f"declined). I'd like to handle sharing at {target}: the personal-data scan, ethics "
+            f"sharing proposals without changing anything ({total} decided in all, {refusals}). "
+            f"I'd like to handle sharing at {target}: the personal-data scan, ethics "
             "review and observed-sphere approvals still apply."
         )
         suggestion = await queue_promotion(store, owner, SHARING, target, evidence)
@@ -639,16 +657,31 @@ class CommonsDreamAction(TaskAction):
         )
 
 
-def sharing_approvals(library: Any, since: datetime | None) -> tuple[int, int]:
-    """``(unchanged owner approvals in a row, owner decisions)`` among share records after
-    *since*.
+def already_asked(latest: str | None, *, shared: bool) -> bool:
+    """Whether this version was already asked about for ``public`` (once per version).
+
+    Not yet shared: any decision (``DECIDED``) counts. Already ``public`` in ``share_with``
+    (nothing ever removes it): only a plain ``approved`` (or no record) still lets the dream
+    finish the publish; a decline, a block (publish refused, relay down) or anything else
+    means the owner was asked at this version and is not asked again.
+    """
+    from zebra_agent.commons.sync import APPROVED, DECIDED
+
+    if not shared:
+        return latest in DECIDED
+    return latest is not None and latest != APPROVED
+
+
+def sharing_approvals(library: Any, since: datetime | None) -> tuple[int, int, int]:
+    """``(unchanged owner approvals in a row, owner decisions, declines)`` among share records
+    after *since*.
 
     An approval with no note counts; a decline or an approval with a note starts the count
     again; approvals by earned autonomy are not the owner's and do not count.
     """
     from zebra_agent.commons.sync import APPROVED, DECLINED, share_records
 
-    run = decided = 0
+    run = decided = declined = 0
     for record in share_records(library):
         at = _parse_at(record.get("at"))
         if since is not None and (at is None or at <= since):
@@ -662,5 +695,6 @@ def sharing_approvals(library: Any, since: datetime | None) -> tuple[int, int]:
             run = run + 1 if reason in OWNER_PLAIN_APPROVALS else 0
         elif status == DECLINED:
             decided += 1
+            declined += 1
             run = 0
-    return run, decided
+    return run, decided, declined

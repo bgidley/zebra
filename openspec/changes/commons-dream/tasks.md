@@ -22,3 +22,8 @@
 ## 4. Docs
 
 - [x] 4.1 CLAUDE.md settings, AGENTS files, `zebra-as-is.md`, `zebra-commons-design.md`
+
+## 5. Review fixes
+
+- [x] 5.1 `already_asked()`: a version already `public` is offered again only after a plain approval (decline / blocked = asked); a stopped publish offer journals `blocked`
+- [x] 5.2 Promotion evidence reports declines (`sharing_approvals` → run, decided, declined)

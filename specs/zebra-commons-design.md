@@ -804,14 +804,18 @@ Live check: [commons-public-relay-runbook.md](commons-public-relay-runbook.md) �
 - **Offer step 1**: learnt workflows (exportable, not a shipped built-in, not adopted) with
   ≥ `MIN_RUNS_TO_OFFER` runs and good stats (success rate ≥ 0.8, rating ≥ 4.0 when rated) that pass
   `offer_refusal`, not offered, not already open or asked about at this hash → *Commons Offer*
-  (the public suggest-and-approve step; `proposed` journalled), ≤ 1 per cycle.
+  (the public suggest-and-approve step; `proposed` journalled), ≤ 1 per cycle. A version already
+  `public` in `share_with` (nothing removes it) is retried only after a plain `approved`; a
+  decline or a refused publish (`blocked`) means it was asked about, so the owner is asked once
+  per version.
 - **Import step 2**: gaps (`creator` saves in the window, `new_workflow` continuations) matched to
   `seen` offers by keyword overlap; import score ≥ 0.5 → *Commons Import* in the background,
   ≤ 1 per cycle, within a daily import budget (USD, spend ledger over the import trees, UTC day).
   Below the threshold the offer is skipped with its score and never judged automatically.
 - **`sharing` promotion**: after 5 owner share approvals in a row without a note (declines and
   notes restart the count) since the last `sharing` suggestion or level change, a pending
-  suggestion one level up (REQ-TRUST-004); never self-promotes.
+  suggestion one level up (REQ-TRUST-004) whose evidence gives the approvals in a row, all
+  decisions and the declines among them; never self-promotes.
 - **Report**: `commons` (voice lines, offers proposed, imports started, skipped reasons, budget,
   promotion), in the summary and a "Commons" block on `/dreams/`.
 

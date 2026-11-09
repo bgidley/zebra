@@ -18,8 +18,10 @@ false, and `status: stopped` when the Commons is stopped. It SHALL never fail th
 The step SHALL start *Commons Offer* for learnt, non-system workflows with at least
 `MIN_RUNS_TO_OFFER` runs, a success rate and (when rated) a rating at or above the thresholds, that
 pass `offer_refusal`, are not already offered, have no open *Commons Offer* and have not been
-decided for `public` at this version, at most `MAX_OFFERS_PER_CYCLE` per cycle. It SHALL NOT
-approve, add `public` to `share_with` or publish by itself.
+decided for `public` at this version, at most `MAX_OFFERS_PER_CYCLE` per cycle. A version already
+`public` in `share_with` SHALL be offered again only while its latest `public` decision is none or a
+plain approval, so the owner is asked about it once per version. It SHALL NOT approve, add `public`
+to `share_with` or publish by itself.
 
 #### Scenario: Good learnt workflow
 - **WHEN** a learnt workflow has 6 successful runs rated 5 and passes every precondition
@@ -30,6 +32,11 @@ approve, add `public` to `share_with` or publish by itself.
 - **WHEN** a workflow is a system or built-in workflow, adopted, leak-tainted, below the stats, or
   already offered
 - **THEN** no offer starts for it and the report gives the reason
+
+#### Scenario: Already public, then declined or blocked
+- **WHEN** a version has `public` in `share_with` and its latest `public` decision is a decline or
+  a refused publish (`blocked`)
+- **THEN** no new *Commons Offer* starts for it on later cycles
 
 #### Scenario: Cap
 - **WHEN** two workflows qualify and the cap is 1
@@ -55,8 +62,9 @@ and only while today's spend of dream-started imports is below `DAILY_IMPORT_BUD
 
 ### Requirement: Sharing promotion request
 The step SHALL queue a pending `sharing` trust suggestion one level up, with the counts as
-evidence, once the owner has approved `COMMONS_SHARING_PROMOTION_APPROVALS` sharing decisions
-without a note and declined none since the last `sharing` suggestion or level change. It SHALL NOT
+evidence (approvals in a row, all decisions and the declines among them), once the owner's last
+`COMMONS_SHARING_PROMOTION_APPROVALS` sharing decisions since the last `sharing` suggestion or level
+change were approvals without a note (a decline or a note restarts the count). It SHALL NOT
 queue one while a `sharing` suggestion is pending, at AUTONOMOUS, or set a trust level.
 
 #### Scenario: Enough unchanged approvals
@@ -66,6 +74,10 @@ queue one while a `sharing` suggestion is pending, at AUTONOMOUS, or set a trust
 #### Scenario: A decline resets
 - **WHEN** the owner declined a share after 4 approvals
 - **THEN** no suggestion is queued
+
+#### Scenario: Evidence reports an earlier decline
+- **WHEN** the owner declined one share and then approved 5 without a note
+- **THEN** the suggestion's evidence says 6 decided in all, 1 declined
 
 ### Requirement: Commons report
 The step SHALL write a `commons` report (status, offers proposed, imports started, skipped with

@@ -14,13 +14,14 @@ from pathlib import Path
 
 import pytest
 from zebra.core.engine import WorkflowEngine
-from zebra.core.models import ProcessState
+from zebra.core.models import ProcessState, TaskResult
 from zebra.definitions.loader import load_definition_from_yaml
 from zebra.storage.memory import InMemoryStore
 from zebra.tasks.registry import ActionRegistry
 from zebra_tasks.commons import dream
 from zebra_tasks.commons.dream import (
     DREAM_IMPORT_KEY,
+    already_asked,
     match_overlap,
     sharing_approvals,
     wait_for_imports,
@@ -38,7 +39,14 @@ from zebra_agent.commons.offer import offer_content
 from zebra_agent.commons.offers import JUDGING, SEEN, InMemoryOfferStore
 from zebra_agent.commons.peers import InMemoryTrustStore as InMemoryPeerStore
 from zebra_agent.commons.publisher import CommonsPublisher
-from zebra_agent.commons.sync import APPROVED, DECLINED, record_share, share_records
+from zebra_agent.commons.sync import (
+    APPROVED,
+    BLOCKED,
+    DECLINED,
+    latest_decision,
+    record_share,
+    share_records,
+)
 from zebra_agent.commons.web_of_trust import WebOfTrust
 from zebra_agent.library import WorkflowLibrary
 from zebra_agent.metrics import WorkflowStats
@@ -361,6 +369,50 @@ async def test_public_already_shared_starts_the_publish(world):
     assert "You'd already agreed to share Capital Facts publicly" in report["voice_text"]
 
 
+async def test_public_already_shared_is_asked_about_once_per_version(world):
+    """The owner keeps it private: 'public' stays in share_with, but no new offer next cycle."""
+    world.library.save(_workflow("Capital Facts"), writer="human")
+    world.metrics.good("Capital Facts")
+    digest = world.library.commons_block("Capital Facts")["content_sha256"]
+    assert world.library.approve_share("Capital Facts", "public", digest)
+
+    [offer] = (await _dream(world))["offers_proposed"]
+    [pending] = await world.engine.get_pending_tasks(offer["process_id"])
+    await world.engine.complete_task(pending.id, TaskResult.ok(output={"decision": "private"}))
+    assert "public" in world.library.commons_block("Capital Facts")["share_with"]
+    assert latest_decision(world.library, digest, "public") == DECLINED
+
+    again = await _dream(world)
+
+    assert again["offers_proposed"] == []
+    assert len(await _processes(world, "Commons Offer")) == 1
+
+
+async def test_public_already_shared_but_publish_blocked_is_not_offered_again(world):
+    """An approved offer the relay refused (BLOCKED) is not started again every cycle."""
+    world.library.save(_workflow("Capital Facts"), writer="human")
+    world.metrics.good("Capital Facts")
+    digest = world.library.commons_block("Capital Facts")["content_sha256"]
+    assert world.library.approve_share("Capital Facts", "public", digest)
+    record_share(world.library, "Capital Facts", digest, "public", APPROVED, reason="ok")
+    record_share(world.library, "Capital Facts", digest, "public", BLOCKED, reason="relay down")
+
+    report = await _dream(world)
+
+    assert report["offers_proposed"] == []
+    assert await _processes(world, "Commons Offer") == []
+
+
+def test_already_asked_rules():
+    assert not already_asked(None, shared=False)
+    assert already_asked(DECLINED, shared=False)
+    assert already_asked(APPROVED, shared=False)
+    assert not already_asked(None, shared=True)
+    assert not already_asked(APPROVED, shared=True)  # approved, never published: finish it
+    assert already_asked(DECLINED, shared=True)
+    assert already_asked(BLOCKED, shared=True)
+
+
 @pytest.mark.parametrize(
     ("runs", "ok", "rating", "reason"),
     [
@@ -644,15 +696,36 @@ async def test_a_decline_or_a_note_restarts_the_count(world):
     _approve(world.library, 1, reason="only after you fix the title")
     _approve(world.library, 4, reason="approved by the owner")
 
-    assert sharing_approvals(world.library, None) == (4, 11)
+    assert sharing_approvals(world.library, None) == (4, 11, 1)
     report = await _dream(world)
     assert report["promotion"] is None
+
+
+async def test_promotion_evidence_counts_an_earlier_decline(world):
+    _approve(world.library, 1, status=DECLINED)
+    _approve(world.library, 5)
+
+    report = await _dream(world)
+
+    assert report["promotion"]["approvals"] == 5
+    [suggestion] = await world.trust.list_suggestions(OWNER)
+    assert "(6 decided in all, 1 declined)" in suggestion.evidence
+    assert "none declined" not in suggestion.evidence
+
+
+async def test_promotion_evidence_without_declines_says_none(world):
+    _approve(world.library, 5)
+
+    await _dream(world)
+
+    [suggestion] = await world.trust.list_suggestions(OWNER)
+    assert "(5 decided in all, none declined)" in suggestion.evidence
 
 
 async def test_autonomy_approvals_do_not_count(world):
     _approve(world.library, 5, reason="approved by earned sharing autonomy")
 
-    assert sharing_approvals(world.library, None) == (0, 0)
+    assert sharing_approvals(world.library, None) == (0, 0, 0)
 
 
 async def test_only_approvals_after_the_last_sharing_change_count(world):
