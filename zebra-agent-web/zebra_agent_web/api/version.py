@@ -6,7 +6,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_FALLBACK: dict = {"short_hash": "unknown", "date": "", "commits": []}
+_FALLBACK: dict = {"version": "unknown", "short_hash": "unknown", "date": "", "commits": []}
 
 _VERSION: dict = {}
 

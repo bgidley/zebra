@@ -13,7 +13,7 @@ GitLab project: https://gitlab.com/gidley/zebra
 ## Pipeline
 
 ```
-lint  →  test  →  e2e  →  deploy  →  smoke
+lint  →  test  →  e2e  →  deploy  →  smoke  →  release
 ```
 
 | Stage | Job | What runs | When |
@@ -24,6 +24,7 @@ lint  →  test  →  e2e  →  deploy  →  smoke
 | e2e | `e2e-live` | real-LLM tests against prod Oracle | schedules only |
 | deploy | `deploy` | `scripts/deploy-podman.sh $SHA` | `master` push |
 | smoke | `smoke` | `pytest tests/smoke -m smoke` against `http://localhost:8000`, logged in via a 15-minute `manage.py smoke_session` for the `smoke` user (#218) | after deploy |
+| release | `release:tag` | `scripts/release_tag.py`: creates the GitLab release + `vX.Y.Z` tag at this commit with notes from the issues closed since the last tag (#283). Refuses unless this is still the master head. Set `RELEASE_BUMP` (`major`/`minor`/`patch`, default `minor`) or `RELEASE_VERSION` when running it; `--dry-run` locally previews | manual, `master` push, after smoke |
 
 `deploy` uses `resource_group: zebra-prod`, so deploys never overlap.
 
@@ -99,6 +100,7 @@ source of truth; the host copy is regenerated on every deploy.
 | `ZEBRA_BUILDER_GITLAB_TOKEN` (masked, **protected**) | host builder only (#251): delivery stages `propose` / `ship` / `review`. Personal token of the `zebra.gidley` bot (Developer on `gidley/zebra`, so it cannot push the Maintainers-only master), scopes `api` + `write_repository` |
 | `ZEBRA_BUILDER_GITLAB_MERGE_TOKEN` (masked, **protected**) | host builder only (#251): the `merge` stage, run only for a human-approved head. Owner's token, `api` + `write_repository` |
 | `ZEBRA_BUILDER_GITHUB_TOKEN` (masked, **protected**) | host builder only (#251): `ship` / `merge` push to the GitHub mirror and open PRs. Fine-grained token for `bgidley/zebra` (Contents + Pull requests read/write); **expires 2026-11-26** |
+| `RELEASE_GITLAB_TOKEN` (masked, **protected**) | `release:tag` only (#283): owner's personal access token for `gidley/zebra` that can read issues and the repository and create tags and releases (`api` scope). Until it is set the manual job fails with "RELEASE_GITLAB_TOKEN is not set" |
 | `SMOKE_PASSWORD` | deploy (creates `smoke` user), `smoke` |
 | `E2E_PROVISIONER_DSN` / `_USERNAME` / `_PASSWORD` | `e2e` ephemeral Oracle schema (SQLite fallback when unset) |
 
