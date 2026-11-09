@@ -34,6 +34,12 @@ urlpatterns = [
         name="commons_offer_import",
     ),
     path("commons/peers/", commons_views.commons_trust, name="commons_trust"),
+    path("commons/genealogy/", commons_views.commons_genealogy, name="commons_genealogy"),
+    path(
+        "commons/genealogy/<str:content_sha256>/",
+        commons_views.commons_genealogy_offer,
+        name="commons_genealogy_offer",
+    ),
     path("commons/restore/", commons_views.commons_restore, name="commons_restore"),
     # Judged import and supervised use (#230)
     path(

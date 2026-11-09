@@ -20,6 +20,7 @@ from __future__ import annotations
 import difflib
 import json
 import logging
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -371,33 +372,43 @@ def _diff(parent: str, child: str, parent_label: str, child_label: str) -> tuple
     return "\n".join(lines[:MAX_DIFF_LINES]), len(lines) > MAX_DIFF_LINES
 
 
-def _layout(versions: dict[str, Version]) -> None:
-    """Layer = longest path from a root; within a layer, oldest first.
+def layer_dag(
+    parents: Mapping[str, Iterable[str]], sort_key: Callable[[str], Any]
+) -> dict[str, tuple[int, int]]:
+    """``{key: (layer, order)}`` for a DAG given each node's parents (shared with #247).
 
-    Content can return to an earlier hash (a revert), so the graph may have a
-    cycle; a node stuck in one is placed after the parents already placed.
+    Layer = longest path from a root; within a layer, by *sort_key* (oldest first).
+    The graph may have a cycle (a revert to earlier content, or mutual trust); a
+    node stuck in one is placed after the parents already placed, breaking the
+    cycle at the smallest *sort_key*. Parents that are not nodes are ignored.
     """
-    pending = {k: {p for p in v.parents if p in versions} for k, v in versions.items()}
+    pending = {k: {p for p in ps if p in parents} for k, ps in parents.items()}
     placed: dict[str, int] = {}
-
-    def oldest(keys):
-        return min(keys, key=lambda k: (versions[k].at or datetime.max.replace(tzinfo=UTC), k))
-
-    while len(placed) < len(versions):
+    while len(placed) < len(pending):
         ready = [k for k in pending if k not in placed and pending[k] <= placed.keys()]
-        if not ready:  # a cycle: break it at its oldest node
-            ready = [oldest([k for k in pending if k not in placed])]
+        if not ready:  # a cycle: break it at its smallest node
+            ready = [min((k for k in pending if k not in placed), key=sort_key)]
         for key in ready:
             known = [placed[p] for p in pending[key] if p in placed]
             placed[key] = max(known) + 1 if known else 0
     by_layer: dict[int, list[str]] = {}
     for key, layer in placed.items():
-        versions[key].layer = layer
         by_layer.setdefault(layer, []).append(key)
-    for keys in by_layer.values():
-        keys.sort(key=lambda k: (versions[k].at or datetime.max.replace(tzinfo=UTC), k))
-        for order, key in enumerate(keys):
-            versions[key].order = order
+    out: dict[str, tuple[int, int]] = {}
+    for layer, keys in by_layer.items():
+        for order, key in enumerate(sorted(keys, key=sort_key)):
+            out[key] = (layer, order)
+    return out
+
+
+def _layout(versions: dict[str, Version]) -> None:
+    """Place each version (``layer_dag``): oldest first within a layer."""
+    placed = layer_dag(
+        {k: v.parents for k, v in versions.items()},
+        lambda k: (versions[k].at or datetime.max.replace(tzinfo=UTC), k),
+    )
+    for key, (layer, order) in placed.items():
+        versions[key].layer, versions[key].order = layer, order
 
 
 def build_genealogy(library: WorkflowLibrary, name: str) -> Genealogy | None:

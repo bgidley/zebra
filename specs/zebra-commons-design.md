@@ -402,7 +402,15 @@ A family tree of skills, in two views built from data Zebra already keeps:
     time (S7).
   - **Zebra lineage:** who vouched for whom (`GRANT` events), and this Zebra's trust paths ("I trust
     B through A: 0.8 × 0.6").
-- **Privacy rule:** an `OFFER` names a `parent` only if that parent was itself publicly offered.
+- **Built in #247 (code only, off by default):** `/commons/genealogy/` and
+  `/commons/genealogy/<sha>/` from the mirror's `OFFER`, `ATTEST`, `TRUST` and `DEVICE_CERT` events
+  only (`zebra_agent/commons/public_genealogy.py`, `api/public_genealogy_view.py`): offers linked by
+  `parent` (only between held offers), publishers, adoption count, attestations with their fixed
+  reasons; who trusts whom (latest `TRUST` per pair; `GRANT` does not exist while the market is
+  parked) and this Zebra's trust paths; no price history. Rendered with #238's shared DAG renderer
+  (`api/dag_svg.py`, `genealogy.layer_dag`).
+- **Privacy rule:** an `OFFER` names a `parent` only if that parent was itself publicly offered
+  (by any Zebra: an `OFFER` of it is in the publisher's mirror, #247).
   Private ancestors are never referenced publicly, not even by hash. So the public tree starts at
   the first public version.
 - **Rendering:** server-rendered (Django templates + inline SVG, layered DAG layout) using the

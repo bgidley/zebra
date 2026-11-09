@@ -9,7 +9,8 @@ device's ``DEVICE_CERT``. Content (canonical JSON)::
 
 Tags: ``d`` and ``x`` = sha256 of ``yaml`` (``provenance.content_sha256``), ``zebra`` = the
 publisher Zebra's pubkey, ``t`` = ``zebra-commons``, ``v`` = ``1`` and, only when that parent
-was itself publicly offered by this Zebra, ``parent`` = the parent's hash. A private ancestor
+was itself publicly offered (by any Zebra: an ``OFFER`` of it is in this Zebra's mirror, #247),
+``parent`` = the parent's hash. A private ancestor
 is never referenced, not even by hash (``public_parent``).
 
 ``offer_refusal`` holds the preconditions every offer must meet; the *Commons Offer*
@@ -128,7 +129,8 @@ def offer_content(
 def public_parent(block: Mapping[str, Any] | None, offered: Collection[str]) -> str | None:
     """The ``parent`` tag value: the block's ``parent_sha256`` only if it was publicly offered.
 
-    *offered* is every content hash this Zebra has published an ``OFFER`` of. Otherwise
+    *offered* is every publicly offered content hash this Zebra holds an ``OFFER`` of, its own
+    or another Zebra's (``CommonsMirror.public_hashes``, #247). Otherwise
     None: the public tree starts at the first public version (design § Genealogy view).
     """
     parent = (block or {}).get("parent_sha256")
