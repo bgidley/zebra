@@ -262,6 +262,8 @@ Workflows tagged `system`, and the core system names, are never touched. A per-c
 
 The web library page lists retired workflows with a Restore button. The detail page has Retire / Restore buttons and a retired banner (`/workflows/<name>/retire/`, `/restore/`). Spec: [workflow-curation](../openspec/specs/workflow-curation/spec.md).
 
+Maintainer PR import (#282 D): `scripts/import_github_pr.py` (`prepare` / `push --reviewed-sha` / `reject`) fetches a `bgidley/zebra` PR, verifies the `zebra-origin` BIP-340 statement (sha256 of `zebra-contribute-v1`, repo, head), re-scans the diff (slice A's `zebra_tasks.contribute.diff_scan.scan_diff_text` when present, else a built-in fail-closed scan) and creates `fN/gh<PR>-slug` locally; only `push` with the reviewed sha reaches GitLab CI. Contributor commits are kept.
+
 `list_goal_workflows(library)` (`zebra_agent/library.py`) is the single builder of the selector's candidates: one dict per non-`system`, non-tool-only workflow (tool-only = `inputs.required` names anything but `goal`, e.g. *Read Web Page*; #146) (`name`, `description`, `tags`, `success_rate` float, `use_count`, `use_when`). `AgentLoop.process_goal`, the web/daemon `api/goals.queue_goal` helper and the `queue_goal` action all use it for `available_workflows`. At selection time `workflow_selector` rebuilds the list from the live `__workflow_library__` (falling back to the queued property), so queued goals see workflows added since; the prompt shows "N/A" success for never-run workflows (#144).
 
 ### Budget
