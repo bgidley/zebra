@@ -21,6 +21,7 @@
 
 - [x] 2b.1 Column-only peer writers (`set_owner_fields`, `set_computed`, `touch_peer`) and one `asyncio.Lock` over `WebOfTrust` mutations; test interleaving an owner distrust / vouch with a recompute
 - [x] 2b.2 `TrustEdge.pending` (+ `TrustEdgeModel.pending`): owner changes retried by `publish_pending` whatever the threshold; `mark_published` only for the unchanged edge; tests
+- [x] 2b.3 `compute_trust`: a Zebra this Zebra distrusts is never a hop (nor a seed), so it cannot vouch others into positive trust; tests for the distrusted interior hop, an alternative path around it and a distrusted seed
 
 ## 3. Integration + docs
 

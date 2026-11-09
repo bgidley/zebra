@@ -778,7 +778,8 @@ Live check: [commons-public-relay-runbook.md](commons-public-relay-runbook.md) �
   else `created_at` (ties: higher id); own changes are strictly later than the last one.
 - **Paths**: hops = edges, first hop to a human-vouched seed, value `∏ weights × 0.9^(hops-1)`, so a
   vouch is 0.8 and "B via A" 0.8 × 0.6 × 0.9 = 0.432; ≤ 3 hops; negative edges only as the last hop;
-  this Zebra's own negative edge wins over any path; its own positive edge counts only to a Zebra a
+  this Zebra's own negative edge wins over any path, and a Zebra it distrusts is never a hop (its
+  vouches pass nothing on); its own positive edge counts only to a Zebra a
   seed path reaches. Ties: fewer hops, then the smaller path.
 - **Experience**: EWMA rate 0.2 on this Zebra's own `ATTEST`s (worked +1; failed, rejected-ethics,
   rejected-gym, pii-found -1; adopted and rejected-pii nothing); the owner's vouch is a floor and a

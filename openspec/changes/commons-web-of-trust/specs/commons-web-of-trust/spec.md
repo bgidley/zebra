@@ -73,7 +73,8 @@ published only when it differs from the last published weight by at least 0.1.
 ### Requirement: Transitive local trust
 Local trust SHALL be `max over paths p of ∏ weights × 0.9^(hops-1)` over paths of at most 3 hops
 starting at a human-vouched seed, with negative edges only as the last hop and this Zebra's own
-negative edge taking precedence. A Zebra with no path from a vouched seed SHALL have trust 0. The
+negative edge taking precedence. A Zebra this Zebra distrusts (own negative edge) SHALL never be
+a hop of any path, so its vouches pass no trust on. A Zebra with no path from a vouched seed SHALL have trust 0. The
 result SHALL be deterministic and the best path SHALL be shown.
 
 #### Scenario: Two hops
@@ -83,6 +84,10 @@ result SHALL be deterministic and the best path SHALL be shown.
 #### Scenario: Sybil
 - **WHEN** Zebras that no vouched seed reaches trust each other highly
 - **THEN** each has local trust 0
+
+#### Scenario: Distrusted Zebra vouches for others
+- **WHEN** the owner vouches A, A trusts X, X trusts Y, and the owner distrusts X
+- **THEN** X's local trust is the owner's negative weight and Y has local trust 0
 
 #### Scenario: Too far
 - **WHEN** the only path to Z has four hops

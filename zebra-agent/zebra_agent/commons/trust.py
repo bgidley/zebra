@@ -304,7 +304,8 @@ def compute_trust(
     - Interior edges must be positive; a negative edge is only ever the last hop.
     - Value ``∏ weights × DECAY^(hops-1)``; trust is the max over paths.
     - Zebras a path reaches are *anchored*; *me*'s own direct edge to an anchored Zebra is a
-      candidate too. *me*'s own negative edge always wins.
+      candidate too. *me*'s own negative edge always wins, and a Zebra *me* distrusts is never
+      a hop of any path: whoever it vouches for gains nothing from it.
     - Zero edges are no edges. Deterministic: ties go to fewer hops, then the smaller path.
 
     Returns ``{pubkey: TrustPath}`` for every Zebra with a path (others have trust 0).
@@ -314,6 +315,7 @@ def compute_trust(
     for (a, b), w in sorted(edges.items()):
         if w and a != b:
             out_edges.setdefault(a, []).append((b, float(w)))
+    distrusted = {b for b, w in out_edges.get(me, []) if w < 0}
     best: dict[str, tuple[float, int, tuple[str, ...], tuple[tuple[str, str, float], ...]]] = {}
 
     def offer(target: str, hops: tuple[tuple[str, str, float], ...]) -> None:
@@ -327,7 +329,7 @@ def compute_trust(
         if len(hops) >= MAX_HOPS:
             return
         for nxt, w in out_edges.get(node, []):
-            if nxt in visited or nxt == me:
+            if nxt in visited or nxt == me or nxt in distrusted:
                 continue
             path = (*hops, (node, nxt, w))
             offer(nxt, path)
@@ -335,7 +337,7 @@ def compute_trust(
                 walk(nxt, path, visited | {nxt})
 
     for seed, w in out_edges.get(me, []):
-        if seed in seeds and w > 0:
+        if seed in seeds and w > 0 and seed not in distrusted:
             first = ((me, seed, w),)
             offer(seed, first)
             walk(seed, first, frozenset({me, seed}))

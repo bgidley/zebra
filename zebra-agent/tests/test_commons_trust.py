@@ -134,6 +134,29 @@ def test_own_negative_edge_wins_over_a_friend():
     assert paths[B].value == pytest.approx(-0.8)
 
 
+def test_distrusted_zebra_passes_no_trust_on():
+    """A Zebra I distrust is no hop: whoever it vouches for gains nothing through it."""
+    edges = {(ME, A): 0.8, (A, B): 0.9, (B, C): 0.9, (ME, B): -0.8}
+    paths = compute_trust(ME, edges, seeds={A})
+    assert paths[B].value == pytest.approx(-0.8)
+    assert C not in paths
+
+
+def test_distrusted_zebra_does_not_block_other_paths():
+    """Distrust removes only paths through that Zebra; C keeps its path via D."""
+    edges = {(ME, A): 0.8, (A, B): 0.9, (B, C): 0.9, (A, D): 0.5, (D, C): 0.5, (ME, B): -0.8}
+    paths = compute_trust(ME, edges, seeds={A})
+    assert paths[C].value == pytest.approx(0.8 * 0.5 * 0.5 * 0.9**2)
+    assert all(h[0] != B for h in paths[C].hops)
+
+
+def test_distrusted_seed_starts_no_path():
+    """Distrusting a Zebra I once vouched for (same edge, now negative) cuts its whole subtree."""
+    paths = compute_trust(ME, {(ME, A): -0.5, (A, B): 0.9}, seeds={A})
+    assert paths[A].value == pytest.approx(-0.5)
+    assert B not in paths
+
+
 def test_sybil_cluster_without_a_seed_path_is_zero():
     edges = {(ME, A): 0.8, (S1, S2): 1.0, (S2, S1): 1.0, (S1, B): 1.0, (S2, B): 1.0}
     paths = compute_trust(ME, edges, seeds={A})
