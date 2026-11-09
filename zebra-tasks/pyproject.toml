@@ -112,6 +112,7 @@ commons_record_offer = "zebra_tasks.commons.offer_actions:CommonsRecordOfferActi
 commons_supervised_run = "zebra_tasks.commons.supervised:CommonsSupervisedRunAction"
 commons_confidentiality_scan = "zebra_tasks.commons.confidentiality:CommonsConfidentialityScanAction"
 commons_sensitivity_check = "zebra_tasks.commons.sensitivity:CommonsSensitivityCheckAction"
+contribute_diff_scan = "zebra_tasks.contribute.diff_scan:ContributeDiffScanAction"
 skill_share_prepare = "zebra_tasks.commons.sync_actions:SkillSharePrepareAction"
 skill_share_route = "zebra_tasks.commons.sync_actions:SkillShareRouteAction"
 skill_share_record = "zebra_tasks.commons.sync_actions:SkillShareRecordAction"
