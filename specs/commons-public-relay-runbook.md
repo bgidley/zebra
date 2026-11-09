@@ -1,4 +1,4 @@
-# Public Zebra Commons relay — owner runbook (#231, S4; #232, S5)
+# Public Zebra Commons relay — owner runbook (#231, S4; #232, S5; #233, S6)
 
 How to bring up the public Commons relay and offer a first workflow from prod. The code shipped
 off by default: until step 5, prod behaves exactly as before. The deploy job never installs or
@@ -196,6 +196,37 @@ Oracle, never port 8000. Prod (Zebra A) keeps its offer from step 6; the dev ins
    attestation appears (the new version has a new hash, which matches no adopted offer).
 7. Post the `/commons/` screenshots and the output on #232 and close it. Stop Zebra B and delete
    `$HOME/.zebra-b` and its `db.sqlite3` if it was only for the check.
+
+## 8. Web-of-trust check (closes #233)
+
+S6 (#233) needs three Zebras: prod (Zebra A), Zebra B from §7 and a third dev instance, Zebra C,
+started exactly like B (own `ZEBRA_COMMONS_KEY_DIR`, own SQLite file, another port such as 8234,
+never 8000). All three run with `ZEBRA_COMMONS_RELAYS` and the receipt key set, and a daemon.
+
+1. **Nothing without relays.** Before setting `ZEBRA_COMMONS_RELAYS` anywhere, `/commons/` on
+   prod shows "Zebras I know" saying publishing is off, and `podman logs zebra-web` has no
+   `TRUST` line.
+2. **B's owner vouches for C.** On B's `/commons/`, "I know this Zebra": paste C's npub (from C's
+   `/commons/`), name it "C". B says "I now count it as a Zebra you know and published it."
+3. **A's owner vouches for B.** On prod's `/commons/` paste B's npub, name it "B". Within a daemon
+   tick (30 s) A lists:
+   - B: local trust **0.80**, "you know it", path `B directly: 0.8 = 0.80`;
+   - C: local trust **0.58**, path `<C fingerprint> via B: 0.8 × 0.8 × 0.9 = 0.58`, and Zebra's
+     line "I trust it through Zebras you know, along the path above."
+   Prod's log shows `Commons: published TRUST +0.80` and a `poll {... 'trust': 1 ...}`.
+4. **Sybil check.** On C, vouch for a fresh key nobody else knows (any `npub` from
+   `uv run python -c "from zebra_agent.commons import keys; print(keys.npub_encode(keys.public_key(keys.generate_secret_key())))"`).
+   A shows it at 3 hops (`0.8 × 0.8 × 0.8 × 0.9^2 = 0.41`). Now withdraw C's vouch on B (B's
+   **Withdraw my vouch**): within a tick A shows C and the fresh key at 0.00 with "No Zebra you know
+   vouches for it", although C still trusts the fresh key. Vouch for C on B again.
+5. **Score on offers.** Any offer from C now shows "Import score" above 0; an offer from a Zebra
+   no one vouches for shows `Import score 0.00` and "Below my threshold of 0.5: no Zebra you know
+   vouches for its publisher." **Import this** still works for the owner.
+6. **Experience.** On B, import and run A's offer (§7 steps 3 and 5): B's edge to A moves
+   (first `worked` publishes `+0.20`); on A's `/commons/` "Edges" under A shows "Trusted by B".
+7. **Withdraw / distrust.** On prod, **Withdraw my vouch** on B: B and C drop to 0 within a tick.
+   **Distrust** on C: C shows -0.80 and "You told me not to trust this Zebra".
+8. Post the screenshots and log lines on #233 and close it. Stop Zebra C and delete its files.
 
 ## Operations
 

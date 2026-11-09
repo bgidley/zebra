@@ -38,6 +38,10 @@ quoted beneath it in muted text. Nothing here contacts a relay.
                 </form>
                 {% endif %}
             </div>
+            <p class="text-xs text-faint" data-testid="offer-score" data-score="{{ o.score.score|floatformat:3 }}" data-clears="{% if o.score.clears %}yes{% else %}no{% endif %}">Import score <span class="font-mono {% if o.score.clears %}text-ok{% else %}text-needs{% endif %}">{{ o.score.score|floatformat:2 }}</span> · trust in publisher <span class="font-mono text-ink">{{ o.score.local_trust|floatformat:2 }}</span> · trusted reports <span class="font-mono text-ink">{{ o.score.signal|floatformat:2 }}</span></p>
+            {% if not o.score.clears %}
+            <p class="text-sm text-needs" data-testid="offer-score-warning">Below my threshold of {{ offers.threshold }}: {% if o.score.local_trust > 0 %}I don't trust its publisher enough yet{% elif o.score.local_trust < 0 %}a Zebra you know distrusts its publisher{% else %}no Zebra you know vouches for its publisher{% endif %}. I would never pick it on my own; if you import it, every gate still runs.</p>
+            {% endif %}
             {% if o.summary %}<p class="text-sm text-muted">{{ o.summary }}</p>{% endif %}
             <dl class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint">
                 <div><dt class="inline">Runs</dt> <dd class="inline font-mono text-ink">{{ o.stats.runs|default:"0" }}</dd></div>

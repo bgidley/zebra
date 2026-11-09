@@ -370,7 +370,7 @@ about 60 KB we would split the content, which is deferred.
   - offers seen, adopted and rejected, with Zebra's reasons in its own voice
   - market prices and holdings (S7)
 - Human vouching: "I know this Zebra" on a peer, which sets `vouched_by_user` and publishes `TRUST`.
-- **Built in S5 (#232)**: the "Public Commons" section (`partials/commons_offers.html`): offers seen (status, publisher npub and fingerprint, stats, worked / failed / adopted / rejected counts, Zebra's verdict as a fixed first-person line plus the gate's recorded reasoning), this Zebra's own offers with other Zebras' attestations, owner-only **Import this**; empty states while publishing is off. Peers and trust are S6.
+- **Built in S5 (#232)**: the "Public Commons" section (`partials/commons_offers.html`): offers seen (status, publisher npub and fingerprint, stats, worked / failed / adopted / rejected counts, Zebra's verdict as a fixed first-person line plus the gate's recorded reasoning), this Zebra's own offers with other Zebras' attestations, owner-only **Import this**; empty states while publishing is off. Peers and trust: **built in S6 (#233)**, the "Zebras I know" section (`partials/commons_peers.html`).
 
 ### Genealogy view
 A family tree of skills, in two views built from data Zebra already keeps:
@@ -768,6 +768,33 @@ my work machine?"**
   per hop, and negative edges not propagated past one hop. It is recomputed after new edges arrive.
 - Sybil limit: Zebras with no path from a human-vouched seed have trust 0, whatever they publish.
 
+**Web of trust (S6) as built (#233, OpenSpec `commons-web-of-trust`). Code only, off by default.**
+Live check: [commons-public-relay-runbook.md](commons-public-relay-runbook.md) §8.
+
+- **`TRUST`** (`commons/trust.py`): signed by a certified device key (devices do not hold the Zebra
+  key), tags exactly `d` = `p` = target, `zebra` = truster, `t`, `v`; content `{reason, weight}`
+  (2 places). Reason: `vouched` / `withdrawn` / `distrusted` / `experience`, or the owner's note
+  (≤ 140 chars, published as typed). Self-trust is refused. Latest edge per pair: receipt order,
+  else `created_at` (ties: higher id); own changes are strictly later than the last one.
+- **Paths**: hops = edges, first hop to a human-vouched seed, value `∏ weights × 0.9^(hops-1)`, so a
+  vouch is 0.8 and "B via A" 0.8 × 0.6 × 0.9 = 0.432; ≤ 3 hops; negative edges only as the last hop;
+  this Zebra's own negative edge wins over any path, and a Zebra it distrusts is never a hop (its
+  vouches pass nothing on); its own positive edge counts only to a Zebra a
+  seed path reaches. Ties: fewer hops, then the smaller path.
+- **Experience**: EWMA rate 0.2 on this Zebra's own `ATTEST`s (worked +1; failed, rejected-ethics,
+  rejected-gym, pii-found -1; adopted and rejected-pii nothing); the owner's vouch is a floor and a
+  distrust a ceiling; published at a 0.1 change from the last published weight (`publish_pending`
+  retries each tick). Owner changes are `pending` until a relay accepts them and are always
+  retried, whatever the threshold.
+- **Concurrency**: all `WebOfTrust` mutations run under one lock, and peer writers touch only their
+  own columns, so a recompute can never undo an owner's vouch or distrust.
+- **Import score**: α = 0.7, γ = 0.3, β = 0; `attestation_signal` counts only reporters with positive
+  local trust, never the publisher or this Zebra. Below 0.5 an offer is never judged automatically
+  (S8) and **Import this** shows the score with a warning (the owner may still import).
+- **Stores / UI**: `PeerModel` (+ `owner_weight`, `best_path`), `TrustEdgeModel` (+ `created_at`,
+  `relay_seq`, `published_weight`); `/commons/` "Zebras I know" section. Without
+  `ZEBRA_COMMONS_RELAYS` the owner's vouches are kept locally and nothing is fetched or published.
+
 ### Reputation market (S7, parked)
 > Parked as its own later theme (decision b; #234, `phase::19-reputation-market`). Until then the
 > import score is `α·local_trust + γ·attestation_signal`, with no market term, and the dream cycle
@@ -843,7 +870,7 @@ my work machine?"**
 | — | `ZEBRA_SYNC_OPERATOR_SECRET` | — | Receipt sidecar only: the operator secret (hex or nsec); a secret env file / CI variable, never `prod.env` |
 | `SUPERVISED_RUNS` | — | 3 | Approved successful runs before an imported workflow runs without the pre-run approval |
 | `MIN_RUNS_TO_OFFER` | — | 5 | Effectiveness evidence needed before offering |
-| `IMPORT_SCORE_THRESHOLD` | — | 0.5 | Minimum import score to try judging |
+| `IMPORT_SCORE_THRESHOLD` | — | 0.5 | Minimum import score to try judging (`commons/trust.py`, #233; with `VOUCH_WEIGHT` 0.8, `DECAY` 0.9, `MAX_HOPS` 3, `EXPERIENCE_RATE` 0.2, `PUBLISH_THRESHOLD` 0.1, α 0.7, γ 0.3) |
 | `MARKET_LIQUIDITY_B` | — | 100 | LMSR liquidity |
 | `GRANT_STAKE` / `GRANT_AMOUNT` | — | 50 / 100 | Vouching economics |
 | `GENESIS` | — | founding Zebra(s), 1000 each | Initial balances pinned in the v1 ledger protocol |

@@ -260,3 +260,65 @@ async def test_two_zebras_offer_seen_attested_on_a_real_relay(relay):
         signing.cancel()
         for client in clients:
             await client.close()
+
+
+async def test_trust_published_and_fetched_on_a_real_relay(relay):
+    """#233: A's owner vouches B; my owner vouches A; my poll fetches A's TRUST → B via A."""
+    from zebra_agent.commons.exchange import CommonsExchange
+    from zebra_agent.commons.nostr import NostrSdkTransport
+    from zebra_agent.commons.offers import InMemoryOfferStore
+    from zebra_agent.commons.peers import InMemoryTrustStore
+    from zebra_agent.commons.trust import DECAY, VOUCH_WEIGHT, TrustPath
+    from zebra_agent.commons.web_of_trust import WebOfTrust
+
+    operator = keys.public_key(relay["operator"])
+    clients = []
+
+    def zebra() -> CommonsExchange:
+        zebra_secret, device = keys.generate_secret_key(), keys.generate_secret_key()
+        cert = make_device_cert(
+            zebra_secret, keys.public_key(device), label="Home", sphere="home", observed=False
+        )
+        client = RelayCommonsClient(NostrSdkTransport(relay["url"], timeout=5), private=False)
+        clients.append(client)
+        publisher = CommonsPublisher(
+            canonical=client,
+            device_secret=device,
+            zebra_pubkey=keys.public_key(zebra_secret),
+            mirror=InMemoryCommonsMirror(),
+            certs=[cert],
+            receipt_pubkey=operator,
+            receipt_wait=15,
+        )
+        return CommonsExchange(
+            publisher=publisher,
+            offers=InMemoryOfferStore(),
+            trust=WebOfTrust(InMemoryTrustStore(), publisher.zebra_pubkey, publisher=publisher),
+        )
+
+    signer_client = RelayCommonsClient(NostrSdkTransport(relay["url"], timeout=5), private=False)
+    clients.append(signer_client)
+    signer = ReceiptSigner(relay["journal"], relay["state"], signer_client, relay["operator"])
+    signing = asyncio.create_task(signer.run(interval=0.2))
+    me, a, b = zebra(), zebra(), zebra()
+    try:
+        await _ready(a.publisher.canonical)
+        result = await a.trust.vouch(b.zebra_pubkey)
+        assert result["published"] and result["event_id"]
+        await me.trust.vouch(a.zebra_pubkey, display_name="A")
+
+        counts = await me.poll()
+        assert counts["trust"] >= 1
+        edge = await me.trust.store.get_edge(a.zebra_pubkey, b.zebra_pubkey)
+        assert edge.weight == VOUCH_WEIGHT and edge.relay_seq is not None  # receipt order
+        peer = await me.trust.store.get_peer(b.zebra_pubkey)
+        assert peer.local_trust == pytest.approx(VOUCH_WEIGHT * VOUCH_WEIGHT * DECAY)
+        assert TrustPath.from_dict(peer.best_path).nodes == [
+            me.zebra_pubkey,
+            a.zebra_pubkey,
+            b.zebra_pubkey,
+        ]
+    finally:
+        signing.cancel()
+        for client in clients:
+            await client.close()
