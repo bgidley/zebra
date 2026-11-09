@@ -29,8 +29,9 @@ switching the Commons on.
   earlier, not published) it publishes after its gates. The step starts it with
   `create_library_process(entry="dream_cycle")` and runs it inline until it parks on the owner (as
   `manage.py commons_offer` does). The step records the kind (`suggest` / `publish`).
-- **Offer filters**, in order, each a recorded skip reason: system / not exportable, unmodified
-  built-in (`builtin_hashes`), adopted (`origin_pubkey`), stats (runs, success rate, rating — an
+- **Offer filters**, in order, each a recorded skip reason (system / built-in / unknown lineage /
+  other users' runs as one line per reason listing the names, the rest per workflow): system /
+  not exportable, unmodified built-in (`builtin_hashes`), adopted (`origin_pubkey`), stats (runs, success rate, rating — an
   unrated workflow passes the rating test), `offer_refusal` (exportable, `leak_kept`, runs),
   already offered (`publisher.offered_hashes`), a *Commons Offer* for it still open, the version
   already decided for `public` (journal `latest_decision` in `DECIDED`, only while `public` is not

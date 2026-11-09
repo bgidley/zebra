@@ -50,6 +50,7 @@ from zebra_agent.commons.sync import (
 from zebra_agent.commons.web_of_trust import WebOfTrust
 from zebra_agent.library import WorkflowLibrary
 from zebra_agent.metrics import WorkflowStats
+from zebra_agent.provenance import read_commons
 from zebra_agent.storage.trust import InMemoryTrustStore, TrustLevel
 
 BUILTIN = Path(__file__).resolve().parents[1] / "workflows"
@@ -450,6 +451,62 @@ async def test_too_few_runs_builtins_and_system_workflows_are_never_candidates(w
 
     assert report["offers_proposed"] == []  # built-ins (shipped) and system workflows skipped
     assert await _processes(world, "Commons Offer") == []
+    offer_skips = [s for s in report["skipped"] if s["kind"] == "offer"]
+    assert {"kind": "offer", "name": "Capital Facts",
+            "reason": "only 4 run(s), I offer from 5"} in offer_skips  # fmt: skip
+    reasons = {s["reason"] for s in offer_skips}
+    assert "Zebra's own system workflow: never offered" in reasons
+    assert "a shipped built-in: not mine to offer" in reasons
+    system = [s for s in offer_skips if s["reason"].startswith("Zebra's own")]
+    assert len(system) == 1  # one line per reason, however many workflows: no flood
+
+
+async def test_adopted_workflow_is_skipped_with_a_reason(world, tmp_path):
+    publisher = WorkflowLibrary(tmp_path / "publisher", owner_user_id=1)
+    publisher.add_workflow(_workflow("River Facts", "Answer questions about rivers"))
+    text = next(publisher.library_path.glob("*.yaml")).read_text()
+    block = read_commons(text)
+    world.library.save(
+        text, writer="adopt", received=block, expected_sha256=block["content_sha256"],
+        name="River Facts", origin_pubkey="ab" * 32,
+    )  # fmt: skip
+    world.metrics.good("River Facts")
+
+    report = await _dream(world)
+
+    assert report["offers_proposed"] == []
+    adopted = "adopted from another Zebra: not mine to offer"
+    assert {"kind": "offer", "name": "River Facts", "reason": adopted} in report["skipped"]
+
+
+async def test_already_offered_version_is_skipped_with_a_reason(world, monkeypatch):
+    world.library.save(_workflow("Capital Facts"), writer="human")
+    world.metrics.good("Capital Facts")
+    digest = world.library.commons_block("Capital Facts")["content_sha256"]
+
+    async def offered():
+        return {digest}
+
+    monkeypatch.setattr(world.publisher, "offered_hashes", offered)
+
+    report = await _dream(world)
+
+    assert report["offers_proposed"] == []
+    assert {"kind": "offer", "name": "Capital Facts",
+            "reason": "this version is already offered publicly"} in report["skipped"]  # fmt: skip
+
+
+async def test_already_asked_version_is_skipped_with_a_reason(world):
+    world.library.save(_workflow("Capital Facts"), writer="human")
+    world.metrics.good("Capital Facts")
+    digest = world.library.commons_block("Capital Facts")["content_sha256"]
+    record_share(world.library, "Capital Facts", digest, "public", DECLINED, reason="private")
+
+    report = await _dream(world)
+
+    assert report["offers_proposed"] == []
+    asked = f"you were already asked about this version ({DECLINED})"
+    assert {"kind": "offer", "name": "Capital Facts", "reason": asked} in report["skipped"]
 
 
 async def test_leak_tainted_workflow_is_skipped(world):
@@ -581,7 +638,8 @@ async def test_non_matching_offers_are_left_alone(world):
 
     report = await _dream(world)
 
-    assert report["imports_started"] == [] and report["skipped"] == []
+    assert report["imports_started"] == []
+    assert [s for s in report["skipped"] if s["kind"] == "import"] == []
 
 
 async def test_imports_are_capped_per_cycle(world):

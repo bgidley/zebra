@@ -238,7 +238,6 @@ class CommonsDreamAction(TaskAction):
         self, task: TaskInstance, context: ExecutionContext, report: _Report,
         publisher: Any, library: Any, metrics: Any,
     ) -> list[dict[str, Any]]:  # fmt: skip
-        from zebra_agent.commons import commons_exportable
         from zebra_agent.commons.offer import MIN_RUNS_TO_OFFER, PUBLIC_SPHERE, offer_refusal
         from zebra_agent.commons.sync import latest_decision
 
@@ -252,24 +251,31 @@ class CommonsDreamAction(TaskAction):
         open_offers = await self._open_offer_names(context, library)
         out = []
         names: dict[str, None] = {}
+        never_mine: dict[str, list[str]] = {}  # reason -> names, one report line per reason
         for listed in await library.list_workflows():
             # Cheap filters on the listing first: resolving a name reads the library.
-            block = listed.commons or {}
-            if not commons_exportable(listed) or block.get("content_sha256") in builtin:
-                continue  # system, other users' runs, unknown lineage, a shipped built-in
+            reason = _not_mine_to_offer(listed, builtin)
+            if reason:
+                never_mine.setdefault(reason, []).append(listed.name)
+                continue
             names[listed.name] = None
         for name in names:
             stats = await metrics.get_stats(name)
             runs = stats.total_runs if stats else 0
             if runs < MIN_RUNS_TO_OFFER:
-                continue  # too young to judge: not worth a line in the report
+                report.skip("offer", name, f"only {runs} run(s), I offer from {MIN_RUNS_TO_OFFER}")
+                continue
             info = await library.get_workflow_info(name)  # the current file of this name
-            if info is None or not commons_exportable(info):
+            reason = "it is no longer in my library" if info is None else None
+            reason = reason or _not_mine_to_offer(info, builtin)
+            if reason:
+                report.skip("offer", name, reason)
                 continue
             block = info.commons or {}
             digest = block.get("content_sha256")
-            if not digest or digest in builtin or block.get("origin_pubkey"):
-                continue  # a shipped built-in or another Zebra's workflow: not mine to offer
+            if block.get("origin_pubkey"):
+                report.skip("offer", name, "adopted from another Zebra: not mine to offer")
+                continue
             if stats.success_rate < min_rate:
                 report.skip(
                     "offer", name, f"success rate {stats.success_rate:.0%} < {min_rate:.0%}"
@@ -283,13 +289,16 @@ class CommonsDreamAction(TaskAction):
                 report.skip("offer", name, reason)
                 continue
             if digest in offered:
-                continue  # already public
+                report.skip("offer", name, "this version is already offered publicly")
+                continue
             if name in open_offers:
                 report.skip("offer", name, "an offer of it is already waiting for an answer")
                 continue
             shared = PUBLIC_SPHERE in (block.get("share_with") or [])
-            if already_asked(latest_decision(library, digest, PUBLIC_SPHERE), shared=shared):
-                continue  # this version was already asked about
+            latest = latest_decision(library, digest, PUBLIC_SPHERE)
+            if already_asked(latest, shared=shared):
+                report.skip("offer", name, f"you were already asked about this version ({latest})")
+                continue
             out.append(
                 {
                     "name": name,
@@ -300,6 +309,11 @@ class CommonsDreamAction(TaskAction):
                     "avg_rating": stats.avg_rating,
                 }
             )
+        for reason, skipped in never_mine.items():  # after the per-workflow reasons
+            shown = ", ".join(skipped[:5]) + (
+                f" and {len(skipped) - 5} more" if skipped[5:] else ""
+            )
+            report.skip("offer", shown, reason)
         out.sort(key=lambda c: (c["success_rate"], c["avg_rating"] or 0, c["runs"]), reverse=True)
         return out
 
@@ -655,6 +669,30 @@ class CommonsDreamAction(TaskAction):
             f"You've approved my last {approvals} sharing proposals without changes, so I've "
             f"asked whether I may share with less supervision ({target}). You decide on /trust/."
         )
+
+
+def _not_mine_to_offer(workflow: Any, builtin: set[str]) -> str | None:
+    """Why *workflow* can never be offered from here, or None if it might be.
+
+    Zebra's own system workflows, shipped built-ins, workflows learnt from other users'
+    runs and workflows of unknown lineage (no ``commons`` block) never leave.
+    """
+    from zebra_agent.commons import commons_exportable
+
+    from zebra_tasks.agent.curator import is_protected_workflow
+
+    block = workflow.commons if isinstance(workflow.commons, dict) else None
+    if is_protected_workflow(workflow):
+        return "Zebra's own system workflow: never offered"
+    if block is None:
+        return "unknown lineage (saved before provenance): never offered"
+    if not commons_exportable(workflow):
+        return "learnt from other users' runs: never offered"
+    if not block.get("content_sha256"):
+        return "no content digest yet: never offered"
+    if block["content_sha256"] in builtin:
+        return "a shipped built-in: not mine to offer"
+    return None
 
 
 def already_asked(latest: str | None, *, shared: bool) -> bool:
