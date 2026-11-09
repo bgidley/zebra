@@ -458,6 +458,21 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 
 `lint → test → e2e → deploy → smoke` (deploy/smoke on `master` pushes only; `e2e-live` on schedules). `deploy` runs `scripts/deploy-podman.sh $SHA`: build → stop daemon → retag `:prod` → restart web (blocks until healthy) → start daemon → build the sandbox image and restart `zebra-builder` (non-fatal; running builds survive); auto-rollback to `:previous` on failure. `smoke` mints a 15-minute session for the `smoke` user (`manage.py smoke_session`, #218) so logged-in pages (dashboard, `/tasks/`, nav badge, budget) are checked, not skipped. See `README-CICD.md`.
 
+### User instances on OCI (#279, onboarding; S1 stack skeleton only)
+
+`deploy/oci/` is a Resource Manager stack for a user's own Zebra, Always Free only: a `zebra`
+compartment, VCN with one public subnet (TCP 443 in only), one A1.Flex instance (2 OCPU / 12 GB,
+100 GB boot, ephemeral public IP), the Always Free ADB (26ai, public endpoint, mTLS, access list =
+instance IP), DEFAULT vault + SOFTWARE key + Vault-generated ADB admin secret (`secret_id`), and a
+private `zebra-models` bucket; default region `uk-london-1`. Limits are locals with
+`precondition`s; variables are only region, compartment, SSH key (22 stays closed), domain,
+release channel (`schema.yaml` is the form). CI job `iac` (stage `test`) runs
+`scripts/oci_iac_check.sh` in a pinned `hashicorp/terraform` container: fmt, validate,
+`terraform test` (mocked `oci` provider), a plan with throwaway credentials (lookups are keyed on
+the new compartment so the plan makes no API calls) and `scripts/oci_plan_scan.py` against
+`deploy/oci/free_tier_allowlist.yaml`; `tests/iac/` has one bad plan per rule. No cloud-init,
+guardrails or TLS yet (S2–S6). Spec: `openspec/changes/oci-provision-stack/`.
+
 ### Delivery review (#190)
 
 Each non-trivial feature lists 3–5 outcomes in its OpenSpec proposal (`## Outcomes`, required by

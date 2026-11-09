@@ -1,0 +1,87 @@
+# OCI Resource Manager form for the Zebra stack (#279). Every variable in variables.tf is
+# listed here (tests/iac checks it). There is deliberately no shape, size or tier choice:
+# the stack only ever creates Always Free resources.
+title: Zebra (Always Free)
+description: >-
+  Your own Zebra on Oracle Cloud's Always Free tier: one Arm A1 instance (2 OCPU, 12 GB),
+  the Always Free Autonomous Database, a free Vault and an Object Storage bucket, in a new
+  compartment. Nothing in this stack can create a billable resource.
+schemaVersion: 1.1.0
+version: "20261109"
+locale: en
+
+variableGroups:
+  - title: Where to deploy
+    variables:
+      - region
+      - compartment_ocid
+  - title: Options
+    variables:
+      - domain
+      - ssh_public_key
+      - release_channel
+  - title: Filled in by Resource Manager
+    visible: false
+    variables:
+      - tenancy_ocid
+
+variables:
+  tenancy_ocid:
+    type: string
+    title: Tenancy
+    required: true
+
+  region:
+    type: oci:identity:region:name
+    title: Region
+    description: >-
+      Use your tenancy's home region: the Always Free database is only offered there.
+      London (uk-london-1) is the default.
+    default: uk-london-1
+    required: true
+
+  compartment_ocid:
+    type: oci:identity:compartment:id
+    title: Parent compartment
+    description: A new "zebra" compartment is created inside this one.
+    required: true
+
+  domain:
+    type: string
+    title: Domain name (optional)
+    description: >-
+      A DNS name you control that points at the instance, e.g. zebra.example.com. Leave
+      empty to use the instance's IP address.
+    required: false
+    pattern: "^$|^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,}$"
+
+  ssh_public_key:
+    type: oci:core:ssh:publickey
+    title: SSH public key (optional)
+    description: Installed for the opc user. Port 22 stays closed; use the OCI Bastion or console.
+    required: false
+
+  release_channel:
+    type: enum
+    title: Release channel
+    enum:
+      - stable
+      - beta
+    default: stable
+    required: true
+
+outputGroups:
+  - title: Your Zebra
+    outputs:
+      - zebra_url
+      - instance_public_ip
+
+outputs:
+  zebra_url:
+    type: link
+    title: Zebra
+    visible: true
+  instance_public_ip:
+    type: copyableString
+    title: Public IP address
+    visible: true

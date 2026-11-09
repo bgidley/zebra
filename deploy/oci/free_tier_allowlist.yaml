@@ -1,0 +1,74 @@
+# Always Free allowlist for the Zebra OCI stack (#279).
+#
+# scripts/oci_plan_scan.py reads a `terraform show -json` plan and fails if any managed
+# resource is not listed under `resources`, breaks one of its rules, or the plan as a whole
+# exceeds a free limit. Re-check against Oracle's Always Free page every release (#283):
+# Oracle has shrunk these silently before (A1 went from 4 OCPU / 24 GB to 2 / 12).
+#
+# Rule keys per resource type:
+#   max_count  most resources of this type in one plan
+#   require    attribute path -> exact value it must have (and be known at plan time)
+#   max        attribute path -> largest number allowed
+# Paths are dotted; a number indexes a nested block list (shape_config.0.ocpus).
+
+checked: 2026-11-09
+
+limits:
+  a1_ocpus: 2
+  a1_memory_gb: 12
+  block_storage_gb: 200 # boot + block volumes, all instances
+  default_boot_volume_gb: 47 # what OCI gives an instance with no boot_volume_size_in_gbs
+
+# Named here only so the failure says why; anything not under `resources` fails anyway.
+denied:
+  oci_load_balancer: load balancer (not part of the stack's free design)
+  oci_load_balancer_load_balancer: load balancer (not part of the stack's free design)
+  oci_network_load_balancer_network_load_balancer: network load balancer (not part of the stack's free design)
+  oci_core_nat_gateway: NAT gateway (billable)
+  oci_core_drg: dynamic routing gateway (billable attachments)
+  oci_core_drg_attachment: dynamic routing gateway attachment (billable)
+  oci_kms_ekms_private_endpoint: external KMS (billable)
+
+resources:
+  oci_identity_compartment: {}
+  oci_core_vcn: {}
+  oci_core_internet_gateway: {}
+  oci_core_route_table: {}
+  oci_core_security_list: {}
+  oci_core_subnet: {}
+
+  oci_core_instance:
+    max_count: 1
+    require:
+      shape: VM.Standard.A1.Flex
+    max:
+      shape_config.0.ocpus: 2
+      shape_config.0.memory_in_gbs: 12
+
+  oci_core_volume:
+    max:
+      size_in_gbs: 200
+
+  oci_core_public_ip:
+    require:
+      lifetime: EPHEMERAL
+
+  oci_database_autonomous_database:
+    max_count: 1
+    require:
+      is_free_tier: true
+
+  oci_kms_vault:
+    max_count: 1
+    require:
+      vault_type: DEFAULT
+
+  oci_kms_key:
+    require:
+      protection_mode: SOFTWARE
+
+  oci_vault_secret: {}
+
+  oci_objectstorage_bucket:
+    require:
+      storage_tier: Standard
