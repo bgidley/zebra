@@ -3,8 +3,8 @@
 A dream cycle is a "Dream Cycle" process instance — started by the
 ``dream_cycle`` routine or ``POST /api/dream-cycle/``. Each step writes its
 report to a process property (``metrics_analysis``, ``curation``,
-``evaluation``, ``optimization_results``, ``improvement_requests``,
-``dream_summary``); this module flattens those into one dict per cycle for the
+``evaluation``, ``optimization_results``, ``improvement_requests``, ``commons``
+(#235), ``dream_summary``); this module flattens those into one dict per cycle for the
 template. It also lists the *Zebra Improvement Request* processes the cycles
 started (#189) with their review outcome.
 """
@@ -148,6 +148,26 @@ def summarize_cycle(model: ProcessInstanceModel) -> dict[str, Any]:
         "top_continued": _list(continuations.get("top_continued")),
         "capability_gaps": len(_list(continuations.get("capability_gaps"))),
         "improvements_requested": _list(improvements.get("requests")),
+        "commons": summarize_commons(props.get("commons")),
+    }
+
+
+def summarize_commons(value: Any) -> dict[str, Any] | None:
+    """The Commons step's report (#235) for the page, or None before the step existed."""
+    report = _dict(value)
+    if not report:
+        return None
+    budget = _dict(report.get("budget"))
+    return {
+        "status": report.get("status") or "",
+        "voice": [str(v) for v in _list(report.get("voice"))],
+        "offers_proposed": _list(report.get("offers_proposed")),
+        "imports_started": _list(report.get("imports_started")),
+        "skipped": [s for s in _list(report.get("skipped")) if isinstance(s, dict)],
+        "budget_limit": budget.get("limit"),
+        "budget_spent": budget.get("spent"),
+        "promotion": _dict(report.get("promotion")) or None,
+        "errors": [str(e) for e in _list(report.get("errors"))],
     }
 
 

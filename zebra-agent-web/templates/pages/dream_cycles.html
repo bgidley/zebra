@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load markdown_tags %}
+{% load markdown_tags format_tags %}
 
 {% block title %}Dream Cycles - Zebra Agent{% endblock %}
 {% block page_title %}Dream Cycles{% endblock %}
@@ -238,6 +238,32 @@
                     {% endif %}
                 </div>
             </details>
+            {% endif %}
+
+            {% if c.commons %}
+            <div class="mt-4 text-sm" data-testid="dream-commons">
+                <h3 class="text-xs uppercase tracking-wider text-gray-400 mb-1">Commons</h3>
+                {% for line in c.commons.voice %}<p class="text-gray-300">{{ line }}</p>{% endfor %}
+                {% if c.commons.status == "ran" %}
+                <div class="mt-2 flex flex-wrap gap-2 text-xs">
+                    <span class="px-2 py-1 rounded bg-gray-700 text-gray-300">{{ c.commons.offers_proposed|length }} offer{{ c.commons.offers_proposed|length|pluralize }} proposed</span>
+                    <span class="px-2 py-1 rounded bg-gray-700 text-gray-300">{{ c.commons.imports_started|length }} import{{ c.commons.imports_started|length|pluralize }} started</span>
+                    {% if c.commons.budget_limit is not None %}<span class="px-2 py-1 rounded bg-gray-700 text-gray-300">import budget {{ c.commons.budget_spent|default:0|usd }} of {{ c.commons.budget_limit|usd }} used today</span>{% endif %}
+                    {% if c.commons.promotion %}<a href="/trust/" class="px-2 py-1 rounded bg-needs/15 text-needs hover:underline">sharing promotion requested</a>{% endif %}
+                </div>
+                {% endif %}
+                {% if c.commons.offers_proposed or c.commons.imports_started or c.commons.skipped or c.commons.errors %}
+                <details class="mt-2">
+                    <summary class="cursor-pointer text-xs text-ink hover:underline select-none">Commons details</summary>
+                    <ul class="mt-2 space-y-1 text-gray-300 text-xs">
+                        {% for o in c.commons.offers_proposed %}<li><span class="px-1.5 rounded bg-surface-2 text-ink">offer</span> {{ o.name }} <span class="text-gray-500">({{ o.outcome }})</span>{% if o.process_id %} <a href="/processes/{{ o.process_id }}/trace/" class="hover:underline text-gray-500">trace</a>{% endif %}</li>{% endfor %}
+                        {% for i in c.commons.imports_started %}<li><span class="px-1.5 rounded bg-surface-2 text-ink">import</span> {{ i.name }} <span class="text-gray-500">for {{ i.gap }}, score {{ i.score|floatformat:2 }}</span>{% if i.process_id %} <a href="/processes/{{ i.process_id }}/trace/" class="hover:underline text-gray-500">trace</a>{% endif %}</li>{% endfor %}
+                        {% for s in c.commons.skipped %}<li><span class="px-1.5 rounded bg-gray-700 text-gray-400">skipped {{ s.kind }}</span> {{ s.name }} <span class="text-gray-500">: {{ s.reason|truncatechars:200 }}</span></li>{% endfor %}
+                        {% for e in c.commons.errors %}<li class="text-fail">{{ e|truncatechars:200 }}</li>{% endfor %}
+                    </ul>
+                </details>
+                {% endif %}
+            </div>
             {% endif %}
         </div>
         {% endfor %}

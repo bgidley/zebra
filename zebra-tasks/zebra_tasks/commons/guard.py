@@ -47,6 +47,7 @@ COMMONS_INTERNAL_ACTIONS = frozenset(
         "commons_offer_record",
         "commons_publish",
         "commons_record_offer",
+        "commons_dream",  # #235: the dream cycle's Commons step
     }
 )
 IMPORT_WORKFLOW_FILE = "commons_import.yaml"

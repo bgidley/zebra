@@ -336,3 +336,65 @@ def test_page_lists_improvement_requests(authenticated_client, completed_setup):
     assert "Add an http_fetch task action" in html
     assert "1 improvement requested" in html
     assert "Awaiting review" in html
+
+
+# ---------------------------------------------------------------------------
+# Commons (#235)
+# ---------------------------------------------------------------------------
+
+COMMONS = {
+    "status": "ran",
+    "voice": [
+        "I asked you whether to offer Capital Facts to the public Commons (100% of 6 runs worked).",
+        "Recipe Box might fill the gap 'Recipes', but I don't trust its publisher enough yet "
+        "(score 0.00 < 0.50), so I left it.",
+    ],
+    "offers_proposed": [{"name": "Capital Facts", "outcome": "waiting", "process_id": "po"}],
+    "imports_started": [
+        {"name": "Trip Planner", "gap": "Plan trips", "score": 0.56, "process_id": "pi"}
+    ],
+    "skipped": [{"kind": "import", "name": "Recipe Box", "reason": "import score 0.00 < 0.50"}],
+    "budget": {"limit": 0.5, "spent": 0.12, "remaining": 0.38},
+    "promotion": {"to_level": "SEMI_AUTONOMOUS", "approvals": 5},
+    "errors": [],
+}
+
+
+@pytest.mark.django_db
+def test_summarize_cycle_keeps_the_commons_report():
+    _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v10")
+    _process("p1", "dream-v10", "complete", {**FULL_PROPS, "commons": COMMONS}, T0)
+    _process("p0", "dream-v10", "complete", FULL_PROPS, T0 - timedelta(days=1))
+
+    new, old = dream_history.recent_dream_cycles()
+
+    assert new["commons"]["status"] == "ran"
+    assert [o["name"] for o in new["commons"]["offers_proposed"]] == ["Capital Facts"]
+    assert new["commons"]["budget_spent"] == 0.12
+    assert old["commons"] is None  # cycles before #235 have no Commons block
+
+
+def test_page_shows_the_commons_block(authenticated_client, completed_setup):
+    _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v10")
+    _process("p1", "dream-v10", "complete", {**FULL_PROPS, "commons": COMMONS}, T0)
+
+    html = authenticated_client.get("/dreams/").content.decode()
+
+    assert 'data-testid="dream-commons"' in html
+    assert "I asked you whether to offer Capital Facts" in html
+    assert "1 offer proposed" in html and "1 import started" in html
+    assert "$0.12" in html and "$0.50" in html
+    assert "import score 0.00 &lt; 0.50" in html
+    assert "sharing promotion requested" in html
+    assert "/processes/pi/trace/" in html
+
+
+def test_page_shows_commons_off(authenticated_client, completed_setup):
+    off = {"status": "off", "voice": ["Commons off: no public relays are set on this device."]}
+    _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v10")
+    _process("p1", "dream-v10", "complete", {**FULL_PROPS, "commons": off}, T0)
+
+    html = authenticated_client.get("/dreams/").content.decode()
+
+    assert "Commons off: no public relays" in html
+    assert "offer proposed" not in html and "offers proposed" not in html

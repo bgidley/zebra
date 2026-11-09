@@ -775,6 +775,11 @@ See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking fl
 | `SYNC_RECEIPT_PUBKEY` | `ZEBRA_SYNC_RECEIPT_PUBKEY` | — | Relay operator key trusted for receipts (revocation by receipt order); the operator secret is only the sidecar's `ZEBRA_SYNC_OPERATOR_SECRET` (#246) |
 | — | `ZEBRA_SYNC_DIRECTION` | both | Skill sync direction of this device: `send` / `receive` / `both` / `off` (unknown → `off`); read by `SyncService` (#236) |
 | — | `ZEBRA_SYNC_CONFIDENTIAL_PATTERNS` | — | Extra regexes (codenames, domains; one per line or `;;`-separated) that block sending a workflow from this device (#236) |
+| `COMMONS_DREAM_ENABLED` | `ZEBRA_COMMONS_DREAM_ENABLED` | true | Dream-cycle Commons step (#235); inert without `ZEBRA_COMMONS_RELAYS` ("Commons off"). Read by `zebra_tasks/commons/dream.py`, like the rest of this group |
+| `MAX_OFFERS_PER_CYCLE` / `MAX_IMPORTS_PER_CYCLE` | `ZEBRA_COMMONS_MAX_OFFERS_PER_CYCLE` / `ZEBRA_COMMONS_MAX_IMPORTS_PER_CYCLE` | 1 / 1 | *Commons Offer* / *Commons Import* runs the dream cycle may start per cycle (#235) |
+| `DAILY_IMPORT_BUDGET_USD` | `ZEBRA_COMMONS_DAILY_IMPORT_BUDGET_USD` | 0.50 | Spend-ledger cap (UTC day) on dream-started imports (judging + gym); checked before each start (#235) |
+| `COMMONS_OFFER_MIN_SUCCESS_RATE` / `COMMONS_OFFER_MIN_RATING` | `ZEBRA_COMMONS_OFFER_MIN_SUCCESS_RATE` / `ZEBRA_COMMONS_OFFER_MIN_RATING` | 0.8 / 4.0 | Stats a learnt workflow needs (with ≥ 5 runs) before the dream cycle proposes offering it; an unrated workflow passes the rating test (#235) |
+| `COMMONS_SHARING_PROMOTION_APPROVALS` | `ZEBRA_COMMONS_SHARING_PROMOTION_APPROVALS` | 5 | Owner approvals of sharing proposals in a row, without a note, before Zebra asks (a pending suggestion) for more `sharing` autonomy (#235) |
 
 ### LLM Model Tiers (OpenRouter only)
 

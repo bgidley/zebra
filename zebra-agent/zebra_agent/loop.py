@@ -559,6 +559,20 @@ class AgentLoop:
         except Exception as e:  # noqa: BLE001 - sharing is advisory
             logger.warning("Skill sync after the dream cycle failed: %s", e)
 
+    async def _wait_for_commons_imports(self) -> None:
+        """Let the Commons imports the dream cycle started (#235) run until they finish or
+        park on the owner, so a one-shot run (``manage.py dream_cycle``) does not cancel them.
+
+        Bounded by ``DREAM_CYCLE_TIMEOUT``; never fails the dream cycle.
+        """
+        from zebra_tasks.commons.dream import wait_for_imports
+
+        try:
+            if not await wait_for_imports(DREAM_CYCLE_TIMEOUT):
+                logger.warning("Commons imports still running after the dream cycle")
+        except Exception as e:  # noqa: BLE001 - the imports record their own outcomes
+            logger.warning("Commons imports after the dream cycle did not settle: %s", e)
+
     async def run_dream_cycle(
         self,
         progress_callback: ProgressCallback | None = None,
@@ -637,6 +651,7 @@ class AgentLoop:
 
             await emit("dream_cycle_completed", {"run_id": run_id})
             await self._propose_shares_after_dream()
+            await self._wait_for_commons_imports()
 
             return {
                 "success": True,
