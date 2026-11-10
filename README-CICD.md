@@ -20,6 +20,7 @@ lint  →  test  →  e2e  →  deploy  →  smoke  →  release
 |---|---|---|---|
 | lint | `lint` | `ruff check` + `ruff format --check` | every push |
 | test | `unit` | `pytest -m "not e2e and not smoke"` on SQLite | every push |
+| test | `iac` | `scripts/oci_iac_check.sh`: OCI stack fmt/validate/test + Always Free plan scan, Terraform in podman, no OCI credentials (#279) | every push |
 | e2e | `e2e` | `pytest tests/e2e -m e2e` — ephemeral Oracle schema, or SQLite fallback | every push |
 | e2e | `e2e-live` | real-LLM tests against prod Oracle | schedules only |
 | deploy | `deploy` | `scripts/deploy-podman.sh $SHA` | `master` push |

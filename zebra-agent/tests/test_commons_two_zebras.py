@@ -376,3 +376,62 @@ async def test_a_file_import_never_attests(tmp_path, relay, zebra_b, engine_b, l
     assert process.properties["__task_output_attest"]["skipped"] == "not an offer"
     assert _attests(relay) == []
     assert content_sha256(_workflow())  # sanity: the workflow hashes
+
+
+async def test_public_genealogy_shows_bs_derived_offer_and_no_private_ancestor(
+    tmp_path, relay, zebra_a, zebra_b, engine_b, library_b, llm
+):
+    """#247 E2E: B adopts A's offer, derives and offers a new version; A's public genealogy
+    shows A → B's derived offer with B's adoption and attestation, and no private hash."""
+    from zebra_agent.commons.public_genealogy import build_public_genealogy
+    from zebra_agent.genealogy import LineageJournal
+
+    # A's offered version has private ancestors in A's library and lineage journal
+    library_a = WorkflowLibrary(tmp_path / "library-a", owner_user_id=1)
+    library_a.add_workflow(_workflow("Draft: {{goal}}"))
+    library_a.save(_workflow("Draft two: {{goal}}"), writer="optimizer", reason="private")
+    library_a.save(_workflow(), writer="optimizer", reason="private reason")
+    block_a = library_a.commons_block("Capital Facts")
+    sha = block_a["content_sha256"]
+    journal = LineageJournal(library_a.library_path).read()
+    private = {block_a["parent_sha256"], *block_a["ancestors"]}
+    private |= {r["content_sha256"] for r in journal if r.get("content_sha256")}
+    private -= {None, sha}
+    assert len(private) == 2
+
+    published = await zebra_a.publisher.publish_offer(_content(_workflow()), block_a)
+    assert published["content_sha256"] == sha and published["parent"] is None
+
+    await zebra_b.poll()
+    process = await _import_offer(engine_b, library_b, zebra_b, sha)
+    process = await _owner_answers(engine_b, process.id, "adopt")
+    local_name = process.properties["commons_import_result"]["local_name"]
+    goal = await _run_goal(engine_b, local_name, "What is the capital of Australia?")
+    assert goal.state == ProcessState.COMPLETE
+
+    # B derives a new version and offers it: its parent is A's public offer
+    derived = _workflow("Answer briefly and cite: {{goal}}").replace(
+        '"Capital Facts"', f'"{local_name}"'
+    )
+    library_b.save(derived, writer="optimizer", reason="shorter answers")
+    block_b = library_b.commons_block(local_name)
+    assert block_b["parent_sha256"] == sha
+    offered_b = await zebra_b.publisher.publish_offer(
+        _content(library_b.get_workflow_yaml(local_name)), block_b
+    )
+    assert offered_b["parent"] == sha
+
+    await zebra_a.poll()
+    events = [m.event for m in await zebra_a.mirror.events()]
+    genealogy = build_public_genealogy(events, zebra_a.zebra_pubkey)
+    assert genealogy.edges == [(sha, offered_b["content_sha256"])]
+    root, child = genealogy.offers
+    assert root.publisher == zebra_a.zebra_pubkey and child.publisher == zebra_b.zebra_pubkey
+    assert root.attestations["adopted"] == 1 and root.attestations["worked"] == 1
+    assert {i["zebra_pubkey"] for i in root.attestations["items"]} == {zebra_b.zebra_pubkey}
+    text = json.dumps(
+        [o.__dict__ for o in genealogy.offers] + [t.__dict__ for t in genealogy.trust],
+        default=str,
+    )
+    for secret in private:
+        assert secret not in text

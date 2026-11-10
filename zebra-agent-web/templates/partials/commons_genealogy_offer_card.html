@@ -1,0 +1,45 @@
+{% comment %}
+One public offer on the public genealogy pages (#247). Parameter: card
+(api.public_genealogy_view._offer_card), link ("true" links the hash to its own page).
+Public facts only: hash, name, summary, stats, publishers, parent / children offers,
+adoptions and attestations with their fixed reasons.
+{% endcomment %}
+<article class="panel min-w-0" data-offer="{{ card.content_sha256 }}" id="o-{{ card.short }}">
+    <div class="px-5 py-3 border-b border-line flex flex-wrap items-center gap-x-3 gap-y-1">
+        {% if link != "false" %}<a href="{{ card.url }}" class="font-mono text-sm text-ink underline" title="{{ card.content_sha256 }}">{{ card.short }}</a>{% else %}<span class="font-mono text-sm text-ink break-all">{{ card.content_sha256 }}</span>{% endif %}
+        <span class="font-medium text-ink break-words min-w-0">{{ card.name }}</span>
+        {% if card.mine %}<span class="rounded-full bg-ok/15 px-2.5 py-0.5 text-xs text-ok">mine</span>{% endif %}
+        {% if card.offered_on %}<span class="font-mono text-xs text-faint tabular-nums">{{ card.offered_on|date:"Y-m-d H:i" }}</span>{% endif %}
+    </div>
+    <div class="px-5 py-3 space-y-3 text-sm">
+        {% if card.summary %}<p class="text-muted max-w-[65ch] break-words">{{ card.summary }}</p>{% endif %}
+        <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+            <dt class="text-muted">Published by</dt>
+            <dd class="min-w-0 space-y-1" data-testid="offer-publishers">{% for p in card.publishers %}
+                <span class="block"><span class="text-ink">{{ p.name }}</span>{% if p.display_name and not p.is_me %} <span class="font-mono text-xs text-faint">{{ p.fingerprint }}</span>{% endif %}<span class="block font-mono text-xs text-faint break-all">{{ p.npub }}</span></span>
+            {% endfor %}</dd>
+            {% if card.parent %}<dt class="text-muted">From</dt><dd><a href="{{ card.parent.url }}" class="font-mono text-xs text-ink underline" data-testid="offer-parent">{{ card.parent.short }}</a></dd>{% endif %}
+            {% if card.children %}<dt class="text-muted">Led to</dt><dd>{% for c in card.children %}<a href="{{ c.url }}" class="font-mono text-xs text-ink underline">{{ c.short }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+            <dt class="text-muted">Adopted by</dt><dd class="text-ink" data-testid="offer-adopted"><span class="font-mono tabular-nums">{{ card.adopted }}</span> Zebra{{ card.adopted|pluralize }}</dd>
+            <dt class="text-muted">Runs reported</dt><dd class="text-ink"><span class="font-mono tabular-nums {% if card.worked %}text-ok{% endif %}">{{ card.worked }}</span> worked · <span class="font-mono tabular-nums {% if card.failed %}text-fail{% endif %}">{{ card.failed }}</span> failed{% if card.rejected %} · <span class="font-mono tabular-nums">{{ card.rejected }}</span> rejected it{% endif %}</dd>
+            {% if card.stats.runs is not None %}<dt class="text-muted">Publisher's stats</dt><dd class="text-faint font-mono text-xs tabular-nums">{{ card.stats.runs }} runs{% if card.stats.success_rate is not None %} · {% widthratio card.stats.success_rate 1 100 %}% success{% endif %}{% if card.stats.gym_score is not None %} · gym {{ card.stats.gym_score }}{% endif %}</dd>{% endif %}
+        </dl>
+        {% if card.items %}
+        <details class="group" data-testid="offer-attestations">
+            <summary class="cursor-pointer text-xs text-faint">Attestations ({{ card.items|length }})</summary>
+            <ul class="mt-2 space-y-1">
+                {% for i in card.items %}
+                <li class="flex flex-wrap gap-x-2" data-label="{{ i.label }}" data-reason="{{ i.reason|default:'' }}">
+                    <span class="{% if i.kind == 'ok' %}text-ok{% elif i.kind == 'fail' %}text-fail{% else %}text-needs{% endif %}">{{ i.label_text }}</span>
+                    <span class="text-ink">by {{ i.zebra.name }}</span>
+                    {% if i.reason_text %}<span class="text-muted">: {{ i.reason_text }}</span>{% endif %}
+                    {% if i.created_on %}<span class="font-mono text-xs text-faint tabular-nums">{{ i.created_on|date:"Y-m-d" }}</span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% else %}
+        <p class="text-xs text-faint">No Zebra has reported on it yet.</p>
+        {% endif %}
+    </div>
+</article>

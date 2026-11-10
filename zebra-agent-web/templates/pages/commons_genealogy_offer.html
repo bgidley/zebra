@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% comment %}
+One public offer's family (#247): the offers linked to it by parent / child across Zebras,
+its publishers, adoptions and attestations. Public events in the mirror only.
+{% endcomment %}
+
+{% block title %}{{ offer.name }} public genealogy - Zebra Agent{% endblock %}
+{% block page_title %}Commons{% endblock %}
+
+{% block content %}
+<style>
+    .genealogy-graph { max-width: 100%; height: auto; }
+    .gen-node:focus { outline: none; }
+    .gen-node:focus-visible rect, .gen-node:hover rect { stroke: var(--color-ink); stroke-width: 3; }
+</style>
+<div class="space-y-6 max-w-5xl min-w-0" data-testid="public-offer-genealogy">
+    <div class="min-w-0">
+        <a href="{% url 'commons_genealogy' %}" class="text-sm text-muted hover:text-ink">Public genealogy</a>
+        <h1 class="mt-1 text-xl font-semibold text-ink break-words">{{ offer.name }}</h1>
+        <p class="text-muted mt-1 max-w-[65ch]">This offered version and the public versions it grew from or led to, across Zebras. <span class="font-mono tabular-nums">{{ family_count }}</span> version{{ family_count|pluralize }} in this family.</p>
+    </div>
+
+    <section class="panel min-w-0" data-testid="public-lineage" aria-labelledby="family-title">
+        <div class="px-5 py-3 border-b border-line">
+            <h2 id="family-title" class="text-base font-semibold text-ink">Family</h2>
+            <p class="text-xs text-faint">Oldest at the top. This version has the thick outline.</p>
+        </div>
+        <div class="p-4 flex justify-center min-w-0">{{ graph_svg|safe }}</div>
+    </section>
+
+    {% include "partials/commons_genealogy_offer_card.html" with card=offer link="false" %}
+
+    {% if family_count > 1 %}
+    <section aria-labelledby="relatives-title" class="space-y-4">
+        <h2 id="relatives-title" class="text-base font-semibold text-ink">Other versions in the family</h2>
+        {% for card in family %}{% if card.content_sha256 != offer.content_sha256 %}{% include "partials/commons_genealogy_offer_card.html" with card=card link="true" %}{% endif %}{% endfor %}
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

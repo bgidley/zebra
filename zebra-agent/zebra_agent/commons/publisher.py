@@ -115,6 +115,10 @@ class CommonsPublisher:
         """Content hashes this Zebra has published an ``OFFER`` of (from the mirror)."""
         return await self.mirror.offered_hashes(self.zebra_pubkey)
 
+    async def public_hashes(self) -> set[str]:
+        """Content hashes publicly offered by any Zebra (``CommonsMirror.public_hashes``)."""
+        return await self.mirror.public_hashes()
+
     def identity_events(self) -> list[Event]:
         """The signing device's current cert and this Zebra's revokes (what readers need)."""
         mine = verify_device_chain(self.device_pubkey, self.zebra_pubkey, self.certs)
@@ -126,7 +130,7 @@ class CommonsPublisher:
 
     async def build(self, content: Mapping[str, Any], block: Mapping[str, Any] | None) -> Event:
         """Sign an ``OFFER`` (``parent`` only if publicly offered) and check it verifies."""
-        parent = public_parent(block, await self.offered_hashes())
+        parent = public_parent(block, await self.public_hashes())
         event = build_offer(
             content,
             device_secret=self.device_secret,
