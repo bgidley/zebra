@@ -4,6 +4,7 @@ stages:
   - e2e
   - deploy
   - smoke
+  - release
 
 # Every job runs on the single prod host (OCI A1, `coding-agent`) via a GitLab
 # shell runner executing as `opc` — see deploy/podman/bootstrap-host.sh.
@@ -126,3 +127,23 @@ smoke:
   rules:
     - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
       when: on_success
+
+# Cut a release (#283): manual, master push pipelines only, and in the last stage, so it can
+# only be started once lint, tests, deploy and smoke are green. Creates the GitLab release and
+# the vX.Y.Z tag at this commit (refused if master has moved on), with notes listing the issues
+# closed since the last tag. Set RELEASE_BUMP (major/minor/patch, default minor) or
+# RELEASE_VERSION when running it. Needs the masked, protected RELEASE_GITLAB_TOKEN.
+# allow_failure keeps the master pipeline green while nobody runs it.
+release:tag:
+  stage: release
+  script:
+    - uv run python scripts/release_tag.py --ref "$CI_COMMIT_SHA" --notes-file release-notes.md
+  artifacts:
+    paths:
+      - release-notes.md
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"
+      when: manual
+      allow_failure: true
+  resource_group: zebra-release

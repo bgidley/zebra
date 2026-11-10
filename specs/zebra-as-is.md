@@ -460,7 +460,15 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 
 ### CI/CD pipeline
 
-`lint → test → e2e → deploy → smoke` (deploy/smoke on `master` pushes only; `e2e-live` on schedules). `deploy` runs `scripts/deploy-podman.sh $SHA`: build → stop daemon → retag `:prod` → restart web (blocks until healthy) → start daemon → build the sandbox image and restart `zebra-builder` (non-fatal; running builds survive); auto-rollback to `:previous` on failure. `smoke` mints a 15-minute session for the `smoke` user (`manage.py smoke_session`, #218) so logged-in pages (dashboard, `/tasks/`, nav badge, budget) are checked, not skipped. See `README-CICD.md`.
+`lint → test → e2e → deploy → smoke → release` (deploy/smoke on `master` pushes only; `e2e-live` on schedules; `release:tag` manual on `master` pushes, #283). `deploy` runs `scripts/deploy-podman.sh $SHA`: build → stop daemon → retag `:prod` → restart web (blocks until healthy) → start daemon → build the sandbox image and restart `zebra-builder` (non-fatal; running builds survive); auto-rollback to `:previous` on failure. `smoke` mints a 15-minute session for the `smoke` user (`manage.py smoke_session`, #218) so logged-in pages (dashboard, `/tasks/`, nav badge, budget) are checked, not skipped. See `README-CICD.md`.
+
+### Releases (#283)
+
+`version.json` (and `/api/version/`, footer) carries a `version` from the newest `vX.Y.Z` tag
+(`0.3.0`, `0.3.0+4.gabc1234` after it, `0.0.0+g<hash>` before the first release). The manual
+`release:tag` job (`scripts/release_tag.py`) cuts the next tag from green master as a GitLab
+release with notes from the issues closed since the last tag. See
+[release-pipeline-design.md](release-pipeline-design.md).
 
 ### User instances on OCI (#279, onboarding; S1 stack skeleton only)
 

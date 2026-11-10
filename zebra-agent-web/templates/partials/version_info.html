@@ -1,12 +1,20 @@
 {% comment %}
-Deployed version (#107): short hash + date; click to show recent commits.
+Deployed version (#107): release version (#283), short hash + date; click to show recent
+commits. The release (v0.3.0, or v0.3.0+4 four commits after the tag) shows only once a
+vX.Y.Z tag exists; the full version is the tooltip.
 Fetches /api/version/ once per page load. The panel opens upward because this
 sits at the bottom of the sidebar or the bare layout.
 {% endcomment %}
 <div class="relative" data-testid="version-info"
      x-data="{
         open: false,
-        version: {short_hash: '...', date: '', commits: []},
+        version: {version: '', short_hash: '...', date: '', commits: []},
+        get release() {
+            const v = this.version.version || '';
+            if (!/^\d+\.\d+\.\d+/.test(v) || v.startsWith('0.0.0')) return '';
+            const [base, after] = v.split('+');
+            return 'v' + base + (after ? '+' + after.split('.')[0] : '');
+        },
         async init() {
             try {
                 const r = await fetch('/api/version/');
@@ -17,7 +25,8 @@ sits at the bottom of the sidebar or the bare layout.
      @click.outside="open = false">
     <button type="button" @click="open = !open" :aria-expanded="open"
             class="flex items-center gap-2 font-mono text-xs text-faint hover:text-muted"
-            title="Recent changes">
+            :title="version.version ? 'Version ' + version.version + ' — recent changes' : 'Recent changes'">
+        <span x-show="release" x-text="release" data-testid="version-release"></span>
         <span x-text="version.short_hash"></span>
         <span x-show="version.date" x-text="version.date"></span>
     </button>

@@ -10,6 +10,7 @@ from zebra_agent_web.api.version import _FALLBACK, load_version
 class TestLoadVersion:
     def test_reads_valid_version_json(self, tmp_path):
         data = {
+            "version": "0.3.0+4.gabc1234",
             "short_hash": "abc1234",
             "date": "2026-05-05",
             "commits": [{"hash": "abc1234", "date": "2026-05-05", "subject": "feat: test"}],
@@ -19,6 +20,7 @@ class TestLoadVersion:
 
         result = load_version(f)
 
+        assert result["version"] == "0.3.0+4.gabc1234"
         assert result["short_hash"] == "abc1234"
         assert result["date"] == "2026-05-05"
         assert len(result["commits"]) == 1
@@ -28,6 +30,7 @@ class TestLoadVersion:
 
         assert result == _FALLBACK
         assert result["short_hash"] == "unknown"
+        assert result["version"] == "unknown"  # release version (#283)
         assert result["commits"] == []
 
     def test_fallback_when_json_malformed(self, tmp_path):
