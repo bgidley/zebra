@@ -201,6 +201,7 @@ These actions power the Dream Cycle self-improvement workflow:
 | `workflow_optimizer` | `optimizer.py` | Create/optimize workflows based on evaluation; with `gym_gate` modifications wait for the gym (#171) |
 | `run_golden_gym` | `gym.py` | Run the current and modified versions of each staged workflow on its golden tasks; save the modification only if it scores no worse (fails closed; #171) |
 | `review_knowledge` | `knowledge/review.py` | Review each active user's personal knowledge against runs since the last dream cycle; human entries only via contradiction/verification workflows (#153) |
+| `commons_dream` | `../commons/dream.py` | Commons step (#235): propose offers of good learnt workflows and imports of trusted offers matching capability gaps through *Commons Offer* / *Commons Import*, capped and budgeted; ask for `sharing` promotion; "Commons off" without relays; never fails the cycle |
 | `propose_zebra_improvements` | `improvements.py` | Turn findings a workflow edit cannot fix into *Zebra Improvement Request* processes for human review; capped, deduped by title (#189) |
 
 ### IoC (Inversion of Control) for Stores

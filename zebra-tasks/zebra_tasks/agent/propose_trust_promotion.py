@@ -14,6 +14,21 @@ from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 logger = logging.getLogger(__name__)
 
 
+async def queue_promotion(store, user_id: int, domain: str, to_level: str, evidence: str):
+    """Queue a pending trust promotion suggestion; the agent's only trust write (REQ-TRUST-004).
+
+    Calls ``store.add_suggestion`` and nothing else: a suggestion never changes a trust level,
+    only a human resolving it does. Shared by this action and the dream cycle's Commons step
+    (#235).
+
+    Raises:
+        ValueError: If the domain or level is unknown.
+    """
+    suggestion = await store.add_suggestion(user_id, domain, to_level, evidence)
+    logger.info("Trust promotion proposed: user=%s domain=%s -> %s", user_id, domain, to_level)
+    return suggestion
+
+
 def _resolve(value, context: ExecutionContext):
     """Resolve {{template}} strings against the process properties."""
     if isinstance(value, str) and "{{" in value:
@@ -115,7 +130,7 @@ class ProposeTrustPromotionAction(TaskAction):
             return TaskResult.ok(output=result)
 
         try:
-            suggestion = await store.add_suggestion(user_id, domain, to_level, evidence)
+            suggestion = await queue_promotion(store, user_id, domain, to_level, evidence)
         except ValueError as exc:
             return TaskResult.fail(f"propose_trust_promotion: {exc}")
 
@@ -127,5 +142,4 @@ class ProposeTrustPromotionAction(TaskAction):
             "status": suggestion.status,
         }
         context.set_process_property(output_key, result)
-        logger.info("Trust promotion proposed: user=%s domain=%s -> %s", user_id, domain, to_level)
         return TaskResult.ok(output=result)
