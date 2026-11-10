@@ -109,6 +109,7 @@ commons_offer_route = "zebra_tasks.commons.offer_actions:CommonsOfferRouteAction
 commons_offer_record = "zebra_tasks.commons.offer_actions:CommonsOfferRecordAction"
 commons_publish = "zebra_tasks.commons.offer_actions:CommonsPublishAction"
 commons_record_offer = "zebra_tasks.commons.offer_actions:CommonsRecordOfferAction"
+commons_dream = "zebra_tasks.commons.dream:CommonsDreamAction"
 commons_supervised_run = "zebra_tasks.commons.supervised:CommonsSupervisedRunAction"
 commons_confidentiality_scan = "zebra_tasks.commons.confidentiality:CommonsConfidentialityScanAction"
 commons_sensitivity_check = "zebra_tasks.commons.sensitivity:CommonsSensitivityCheckAction"

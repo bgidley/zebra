@@ -90,7 +90,7 @@ def test_improvement_requests_run_before_summary():
     assert task.action == "propose_zebra_improvements"
     assert task.properties["output_key"] == "improvement_requests"
     assert ("review_knowledge", "propose_improvements") in routes
-    assert ("propose_improvements", "generate_summary") in routes
+    assert ("propose_improvements", "commons") in routes
     assert ("review_knowledge", "generate_summary") not in routes
 
 
@@ -141,3 +141,29 @@ def test_summary_reports_knowledge():
     assert "### Knowledge" in prompt
     assert "{{knowledge_review.counts}}" in prompt
     assert "{{knowledge_review.examples}}" in prompt
+
+
+def test_commons_step_runs_before_the_summary():
+    """The Commons step (#235) proposes offers / imports and feeds the summary."""
+    definition = load_definition(_DREAM_CYCLE)
+    routes = {(r.source_task_id, r.dest_task_id) for r in definition.routings}
+
+    task = definition.tasks["commons"]
+    assert task.action == "commons_dream"
+    assert task.properties["output_key"] == "commons"
+    assert task.properties["capability_gaps"] == (
+        "{{metrics_analysis.continuation_analysis.capability_gaps}}"
+    )
+    assert ("propose_improvements", "commons") in routes
+    assert ("commons", "generate_summary") in routes
+    assert ("propose_improvements", "generate_summary") not in routes
+    assert yaml.safe_load(_DREAM_CYCLE.read_text())["version"] >= 10
+
+
+def test_summary_reports_commons():
+    data = yaml.safe_load(_DREAM_CYCLE.read_text())
+    prompt = data["tasks"]["generate_summary"]["properties"]["prompt"]
+
+    assert "### Commons" in prompt
+    assert "{{commons.voice_text}}" in prompt
+    assert "{{commons.skipped}}" in prompt

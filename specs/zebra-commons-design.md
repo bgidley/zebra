@@ -402,7 +402,15 @@ A family tree of skills, in two views built from data Zebra already keeps:
     time (S7).
   - **Zebra lineage:** who vouched for whom (`GRANT` events), and this Zebra's trust paths ("I trust
     B through A: 0.8 × 0.6").
-- **Privacy rule:** an `OFFER` names a `parent` only if that parent was itself publicly offered.
+- **Built in #247 (code only, off by default):** `/commons/genealogy/` and
+  `/commons/genealogy/<sha>/` from the mirror's `OFFER`, `ATTEST`, `TRUST` and `DEVICE_CERT` events
+  only (`zebra_agent/commons/public_genealogy.py`, `api/public_genealogy_view.py`): offers linked by
+  `parent` (only between held offers), publishers, adoption count, attestations with their fixed
+  reasons; who trusts whom (latest `TRUST` per pair; `GRANT` does not exist while the market is
+  parked) and this Zebra's trust paths; no price history. Rendered with #238's shared DAG renderer
+  (`api/dag_svg.py`, `genealogy.layer_dag`).
+- **Privacy rule:** an `OFFER` names a `parent` only if that parent was itself publicly offered
+  (by any Zebra: an `OFFER` of it is in the publisher's mirror, #247).
   Private ancestors are never referenced publicly, not even by hash. So the public tree starts at
   the first public version.
 - **Rendering:** server-rendered (Django templates + inline SVG, layered DAG layout) using the
@@ -435,7 +443,7 @@ A family tree of skills, in two views built from data Zebra already keeps:
 steps: [commons-public-relay-runbook.md](commons-public-relay-runbook.md).
 
 - **Start:** `manage.py commons_offer NAME` starts *Commons Offer* (`commons_offer.yaml`, system)
-  as the owner. No dream-cycle proposals yet (S8).
+  as the owner, or the dream cycle (S8, #235, below).
 - **Steps:** `commons_prepare_offer` (preconditions; canonical YAML via `relabel`, its hash, stats
   from the `MetricsStore` incl. the gym mean, the actions, one low-tier `complete_json` that sees
   only the YAML and numbers and writes `summary`, `use_when` and 1–3 golden tasks, the library's
@@ -795,6 +803,30 @@ Live check: [commons-public-relay-runbook.md](commons-public-relay-runbook.md) �
   `relay_seq`, `published_weight`); `/commons/` "Zebras I know" section. Without
   `ZEBRA_COMMONS_RELAYS` the owner's vouches are kept locally and nothing is fetched or published.
 
+**Dream cycle (S8) as built (#235, OpenSpec `commons-dream`). Code only, off by default.**
+
+- `commons_dream` (`zebra_tasks/commons/dream.py`), a step of `dream_cycle.yaml` (v10) before the
+  summary. Without a publisher (`ZEBRA_COMMONS_RELAYS` unset) it records "Commons off" and does
+  nothing; it never fails the cycle. It only starts the existing gated workflows; trades are out
+  while the market is parked.
+- **Offer step 1**: learnt workflows (exportable, not a shipped built-in, not adopted) with
+  ≥ `MIN_RUNS_TO_OFFER` runs and good stats (success rate ≥ 0.8, rating ≥ 4.0 when rated) that pass
+  `offer_refusal`, not offered, not already open or asked about at this hash → *Commons Offer*
+  (the public suggest-and-approve step; `proposed` journalled), ≤ 1 per cycle. A version already
+  `public` in `share_with` (nothing removes it) is retried only after a plain `approved`; a
+  decline or a refused publish (`blocked`) means it was asked about, so the owner is asked once
+  per version.
+- **Import step 2**: gaps (`creator` saves in the window, `new_workflow` continuations) matched to
+  `seen` offers by keyword overlap; import score ≥ 0.5 → *Commons Import* in the background,
+  ≤ 1 per cycle, within a daily import budget (USD, spend ledger over the import trees, UTC day).
+  Below the threshold the offer is skipped with its score and never judged automatically.
+- **`sharing` promotion**: after 5 owner share approvals in a row without a note (declines and
+  notes restart the count) since the last `sharing` suggestion or level change, a pending
+  suggestion one level up (REQ-TRUST-004) whose evidence gives the approvals in a row, all
+  decisions and the declines among them; never self-promotes.
+- **Report**: `commons` (voice lines, offers proposed, imports started, skipped reasons, budget,
+  promotion), in the summary and a "Commons" block on `/dreams/`.
+
 ### Reputation market (S7, parked)
 > Parked as its own later theme (decision b; #234, `phase::19-reputation-market`). Until then the
 > import score is `α·local_trust + γ·attestation_signal`, with no market term, and the dream cycle
@@ -865,6 +897,11 @@ Live check: [commons-public-relay-runbook.md](commons-public-relay-runbook.md) �
 | `SYNC_CONFIDENTIAL_PATTERNS` | `ZEBRA_SYNC_CONFIDENTIAL_PATTERNS` | — | Extra per-device regexes, such as codenames or domains, that block sending |
 | `MIN_RUNS_TO_SHARE` | — | 2 | Successful runs before Zebra suggests sharing a workflow with another sphere |
 | `ANCESTOR_WINDOW` | — | 32 | Ancestor hashes carried per version for lineage merges |
+| `COMMONS_DREAM_ENABLED` | `ZEBRA_COMMONS_DREAM_ENABLED` | true | The dream cycle's Commons step (S8); inert without `COMMONS_RELAYS` |
+| `MAX_OFFERS_PER_CYCLE` / `MAX_IMPORTS_PER_CYCLE` | `ZEBRA_COMMONS_MAX_OFFERS_PER_CYCLE` / `ZEBRA_COMMONS_MAX_IMPORTS_PER_CYCLE` | 1 / 1 | Offers / imports the dream cycle may start per cycle |
+| `DAILY_IMPORT_BUDGET_USD` | `ZEBRA_COMMONS_DAILY_IMPORT_BUDGET_USD` | 0.50 | Daily (UTC) spend cap on dream-started imports, from the spend ledger |
+| `COMMONS_OFFER_MIN_SUCCESS_RATE` / `COMMONS_OFFER_MIN_RATING` | `ZEBRA_COMMONS_OFFER_MIN_SUCCESS_RATE` / `ZEBRA_COMMONS_OFFER_MIN_RATING` | 0.8 / 4.0 | Stats a workflow needs before the dream cycle proposes offering it |
+| `COMMONS_SHARING_PROMOTION_APPROVALS` | `ZEBRA_COMMONS_SHARING_PROMOTION_APPROVALS` | 5 | Unchanged owner share approvals before Zebra asks for `sharing` promotion |
 | `SYNC_RECEIPT_PUBKEY` | `ZEBRA_SYNC_RECEIPT_PUBKEY` | — | Private-relay operator key trusted for sync receipts; unset keeps the S1 revocation rule |
 | — | `ZEBRA_COMMONS_OPERATOR_SECRET` | — | Public relay's receipt sidecar only: its operator secret (a different key from the sync relay's); never `prod.env` |
 | — | `ZEBRA_SYNC_OPERATOR_SECRET` | — | Receipt sidecar only: the operator secret (hex or nsec); a secret env file / CI variable, never `prod.env` |

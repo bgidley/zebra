@@ -252,6 +252,20 @@ blanket `--upgrade`, which pulls unrelated major versions), then the full test s
 minimum version: a bare `-P <package>` can keep the old version on a lock forked by platform
 markers (autobahn stayed on 26.7.1 for CPython that way).
 
+### Importing a GitHub PR (maintainer, #282)
+
+Contributors' Zebras open PRs on the GitHub mirror. The GitLab runner executes code on the prod
+host, so an imported diff is read by a person before any CI runs:
+```bash
+uv run python scripts/import_github_pr.py prepare <PR>    # verify origin signature, scan, local branch fN/gh<PR>-slug; pushes nothing
+# read the whole diff (path printed); CI/deploy/script paths are flagged
+uv run python scripts/import_github_pr.py push <PR> --reviewed-sha <sha>   # only now does CI start
+uv run python scripts/import_github_pr.py reject <PR> --reason "..."      # close with a comment
+```
+Then normal flow: pipeline green, `merge --no-ff` (contributor authorship kept), push master to both
+remotes; GitHub shows the PR merged. Add OpenSpec/outcomes on the branch if the PR lacks them.
+Details: [openspec/changes/maintainer-pr-import](openspec/changes/maintainer-pr-import/design.md).
+
 ## Plan Tracking
 
 All feature and bug work is tracked as **GitLab issues** at https://gitlab.com/gidley/zebra/-/issues.
@@ -775,6 +789,11 @@ See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking fl
 | `SYNC_RECEIPT_PUBKEY` | `ZEBRA_SYNC_RECEIPT_PUBKEY` | — | Relay operator key trusted for receipts (revocation by receipt order); the operator secret is only the sidecar's `ZEBRA_SYNC_OPERATOR_SECRET` (#246) |
 | — | `ZEBRA_SYNC_DIRECTION` | both | Skill sync direction of this device: `send` / `receive` / `both` / `off` (unknown → `off`); read by `SyncService` (#236) |
 | — | `ZEBRA_SYNC_CONFIDENTIAL_PATTERNS` | — | Extra regexes (codenames, domains; one per line or `;;`-separated) that block sending a workflow from this device (#236) |
+| `COMMONS_DREAM_ENABLED` | `ZEBRA_COMMONS_DREAM_ENABLED` | true | Dream-cycle Commons step (#235); inert without `ZEBRA_COMMONS_RELAYS` ("Commons off"). Read by `zebra_tasks/commons/dream.py`, like the rest of this group |
+| `MAX_OFFERS_PER_CYCLE` / `MAX_IMPORTS_PER_CYCLE` | `ZEBRA_COMMONS_MAX_OFFERS_PER_CYCLE` / `ZEBRA_COMMONS_MAX_IMPORTS_PER_CYCLE` | 1 / 1 | *Commons Offer* / *Commons Import* runs the dream cycle may start per cycle (#235) |
+| `DAILY_IMPORT_BUDGET_USD` | `ZEBRA_COMMONS_DAILY_IMPORT_BUDGET_USD` | 0.50 | Spend-ledger cap (UTC day) on dream-started imports (judging + gym); checked before each start (#235) |
+| `COMMONS_OFFER_MIN_SUCCESS_RATE` / `COMMONS_OFFER_MIN_RATING` | `ZEBRA_COMMONS_OFFER_MIN_SUCCESS_RATE` / `ZEBRA_COMMONS_OFFER_MIN_RATING` | 0.8 / 4.0 | Stats a learnt workflow needs (with ≥ 5 runs) before the dream cycle proposes offering it; an unrated workflow passes the rating test (#235) |
+| `COMMONS_SHARING_PROMOTION_APPROVALS` | `ZEBRA_COMMONS_SHARING_PROMOTION_APPROVALS` | 5 | Owner approvals of sharing proposals in a row, without a note, before Zebra asks (a pending suggestion) for more `sharing` autonomy (#235) |
 
 ### LLM Model Tiers (OpenRouter only)
 

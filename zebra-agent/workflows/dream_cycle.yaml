@@ -2,7 +2,7 @@ name: "Dream Cycle"
 description: "Self-improvement cycle that analyzes performance, evaluates workflows, and optimizes the system"
 tags: ["system", "optimization", "self-improvement", "dream"]
 use_when: "Use this workflow periodically (e.g., daily) to review and improve the agent's capabilities"
-version: 9
+version: 10
 first_task: analyze_metrics
 
 tasks:
@@ -94,6 +94,17 @@ tasks:
       max_requests: 2
       output_key: improvement_requests
 
+  # Proposes Commons offers and imports through their gated workflows and asks for
+  # sharing autonomy (#235). Off without ZEBRA_COMMONS_RELAYS ("Commons off"); never
+  # fails the cycle. Caps and budget: ZEBRA_COMMONS_* env vars.
+  commons:
+    name: "Commons Offers and Imports"
+    action: commons_dream
+    auto: true
+    properties:
+      capability_gaps: "{{metrics_analysis.continuation_analysis.capability_gaps}}"
+      output_key: commons
+
   generate_summary:
     name: "Generate Dream Cycle Summary"
     action: llm_call
@@ -147,6 +158,13 @@ tasks:
         Requests (title, area, impact): {{improvement_requests.requests}}
         Not requested (duplicate or over the cap): {{improvement_requests.skipped}}
 
+        ### Commons (status: {{commons.status}})
+        What I did, in my words: {{commons.voice_text}}
+        Offers proposed: {{commons.offers_proposed}}
+        Imports started: {{commons.imports_started}}
+        Skipped (name, reason): {{commons.skipped}}
+        Import budget (limit, spent, remaining USD): {{commons.budget}}
+
         Provide a brief summary (3-5 sentences) of:
         1. Current system health
         2. Key improvements made — only those listed under "Changes made"
@@ -160,7 +178,8 @@ tasks:
            examples), and how many changes to user-entered facts were sent to the user
            for confirmation instead of being applied
         7. Improvements to Zebra itself requested for human review (titles), if any
-        8. Recommendations for future focus
+        8. Commons: offers proposed and imports started (or that the Commons is off)
+        9. Recommendations for future focus
 
         Never describe a failed change as applied or as having fixed anything.
       temperature: 0.5
@@ -183,4 +202,6 @@ routings:
   - from: review_knowledge
     to: propose_improvements
   - from: propose_improvements
+    to: commons
+  - from: commons
     to: generate_summary
