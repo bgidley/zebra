@@ -56,3 +56,13 @@ valid login is given, else null. The action SHALL store it under `output_key` (d
 #### Scenario: Author email rewritten
 - **WHEN** the login `octo` with id `42` is given
 - **THEN** `author_email` is `42+octo@users.noreply.github.com`
+
+### Requirement: Rules-only scan for the maintainer import
+`scan_diff_text(patch, *, paths, commit_messages, author_emails, pr_body)` SHALL run every rule
+synchronously without the LLM pass, check the given `paths` as well as the patch's, scan the
+author emails (noreply addresses allowed), and additionally reject on any `SENSITIVE_PATHS`
+change, because CI runs on the prod host. It SHALL fail closed like the action.
+
+#### Scenario: CI change in a contributed PR
+- **WHEN** a clean patch changes `.gitlab-ci.yml`
+- **THEN** `scan_diff_text` returns `rejected` with a `sensitive_path` finding

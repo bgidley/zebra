@@ -13,6 +13,10 @@
 - [x] 2.2 Fail closed: empty, malformed, size cap, no LLM, failed call, empty / verdict-less reply, LLM positive
 - [x] 2.3 A real repo diff passes; sensitive files flagged; noreply email; action stores its output
 
+## 2b. Slice D integration
+
+- [x] 2b.1 `scan_diff_text()` (sync, rules only, extra paths, author emails, rejects `SENSITIVE_PATHS`) for `scripts/import_github_pr.py`; slice D's fallback tests call `builtin_scan` directly, new tests cover the real path
+
 ## 3. Docs
 
 - [x] 3.1 `specs/zebra-as-is.md`, `zebra-tasks/AGENTS.md`

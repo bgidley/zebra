@@ -48,9 +48,10 @@ def test_bad_origin_refused(body, head, why):
         imp.verify_origin(body, head)
 
 
-def test_scan_rejects_secret_and_blocked_path():
+def test_builtin_scan_rejects_secret_and_blocked_path():
+    """The fallback scan (used only if slice A's scanner is missing)."""
     patch = "+++ b/x.py\n+token = 'ghp_" + "a" * 36 + "'\n+mail = 'jane.doe@gmail.com'\n"
-    scan = imp.scan_diff(
+    scan = imp.builtin_scan(
         patch,
         paths=["x.py", ".env", "deploy/a.sh"],
         commit_messages=[],
@@ -63,8 +64,8 @@ def test_scan_rejects_secret_and_blocked_path():
     assert len(scan.findings) >= 3  # secret and email found as well
 
 
-def test_scan_clean_diff_passes():
-    scan = imp.scan_diff(
+def test_builtin_scan_clean_diff_passes():
+    scan = imp.builtin_scan(
         "+++ b/a.py\n+x = 1\n",
         paths=["a.py"],
         commit_messages=["feat: x"],
@@ -72,6 +73,66 @@ def test_scan_clean_diff_passes():
         pr_body="ok",
     )
     assert scan.verdict == "clean"
+
+
+def _git_diff(path: str, *lines: str) -> str:
+    return (
+        f"diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n"
+        f"@@ -0,0 +1,{len(lines)} @@\n" + "".join(f"+{line}\n" for line in lines)
+    )
+
+
+def test_scan_uses_slice_a_scanner():
+    from zebra_tasks.contribute import diff_scan
+
+    assert hasattr(diff_scan, "scan_diff_text")
+    patch = _git_diff("x.py", "token = 'ghp_" + "aB3" * 12 + "'", "mail = 'jane.doe@gmail.com'")
+    patch += _git_diff(".env", "A=1")
+    patch += _git_diff("deploy/a.sh", "echo hi")
+    scan = imp.scan_diff(
+        patch,
+        paths=["x.py", ".env", "deploy/a.sh"],
+        commit_messages=[],
+        author_emails=[],
+        pr_body="",
+    )
+    kinds = {f["kind"] for f in scan.findings}
+    assert scan.verdict == "rejected"
+    assert {"secret", "email", "blocked_file", "sensitive_path"} <= kinds
+
+
+def test_scan_sensitive_path_alone_rejects():
+    scan = imp.scan_diff(
+        _git_diff(".gitlab-ci.yml", "stages: [lint]"),
+        paths=[".gitlab-ci.yml"],
+        commit_messages=["ci: x"],
+        author_emails=["42+octo@users.noreply.github.com"],
+        pr_body="ok",
+    )
+    assert scan.verdict == "rejected"
+    assert [f["kind"] for f in scan.findings] == ["sensitive_path"]
+
+
+def test_scan_clean_diff_passes():
+    scan = imp.scan_diff(
+        _git_diff("a.py", "x = 1"),
+        paths=["a.py"],
+        commit_messages=["feat: x\n\nSigned-off-by: Octo <42+octo@users.noreply.github.com>"],
+        author_emails=["42+octo@users.noreply.github.com"],
+        pr_body="ok",
+    )
+    assert scan.verdict == "clean", scan.findings
+
+
+def test_scan_real_author_email_rejects():
+    scan = imp.scan_diff(
+        _git_diff("a.py", "x = 1"),
+        paths=["a.py"],
+        commit_messages=["feat: x"],
+        author_emails=["jane.doe@gmail.com"],
+        pr_body="ok",
+    )
+    assert scan.verdict == "rejected"
 
 
 def test_scan_error_fails_closed(monkeypatch):

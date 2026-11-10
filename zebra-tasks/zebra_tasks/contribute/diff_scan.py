@@ -460,83 +460,23 @@ async def scan_diff(
     Returns ``{verdict, clean, findings, failed_closed, reason, files, sensitive_files,
     added_lines, diff_sha256, author_email}``.
     """
-    rewritten = noreply_email(github_login, github_user_id)
-    result: dict[str, Any] = {
-        "verdict": ROUTE_REJECTED,
-        "clean": False,
-        "findings": [],
-        "failed_closed": False,
-        "reason": "",
-        "files": [],
-        "sensitive_files": [],
-        "added_lines": 0,
-        "diff_sha256": None,
-        "author_email": rewritten,
-    }
+    result, parsed, texts = _rule_scan(
+        diff,
+        commit_messages=commit_messages,
+        pr_title=pr_title,
+        pr_body=pr_body,
+        author_name=author_name,
+        author_emails=author_email,
+        github_login=github_login,
+        github_user_id=github_user_id,
+        patterns=patterns,
+    )
+    if parsed is None:
+        return result
 
     def rejected(reason: str, findings=None, *, failed: bool) -> dict[str, Any]:
         result.update(findings=_dedupe(findings or []), failed_closed=failed, reason=reason)
         return result
-
-    if not isinstance(diff, str) or not diff.strip():
-        return rejected("no diff to scan — failing closed", failed=True)
-    result["diff_sha256"] = hashlib.sha256(diff.encode("utf-8")).hexdigest()
-    try:
-        parsed = parse_diff(diff)
-    except DiffParseError as e:
-        return rejected(f"diff does not parse — failing closed: {e}", failed=True)
-    if not parsed.files:
-        return rejected("diff has no files — failing closed", failed=True)
-    try:
-        compiled = [re.compile(p, re.IGNORECASE) for p in patterns or []]
-    except re.error as e:
-        return rejected(f"bad confidential pattern — failing closed: {e}", failed=True)
-
-    result["files"] = [f.path for f in parsed.files]
-    result["sensitive_files"] = [f.path for f in parsed.files if is_sensitive(f.path)]
-    result["added_lines"] = sum(len(f.added) for f in parsed.files)
-
-    findings: list[dict[str, str]] = []
-    for f in parsed.files:
-        if f.deleted and not f.added:
-            continue  # deleting a file leaks nothing
-        reason = "binary file" if f.binary else blocked_reason(f.path)
-        if reason:
-            findings.append(
-                {"source": "rule", "kind": "blocked_file", "path": f.path, "reason": reason}
-            )
-
-    # Everything that would leave the instance, besides context and removed lines.
-    texts: list[ScanText] = []
-    lock_lines: list[ScanText] = []
-    for f in parsed.files:
-        texts.append(ScanText(f"{f.path} (path)", f.path))
-        if f.old_path and f.old_path != f.path:
-            texts.append(ScanText(f"{f.old_path} (path)", f.old_path))
-        added = [ScanText(f"{f.path}:{n}", line) for n, line in f.added if line.strip()]
-        (lock_lines if is_lock_file(f.path) else texts).extend(added)
-    texts.extend(parsed.loose)
-    for n, message in enumerate(_as_list(commit_messages)):
-        texts.append(ScanText(f"commit_message[{n}]", message))
-    texts.extend(ScanText("pr_title", t) for t in _as_list(pr_title))
-    texts.extend(ScanText("pr_body", t) for t in _as_list(pr_body))
-    rules_only = [ScanText("author_name", t) for t in _as_list(author_name)]
-    if rewritten is None:
-        rules_only += [ScanText("author_email", t) for t in _as_list(author_email)]
-
-    scanned = [ScanText(t.path, _normalise(t.text)) for t in texts + rules_only]
-    findings += rule_findings(scanned)
-    findings += [
-        f
-        for f in confidential_rule_findings(scanned, compiled)
-        if f["kind"] not in _SKIPPED_CONFIDENTIAL_KINDS
-    ]
-    findings += host_findings(scanned)
-    findings += secret_findings(scanned + lock_lines)
-    if findings:
-        return rejected(
-            "secrets, personal data or blocked files found by rules", findings, failed=False
-        )
 
     payload = _llm_payload(parsed, texts)
     if len(payload) > max_chars:
@@ -581,6 +521,170 @@ async def scan_diff(
         reason="no secrets, personal data or blocked files found by rules or LLM",
     )
     return result
+
+
+def scan_diff_text(
+    patch: Any,
+    *,
+    paths: list[str] | None = None,
+    commit_messages: Any = None,
+    author_emails: Any = None,
+    pr_body: Any = None,
+    pr_title: Any = None,
+    patterns: list[str] | None = None,
+) -> dict[str, Any]:
+    """Rules-only, synchronous scan for the maintainer's PR import (#282 slice D).
+
+    Every rule of :func:`scan_diff` runs (``ZEBRA_SYNC_CONFIDENTIAL_PATTERNS`` included), but
+    not the LLM pass: the maintainer reads the whole diff before anything reaches CI, and the
+    contributing instance already ran the LLM. *paths* (e.g. ``git diff --name-only``) are
+    checked as well as the paths in the patch. Fails closed like :func:`scan_diff`.
+    """
+    all_patterns = configured_patterns(patterns)
+    paths = [p for p in paths or [] if isinstance(p, str) and p]
+    result, parsed, _ = _rule_scan(
+        patch,
+        commit_messages=commit_messages,
+        pr_title=pr_title,
+        pr_body=pr_body,
+        author_emails=author_emails,
+        patterns=all_patterns,
+        extra_paths=paths,
+    )
+    # CI runs on the prod host: a contributed CI / deploy / scripts change is refused here, so
+    # the maintainer imports it by hand after reading it.
+    sensitive = sorted(set(result["sensitive_files"]) | {p for p in paths if is_sensitive(p)})
+    result["sensitive_files"] = sensitive
+    sensitive_findings = [
+        {
+            "source": "rule",
+            "kind": "sensitive_path",
+            "path": p,
+            "reason": "CI, deploy or scripts change; CI runs on the prod host",
+        }
+        for p in sensitive
+    ]
+    if parsed is None:
+        result["findings"] = result["findings"] + sensitive_findings
+    elif sensitive_findings:
+        result.update(
+            findings=sensitive_findings,
+            reason="CI, deploy or scripts paths changed — import by hand after reading",
+        )
+    else:
+        result.update(
+            verdict=ROUTE_CLEAN,
+            clean=True,
+            reason="no secrets, personal data or blocked files found by rules (no LLM pass)",
+        )
+    return result
+
+
+def _rule_scan(
+    diff: Any,
+    *,
+    commit_messages: Any = None,
+    pr_title: Any = None,
+    pr_body: Any = None,
+    author_name: Any = None,
+    author_emails: Any = None,
+    github_login: Any = None,
+    github_user_id: Any = None,
+    patterns: list[str] | None = None,
+    extra_paths: list[str] | tuple[str, ...] = (),
+) -> tuple[dict[str, Any], ParsedDiff | None, list[ScanText]]:
+    """The rules stage: ``(result, parsed, llm_texts)``; ``parsed`` is None once rejected."""
+    rewritten = noreply_email(github_login, github_user_id)
+    result: dict[str, Any] = {
+        "verdict": ROUTE_REJECTED,
+        "clean": False,
+        "findings": [],
+        "failed_closed": False,
+        "reason": "",
+        "files": [],
+        "sensitive_files": [],
+        "added_lines": 0,
+        "diff_sha256": None,
+        "author_email": rewritten,
+    }
+
+    def rejected(reason: str, findings=None, *, failed: bool):
+        result.update(findings=_dedupe(findings or []), failed_closed=failed, reason=reason)
+        return result, None, []
+
+    if not isinstance(diff, str) or not diff.strip():
+        return rejected("no diff to scan — failing closed", failed=True)
+    result["diff_sha256"] = hashlib.sha256(diff.encode("utf-8")).hexdigest()
+    try:
+        parsed = parse_diff(diff)
+    except DiffParseError as e:
+        return rejected(f"diff does not parse — failing closed: {e}", failed=True)
+    if not parsed.files:
+        return rejected("diff has no files — failing closed", failed=True)
+    try:
+        compiled = [re.compile(p, re.IGNORECASE) for p in patterns or []]
+    except re.error as e:
+        return rejected(f"bad confidential pattern — failing closed: {e}", failed=True)
+
+    result["files"] = [f.path for f in parsed.files]
+    result["sensitive_files"] = [f.path for f in parsed.files if is_sensitive(f.path)]
+    result["added_lines"] = sum(len(f.added) for f in parsed.files)
+
+    findings: list[dict[str, str]] = []
+    diff_paths = {f.path for f in parsed.files}
+    for path in extra_paths:
+        if path not in diff_paths and blocked_reason(path):
+            findings.append(
+                {
+                    "source": "rule",
+                    "kind": "blocked_file",
+                    "path": path,
+                    "reason": blocked_reason(path),
+                }
+            )
+    for f in parsed.files:
+        if f.deleted and not f.added:
+            continue  # deleting a file leaks nothing
+        reason = "binary file" if f.binary else blocked_reason(f.path)
+        if reason:
+            findings.append(
+                {"source": "rule", "kind": "blocked_file", "path": f.path, "reason": reason}
+            )
+
+    # Everything that would leave the instance, besides context and removed lines.
+    texts: list[ScanText] = []
+    lock_lines: list[ScanText] = []
+    for f in parsed.files:
+        texts.append(ScanText(f"{f.path} (path)", f.path))
+        if f.old_path and f.old_path != f.path:
+            texts.append(ScanText(f"{f.old_path} (path)", f.old_path))
+        added = [ScanText(f"{f.path}:{n}", line) for n, line in f.added if line.strip()]
+        (lock_lines if is_lock_file(f.path) else texts).extend(added)
+    texts.extend(parsed.loose)
+    texts.extend(ScanText(f"{p} (path)", p) for p in extra_paths if p not in diff_paths)
+    for n, message in enumerate(_as_list(commit_messages)):
+        texts.append(ScanText(f"commit_message[{n}]", message))
+    texts.extend(ScanText("pr_title", t) for t in _as_list(pr_title))
+    texts.extend(ScanText("pr_body", t) for t in _as_list(pr_body))
+    rules_only = [ScanText("author_name", t) for t in _as_list(author_name)]
+    if rewritten is None:
+        rules_only += [ScanText("author_email", t) for t in _as_list(author_emails)]
+
+    scanned = [ScanText(t.path, _normalise(t.text)) for t in texts + rules_only]
+    findings += rule_findings(scanned)
+    findings += [
+        f
+        for f in confidential_rule_findings(scanned, compiled)
+        if f["kind"] not in _SKIPPED_CONFIDENTIAL_KINDS
+    ]
+    findings += host_findings(scanned)
+    findings += secret_findings(scanned + lock_lines)
+    if findings:
+        return rejected(
+            "secrets, personal data or blocked files found by rules", findings, failed=False
+        )
+
+    return result, parsed, texts
 
 
 def _llm_payload(parsed: ParsedDiff, texts: list[ScanText]) -> str:

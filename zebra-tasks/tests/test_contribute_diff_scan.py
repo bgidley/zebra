@@ -20,6 +20,7 @@ from zebra_tasks.contribute.diff_scan import (
     noreply_email,
     parse_diff,
     scan_diff,
+    scan_diff_text,
     shannon_entropy,
 )
 from zebra_tasks.llm.base import LLMResponse, TokenUsage
@@ -511,3 +512,40 @@ def test_action_is_registered_and_reversible():
     eps = {ep.name: ep for ep in entry_points(group="zebra.tasks")}
     assert eps["contribute_diff_scan"].load() is ContributeDiffScanAction
     assert ContributeDiffScanAction.reversibility_hint == "always_reversible"
+
+
+# --- rules-only entry point for the maintainer's PR import (slice D) ----------------------
+
+
+def test_scan_diff_text_is_rules_only_and_sync():
+    result = scan_diff_text(added("a.py", "x = 1"), paths=["a.py"], commit_messages=["feat: x"])
+    assert result["verdict"] == ROUTE_CLEAN
+    assert "no LLM pass" in result["reason"]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "kind"),
+    [
+        ({"commit_messages": [f"oops {GH_TOKEN}"]}, "secret"),
+        ({"pr_body": "ring +44 7700 900123"}, "phone"),
+        ({"author_emails": ["jane.smith@gmail.com"]}, "email"),
+        ({"paths": ["a.py", "secrets/.env"]}, "blocked_file"),
+        ({"paths": ["a.py", "scripts/deploy.sh"]}, "sensitive_path"),
+        ({"patterns": ["zorblax"], "pr_body": "for Zorblax"}, "confidential_pattern"),
+    ],
+)
+def test_scan_diff_text_rejects(kwargs, kind):
+    result = scan_diff_text(added("a.py", "x = 1"), **kwargs)
+    assert result["verdict"] == ROUTE_REJECTED
+    assert kind in _kinds(result)
+
+
+def test_scan_diff_text_flags_sensitive_paths_in_the_patch():
+    result = scan_diff_text(added("deploy/podman/x.container", "Image=zebra"))
+    assert result["verdict"] == ROUTE_REJECTED
+    assert result["sensitive_files"] == ["deploy/podman/x.container"]
+
+
+def test_scan_diff_text_fails_closed_on_bad_input():
+    assert scan_diff_text("")["failed_closed"]
+    assert scan_diff_text("+x\n")["verdict"] == ROUTE_REJECTED
