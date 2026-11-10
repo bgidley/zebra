@@ -471,7 +471,7 @@ release channel (`schema.yaml` is the form). CI job `iac` (stage `test`) runs
 `terraform test` (mocked `oci` provider), a plan with throwaway credentials (lookups are keyed on
 the new compartment so the plan makes no API calls) and `scripts/oci_plan_scan.py` against
 `deploy/oci/free_tier_allowlist.yaml`; `tests/iac/` has one bad plan per rule. No cloud-init,
-guardrails or TLS yet (S2–S6). Spec: `openspec/changes/oci-provision-stack/`.
+guardrails or TLS yet (S2–S6). Spec: `openspec/specs/oci-provision-stack/`.
 
 ### Delivery review (#190)
 
