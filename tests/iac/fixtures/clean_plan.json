@@ -1,0 +1,393 @@
+{
+ "format_version": "1.2",
+ "resource_changes": [
+  {
+   "address": "data.oci_core_images.oracle_linux",
+   "change": {
+    "actions": [
+     "read"
+    ],
+    "after": {
+     "display_name": null,
+     "filter": [],
+     "operating_system": "Oracle Linux",
+     "operating_system_version": "9",
+     "shape": "VM.Standard.A1.Flex",
+     "sort_by": "TIMECREATED",
+     "sort_order": "DESC",
+     "state": null
+    }
+   },
+   "mode": "data",
+   "name": "oracle_linux",
+   "type": "oci_core_images"
+  },
+  {
+   "address": "data.oci_identity_availability_domains.ads",
+   "change": {
+    "actions": [
+     "read"
+    ],
+    "after": {
+     "filter": []
+    }
+   },
+   "mode": "data",
+   "name": "ads",
+   "type": "oci_identity_availability_domains"
+  },
+  {
+   "address": "data.oci_objectstorage_namespace.ns",
+   "change": {
+    "actions": [
+     "read"
+    ],
+    "after": {}
+   },
+   "mode": "data",
+   "name": "ns",
+   "type": "oci_objectstorage_namespace"
+  },
+  {
+   "address": "oci_core_instance.zebra",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "async": null,
+     "cluster_placement_group_id": null,
+     "create_vnic_details": [
+      {
+       "assign_private_dns_record": null,
+       "assign_public_ip": "true",
+       "hostname_label": "zebra"
+      }
+     ],
+     "display_name": "zebra",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "preserve_boot_volume": null,
+     "preserve_data_volumes_created_at_launch": null,
+     "shape": "VM.Standard.A1.Flex",
+     "shape_config": [
+      {
+       "memory_in_gbs": 12,
+       "ocpus": 2
+      }
+     ],
+     "source_details": [
+      {
+       "boot_volume_size_in_gbs": "100",
+       "is_preserve_boot_volume_enabled": null,
+       "kms_key_id": null,
+       "source_type": "image"
+      }
+     ],
+     "timeouts": null,
+     "update_operation_constraint": null
+    }
+   },
+   "mode": "managed",
+   "name": "zebra",
+   "type": "oci_core_instance"
+  },
+  {
+   "address": "oci_core_internet_gateway.zebra",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-igw",
+     "enabled": true,
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "timeouts": null
+    }
+   },
+   "mode": "managed",
+   "name": "zebra",
+   "type": "oci_core_internet_gateway"
+  },
+  {
+   "address": "oci_core_route_table.zebra",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-rt",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "route_rules": [
+      {
+       "destination": "0.0.0.0/0",
+       "destination_type": "CIDR_BLOCK"
+      }
+     ],
+     "timeouts": null
+    }
+   },
+   "mode": "managed",
+   "name": "zebra",
+   "type": "oci_core_route_table"
+  },
+  {
+   "address": "oci_core_security_list.zebra",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-https-only",
+     "egress_security_rules": [
+      {
+       "destination": "0.0.0.0/0",
+       "icmp_options": [],
+       "protocol": "all",
+       "tcp_options": [],
+       "udp_options": []
+      }
+     ],
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "ingress_security_rules": [
+      {
+       "icmp_options": [],
+       "protocol": "6",
+       "source": "0.0.0.0/0",
+       "stateless": false,
+       "tcp_options": [
+        {
+         "max": 443,
+         "min": 443,
+         "source_port_range": []
+        }
+       ],
+       "udp_options": []
+      }
+     ],
+     "timeouts": null
+    }
+   },
+   "mode": "managed",
+   "name": "zebra",
+   "type": "oci_core_security_list"
+  },
+  {
+   "address": "oci_core_subnet.zebra",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "cidr_block": "10.0.1.0/24",
+     "display_name": "zebra-public",
+     "dns_label": "pub",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "prohibit_public_ip_on_vnic": false,
+     "timeouts": null
+    }
+   },
+   "mode": "managed",
+   "name": "zebra",
+   "type": "oci_core_subnet"
+  },
+  {
+   "address": "oci_core_vcn.zebra",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "cidr_blocks": [
+      "10.0.0.0/16"
+     ],
+     "display_name": "zebra-vcn",
+     "dns_label": "zebra",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "timeouts": null
+    }
+   },
+   "mode": "managed",
+   "name": "zebra",
+   "type": "oci_core_vcn"
+  },
+  {
+   "address": "oci_database_autonomous_database.zebra",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "db_name": "zebra",
+     "db_version": "26ai",
+     "db_workload": "OLTP",
+     "display_name": "zebra-adb",
+     "enable_delete_scheduled_operations": null,
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "is_disconnect_peer": null,
+     "is_free_tier": true,
+     "is_mtls_connection_required": true,
+     "is_shrink_only": null,
+     "key_version_id": null,
+     "rotate_key_trigger": null,
+     "secret_version_number": 1,
+     "switchover_to": null,
+     "switchover_to_remote_peer_id": null,
+     "timeouts": null
+    }
+   },
+   "mode": "managed",
+   "name": "zebra",
+   "type": "oci_database_autonomous_database"
+  },
+  {
+   "address": "oci_identity_compartment.zebra",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "compartment_id": "ocid1.tenancy.oc1..aaaaaaaazebraplanscanzebraplanscanzebraplanscanzebrapla",
+     "description": "Zebra (Always Free) - created by the Zebra Resource Manager stack",
+     "enable_delete": true,
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "name": "zebra",
+     "timeouts": null
+    }
+   },
+   "mode": "managed",
+   "name": "zebra",
+   "type": "oci_identity_compartment"
+  },
+  {
+   "address": "oci_kms_key.zebra",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-key",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "key_shape": [
+      {
+       "algorithm": "AES",
+       "length": 32
+      }
+     ],
+     "protection_mode": "SOFTWARE",
+     "restore_from_file": [],
+     "restore_from_object_store": [],
+     "restore_trigger": null,
+     "timeouts": null
+    }
+   },
+   "mode": "managed",
+   "name": "zebra",
+   "type": "oci_kms_key"
+  },
+  {
+   "address": "oci_kms_vault.zebra",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-vault",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "restore_from_file": [],
+     "restore_from_object_store": [],
+     "restore_trigger": null,
+     "timeouts": null,
+     "vault_type": "DEFAULT"
+    }
+   },
+   "mode": "managed",
+   "name": "zebra",
+   "type": "oci_kms_vault"
+  },
+  {
+   "address": "oci_objectstorage_bucket.models",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "access_type": "NoPublicAccess",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "metadata": null,
+     "name": "zebra-models",
+     "retention_rules": [],
+     "storage_tier": "Standard",
+     "timeouts": null,
+     "versioning": "Disabled"
+    }
+   },
+   "mode": "managed",
+   "name": "models",
+   "type": "oci_objectstorage_bucket"
+  },
+  {
+   "address": "oci_vault_secret.adb_admin",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "description": "Autonomous Database ADMIN password (generated by Vault)",
+     "enable_auto_generation": true,
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "replication_config": [],
+     "secret_generation_context": [
+      {
+       "generation_template": "DBAAS_DEFAULT_PASSWORD",
+       "generation_type": "PASSPHRASE",
+       "passphrase_length": 32,
+       "secret_template": null
+      }
+     ],
+     "secret_name": "zebra-adb-admin",
+     "timeouts": null
+    }
+   },
+   "mode": "managed",
+   "name": "adb_admin",
+   "type": "oci_vault_secret"
+  }
+ ],
+ "terraform_version": "1.12.2"
+}

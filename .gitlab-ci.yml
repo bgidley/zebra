@@ -37,6 +37,17 @@ unit:
   script:
     - uv run pytest -m "not e2e and not smoke" --ignore=zebra-agent-web/tests/e2e_live --ignore=zebra-agent-web/tests/smoke --ds=zebra_agent_web.test_settings
 
+# OCI Resource Manager stack (#279): fmt, validate, `terraform test` with a mocked oci
+# provider, and a plan scanned against the Always Free allowlist. Terraform runs in a pinned
+# container; no OCI credentials, never applies. The scanner's pytest cases run in `unit`.
+iac:
+  stage: test
+  retry:
+    max: 1
+    when: script_failure # registry.terraform.io hiccups during init
+  script:
+    - bash scripts/oci_iac_check.sh
+
 e2e:
   stage: e2e
   # Auto-recover transient ADB connection drops (e.g. DPY-4011). The per-pipeline
