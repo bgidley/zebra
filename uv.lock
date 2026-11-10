@@ -1755,6 +1755,7 @@ source = { editable = "zebra-agent" }
 dependencies = [
     { name = "btclib-secp256k1" },
     { name = "cronsim" },
+    { name = "cryptography" },
     { name = "dependency-injector" },
     { name = "keyring" },
     { name = "nostr-sdk" },
@@ -1774,6 +1775,7 @@ dev = [
 requires-dist = [
     { name = "btclib-secp256k1", specifier = ">=0.8.0.13" },
     { name = "cronsim", specifier = ">=2.6" },
+    { name = "cryptography", specifier = ">=50.0.2" },
     { name = "dependency-injector", specifier = ">=4.44.0" },
     { name = "keyring", specifier = ">=24.0" },
     { name = "nostr-sdk", specifier = ">=0.45.1,<0.46" },

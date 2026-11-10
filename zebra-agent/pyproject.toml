@@ -25,6 +25,8 @@ dependencies = [
     "cronsim>=2.6",
     "keyring>=24.0",
     "btclib-secp256k1>=0.8.0.13",
+    # Release manifest signatures (cosign ECDSA P-256), zebra_agent/release.py (#283).
+    "cryptography>=50.0.2",
     # Nostr transport for the Commons (#246). Alpha: only zebra_agent/commons/nostr.py imports it.
     "nostr-sdk>=0.45.1,<0.46",
 ]

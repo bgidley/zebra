@@ -136,3 +136,42 @@ release:tag:
       when: manual
       allow_failure: true
   resource_group: zebra-release
+
+# Release manifests (#283 R3). Tag pipelines only, and only once the release bucket and the
+# cosign key are configured, so branch and master pipelines never see these jobs. RELEASE_IMAGE
+# (registry/repo@sha256:...) comes from the image publish job (R2, not built yet) as a dotenv
+# artifact; until then release:manifest stops with a clear message. See
+# specs/release-pipeline-design.md for the variables and the bucket layout.
+.release-manifest:
+  stage: release
+  variables:
+    RELEASE_PUBKEY: deploy/release/cosign.pub
+  resource_group: zebra-release
+
+release:manifest:
+  extends: .release-manifest
+  script:
+    - test -n "$RELEASE_IMAGE" || { echo "RELEASE_IMAGE is not set (publish the image first)"; exit 1; }
+    - uv run python scripts/release_manifest.py build --version "${CI_COMMIT_TAG#v}" --ref "$CI_COMMIT_TAG" --image "$RELEASE_IMAGE" --channel next --notes-gitlab
+    - uv run python scripts/release_manifest.py sign --key "$COSIGN_PRIVATE_KEY"
+    - uv run python scripts/release_manifest.py verify --pubkey "$RELEASE_PUBKEY" --cosign
+    - uv run python scripts/release_manifest.py publish --bucket "$RELEASE_BUCKET"
+  artifacts:
+    paths:
+      - release-dist/
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ && $RELEASE_BUCKET && $COSIGN_PRIVATE_KEY
+
+# Promote this tag's release to the stable channel: only channels/stable.json(.sig) change.
+release:promote-stable:
+  extends: .release-manifest
+  needs: ["release:manifest"]
+  script:
+    - uv run python scripts/release_manifest.py fetch --bucket "$RELEASE_BUCKET" "releases/$CI_COMMIT_TAG.json" "releases/$CI_COMMIT_TAG.json.sig"
+    - uv run python scripts/release_manifest.py promote --version "${CI_COMMIT_TAG#v}" --pubkey "$RELEASE_PUBKEY"
+    - uv run python scripts/release_manifest.py sign --key "$COSIGN_PRIVATE_KEY" release-dist/channels/stable.json
+    - uv run python scripts/release_manifest.py verify --pubkey "$RELEASE_PUBKEY" --cosign release-dist/channels/stable.json
+    - uv run python scripts/release_manifest.py publish --bucket "$RELEASE_BUCKET" release-dist/channels/stable.json
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ && $RELEASE_BUCKET && $COSIGN_PRIVATE_KEY
+      when: manual

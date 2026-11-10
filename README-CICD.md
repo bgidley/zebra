@@ -25,6 +25,7 @@ lint  →  test  →  e2e  →  deploy  →  smoke  →  release
 | deploy | `deploy` | `scripts/deploy-podman.sh $SHA` | `master` push |
 | smoke | `smoke` | `pytest tests/smoke -m smoke` against `http://localhost:8000`, logged in via a 15-minute `manage.py smoke_session` for the `smoke` user (#218) | after deploy |
 | release | `release:tag` | `scripts/release_tag.py`: creates the GitLab release + `vX.Y.Z` tag at this commit with notes from the issues closed since the last tag (#283). Refuses unless this is still the master head. Set `RELEASE_BUMP` (`major`/`minor`/`patch`, default `minor`) or `RELEASE_VERSION` when running it; `--dry-run` locally previews | manual, `master` push, after smoke |
+| release | `release:manifest` / `release:promote-stable` | `scripts/release_manifest.py`: build, sign, verify and upload the signed release manifest (`releases/vX.Y.Z.json`, `channels/next.json`); promote copies it to `channels/stable.json` (#283 R3) | `vX.Y.Z` tag pipelines, only when `RELEASE_BUCKET` and `COSIGN_PRIVATE_KEY` are set (promote manual) |
 
 `deploy` uses `resource_group: zebra-prod`, so deploys never overlap.
 
