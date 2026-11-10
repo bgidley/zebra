@@ -252,6 +252,20 @@ blanket `--upgrade`, which pulls unrelated major versions), then the full test s
 minimum version: a bare `-P <package>` can keep the old version on a lock forked by platform
 markers (autobahn stayed on 26.7.1 for CPython that way).
 
+### Importing a GitHub PR (maintainer, #282)
+
+Contributors' Zebras open PRs on the GitHub mirror. The GitLab runner executes code on the prod
+host, so an imported diff is read by a person before any CI runs:
+```bash
+uv run python scripts/import_github_pr.py prepare <PR>    # verify origin signature, scan, local branch fN/gh<PR>-slug; pushes nothing
+# read the whole diff (path printed); CI/deploy/script paths are flagged
+uv run python scripts/import_github_pr.py push <PR> --reviewed-sha <sha>   # only now does CI start
+uv run python scripts/import_github_pr.py reject <PR> --reason "..."      # close with a comment
+```
+Then normal flow: pipeline green, `merge --no-ff` (contributor authorship kept), push master to both
+remotes; GitHub shows the PR merged. Add OpenSpec/outcomes on the branch if the PR lacks them.
+Details: [openspec/changes/maintainer-pr-import](openspec/changes/maintainer-pr-import/design.md).
+
 ## Plan Tracking
 
 All feature and bug work is tracked as **GitLab issues** at https://gitlab.com/gidley/zebra/-/issues.
