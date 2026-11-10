@@ -65,24 +65,26 @@ AUTH fails and every `SKILL` is refused. The relay never binds port 8000.
 
 ## 3. Reverse-proxy route `wss://<host>/sync` (root)
 
-Add a path rule **above** the existing hostname rule in `/etc/cloudflared/config.yml`
-(written by `deploy/podman/setup-tunnel.sh`; re-running that script drops the rule, so re-add it):
+Re-run the tunnel script. It sees the relay's Quadlet (installed in step 2) and adds the route
+above the hostname rule; it also keeps the `/commons` route if the public relay is installed:
+
+```bash
+deploy/podman/setup-tunnel.sh --print-config <host>   # check first: shows ^/sync$ -> 127.0.0.1:7778
+deploy/podman/setup-tunnel.sh <host>                  # writes /etc/cloudflared/config.yml, validates, restarts
+```
 
 ```yaml
 ingress:
   - hostname: <host>
-    path: ^/sync
+    path: ^/sync$
     service: http://127.0.0.1:7778
   - hostname: <host>
     service: http://127.0.0.1:8000
   - service: http_status:404
 ```
 
-```bash
-sudo cloudflared tunnel --config /etc/cloudflared/config.yml ingress validate
-sudo systemctl restart cloudflared
-```
-
+Never edit `config.yml` by hand: the script owns it, and re-running it keeps every installed
+relay's route. Force a route on or off with `ROUTE_SYNC=1|0` (and `ROUTE_COMMONS=1|0`).
 strfry serves WebSockets on any path, so `/sync` needs no rewrite.
 
 ## 4. Register the Zebra key on the allow-list

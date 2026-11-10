@@ -63,8 +63,13 @@ The relay never binds port 8000. `policy.json` is re-read on the next event (no 
 
 ## 3. Reverse-proxy route `wss://<host>/commons` (root)
 
-Add a path rule **above** the existing hostname rule in `/etc/cloudflared/config.yml` (next to
-the `/sync` rule if the sync relay is up; re-running `deploy/podman/setup-tunnel.sh` drops both):
+Re-run the tunnel script. It sees the relay's Quadlet (installed in step 2) and adds the route
+above the hostname rule, next to the `/sync` route if the sync relay is installed:
+
+```bash
+deploy/podman/setup-tunnel.sh --print-config <host>   # check first: shows ^/commons$ -> 127.0.0.1:7779
+deploy/podman/setup-tunnel.sh <host>                  # writes /etc/cloudflared/config.yml, validates, restarts
+```
 
 ```yaml
 ingress:
@@ -76,11 +81,8 @@ ingress:
   - service: http_status:404
 ```
 
-```bash
-sudo cloudflared tunnel --config /etc/cloudflared/config.yml ingress validate
-sudo systemctl restart cloudflared
-```
-
+Never edit `config.yml` by hand: the script owns it, and re-running it keeps every installed
+relay's route. Force a route on or off with `ROUTE_COMMONS=1|0` (and `ROUTE_SYNC=1|0`).
 The rule matches `/commons` exactly: the web app's `/commons/` page (and everything under it)
 must keep going to Django, so Zebras use `wss://<host>/commons` with no trailing slash.
 
