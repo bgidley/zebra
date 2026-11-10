@@ -91,8 +91,9 @@ before setting the key.
   the tag existed): `0.3.0` appears as `0.3.0+1.g…` on the following deploy.
 - Tag pipelines re-run e2e against the shared Always Free ADB (`resource_group: oracle-e2e`).
 - Not yet done: the key pair, `deploy/release/cosign.pub`, the bucket, `v*` tag protection, cosign
-  on the host (R2 pins it in `bootstrap-host.sh`), retention of 5 releases, the #279 Always Free
-  plan scan of the stack zip. In-process verification matches cosign's documented `sign-blob`
+  on the host (R2 pins it in `bootstrap-host.sh`), retention of 5 releases, publishing the #279
+  stack zip. The #279 Always Free plan scan (`iac` job, `scripts/oci_plan_scan.py`) has no rules,
+  so it already runs on every release tag pipeline. In-process verification matches cosign's documented `sign-blob`
   format but was not cross-checked against a real cosign binary (not installed on the host).
 - Classifying contracting migrations automatically is U1 (`check_migrations.py`); until then
   `--contract` is manual.
