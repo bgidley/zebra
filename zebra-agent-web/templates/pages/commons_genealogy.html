@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% comment %}
+Public genealogy (#247): the family tree of skills across Zebras and how Zebras are linked,
+built only from public Commons events in the local mirror (api/public_genealogy_view.py).
+Nothing private is shown or referenced, not even by hash. No market prices (S7 is parked).
+No JavaScript.
+{% endcomment %}
+
+{% block title %}Public genealogy - Zebra Agent{% endblock %}
+{% block page_title %}Commons{% endblock %}
+
+{% block content %}
+<style>
+    .genealogy-graph { max-width: 100%; height: auto; }
+    .gen-node:focus { outline: none; }
+    .gen-node:focus-visible rect, .gen-node:hover rect { stroke: var(--color-ink); stroke-width: 3; }
+</style>
+<div class="space-y-6 max-w-5xl min-w-0" data-testid="public-genealogy">
+    <div class="min-w-0">
+        <a href="{% url 'commons' %}" class="text-sm text-muted hover:text-ink">Commons</a>
+        <h1 class="mt-1 text-xl font-semibold text-ink">Public genealogy</h1>
+        <p class="text-muted mt-1 max-w-[65ch]">How workflows offered in the public Commons grew from one another across Zebras, who adopted them and what happened, and which Zebras vouch for which. Built only from public Commons events I hold. Versions that were never offered publicly do not appear here, not even by hash.</p>
+    </div>
+
+    {% if not enabled %}
+    <section class="panel px-6 py-5" data-testid="genealogy-off">
+        <p class="text-ink font-medium">Commons is off.</p>
+        <p class="text-muted text-sm mt-1">There is nothing public to show. Set <span class="font-mono">ZEBRA_COMMONS_ENABLED=1</span> and a public relay to take part in the Commons.</p>
+    </section>
+    {% else %}
+
+    {% if not publishing_on %}
+    <p class="text-sm text-muted max-w-[65ch]" data-testid="genealogy-publishing-off">Publishing is off (<span class="font-mono">ZEBRA_COMMONS_RELAYS</span> is not set), so I fetch nothing new. This page shows only the public events I already hold.</p>
+    {% endif %}
+
+    <section class="panel min-w-0" data-testid="public-lineage" aria-labelledby="lineage-title">
+        <div class="px-5 py-3 border-b border-line">
+            <h2 id="lineage-title" class="text-base font-semibold text-ink">Workflow lineage</h2>
+            <p class="text-xs text-faint"><span class="font-mono tabular-nums">{{ offer_count }}</span> offered version{{ offer_count|pluralize }} from <span class="font-mono tabular-nums">{{ publisher_count }}</span> Zebra{{ publisher_count|pluralize }}. Oldest at the top; mine are outlined green. Select a version to see its family.</p>
+        </div>
+        {% if graph_svg %}
+        <div class="p-4 flex justify-center min-w-0">{{ graph_svg|safe }}</div>
+        {% else %}
+        <p class="px-5 py-4 text-sm text-muted" data-testid="lineage-empty">I have not seen any public offers yet.</p>
+        {% endif %}
+    </section>
+
+    {% if offers %}
+    <section aria-labelledby="offers-title" class="space-y-4" data-testid="public-offers">
+        <h2 id="offers-title" class="text-base font-semibold text-ink">Offered versions</h2>
+        {% for card in offers %}{% include "partials/commons_genealogy_offer_card.html" with card=card link="true" %}{% endfor %}
+    </section>
+    {% endif %}
+
+    <section class="panel min-w-0" data-testid="zebra-lineage" aria-labelledby="zebras-title">
+        <div class="px-5 py-3 border-b border-line">
+            <h2 id="zebras-title" class="text-base font-semibold text-ink">Zebra lineage</h2>
+            <p class="text-xs text-faint">Who vouches for whom, from the latest public trust each Zebra published. Dashed arrows are distrust.</p>
+        </div>
+        {% if trust_svg %}<div class="p-4 flex justify-center min-w-0">{{ trust_svg|safe }}</div>{% endif %}
+        {% if trust_rows %}
+        <ul class="divide-y divide-line border-t border-line" data-testid="trust-links">
+            {% for t in trust_rows %}
+            <li class="px-5 py-2 text-sm flex flex-wrap gap-x-2 gap-y-0.5" data-from="{{ t.from.pubkey }}" data-to="{{ t.to.pubkey }}" data-weight="{{ t.weight|floatformat:2 }}">
+                <span class="text-ink">{{ t.from.name }}</span>
+                <span class="text-muted">{% if t.withdrawn %}no longer vouches for{% elif t.negative %}distrusts{% else %}trusts{% endif %}</span>
+                <span class="text-ink">{{ t.to.name }}</span>
+                {% if not t.withdrawn %}<span class="font-mono tabular-nums {% if t.negative %}text-fail{% else %}text-ok{% endif %}">{{ t.weight|floatformat:2 }}</span>{% endif %}
+                <span class="text-faint break-words min-w-0">{% if t.note %}“{{ t.reason }}”{% else %}({{ t.reason }}){% endif %}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="px-5 py-4 text-sm text-muted" data-testid="trust-empty">I hold no public trust between Zebras yet.</p>
+        {% endif %}
+    </section>
+
+    <section class="panel min-w-0" data-testid="trust-paths" aria-labelledby="paths-title">
+        <div class="px-5 py-3 border-b border-line">
+            <h2 id="paths-title" class="text-base font-semibold text-ink">My trust paths</h2>
+            <p class="text-xs text-faint">How I reach each Zebra from the ones you told me you know: each weight multiplied, a little less with each step.</p>
+        </div>
+        {% if paths %}
+        <ul class="divide-y divide-line">
+            {% for p in paths %}<li class="px-5 py-2 font-mono text-xs text-ink break-words" data-zebra="{{ p.zebra.pubkey }}">{{ p.text }}</li>{% endfor %}
+        </ul>
+        {% else %}
+        <p class="px-5 py-4 text-sm text-muted">I trust no other Zebra yet. Vouch for a Zebra you know on the <a class="underline hover:text-ink" href="{% url 'commons' %}">Commons page</a>.</p>
+        {% endif %}
+    </section>
+
+    {% if zebras %}
+    <section class="panel min-w-0" data-testid="zebras-seen" aria-labelledby="seen-title">
+        <div class="px-5 py-3 border-b border-line">
+            <h2 id="seen-title" class="text-base font-semibold text-ink">Zebras in this tree</h2>
+        </div>
+        <ul class="divide-y divide-line">
+            {% for z in zebras %}
+            <li class="px-5 py-2 text-sm min-w-0"><span class="text-ink">{{ z.name }}</span> <span class="font-mono text-xs text-faint">{{ z.fingerprint }}</span>{% if z.devices %} <span class="text-xs text-faint">· {{ z.devices }} certified device{{ z.devices|pluralize }}</span>{% endif %}<span class="block font-mono text-xs text-faint break-all">{{ z.npub }}</span></li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,26 +1,19 @@
 """Layout for the private genealogy page (#238).
 
 Turns a ``zebra_agent.genealogy.Genealogy`` into template context: an inline SVG
-layered DAG (oldest at the top, one row per layer) and the version cards. No
-JavaScript. Colours are theme tokens through CSS variables, so the graph
-follows light and dark like the rest of the page (``specs/web-ui-design.md``).
+layered DAG (oldest at the top, one row per layer; drawn by ``api/dag_svg.py``,
+shared with the public genealogy, #247) and the version cards. No JavaScript.
 """
 
 from __future__ import annotations
 
-import html
 from dataclasses import dataclass
 from typing import Any
 
 from zebra_agent.genealogy import Genealogy, Version
 
+from zebra_agent_web.api.dag_svg import DagEdge, DagNode, dag_svg
 from zebra_agent_web.api.thoughts import Thought
-
-NODE_W = 132
-NODE_H = 46
-GAP_X = 20
-GAP_Y = 34
-PAD = 8
 
 # Which recorded reason a source is, as the page names it.
 REASON_LABELS = {
@@ -58,71 +51,32 @@ def _node_title(version: Version) -> str:
 
 
 def genealogy_svg(genealogy: Genealogy) -> str:
-    """The lineage as an inline SVG, parents above children."""
-    versions = {v.key: v for v in genealogy.versions}
-    if not versions:
-        return ""
-    width_nodes = max(v.order for v in versions.values()) + 1
-    layers = genealogy.layers
-    width = PAD * 2 + width_nodes * NODE_W + (width_nodes - 1) * GAP_X
-    height = PAD * 2 + layers * NODE_H + (layers - 1) * GAP_Y
-
-    def pos(v: Version) -> tuple[int, int]:
-        return PAD + v.order * (NODE_W + GAP_X), PAD + v.layer * (NODE_H + GAP_Y)
-
-    parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
-        f'width="{width}" height="{height}" role="img" class="genealogy-graph" '
-        f'aria-label="Lineage of {html.escape(genealogy.name)}: {len(versions)} versions">',
-        "<defs>"
-        '<marker id="gen-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" '
-        'markerHeight="7" orient="auto-start-reverse">'
-        '<path d="M0,0 L10,5 L0,10 z" fill="var(--color-faint)"/></marker></defs>',
-    ]
-    for parent_key, child_key in genealogy.edges:
-        parent, child = versions[parent_key], versions[child_key]
-        px, py = pos(parent)
-        cx, cy = pos(child)
-        x1, y1 = px + NODE_W // 2, py + NODE_H
-        x2, y2 = cx + NODE_W // 2, cy
-        if child.layer <= parent.layer:  # a revert back to earlier content
-            x1, y1, x2, y2 = px + NODE_W, py + NODE_H // 2, cx + NODE_W, cy + NODE_H // 2
-            bend = x1 + GAP_X
-            d = f"M{x1},{y1} C{bend},{y1} {bend},{y2} {x2},{y2}"
-            dash = ' stroke-dasharray="3 3"'
-        else:
-            mid = (y1 + y2) / 2
-            d = f"M{x1},{y1} C{x1},{mid} {x2},{mid} {x2},{y2 - 2}"
-            dash = ""
-        parts.append(
-            f'<path d="{d}" fill="none" stroke="var(--color-faint)" stroke-width="1.5"{dash} '
-            'marker-end="url(#gen-arrow)"/>'
-        )
-    for v in versions.values():
-        x, y = pos(v)
+    """The lineage as an inline SVG, parents above children (shared ``dag_svg``)."""
+    nodes = []
+    for v in genealogy.versions:
         stroke, text, dash = _colours(v)
-        dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
-        width_attr = "2.5" if v.current else "1.25"
         label = "no file here" if v.hash_only else v.writer_label
-        body = (
-            f'<rect x="{x}" y="{y}" width="{NODE_W}" height="{NODE_H}" rx="6" '
-            f'fill="var(--color-surface)" stroke="{stroke}" stroke-width="{width_attr}"'
-            f"{dash_attr}/>"
-            f'<text x="{x + 10}" y="{y + 19}" fill="{text}" font-size="12" '
-            f'font-family="var(--font-mono, monospace)">{html.escape(v.short)}</text>'
-            f'<text x="{x + 10}" y="{y + 35}" fill="var(--color-muted)" font-size="11">'
-            f"{html.escape(label)}{' · current' if v.current else ''}</text>"
-        )
-        title = f"<title>{html.escape(_node_title(v))}</title>"
-        if v.hash_only:
-            parts.append(f'<g class="gen-node">{title}{body}</g>')
-        else:
-            parts.append(
-                f'<a href="#{anchor(v)}" class="gen-node" '
-                f'aria-label="{html.escape(_node_title(v))}">{title}{body}</a>'
+        nodes.append(
+            DagNode(
+                key=v.key,
+                layer=v.layer,
+                order=v.order,
+                line1=v.short,
+                line2=f"{label}{' · current' if v.current else ''}",
+                title=_node_title(v),
+                href=None if v.hash_only else f"#{anchor(v)}",
+                stroke=stroke,
+                text=text,
+                dash=dash,
+                strong=v.current,
             )
-    parts.append("</svg>")
-    return "".join(parts)
+        )
+    return dag_svg(
+        nodes,
+        [DagEdge(p, c) for p, c in genealogy.edges],
+        f"Lineage of {genealogy.name}: {len(nodes)} versions",
+        marker="gen-arrow",
+    )
 
 
 @dataclass

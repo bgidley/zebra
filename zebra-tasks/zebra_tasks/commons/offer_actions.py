@@ -216,7 +216,7 @@ class CommonsPrepareOfferAction(TaskAction):
         except OfferRefused as e:
             return refuse(str(e))
         taint = publisher.observed_taint(block)
-        parent = public_parent(block, await publisher.offered_hashes())
+        parent = public_parent(block, await publisher.public_hashes())
         output = {
             "name": info.name,
             "content_sha256": digest,

@@ -210,3 +210,29 @@ async def commons_trust(request):
         note=request.POST.get("note", ""),
     )
     return _redirect(message=message)
+
+
+async def commons_genealogy(request):
+    """The public genealogy (#247): public events in the mirror only. Empty while off."""
+    from zebra_agent_web.api.public_genealogy_view import public_genealogy_context
+
+    context = {"enabled": False}
+    if ci.commons_enabled():
+        context = await public_genealogy_context()
+    response = render(request, "pages/commons_genealogy.html", context)
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+async def commons_genealogy_offer(request, content_sha256: str):
+    """One public offer's family (#247); 404 unless it is an offer in the mirror."""
+    from zebra_agent_web.api.public_genealogy_view import public_offer_context
+
+    if not ci.commons_enabled():
+        raise Http404("Commons is off")
+    context = await public_offer_context(content_sha256)
+    if context is None:
+        raise Http404("No public offer with that hash")
+    response = render(request, "pages/commons_genealogy_offer.html", context)
+    response["Cache-Control"] = "no-store"
+    return response

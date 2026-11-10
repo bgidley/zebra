@@ -49,6 +49,14 @@ class CommonsMirror(ABC):
             for d in m.event.tag_values("d")
         }
 
+    async def public_hashes(self) -> set[str]:
+        """Content hashes publicly offered by any Zebra: an ``OFFER`` of each is held here.
+
+        The mirror holds only this Zebra's own events and events it verified at intake, so
+        every hash here is public. ``public_parent`` names a parent only from this set.
+        """
+        return {d for m in await self.events(kind=OFFER_KIND) for d in m.event.tag_values("d")}
+
     async def receipt_seq(self, operator_pubkey: str) -> dict[str, int]:
         """Event id → ``seq`` from the stored receipts of *operator_pubkey*."""
         from zebra_agent.commons.receipts import receipt_order
