@@ -56,8 +56,8 @@ def test_installed_relays_get_their_routes_above_the_hostname_rule(tmp_path):
     _install(tmp_path, "zebra-commons-relay.container", "zebra-sync-relay.container")
     ingress = _config(tmp_path)
     assert ingress[:2] == [
-        {"hostname": HOST, "path": "^/commons$", "service": "http://127.0.0.1:7779"},
-        {"hostname": HOST, "path": "^/sync$", "service": "http://127.0.0.1:7778"},
+        {"hostname": HOST, "path": "^/relay/commons$", "service": "http://127.0.0.1:7779"},
+        {"hostname": HOST, "path": "^/relay/sync$", "service": "http://127.0.0.1:7778"},
     ]
     # cloudflared takes the first match, so the catch-all hostname rule must come after them.
     assert ingress[2:] == [
@@ -68,12 +68,16 @@ def test_installed_relays_get_their_routes_above_the_hostname_rule(tmp_path):
 
 def test_each_relay_is_routed_on_its_own(tmp_path):
     _install(tmp_path, "zebra-sync-relay.container")
-    assert _paths(_config(tmp_path)) == ["^/sync$", None, None]
+    assert _paths(_config(tmp_path)) == ["^/relay/sync$", None, None]
 
 
 def test_overrides_beat_detection(tmp_path):
     _install(tmp_path, "zebra-commons-relay.container")
-    assert _paths(_config(tmp_path, ROUTE_COMMONS="0", ROUTE_SYNC="1")) == ["^/sync$", None, None]
+    assert _paths(_config(tmp_path, ROUTE_COMMONS="0", ROUTE_SYNC="1")) == [
+        "^/relay/sync$",
+        None,
+        None,
+    ]
 
 
 def test_a_bad_override_fails_and_writes_nothing(tmp_path):
@@ -91,12 +95,14 @@ def test_a_bad_override_fails_and_writes_nothing(tmp_path):
 @pytest.mark.parametrize(
     ("path", "relay"),
     [
-        ("/commons", True),
+        ("/relay/commons", True),
+        ("/relay/sync", True),
+        ("/relay/commons/", False),
+        ("/relay/sync/x", False),
+        ("/commons", False),
         ("/commons/", False),
-        ("/commons/genealogy/", False),
-        ("/commonsx", False),
-        ("/sync", True),
-        ("/sync/x", False),
+        ("/commons/backup/", False),
+        ("/sync", False),
     ],
 )
 def test_relay_paths_are_exact_so_the_web_pages_stay_on_django(tmp_path, path, relay):

@@ -97,7 +97,9 @@ class Relay:
         for d in (self.conf, self.receipts, self.db):
             d.mkdir(parents=True)
         conf = (RELAY_DIR / "strfry.conf").read_text()
-        conf = conf.replace('serviceUrl = "wss://ZEBRA_HOST/sync"', f'serviceUrl = "{self.url}"')
+        conf = conf.replace(
+            'serviceUrl = "wss://ZEBRA_HOST/relay/sync"', f'serviceUrl = "{self.url}"'
+        )
         assert self.url in conf
         (self.conf / "strfry.conf").write_text(conf)
         shutil.copy(RELAY_DIR / "write_policy.py", self.conf / "write_policy.py")

@@ -15,13 +15,13 @@ Operator detail lives in specs/commons-sync-relay-runbook.md. Parameters: sync (
         <ol class="list-decimal pl-5 space-y-3 marker:text-faint">
             <li>
                 <p class="text-ink font-medium">Set up the private relay (once, on your home host)</p>
-                <p>The relay passes encrypted workflows between your devices. Whoever runs the host follows <span class="font-mono text-ink">specs/commons-sync-relay-runbook.md</span>: steps 1 to 3 now (operator key, relay containers, the <span class="font-mono text-ink">/sync</span> route), and step 4, registering your Zebra key on the relay, once you have started your Zebra in step 3 below. You get two values: the relay URL <span class="font-mono text-ink">wss://&lt;host&gt;/sync</span> and the receipt key.</p>
+                <p>The relay passes encrypted workflows between your devices. Whoever runs the host follows <span class="font-mono text-ink">specs/commons-sync-relay-runbook.md</span>: steps 1 to 3 now (operator key, relay containers, the <span class="font-mono text-ink">/sync</span> route), and step 4, registering your Zebra key on the relay, once you have started your Zebra in step 3 below. You get two values: the relay URL <span class="font-mono text-ink">wss://&lt;host&gt;/relay/sync</span> and the receipt key.</p>
             </li>
             <li>
                 <p class="text-ink font-medium">Turn sync on for each deployment</p>
                 <p>Add these to its site env file (<span class="font-mono text-ink">~/.config/zebra/site.env</span> on the Podman host), then retry the <strong class="text-ink">latest</strong> master pipeline's <span class="font-mono text-ink">deploy</span> job. Only a deploy copies the site env into what the containers read; a restart alone changes nothing:</p>
                 <pre class="mt-2 font-mono text-xs bg-ground border border-line text-ink rounded-md px-3 py-2 overflow-x-auto">ZEBRA_COMMONS_ENABLED=1
-ZEBRA_SYNC_RELAY=wss://&lt;host&gt;/sync
+ZEBRA_SYNC_RELAY=wss://&lt;host&gt;/relay/sync
 ZEBRA_SYNC_RECEIPT_PUBKEY=&lt;receipt key&gt;
 # optional
 ZEBRA_SYNC_DIRECTION=both          # send / receive / both / off

@@ -46,7 +46,7 @@ install -d -m 700 ~/.config/zebra-sync-relay
 install -m 644 deploy/podman/sync-relay/strfry.conf ~/.config/zebra-sync-relay/
 install -m 755 deploy/podman/sync-relay/write_policy.py ~/.config/zebra-sync-relay/
 install -m 644 deploy/podman/sync-relay/allowlist.json.example ~/.config/zebra-sync-relay/allowlist.json
-sed -i 's#wss://ZEBRA_HOST/sync#wss://<host>/sync#' ~/.config/zebra-sync-relay/strfry.conf
+sed -i 's#wss://ZEBRA_HOST/relay/sync#wss://<host>/relay/sync#' ~/.config/zebra-sync-relay/strfry.conf
 install -m 644 deploy/podman/sync-relay/zebra-sync.network \
   deploy/podman/sync-relay/zebra-sync-relay.container \
   deploy/podman/sync-relay/zebra-sync-receipts.container ~/.config/containers/systemd/
@@ -63,20 +63,20 @@ podman logs zebra-sync-relay 2>&1 | grep zebra-sync-policy   # "allow-list: 0 Ze
 `serviceUrl` in `strfry.conf` must be exactly the URL devices use (`ZEBRA_SYNC_RELAY`), or NIP-42
 AUTH fails and every `SKILL` is refused. The relay never binds port 8000.
 
-## 3. Reverse-proxy route `wss://<host>/sync` (root)
+## 3. Reverse-proxy route `wss://<host>/relay/sync` (root)
 
 Re-run the tunnel script. It sees the relay's Quadlet (installed in step 2) and adds the route
 above the hostname rule; it also keeps the `/commons` route if the public relay is installed:
 
 ```bash
-deploy/podman/setup-tunnel.sh --print-config <host>   # check first: shows ^/sync$ -> 127.0.0.1:7778
+deploy/podman/setup-tunnel.sh --print-config <host>   # check first: shows ^/relay/sync$ -> 127.0.0.1:7778
 deploy/podman/setup-tunnel.sh <host>                  # writes /etc/cloudflared/config.yml, validates, restarts
 ```
 
 ```yaml
 ingress:
   - hostname: <host>
-    path: ^/sync$
+    path: ^/relay/sync$
     service: http://127.0.0.1:7778
   - hostname: <host>
     service: http://127.0.0.1:8000
@@ -85,7 +85,9 @@ ingress:
 
 Never edit `config.yml` by hand: the script owns it, and re-running it keeps every installed
 relay's route. Force a route on or off with `ROUTE_SYNC=1|0` (and `ROUTE_COMMONS=1|0`).
-strfry serves WebSockets on any path, so `/sync` needs no rewrite.
+strfry serves WebSockets on any path, so `/relay/sync` needs no rewrite. If Cloudflare Access
+protects `<host>`, the Access bypass app for path `relay` (public relay runbook, step 3) covers
+this relay too; NIP-42 and the allow-list still decide who may publish.
 
 ## 4. Register the Zebra key on the allow-list
 
@@ -111,7 +113,7 @@ Add to `~/.config/zebra/site.env` (public values, not secrets):
 
 ```bash
 ZEBRA_COMMONS_ENABLED=1            # if not already on
-ZEBRA_SYNC_RELAY=wss://<host>/sync
+ZEBRA_SYNC_RELAY=wss://<host>/relay/sync
 ZEBRA_SYNC_RECEIPT_PUBKEY=<operator pubkey hex>
 # optional: ZEBRA_SYNC_DIRECTION=both|send|receive|off
 ```

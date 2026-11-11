@@ -11,13 +11,15 @@
 # /etc/cloudflared/config.yml and runs it as the system `cloudflared` service. The deploy
 # script never touches this service. The config sends <hostname> to 127.0.0.1:8000, except:
 #
-#   wss://<hostname>/commons -> 127.0.0.1:7779  public Commons relay (#231), if installed
-#   wss://<hostname>/sync    -> 127.0.0.1:7778  private sync relay (#246), if installed
+#   wss://<hostname>/relay/commons -> 127.0.0.1:7779  public Commons relay (#231), if installed
+#   wss://<hostname>/relay/sync    -> 127.0.0.1:7778  private sync relay (#246), if installed
 #
 # A relay counts as installed when its Quadlet is in ~/.config/containers/systemd/ (the
 # runbooks put it there), so re-running this script keeps its route. Override with
-# ROUTE_COMMONS=1|0 and ROUTE_SYNC=1|0. Both paths are exact: the web app's /commons/
-# page and everything under it stay on Django.
+# ROUTE_COMMONS=1|0 and ROUTE_SYNC=1|0. Both paths are exact and live under /relay/, where
+# the web app has no pages: if Cloudflare Access protects the hostname, one Access app for
+# <hostname>/relay with a Bypass policy opens the relays to other Zebras, while every web page
+# (/commons/ included) stays behind Access.
 set -euo pipefail
 
 PRINT_ONLY=0
@@ -52,11 +54,11 @@ render_config() {
   echo "credentials-file: /etc/cloudflared/$1.json"
   echo "ingress:"
   if [ "$ROUTE_COMMONS" = 1 ]; then
-    printf '  - hostname: %s\n    path: ^/commons$\n    service: %s\n' \
+    printf '  - hostname: %s\n    path: ^/relay/commons$\n    service: %s\n' \
       "$HOSTNAME_FQDN" "$COMMONS_ORIGIN"
   fi
   if [ "$ROUTE_SYNC" = 1 ]; then
-    printf '  - hostname: %s\n    path: ^/sync$\n    service: %s\n' "$HOSTNAME_FQDN" "$SYNC_ORIGIN"
+    printf '  - hostname: %s\n    path: ^/relay/sync$\n    service: %s\n' "$HOSTNAME_FQDN" "$SYNC_ORIGIN"
   fi
   printf '  - hostname: %s\n    service: %s\n' "$HOSTNAME_FQDN" "$ORIGIN"
   echo "  - service: http_status:404"
@@ -95,5 +97,5 @@ sudo systemctl restart cloudflared
 sleep 3
 systemctl is-active cloudflared
 echo "Tunnel $TUNNEL_NAME ($TUNNEL_ID) -> https://$HOSTNAME_FQDN -> $ORIGIN"
-if [ "$ROUTE_COMMONS" = 1 ]; then echo "  wss://$HOSTNAME_FQDN/commons -> $COMMONS_ORIGIN"; fi
-if [ "$ROUTE_SYNC" = 1 ]; then echo "  wss://$HOSTNAME_FQDN/sync -> $SYNC_ORIGIN"; fi
+if [ "$ROUTE_COMMONS" = 1 ]; then echo "  wss://$HOSTNAME_FQDN/relay/commons -> $COMMONS_ORIGIN"; fi
+if [ "$ROUTE_SYNC" = 1 ]; then echo "  wss://$HOSTNAME_FQDN/relay/sync -> $SYNC_ORIGIN"; fi

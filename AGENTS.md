@@ -783,7 +783,7 @@ See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking fl
 | `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | `ZEBRA_RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | 3 | Recovery fails a process once a task has been interrupted this many times (#130) |
 | `COMMONS_ENABLED` | `ZEBRA_COMMONS_ENABLED` | false | Zebra Commons master switch; off means no Commons keys and `/commons/` actions 404 (#228) |
 | `COMMONS_KEY_DIR` | `ZEBRA_COMMONS_KEY_DIR` | `~/.zebra-agent/commons-keys` | Commons secret keys (Zebra key, device key) in a 0600 file credential store (#228) |
-| `SYNC_RELAY` | `ZEBRA_SYNC_RELAY` | — | Private sync relay (`wss://…/sync`); unset = no skill sync, no connection (#246) |
+| `SYNC_RELAY` | `ZEBRA_SYNC_RELAY` | — | Private sync relay (`wss://…/relay/sync`); unset = no skill sync, no connection (#246) |
 | `COMMONS_RELAYS` | `ZEBRA_COMMONS_RELAYS` | — | Public Commons relays (`wss://…`, canonical first, then mirrors); unset = no offers published, no connection (#231) |
 | `COMMONS_RECEIPT_PUBKEY` | `ZEBRA_COMMONS_RECEIPT_PUBKEY` | — | Canonical public relay's operator key trusted for offer receipts (#231) |
 | `SYNC_RECEIPT_PUBKEY` | `ZEBRA_SYNC_RECEIPT_PUBKEY` | — | Relay operator key trusted for receipts (revocation by receipt order); the operator secret is only the sidecar's `ZEBRA_SYNC_OPERATOR_SECRET` (#246) |

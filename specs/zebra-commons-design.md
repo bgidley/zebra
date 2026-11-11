@@ -418,16 +418,16 @@ A family tree of skills, in two views built from data Zebra already keeps:
 
 ### Infrastructure
 - `strfry` relay as a Quadlet unit on the prod host, rootless Podman, a few MB of RAM, behind the
-  existing reverse proxy on `wss://…/commons`. It accepts only events tagged `zebra-commons`.
+  existing reverse proxy on `wss://…/relay/commons`. It accepts only events tagged `zebra-commons`.
 - The operator key signs `RECEIPT`s.
-- The private sync relay (S3b-2, #246) is a second strfry on `wss://…/sync` (loopback
+- The private sync relay (S3b-2, #246) is a second strfry on `wss://…/relay/sync` (loopback
   `127.0.0.1:7778`), with its own write policy, receipt sidecar and operator key; files in
   `deploy/podman/sync-relay/`, installed by hand ([commons-sync-relay-runbook.md](commons-sync-relay-runbook.md)).
 - Mirroring to 2–3 public relays is configured in `ZEBRA_COMMONS_RELAYS`.
 - **Built in #231 (not deployed):** `deploy/podman/commons-relay/` (strfry Quadlet on loopback
   `7779`, config without NIP-42, public-kinds write policy, receipt sidecar, network); installed by
   hand ([commons-public-relay-runbook.md](commons-public-relay-runbook.md)), route
-  `wss://<host>/commons` (exact path; `/commons/` stays the web page).
+  `wss://<host>/relay/commons` (exact path, under `/relay/` so one Cloudflare Access bypass on `/relay` covers both relays while every web page, `/commons/` included, stays behind Access).
 
 ---
 
