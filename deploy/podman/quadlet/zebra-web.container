@@ -19,7 +19,8 @@ Environment=ZEBRA_DAEMON_AUTO_START=0
 Volume=zebra-logs:/app/zebra-agent-web/tmp
 # Workflow library (built-ins + agent-created) — shared with zebra-daemon, survives redeploys.
 Volume=zebra-workflows:/root/.zebra/workflows
-# Zebra Commons secret keys (#228, COMMONS_KEY_DIR) — survive redeploys. Back up the Zebra key too.
+# Zebra Commons secret keys (#228, COMMONS_KEY_DIR) — shared with zebra-daemon, survive redeploys.
+# Back up the Zebra key too.
 Volume=zebra-commons-keys:/root/.zebra-agent/commons-keys
 # Host builder spool (#98): Zebra writes Claude Code build jobs here; zebra-builder.service runs them.
 Volume=%h/.local/share/zebra/builds:/builds:z

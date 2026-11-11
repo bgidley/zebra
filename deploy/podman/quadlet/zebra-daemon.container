@@ -19,6 +19,9 @@ Exec=zebra-agent-web/manage.py run_daemon
 WorkingDir=/app
 # Workflow library (built-ins + agent-created) — shared with zebra-daemon, survives redeploys.
 Volume=zebra-workflows:/root/.zebra/workflows
+# Zebra Commons secret keys (#228) — shared with zebra-web. The daemon polls the relays, runs the
+# dream cycle's Commons step and skill sync, all signed with this device's key.
+Volume=zebra-commons-keys:/root/.zebra-agent/commons-keys
 # Host builder spool (#98): Zebra writes Claude Code build jobs here; zebra-builder.service runs them.
 Volume=%h/.local/share/zebra/builds:/builds:z
 Environment=ZEBRA_BUILDER_SPOOL=/builds
