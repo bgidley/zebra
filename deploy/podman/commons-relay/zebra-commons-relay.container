@@ -6,7 +6,7 @@
 #
 # Config, write policy and policy.json (operator key) come from ~/.config/zebra-commons-relay/
 # (a directory mount, so editing policy.json is picked up without a restart). Bound to
-# loopback; the reverse proxy (Cloudflare Tunnel) routes wss://<host>/commons here. No NIP-42:
+# loopback; the reverse proxy (Cloudflare Tunnel) routes wss://<host>/relay/commons here. No NIP-42:
 # anyone may read; the write policy accepts only zebra-commons events of the public kinds.
 [Unit]
 Description=Zebra public Commons relay (strfry)

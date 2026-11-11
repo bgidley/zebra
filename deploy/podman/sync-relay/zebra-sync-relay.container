@@ -5,7 +5,7 @@
 #
 # Config, write policy and allow-list come from ~/.config/zebra-sync-relay/ (a directory mount,
 # so editing allowlist.json is picked up without a restart). Bound to loopback; the reverse
-# proxy (Cloudflare Tunnel) routes wss://<host>/sync here.
+# proxy (Cloudflare Tunnel) routes wss://<host>/relay/sync here.
 [Unit]
 Description=Zebra private sync relay (strfry)
 Wants=network-online.target

@@ -128,7 +128,7 @@ Then re-run the latest `master` pipeline (or push) to deploy.
 | `.gitlab-ci.yml` | Pipeline definition |
 | `Dockerfile`, `docker/entrypoint.sh` | Image build; entrypoint migrates + starts Daphne |
 | `deploy/podman/bootstrap-host.sh` | Idempotent host setup (uv, runner, linger, cloudflared, growfs) |
-| `deploy/podman/setup-tunnel.sh` | Cloudflare Tunnel: hostname → `127.0.0.1:8000`, plus `wss://<host>/commons` → `:7779` and `/sync` → `:7778` for each Commons relay whose Quadlet is installed (#231, #246); `--print-config` previews; system service |
+| `deploy/podman/setup-tunnel.sh` | Cloudflare Tunnel: hostname → `127.0.0.1:8000`, plus `wss://<host>/relay/commons` → `:7779` and `/relay/sync` → `:7778` for each Commons relay whose Quadlet is installed (#231, #246); `--print-config` previews; system service |
 | `deploy/podman/quadlet/` | `zebra-web` / `zebra-daemon` Quadlet units |
 | `deploy/podman/zebra-builder.service`, `scripts/zebra_builder.py` | Host builder for Claude Code builds (#98); `--probe` checks the sandbox, `--once` runs one pass |
 | `deploy/builder/` | Sandbox image (Claude Code, uv), its entrypoint and the escape probe |

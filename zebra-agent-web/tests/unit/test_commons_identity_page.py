@@ -435,7 +435,7 @@ async def test_sync_status_on_with_a_relay(
     await _start(authenticated_async_client)
     settings.ZEBRA_AGENT_SETTINGS = {
         **settings.ZEBRA_AGENT_SETTINGS,
-        "SYNC_RELAY": "wss://zebra.example.com/sync",
+        "SYNC_RELAY": "wss://zebra.example.com/relay/sync",
         "SYNC_RECEIPT_PUBKEY": "",
     }
 
@@ -443,7 +443,7 @@ async def test_sync_status_on_with_a_relay(
     status = re.search(r'data-testid="sync-status".*?</dd>', html, re.S).group(0)
 
     assert 'data-sync="on"' in status
-    assert "wss://zebra.example.com/sync" in status
+    assert "wss://zebra.example.com/relay/sync" in status
     # The stricter of the env (send) and the stored device direction (both).
     assert "· send" in status
     assert "receipts off" in status

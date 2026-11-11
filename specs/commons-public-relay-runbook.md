@@ -48,7 +48,7 @@ install -d -m 700 ~/.config/zebra-commons-relay
 install -m 644 deploy/podman/commons-relay/strfry.conf ~/.config/zebra-commons-relay/
 install -m 755 deploy/podman/commons-relay/write_policy.py ~/.config/zebra-commons-relay/
 echo '{"operator_pubkey": "<ZEBRA_COMMONS_RECEIPT_PUBKEY>"}' > ~/.config/zebra-commons-relay/policy.json
-sed -i 's#wss://ZEBRA_HOST/commons#wss://<host>/commons#' ~/.config/zebra-commons-relay/strfry.conf
+sed -i 's#wss://ZEBRA_HOST/relay/commons#wss://<host>/relay/commons#' ~/.config/zebra-commons-relay/strfry.conf
 install -m 644 deploy/podman/commons-relay/zebra-commons.network \
   deploy/podman/commons-relay/zebra-commons-relay.container \
   deploy/podman/commons-relay/zebra-commons-receipts.container ~/.config/containers/systemd/
@@ -61,20 +61,20 @@ podman logs zebra-commons-relay 2>&1 | grep zebra-commons-policy   # "operator k
 
 The relay never binds port 8000. `policy.json` is re-read on the next event (no restart).
 
-## 3. Reverse-proxy route `wss://<host>/commons` (root)
+## 3. Reverse-proxy route `wss://<host>/relay/commons` (root)
 
 Re-run the tunnel script. It sees the relay's Quadlet (installed in step 2) and adds the route
 above the hostname rule, next to the `/sync` route if the sync relay is installed:
 
 ```bash
-deploy/podman/setup-tunnel.sh --print-config <host>   # check first: shows ^/commons$ -> 127.0.0.1:7779
+deploy/podman/setup-tunnel.sh --print-config <host>   # check first: shows ^/relay/commons$ -> 127.0.0.1:7779
 deploy/podman/setup-tunnel.sh <host>                  # writes /etc/cloudflared/config.yml, validates, restarts
 ```
 
 ```yaml
 ingress:
   - hostname: <host>
-    path: ^/commons$
+    path: ^/relay/commons$
     service: http://127.0.0.1:7779
   - hostname: <host>
     service: http://127.0.0.1:8000
@@ -83,8 +83,15 @@ ingress:
 
 Never edit `config.yml` by hand: the script owns it, and re-running it keeps every installed
 relay's route. Force a route on or off with `ROUTE_COMMONS=1|0` (and `ROUTE_SYNC=1|0`).
-The rule matches `/commons` exactly: the web app's `/commons/` page (and everything under it)
-must keep going to Django, so Zebras use `wss://<host>/commons` with no trailing slash.
+The rule matches `/relay/commons` exactly, with no trailing slash. The relays live under `/relay/`,
+where the web app has no pages, so the web app's `/commons/` pages are untouched.
+
+**If Cloudflare Access protects `<host>`** (prod does), other Zebras get the Access login instead
+of the relay. In Zero Trust → Access → Applications add a self-hosted app for domain `<host>`,
+path `relay`, with one policy: action **Bypass**, include **Everyone**. It covers
+`/relay/commons` and `/relay/sync` and nothing else; every web page stays behind Access. Check
+from outside: `curl -s -H 'Accept: application/nostr+json' https://<host>/relay/commons` returns
+the relay's JSON (`"name":"zebra commons"`), not a 302 to `cloudflareaccess.com`.
 
 ## 4. Mirrors (optional)
 
@@ -98,7 +105,7 @@ Add to `~/.config/zebra/site.env` (public values, not secrets):
 
 ```bash
 ZEBRA_COMMONS_ENABLED=1                       # if not already on
-ZEBRA_COMMONS_RELAYS=wss://<host>/commons, wss://relay.example.org   # canonical first
+ZEBRA_COMMONS_RELAYS=wss://<host>/relay/commons, wss://relay.example.org   # canonical first
 ZEBRA_COMMONS_RECEIPT_PUBKEY=<operator pubkey hex>
 ```
 
@@ -127,7 +134,7 @@ retry the latest deploy job again to turn it off.
    from zebra_agent.commons.relay import RelayCommonsClient
 
    async def main():
-       c = RelayCommonsClient(NostrSdkTransport("wss://<host>/commons"), private=False)
+       c = RelayCommonsClient(NostrSdkTransport("wss://<host>/relay/commons"), private=False)
        offers = await c.fetch([Filter(kinds=(kinds.OFFER_KIND,))])
        certs = await c.fetch([Filter(kinds=(kinds.DEVICE_CERT_KIND, kinds.DEVICE_REVOKE_KIND))])
        for o in offers:
@@ -149,11 +156,11 @@ retry the latest deploy job again to turn it off.
 S5 (#232) needs a second Zebra: a dev instance with its **own** identity and database, never prod's
 Oracle, never port 8000. Prod (Zebra A) keeps its offer from step 6; the dev instance is Zebra B.
 
-1. **Start Zebra B** (any machine that can reach `wss://<host>/commons`; a checkout of master):
+1. **Start Zebra B** (any machine that can reach `wss://<host>/relay/commons`; a checkout of master):
    ```bash
    export DJANGO_SETTINGS_MODULE=zebra_agent_web.e2e_settings   # file SQLite, not Oracle
    export ZEBRA_COMMONS_ENABLED=1 ZEBRA_COMMONS_KEY_DIR=$HOME/.zebra-b/keys
-   export ZEBRA_COMMONS_RELAYS=wss://<host>/commons
+   export ZEBRA_COMMONS_RELAYS=wss://<host>/relay/commons
    export ZEBRA_COMMONS_RECEIPT_PUBKEY=<operator pubkey hex>
    export OPENROUTER_API_KEY=<a dev key>        # the import's scans, ethics gate and gym
    cd zebra-agent-web && uv run python manage.py migrate
@@ -185,7 +192,7 @@ Oracle, never port 8000. Prod (Zebra A) keeps its offer from step 6; the dev ins
    from zebra_agent.commons.relay import RelayCommonsClient
 
    async def main():
-       c = RelayCommonsClient(NostrSdkTransport("wss://<host>/commons"), private=False)
+       c = RelayCommonsClient(NostrSdkTransport("wss://<host>/relay/commons"), private=False)
        for e in await c.fetch([Filter(kinds=(kinds.ATTEST_KIND,))]):
            print(e.tag_values("l"), e.tag_values("x")[0][:12], e.content)
        await c.close()
