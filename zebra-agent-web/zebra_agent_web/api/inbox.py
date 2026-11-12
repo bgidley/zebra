@@ -12,7 +12,7 @@ import logging
 from datetime import UTC, datetime
 
 from zebra.core.models import ProcessInstance, ProcessState
-from zebra.forms import is_human_task, resolve_task_schema
+from zebra.forms import is_human_task, resolve_task_schema, resolve_template_text
 from zebra.storage.base import StateStore
 
 from zebra_agent_web.api import manual_review
@@ -85,13 +85,15 @@ async def inbox_items(store: StateStore) -> list[dict]:
         task_def = definition.tasks.get(task.task_definition_id) if definition else None
         if task_def is None or not is_human_task(task_def):
             continue
-        schema = resolve_task_schema(task_def.properties.get("schema"), process.properties or {})
+        props = process.properties or {}
+        schema = resolve_task_schema(task_def.properties.get("schema"), props)
+        title = schema.get("title", "") if schema else ""
         items.append(
             {
                 "id": task.id,
                 "kind": "human",
                 "task_name": task_def.name,
-                "title": (schema or {}).get("title", ""),
+                "title": resolve_template_text(title, props) if isinstance(title, str) else "",
                 "process_id": process.id,
                 "waiting_since": task.created_at,
                 **await lookup.context(process),

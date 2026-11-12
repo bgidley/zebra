@@ -370,6 +370,60 @@ def _as_schema(value: Any) -> dict[str, Any] | None:
     return {"type": "object", **value}
 
 
+_TEMPLATE_VAR = re.compile(r"\{\{(\w+(?:\.\w+)*)\}\}")
+
+
+def resolve_template_text(text: str, process_properties: dict[str, Any]) -> str:
+    """Fill ``{{var}}`` references in display text from process properties.
+
+    ``{{key}}`` is a property, ``{{task_id.output}}`` a task's stored output and
+    ``{{key.field.subfield}}`` a field of a dict property at any depth. A reference that
+    does not resolve becomes empty text.
+    """
+
+    def replace_var(match: re.Match) -> str:
+        var = match.group(1)
+        if "." in var:
+            key, attr = var.split(".", 1)
+            if attr == "output":
+                output = process_properties.get(f"__task_output_{key}")
+                return str(output) if output is not None else ""
+            value = process_properties.get(key)
+            if isinstance(value, dict):
+                for part in attr.split("."):
+                    value = value.get(part) if isinstance(value, dict) else None
+                return str(value) if value is not None else ""
+        return str(process_properties.get(var, ""))
+
+    return _TEMPLATE_VAR.sub(replace_var, text)
+
+
+def resolve_schema_templates(
+    schema: dict[str, Any], process_properties: dict[str, Any]
+) -> dict[str, Any]:
+    """A copy of a human task's schema with its display text resolved.
+
+    Fills ``{{…}}`` (see ``resolve_template_text``) in the schema's ``title`` and
+    ``description`` and in each field's ``title``, ``description`` and string ``default``.
+    Everything else is left unchanged.
+    """
+    import copy
+
+    schema = copy.deepcopy(schema)
+    for key in ("title", "description"):
+        if isinstance(schema.get(key), str):
+            schema[key] = resolve_template_text(schema[key], process_properties)
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        for field_schema in properties.values():
+            if not isinstance(field_schema, dict):
+                continue
+            for key in ("title", "description", "default"):
+                if isinstance(field_schema.get(key), str):
+                    field_schema[key] = resolve_template_text(field_schema[key], process_properties)
+    return schema
+
+
 def get_routes_from_definition(
     task_definition_id: str, routings: list[dict[str, Any]]
 ) -> list[str]:
