@@ -35,6 +35,8 @@ _trust: "DjangoTrustStore | None" = None
 _agent_loop: "AgentLoop | None" = None
 _budget_manager: "BudgetManager | None" = None
 _initialized = False
+#: True while ``_async_init`` runs; set before its first await, so a concurrent caller waits.
+_initializing = False
 
 
 def _get_agent_settings() -> dict:
@@ -81,11 +83,24 @@ async def install_builtin_workflows(library: "WorkflowLibrary", builtin_path: Pa
 
 
 async def _async_init() -> None:
+    """Initialise the agent once; a failure resets it so the next caller retries."""
+    global _library, _initializing
+
+    if _library is not None or _initializing:
+        return
+    _initializing = True
+    try:
+        await _do_init()
+    except BaseException:
+        _library = None  # not half-initialised: the next ensure_initialized() starts again
+        raise
+    finally:
+        _initializing = False
+
+
+async def _do_init() -> None:
     """Async initialization of agent components."""
     global _library, _metrics, _memory, _profile, _ethics_audit, _trust, _agent_loop
-
-    if _library is not None:
-        return
 
     # Import here to avoid issues at module load time
     from zebra_agent.library import WorkflowLibrary
@@ -300,15 +315,45 @@ def get_budget_manager() -> "BudgetManager":
     return _budget_manager
 
 
+#: How long a caller waits for an initialisation another caller started.
+INIT_WAIT_SECONDS = 120
+
+
 async def ensure_initialized() -> None:
     """Ensure the agent is initialized (async).
 
-    Call this at the start of any async view that needs the agent.
+    Call this at the start of any async view that needs the agent. Initialised means the
+    agent loop exists, not just the library: the library is set early, so a second caller
+    arriving mid-initialisation waits for it (from any thread or event loop) instead of
+    using an agent with no loop and no engine extras (#231).
     """
-    if _library is None:
-        await _async_init()
-    else:
+    if _agent_loop is not None:
         await refresh_commons_owner()
+        return
+    if not _initializing:
+        await _async_init()
+        if _agent_loop is not None:
+            return
+    await _wait_for_init()
+
+
+async def _wait_for_init() -> None:
+    """Wait for the initialisation in progress; start it again if that one failed."""
+    import asyncio
+    import time
+
+    deadline = time.monotonic() + INIT_WAIT_SECONDS
+    while _agent_loop is None:
+        if not _initializing:  # the other initialisation ended without an agent loop
+            await _async_init()
+            if _agent_loop is None:
+                raise RuntimeError("Zebra agent initialisation failed")
+            return
+        if time.monotonic() > deadline:
+            raise RuntimeError(
+                f"Zebra agent initialisation did not finish within {INIT_WAIT_SECONDS}s"
+            )
+        await asyncio.sleep(0.1)
 
 
 async def refresh_commons_owner() -> None:

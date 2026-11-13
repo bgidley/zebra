@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from zebra_agent.commons import keys
@@ -61,22 +62,38 @@ def get_commons_keys() -> CommonsKeys:
     return CommonsKeys(FileCredentialStore(Path(key_dir).expanduser()))
 
 
-async def _state() -> SystemStateModel:
-    obj, _ = await SystemStateModel.objects.aget_or_create(pk=1)
+# The reads below also run during the agent's initialisation, which can outlive the request
+# that started it (a health check that gives up after 5 s). Django's async ORM is
+# thread-sensitive: once that request is gone its calls wait forever. These run in a pool
+# thread instead (#123), so the Commons publisher can always be built.
+
+
+@sync_to_async(thread_sensitive=False)
+def _load_state() -> SystemStateModel:
+    obj, _ = SystemStateModel.objects.get_or_create(pk=1)
     return obj
+
+
+async def _state() -> SystemStateModel:
+    return await _load_state()
+
+
+@sync_to_async(thread_sensitive=False)
+def _owner_id() -> int | None:
+    state, _ = SystemStateModel.objects.get_or_create(pk=1)
+    if state.commons_owner_user_id is not None:
+        return state.commons_owner_user_id
+    first = get_user_model().objects.order_by("id").first()
+    if first is None:
+        return None
+    state.commons_owner_user_id = first.id
+    state.save(update_fields=["commons_owner_user_id"])
+    return first.id
 
 
 async def get_owner_id() -> int | None:
     """The Commons owner's user id, defaulting to (and persisting) the first user."""
-    state = await _state()
-    if state.commons_owner_user_id is not None:
-        return state.commons_owner_user_id
-    first = await get_user_model().objects.order_by("id").afirst()
-    if first is None:
-        return None
-    state.commons_owner_user_id = first.id
-    await state.asave(update_fields=["commons_owner_user_id"])
-    return first.id
+    return await _owner_id()
 
 
 async def is_owner(user: Any) -> bool:
@@ -119,13 +136,19 @@ async def _store_cert(cert_event: Event, owner_id: int | None) -> CommonsDeviceM
     return row
 
 
-async def _chain_events(zebra_pubkey: str) -> list[Event]:
+@sync_to_async(thread_sensitive=False)
+def _chain_events_sync(zebra_pubkey: str) -> list[Event]:
     events: list[Event] = []
-    async for row in CommonsDeviceModel.objects.filter(zebra_pubkey=zebra_pubkey):
+    for row in CommonsDeviceModel.objects.filter(zebra_pubkey=zebra_pubkey):
         events.append(Event.from_dict(row.cert_event))
         if row.revoke_event:
             events.append(Event.from_dict(row.revoke_event))
     return events
+
+
+async def _chain_events(zebra_pubkey: str) -> list[Event]:
+    """Every held cert and revoke of this Zebra's devices (pool thread, see ``_load_state``)."""
+    return await _chain_events_sync(zebra_pubkey)
 
 
 async def _self_certify(

@@ -21,11 +21,11 @@ from zebra_agent.commons.publisher import PUBLISHER_KEY, CommonsPublisher
 
 from zebra_agent_web.api.commons_identity import (
     _chain_events,
+    _state,
     commons_enabled,
     get_commons_keys,
     get_owner_id,
 )
-from zebra_agent_web.api.models import SystemStateModel
 
 if TYPE_CHECKING:
     from zebra_agent.library import WorkflowLibrary
@@ -64,7 +64,7 @@ async def build_commons_publisher(library: WorkflowLibrary) -> CommonsPublisher 
     if not publishing_configured():
         return None
     try:
-        state, _ = await SystemStateModel.objects.aget_or_create(pk=1)
+        state = await _state()
         if not state.zebra_pubkey:
             logger.info("Commons: ZEBRA_COMMONS_RELAYS is set but this device has no Zebra yet")
             return None
