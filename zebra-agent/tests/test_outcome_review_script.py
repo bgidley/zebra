@@ -164,6 +164,30 @@ def test_complete_ruled_exits_0_and_prints_the_ruling(fake):
     assert "disputed outcomes: O1" in result.stdout
 
 
+def test_ruled_per_outcome_prints_rulings_and_followups(fake):
+    """A pick per disputed outcome (#295): follow-ups listed, nothing left to read."""
+    result = _status(
+        fake,
+        {
+            "status": "complete",
+            "process_id": "proc-1",
+            "output": {
+                "status": "ruled",
+                "table_markdown": "| O1 | met | partial | **no** | **partial** (no test) |",
+                "ruling": "O1: partial: no test\nO2: met",
+                "disputed": ["O1", "O2"],
+                "unruled": [],
+                "followups": ["O1"],
+            },
+        },
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert "Human ruling:\nO1: partial: no test\nO2: met" in result.stdout
+    assert "Follow-up issues needed for: O1" in result.stdout
+    assert "Also check" not in result.stdout
+
+
 def test_awaiting_input_exits_2_with_task_link_and_poll_command(fake):
     result = _status(
         fake, {"status": "awaiting_input", "process_id": "proc-9", "task_id": "task-7"}

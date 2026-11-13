@@ -176,5 +176,8 @@ if followups:
     print()
     print(f"Follow-up issues needed for: {', '.join(followups)}")
 if review.get("status") == "ruled":
-    print(f"Also check the ruling for disputed outcomes: {', '.join(review.get('disputed', []))}")
+    # Since #295 the human picks a verdict per disputed outcome; only free text needs reading.
+    unruled = review.get("unruled", review.get("disputed", []))
+    if unruled:
+        print(f"Also check the ruling for disputed outcomes: {', '.join(unruled)}")
 PY
