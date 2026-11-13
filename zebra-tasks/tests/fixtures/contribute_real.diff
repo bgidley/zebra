@@ -1,0 +1,794 @@
+diff --git a/openspec/changes/review-tool-turns/.openspec.yaml b/openspec/changes/review-tool-turns/.openspec.yaml
+new file mode 100644
+index 0000000..8a94d76
+--- /dev/null
++++ b/openspec/changes/review-tool-turns/.openspec.yaml
+@@ -0,0 +1,2 @@
++schema: spec-driven
++created: 2026-11-06
+diff --git a/openspec/changes/review-tool-turns/design.md b/openspec/changes/review-tool-turns/design.md
+new file mode 100644
+index 0000000..52bb8db
+--- /dev/null
++++ b/openspec/changes/review-tool-turns/design.md
+@@ -0,0 +1,35 @@
++## Context
++
++The outcome review's `zebra_review` step is an `llm_agent` with three source tools (List, Read and
++Search Zebra Source), each a one-step workflow over the `zebra_source` action. Every turn resends
++the whole conversation, so a turn that returns a large useless result costs tokens on every later
++turn. Prod runs dream-cycle copies of all three tools: Read v10 (range ignored), List v3 (drops
++the `glob` input, says to put globs in `path`) and Search v2 (the same as the built-in).
++
++## Decisions
++
++- **Restore by version bump, not by deleting files.** `copy_builtin_workflows` installs a
++  built-in whose version is higher than the active copy and retires every other file with that
++  name (#224). The new versions are Read v11, List v4, Search v3 and Outcome Review v5. This is
++  the fix used for #249. Preventing the dream cycle from breaking tools again is #252.
++- **Brace expansion in `_glob_match`.** `fnmatch` has no `{a,b}`. `expand_braces()` repeatedly
++  expands an innermost `{…,…}` group into plain globs (nested groups work), up to
++  `MAX_BRACE_EXPANSIONS` (64) so a pathological pattern cannot blow up; results are cached. Matching is any-of. List and search share it.
++- **A glob in `path`.** If list's `path` contains `*`, `?`, `[` or `{` and there is no `glob`, it
++  lists by `path` as a glob from the root. This is what the model and the List v3 copy both do.
++- **Change map in the script, not a new action.** The diff is already built in the script's
++  Python step. The map is computed there from the diff text (stdlib only, host `python3`), so no
++  new task action, registration or reversibility hint is needed. It covers every file even when
++  the diff itself is cut at `MAX_DIFF_CHARS`. Test functions: `+` lines matching
++  `(async )?def test_\w+` in files under a `tests/` directory or named `test_*.py`. The map is
++  capped at 8000 characters.
++- **Old callers.** `change_map` is optional in the Outcome Review inputs. The prompt reads
++  `{{change_map}}`, which resolves to empty when it is not given.
++
++## Risks
++
++- A built-in at a higher version again becomes the dream cycle's next parent, so the cycle can
++  break it again until #252 lands.
++- Turn limits that are too tight give a weaker review. `answer_on_budget` still produces an
++  answer, and 8 turns was more than the successful #236 run needed once its wasted reads are
++  removed.
+diff --git a/openspec/changes/review-tool-turns/proposal.md b/openspec/changes/review-tool-turns/proposal.md
+new file mode 100644
+index 0000000..96747e3
+--- /dev/null
++++ b/openspec/changes/review-tool-turns/proposal.md
+@@ -0,0 +1,48 @@
++## Why
++
++The #236 outcome review (2026-11-06) cost $3.11, all on `anthropic/claude-fable-5.1`. The run that
++succeeded took 12 model calls, and its prompt grew from 27k to 81k tokens (594k input tokens in all).
++Tracing that run's tool calls showed most turns were wasted (GitLab #285):
++
++- **Read Zebra Source is broken on prod.** The dream copy `read_zebra_source_1.yaml` (v10, written
++  2026-11-01) ignores the line range: every read returns the file from line 1, cut off at 12k
++  characters. Six reads of the same test file each returned the same opening.
++- **About 8 calls returned nothing.** Brace globs (`*{skill,sync}*.py`) are not supported, and the
++  prod List v3 dream copy says to put globs in `path`, which the action treats as a directory.
++- **About half the turns went on finding the tests** the diff already contained.
++- **The budget is generous:** `max_tool_turns: 12`.
++
++## What Changes
++
++- **Read Zebra Source v11.** The built-in ships at v11 with its v9 steps, above the dream copy, so
++  `copy_builtin_workflows` reinstalls it and retires the copy (#224, #249). List Zebra Source v4
++  and Search Zebra Source v3 replace their prod versions the same way and document the glob syntax.
++- **Globs.** `zebra_source` expands `{a,b}` alternatives (nested too) in every glob. A list whose
++  `path` contains glob characters, with no `glob`, lists by that glob.
++- **Change map.** `scripts/zebra-outcome-review.sh` sends a `change_map` input: each changed file
++  with its added/removed line counts, then the test functions the diff adds or changes, by file.
++  Outcome Review v5 puts it ahead of the diff and tells the agent to start from it.
++- **Budget.** Outcome Review v5 lowers `zebra_review` to 8 tool turns and `zebra_reconsider` to 5,
++  and tells the agent to read line ranges, not whole files, and to batch its calls.
++
++Not in scope: gating dream changes to tool workflows (#252), and the review model choice (still
++`ZEBRA_REVIEW_MODEL`).
++
++## Capabilities
++
++### New Capabilities
++<!-- none -->
++
++### Modified Capabilities
++- `zebra-source-access`: brace globs, a glob given as list `path`, range reads through the workflow
++- `outcome-review`: change map, tighter tool budget
++
++## Outcomes
++
++| # | Outcome | How we'll know |
++|---|---------|----------------|
++| O1 | On prod, Read Zebra Source with `start_line`/`end_line` returns exactly those lines, because built-in v11 replaced the dream copy | Workflow test of a range read through `read_zebra_source.yaml`; after deploy, prod's active Read Zebra Source is v11 and the dream copy is in `retired/`; a prod range read returns the requested lines |
++| O2 | Brace globs and a glob given as List's `path` return matching files instead of nothing | `zebra_source` unit tests (list and search, nested braces, glob as path); List v4 / Search v3 active on prod |
++| O3 | Zebra's review prompt starts with a change map of the changed files and the test functions added or changed | Script test: `change_map` in the workflow input lists files with +/- counts and the test names; workflow test that it reaches the prompt |
++| O4 | The review runs with a tighter budget: 8 tool turns for `zebra_review`, 5 for `zebra_reconsider`, with guidance to read ranges and batch calls | Outcome Review v5 YAML and a test pinning the turn limits |
++| O5 | This change's own outcome review spends clearly less than #236's: under half its 594k input tokens | `LLMSpendModel` rows for this change's Outcome Review process, compared with process `71a950e5` |
+diff --git a/openspec/changes/review-tool-turns/specs/outcome-review/spec.md b/openspec/changes/review-tool-turns/specs/outcome-review/spec.md
+new file mode 100644
+index 0000000..a1c9005
+--- /dev/null
++++ b/openspec/changes/review-tool-turns/specs/outcome-review/spec.md
+@@ -0,0 +1,23 @@
++## ADDED Requirements
++
++### Requirement: The review starts from a change map
++`scripts/zebra-outcome-review.sh` SHALL send a `change_map` input listing every changed file with
++its added and removed line counts, then the test functions the diff adds or changes, grouped by
++file, capped at 8000 characters. The Outcome Review prompt SHALL show it before the diff.
++
++#### Scenario: Map of a change with tests
++- **WHEN** the reviewed diff changes `a.py` and adds `test_one` and `test_two` to `tests/test_a.py`
++- **THEN** `change_map` lists both files with their `+`/`-` counts and names both tests under `tests/test_a.py`
++
++#### Scenario: Map survives a cut diff
++- **WHEN** the diff is longer than `MAX_DIFF_CHARS`
++- **THEN** `change_map` still lists every changed file
++
++### Requirement: The review has a tight tool budget
++The Outcome Review `zebra_review` step SHALL allow at most 8 tool turns and `zebra_reconsider` at
++most 5, both with `answer_on_budget`, and their system prompts SHALL tell the agent to start from
++the change map, read line ranges rather than whole files, and ask for several reads in one turn.
++
++#### Scenario: Budget limits
++- **WHEN** the Outcome Review workflow is loaded
++- **THEN** `zebra_review.max_tool_turns` is 8 and `zebra_reconsider.max_tool_turns` is 5
+diff --git a/openspec/changes/review-tool-turns/specs/zebra-source-access/spec.md b/openspec/changes/review-tool-turns/specs/zebra-source-access/spec.md
+new file mode 100644
+index 0000000..7eb86b4
+--- /dev/null
++++ b/openspec/changes/review-tool-turns/specs/zebra-source-access/spec.md
+@@ -0,0 +1,30 @@
++## ADDED Requirements
++
++### Requirement: Globs support brace alternatives
++Every `zebra_source` glob (list and search) SHALL accept `{a,b}` alternatives, nested or several
++per pattern, matching a path when any expansion matches.
++
++#### Scenario: Brace glob in search
++- **WHEN** `zebra_source` searches with glob `zebra-tasks/tests/test_{zebra_source,launch}.py`
++- **THEN** hits come from both files and from no other file
++
++#### Scenario: Brace glob in list
++- **WHEN** `zebra_source` lists with glob `zebra-agent/workflows/*_zebra_source.{yaml,yml}`
++- **THEN** it returns the matching workflow files, not "No files match"
++
++### Requirement: List accepts a glob as its path
++When a list request has no `glob` and its `path` contains `*`, `?`, `[` or `{`, `zebra_source`
++SHALL list the files matching `path` as a glob from the source root.
++
++#### Scenario: Glob given as path
++- **WHEN** `zebra_source` lists with path `zebra-tasks/tests/test_zebra_*.py` and no glob
++- **THEN** it returns the matching test files instead of failing as a missing directory
++
++### Requirement: Read Zebra Source reads the requested range
++The built-in Read Zebra Source workflow SHALL pass `start_line` and `end_line` to `zebra_source`
++so a read returns exactly the requested lines, and it SHALL carry a version above any dream copy
++on prod, so it replaces that copy.
++
++#### Scenario: Range read through the workflow
++- **WHEN** Read Zebra Source runs with `start_line: 20` and `end_line: 25`
++- **THEN** its result holds lines 20 to 25 and no others
+diff --git a/openspec/changes/review-tool-turns/tasks.md b/openspec/changes/review-tool-turns/tasks.md
+new file mode 100644
+index 0000000..323c603
+--- /dev/null
++++ b/openspec/changes/review-tool-turns/tasks.md
+@@ -0,0 +1,20 @@
++> Branch: `f285/review-tool-turns`. `Part of #285` on interim commits, `Closes #285` on the last.
++
++## 1. Source tools
++
++- [x] 1.1 `zebra_source`: `expand_braces()` + any-of `_glob_match` (list and search), capped
++- [x] 1.2 `zebra_source`: list treats a glob-like `path` (no `glob`) as a glob from the root
++- [x] 1.3 Read Zebra Source v11 (v9 steps), List Zebra Source v4, Search Zebra Source v3 (glob syntax in descriptions)
++- [x] 1.4 Tests: brace globs (list, search, nested), glob as path, range read through the workflow
++
++## 2. Outcome review
++
++- [x] 2.1 `zebra-outcome-review.sh`: `change_map` (files with +/- counts, test functions by file, capped) in the input
++- [x] 2.2 Outcome Review v5: `change_map` input and prompt section; `max_tool_turns` 8 / 5; range and batching guidance
++- [x] 2.3 Tests: script `change_map` (tests found, cut diff), workflow budget and prompt
++
++## 3. Docs and delivery
++
++- [x] 3.1 `specs/zebra-as-is.md` and `zebra-tasks/AGENTS.md` (`zebra_source` row)
++- [ ] 3.2 ruff, unit tests; CI green; merge; verify prod runs Read v11 / List v4 / Search v3 / Outcome Review v5 and a range read
++- [ ] 3.3 Outcome review (O5: compare input tokens with process `71a950e5`); archive the change
+diff --git a/openspec/specs/zebra-source-access/spec.md b/openspec/specs/zebra-source-access/spec.md
+index 7477306..22bafa1 100644
+--- a/openspec/specs/zebra-source-access/spec.md
++++ b/openspec/specs/zebra-source-access/spec.md
+@@ -1,3 +1,11 @@
++# zebra-source-access Specification
++
++## Purpose
++How Zebra's read-only source tools (`zebra_source` and the List, Read and Search Zebra Source
++workflows) find, read and refuse paths, and how they report failures.
++
++## Requirements
++
+ ### Requirement: Source access failures carry a reason
+ 
+ Every failed `zebra_source` request SHALL fail the task with an error that starts with
+diff --git a/scripts/zebra-outcome-review.sh b/scripts/zebra-outcome-review.sh
+index 5af188e..533f6bf 100755
+--- a/scripts/zebra-outcome-review.sh
++++ b/scripts/zebra-outcome-review.sh
+@@ -59,10 +59,52 @@ case "${1:-}" in
+     python3 - "$ISSUE" "$TITLE" "$OUTCOMES" "$CLAUDE" "$TMP/diff.patch" "${HASH:-unknown}" \
+       "$MAX_DIFF_CHARS" >"$TMP/in.json" <<'PY' || exit 1
+ import json
++import re
+ import sys
+ 
++MAX_MAP_CHARS = 8000
++TEST_DEF = re.compile(r"^\+\s*(?:async\s+)?def\s+(test_\w+)")
++
++
++def change_map(diff: str) -> str:
++    """Changed files with +/- counts, then the tests the diff adds or changes (#285).
++
++    Built from the whole diff, so it names every file even when the diff is cut.
++    """
++    files: dict[str, list[int]] = {}
++    tests: dict[str, list[str]] = {}
++    current, in_hunk = None, False
++    for line in diff.splitlines():
++        if line.startswith("diff --git "):
++            current, in_hunk = line.split(" b/", 1)[-1], False
++            files[current] = [0, 0]
++        elif current is not None and line.startswith("@@"):
++            in_hunk = True
++        elif not in_hunk:
++            continue
++        elif line.startswith("+"):
++            files[current][0] += 1
++            name = current.rsplit("/", 1)[-1]
++            is_test = "/tests/" in f"/{current}" or name.startswith("test_")
++            match = TEST_DEF.match(line) if is_test else None
++            if match:
++                tests.setdefault(current, []).append(match.group(1))
++        elif line.startswith("-"):
++            files[current][1] += 1
++    lines = [f"Files changed ({len(files)}):"]
++    lines += [f"- {path} (+{added} -{removed})" for path, (added, removed) in files.items()]
++    if tests:
++        lines += ["", "Tests added or changed:"]
++        lines += [f"- {path}: {', '.join(names)}" for path, names in tests.items()]
++    text = "\n".join(lines)
++    if len(text) > MAX_MAP_CHARS:
++        text = text[:MAX_MAP_CHARS] + "\n... change map truncated; list the source for the rest"
++    return text
++
++
+ issue, title, outcomes, claude, diff_path, deployed, cap = sys.argv[1:]
+ diff = open(diff_path).read()
++changes = change_map(diff)
+ if len(diff) > int(cap):
+     diff = diff[: int(cap)] + f"\n... diff truncated at {cap} characters; read the source for the rest"
+ try:
+@@ -77,6 +119,7 @@ json.dump(
+         "outcomes": open(outcomes).read(),
+         "claude_review": claude_review,
+         "diff": diff,
++        "change_map": changes,
+         "deployed_hash": deployed,
+     },
+     sys.stdout,
+diff --git a/specs/outcome-review-design.md b/specs/outcome-review-design.md
+index b0f6c0c..655277c 100644
+--- a/specs/outcome-review-design.md
++++ b/specs/outcome-review-design.md
+@@ -66,8 +66,13 @@ merge → deploy green → fresh Claude subagent writes `claude.json` → `zebra
+   task, not a false pass.
+ - Claude's side has no rebuttal round inside the workflow; the human sees both positions.
+ - Cost: up to two medium-tier `llm_agent` passes per feature. Both set `answer_on_budget`, so a review
+-  that spends its tool turns (12, then 6) still answers instead of failing (#191; the first real
+-  run, of #190, failed after 8 turns).
++  that spends its tool turns still answers instead of failing (#191; the first real
++  run, of #190, failed after 8 turns). Since #285 the budget is 8, then 5: the #236 review spent
++  12 turns ($1.42, 594k input tokens) mostly on a broken range read (dream copy of *Read Zebra
++  Source*), empty brace globs and searching for tests the diff already held.
++- A `change_map` input (from the script: every changed file with +/- counts, then the test
++  functions added or changed, capped at 8000 chars) comes before the diff in the prompt, so the
++  agent starts from the tests and still sees every file when the diff is truncated (#285).
+ - Since #212 the image also ships `specs/`, `docs/`, `openspec/`, `scripts/`, `deploy/` and the
+   root `*.md` files, so Zebra can read the docs and scripts an outcome names. Before that every
+   failed source read on prod (18 of 171) was for one of these paths.
+diff --git a/specs/zebra-as-is.md b/specs/zebra-as-is.md
+index f0e338c..7d0be83 100644
+--- a/specs/zebra-as-is.md
++++ b/specs/zebra-as-is.md
+@@ -125,7 +125,7 @@ A legacy Java implementation sits in `legacy/` and is archived.
+ | Filesystem | `file_read`, `file_write`, `file_copy`, `file_move`, `file_delete`, `file_search`, `file_exists`, `file_info` (9 actions) |
+ | Compute | `python_exec` (in-process with light restrictions, not a sandbox; real code runs through the host builder, #98) |
+ | Agent loop | `consult_memory`, `consult_knowledge`, `assess_history_need`, `get_workflow_history` (F138 — see [workflow-history spec](../openspec/specs/workflow-history/spec.md)), `workflow_selector`, `workflow_creator`, `workflow_variant_creator`, `execute_goal_workflow`, `assess_and_record`, `update_conceptual_memory`, `propagate_failure`, `record_metrics`, `load_workflow_definitions`, `queue_goal` — `workflow_creator`/`workflow_variant_creator` cap output at `GENERATED_WORKFLOW_MAX_TOKENS` (12000 — sized to finish inside the 180s LLM timeout) and reject truncated or `validate_definition`-invalid (orphaned tasks) YAML, or `route_name` routings from `llm_call` tasks, before saving (#122, #139); both share `generate_workflow()`, which makes one follow-up call: a truncated reply is re-requested (without the cut-off YAML) asking for a more compact workflow, any other problem is fed back for repair (#188); both prompts forbid copying names, numbers or text from the goal or a previous run into the YAML and both run the leak guard (#237, see Dream cycle); `workflow_creator` runs at temperature 0.3, and its prompt documents data flow, serial/parallel/`synchronized` routing and that `route_name` routes are human-task buttons (#139) |
+-| Outcome review (#190) | `zebra_source` (read-only list/read/search of Zebra's own source, sandboxed to the checkout; refusals say why (outside the tree / hidden, secret or runtime file); every failure starts with a `[reason]` tag — `protected`, `not_deployed`, `missing`, `invalid` or `error` — so a caller can tell policy from absence (#258); a missing path with one clear match — the only same-name file, else the only path ≥ 0.9 similar whose name is ≥ 0.85 similar — is read in the same run with a correction note and `output.path`, any other bad path fails with nearest-path suggestions (#221, #223); `list` of a file returns its entry and a glob with no match returns an empty result, both successes (#255); tools *List Zebra Source* / *Read Zebra Source* / *Search Zebra Source*; the image ships the packages plus `specs/`, `docs/`, `openspec/`, `scripts/`, `deploy/` and root `*.md` — #211, #212), `compare_outcome_reviews` (per-outcome Zebra vs Claude verdicts → `agreed` / `disputed` / `ruled`); an unusable JSON review or reconsideration fails the review (exit 1) rather than counting as an empty one (#216). See [outcome-review-design.md](outcome-review-design.md) |
++| Outcome review (#190) | `zebra_source` (read-only list/read/search of Zebra's own source, sandboxed to the checkout; refusals say why (outside the tree / hidden, secret or runtime file); every failure starts with a `[reason]` tag — `protected`, `not_deployed`, `missing`, `invalid` or `error` — so a caller can tell policy from absence (#258); a missing path with one clear match — the only same-name file, else the only path ≥ 0.9 similar whose name is ≥ 0.85 similar — is read in the same run with a correction note and `output.path`, any other bad path fails with nearest-path suggestions (#221, #223); `list` of a file returns its entry and a glob with no match returns an empty result, both successes (#255); globs take `{a,b}` alternatives (`expand_braces`, capped at 64) and a list `path` with glob characters lists by that glob (#285); tools *List Zebra Source* / *Read Zebra Source* / *Search Zebra Source*; the image ships the packages plus `specs/`, `docs/`, `openspec/`, `scripts/`, `deploy/` and root `*.md` — #211, #212), `compare_outcome_reviews` (per-outcome Zebra vs Claude verdicts → `agreed` / `disputed` / `ruled`); an unusable JSON review or reconsideration fails the review (exit 1) rather than counting as an empty one (#216). See [outcome-review-design.md](outcome-review-design.md) |
+ | Dream cycle | `metrics_analyzer`, `workflow_curator`, `workflow_evaluator`, `workflow_optimizer`, `run_golden_gym` (#171), `review_knowledge` (#153), `propose_zebra_improvements` (#189) |
+ | Ethics | `ethics_gate` |
+ | Knowledge (F32, F152, F153) | `review_knowledge` (dream-cycle review, see Dream cycle), `add_knowledge`, `decay_confidence`, `pick_entries_for_verification`, `apply_verification_result`, `apply_resolution`, `extract_knowledge` (low tier extraction of personal-fact candidates; no writes; reusable), `store_learned_knowledge` (stores candidates as `source=agent`, conflicts → *Resolve Knowledge Contradiction* process; `update_agent_entries` updates a conflicting agent entry in place instead — F155) — see [knowledge-learning spec](../openspec/specs/knowledge-learning/spec.md) |
+@@ -463,7 +463,9 @@ per-outcome verdicts and `scripts/zebra-outcome-review.sh` runs the system *Outc
+ in `zebra-web` via `manage.py run_workflow` (`zebra_agent/direct_run.py`: run a named workflow
+ directly, or report its status). Zebra reviews blind, reading its deployed source; disagreement
+ gets one reconsideration and then a human ruling task, and the script exits 2 (sign-off blocked)
+-until it is ruled. See [outcome-review-design.md](outcome-review-design.md).
++until it is ruled. The script also sends a `change_map` (changed files, tests added or changed)
++shown before the diff, and the review has 8 tool turns, the reconsideration 5 (#285). See
++[outcome-review-design.md](outcome-review-design.md).
+ 
+ ### Ethics gate change (F111)
+ 
+diff --git a/zebra-agent/tests/test_outcome_review_script.py b/zebra-agent/tests/test_outcome_review_script.py
+index 16d8f82..32b0bd4 100644
+--- a/zebra-agent/tests/test_outcome_review_script.py
++++ b/zebra-agent/tests/test_outcome_review_script.py
+@@ -250,6 +250,46 @@ def test_run_caps_the_diff(fake, repo, tmp_path):
+     )
+ 
+ 
++def _sent_change_map(fake: Path) -> str:
++    return json.loads((fake / "stdin.json").read_text())["change_map"]
++
++
++def test_run_sends_a_change_map_of_files_and_tests(fake, repo, tmp_path):
++    (repo / "tests").mkdir()
++    (repo / "a.txt").write_text("one\ntwo\nthree\n")
++    (repo / "tests" / "test_a.py").write_text(
++        "def helper():\n    pass\n\n\ndef test_one():\n    pass\n\n\n"
++        "async def test_two():\n    --x\n"
++    )
++    (repo / "lib.py").write_text("def test_not_a_test():\n    pass\n")
++    _git(repo, "add", ".")
++    _git(repo, "commit", "-qm", "change")
++
++    result = _run_review(fake, repo, tmp_path)
++
++    assert result.returncode == 0, result.stdout + result.stderr
++    assert _sent_change_map(fake) == (
++        "Files changed (3):\n"
++        "- a.txt (+2 -0)\n"
++        "- lib.py (+2 -0)\n"
++        "- tests/test_a.py (+10 -0)\n"
++        "\n"
++        "Tests added or changed:\n"
++        "- tests/test_a.py: test_one, test_two"
++    )
++
++
++def test_change_map_names_every_file_when_the_diff_is_cut(fake, repo, tmp_path):
++    _commit(repo, "big.txt", "x" * (MAX_DIFF_CHARS * 2) + "\n")
++    _commit(repo, "late.txt", "late\n")
++
++    result = _run_review(fake, repo, tmp_path)
++
++    assert result.returncode == 0, result.stdout + result.stderr
++    assert "- late.txt (+1 -0)" in _sent_change_map(fake)
++    assert "late.txt" not in json.loads((fake / "stdin.json").read_text())["diff"]
++
++
+ def test_run_rejects_a_non_json_claude_review(fake, repo, tmp_path):
+     result = _run_review(fake, repo, tmp_path, claude="O1: met")
+ 
+diff --git a/zebra-agent/tests/test_outcome_review_workflow.py b/zebra-agent/tests/test_outcome_review_workflow.py
+index a055559..98dcdb4 100644
+--- a/zebra-agent/tests/test_outcome_review_workflow.py
++++ b/zebra-agent/tests/test_outcome_review_workflow.py
+@@ -143,9 +143,11 @@ def _inputs() -> dict:
+     }
+ 
+ 
+-async def _run(engine, library, model: ReviewModel) -> dict:
++async def _run(engine, library, model: ReviewModel, **inputs) -> dict:
+     set_llm_factory(lambda m: model)
+-    return await run_named_workflow(engine, library, "Outcome Review", _inputs(), model="medium")
++    return await run_named_workflow(
++        engine, library, "Outcome Review", {**_inputs(), **inputs}, model="medium"
++    )
+ 
+ 
+ @pytest.mark.parametrize(
+@@ -194,6 +196,81 @@ async def test_review_can_list_source_and_recover_from_a_bad_path(engine, librar
+     assert "list_zebra_source" in bad_read
+ 
+ 
++async def test_read_tool_returns_exactly_the_requested_range(engine, library):
++    """Read Zebra Source passes start_line / end_line through (#285: dream v10 did not)."""
++    model = ReviewModel(
++        _verdicts(("O1", "met"), ("O2", "partial")),
++        calls=[
++            ToolCall(
++                "r1",
++                "read_zebra_source",
++                {"path": f"{AGENT_DIR}/outcome_review.py", "start_line": 20, "end_line": 25},
++            )
++        ],
++    )
++
++    status = await _run(engine, library, model)
++
++    assert status["status"] == "complete"
++    (read,) = model.tool_results
++    numbers = [int(line.split("|", 1)[0]) for line in read.splitlines() if "|" in line]
++    assert numbers == list(range(20, 26))
++
++
++async def test_list_tool_takes_brace_globs_and_a_glob_as_path(engine, library):
++    model = ReviewModel(
++        _verdicts(("O1", "met"), ("O2", "partial")),
++        calls=[
++            ToolCall("l1", "list_zebra_source", {"path": f"{AGENT_DIR}/outcome_*.py"}),
++            ToolCall(
++                "l2",
++                "list_zebra_source",
++                {"path": ".", "glob": f"{AGENT_DIR}/{{outcome_review,zebra_source}}.py"},
++            ),
++        ],
++    )
++
++    status = await _run(engine, library, model)
++
++    assert status["status"] == "complete"
++    as_path, braces = model.tool_results
++    assert f"{AGENT_DIR}/outcome_review.py" in as_path
++    assert braces.splitlines() == [f"{AGENT_DIR}/outcome_review.py", f"{AGENT_DIR}/zebra_source.py"]
++
++
++async def test_review_prompt_shows_the_change_map_before_the_diff(engine, library):
++    model = ReviewModel(_verdicts(("O1", "met"), ("O2", "partial")))
++    change_map = "Files changed (1):\n- a.py (+1 -0)"
++
++    await _run(engine, library, model, change_map=change_map)
++
++    prompt = model.review_prompts[0]
++    assert f"## Change map\n{change_map}" in prompt
++    assert prompt.index("## Change map") < prompt.index("## Diff")
++
++
++@pytest.mark.parametrize(
++    ("filename", "prod_copy"),
++    [
++        ("read_zebra_source.yaml", 10),
++        ("list_zebra_source.yaml", 3),
++        ("search_zebra_source.yaml", 2),
++    ],
++)
++def test_source_tools_ship_above_the_prod_dream_copies(filename, prod_copy):
++    """Only a higher version replaces the broken dream copies on prod (#224, #285)."""
++    assert load_definition(WORKFLOWS / filename).version > prod_copy
++
++
++def test_review_tool_budget_is_tight():
++    tasks = load_definition(WORKFLOWS / "outcome_review.yaml").tasks
++
++    assert tasks["zebra_review"].properties["max_tool_turns"] == 8
++    assert tasks["zebra_reconsider"].properties["max_tool_turns"] == 5
++    assert tasks["zebra_review"].properties["answer_on_budget"] is True
++    assert tasks["zebra_reconsider"].properties["answer_on_budget"] is True
++
++
+ async def test_agreement_completes_without_a_human(engine, library):
+     model = ReviewModel(_verdicts(("O1", "met"), ("O2", "partial")))
+ 
+diff --git a/zebra-agent/workflows/list_zebra_source.yaml b/zebra-agent/workflows/list_zebra_source.yaml
+index 4b59447..aebf500 100644
+--- a/zebra-agent/workflows/list_zebra_source.yaml
++++ b/zebra-agent/workflows/list_zebra_source.yaml
+@@ -1,12 +1,15 @@
+ name: "List Zebra Source"
+ description: >-
+   List what is in Zebra's own deployed source: a directory's subdirectories (with file counts)
+-  and files (with sizes), or with a glob, every matching file path. Deployed top-level entries:
+-  zebra-py/, zebra-tasks/, zebra-agent/, zebra-agent-web/, specs/, docs/, openspec/, scripts/,
+-  deploy/, pyproject.toml, version.json and the root *.md files.
++  and files (with sizes), or with a glob, every matching file path. Globs use * ? [..] and
++  {a,b} alternatives, ** for any depth; a glob given as path lists by that glob. Deployed
++  top-level entries: zebra-py/, zebra-tasks/, zebra-agent/, zebra-agent-web/, specs/, docs/,
++  openspec/, scripts/, deploy/, pyproject.toml, version.json and the root *.md files.
+ tags: ["code", "source", "list"]
+ use_when: "You need to know which files or directories exist in Zebra's own codebase before reading one."
+-version: 1
++# v4 (#285): glob syntax documented, and a glob in path works. Replaces dream copy v3,
++# which dropped the glob input.
++version: 4
+ first_task: list
+ result_key: source
+ # Requires a path, so it is a tool for llm_agent and never selected for a goal (#190, #211).
+@@ -16,10 +19,10 @@ inputs:
+   properties:
+     path:
+       type: string
+-      description: "Directory relative to the repository root, e.g. zebra-tasks/zebra_tasks/agent, or '.' for the root"
++      description: "Directory relative to the repository root, e.g. zebra-tasks/zebra_tasks/agent, or '.' for the root; a glob here lists by that glob"
+     glob:
+       type: string
+-      description: "List matching files recursively instead, relative to the repository root, e.g. 'specs/**/*.md'"
++      description: "List matching files recursively instead, relative to the repository root, e.g. 'specs/**/*.md' or 'zebra-agent/tests/test_{skill,sync}*.py'"
+ 
+ tasks:
+   list:
+diff --git a/zebra-agent/workflows/outcome_review.yaml b/zebra-agent/workflows/outcome_review.yaml
+index 9dea683..dc0a237 100644
+--- a/zebra-agent/workflows/outcome_review.yaml
++++ b/zebra-agent/workflows/outcome_review.yaml
+@@ -2,7 +2,8 @@ name: "Outcome Review"
+ description: "Review a shipped Zebra change against its agreed outcomes, compare with Claude's independent review, and ask a human to rule where the two still disagree."
+ tags: ["review", "outcomes", "process", "code", "system"]
+ use_when: "Run by the delivery process after a deploy, with the outcomes, the diff and Claude's verdicts."
+-version: 4
++# v5 (#285): change map ahead of the diff, 8 / 5 tool turns, read ranges and batch calls.
++version: 5
+ first_task: zebra_review
+ result_key: review_result
+ # Requires inputs, so it is never selected for a goal; run it with
+@@ -23,6 +24,9 @@ inputs:
+     diff:
+       type: string
+       description: "Unified diff of the merged change"
++    change_map:
++      type: string
++      description: "Changed files with +/- line counts, then the test functions added or changed, by file"
+     claude_review:
+       type: object
+       description: "Claude's verdicts: {verdicts: [{id, verdict: met|partial|missed, evidence}]}"
+@@ -54,9 +58,11 @@ tasks:
+         Use the tools to check what the diff alone does not show: callers, tests,
+         configuration. Be strict; "probably" is partial. Cite file:line or a test name
+         as evidence. Another reviewer is judging the same outcomes independently.
+-        You have about 10 tool turns: search first, read only what you need, and
+-        ask for several reads in one turn. When the budget runs out you must answer
+-        from what you have.
++        Start from the change map: it names every changed file and the tests the
++        change adds, so you need not search for them. You have 8 tool turns. Ask for
++        several calls in one turn, read line ranges (start_line / end_line) rather
++        than whole files, and do not re-read lines you already have. When the budget
++        runs out you must answer from what you have.
+ 
+         Reply with JSON only:
+         {"verdicts": [{"id": "O1", "verdict": "met|partial|missed",
+@@ -70,10 +76,13 @@ tasks:
+         ## Outcomes
+         {{outcomes}}
+ 
++        ## Change map
++        {{change_map}}
++
+         ## Diff
+         {{diff}}
+       tools: ["List Zebra Source", "Read Zebra Source", "Search Zebra Source"]
+-      max_tool_turns: 12
++      max_tool_turns: 8
+       answer_on_budget: true
+       max_tokens: 4000
+       response_format: json
+@@ -100,7 +109,8 @@ tasks:
+         and another reviewer (Claude) disagreed with you on some of them. For each
+         disputed outcome, re-check the code with your tools and decide again:
+         met, partial or missed. Change your verdict only if the evidence supports it;
+-        holding your position is fine when you can show why.
++        holding your position is fine when you can show why. You have 5 tool turns:
++        batch your calls and read line ranges, not whole files.
+ 
+         Reply with JSON only, covering the disputed outcomes:
+         {"verdicts": [{"id": "O1", "verdict": "met|partial|missed",
+@@ -117,7 +127,7 @@ tasks:
+         ## Diff
+         {{diff}}
+       tools: ["List Zebra Source", "Read Zebra Source", "Search Zebra Source"]
+-      max_tool_turns: 6
++      max_tool_turns: 5
+       answer_on_budget: true
+       max_tokens: 3000
+       response_format: json
+diff --git a/zebra-agent/workflows/read_zebra_source.yaml b/zebra-agent/workflows/read_zebra_source.yaml
+index 2c54f96..895f0a3 100644
+--- a/zebra-agent/workflows/read_zebra_source.yaml
++++ b/zebra-agent/workflows/read_zebra_source.yaml
+@@ -7,7 +7,9 @@ use_when: "You need to see the code of a specific file in Zebra's own codebase."
+ # v9 (#249): no change to the steps again. Dream copies v6 (sub-workflow "Source Path
+ # Resolver", not runnable as a tool), v7 and v8 (python_exec `import os`, refused by the
+ # sandbox) broke every read; zebra_source already resolves a missing path itself.
+-version: 9
++# v11 (#285): no change to the steps. Dream copy v10 (validate_line_range + routing)
++# dropped the line range, so every read returned the file from line 1.
++version: 11
+ first_task: read
+ result_key: source
+ # Requires a path, so it is a tool for llm_agent and never selected for a goal (#190).
+diff --git a/zebra-agent/workflows/search_zebra_source.yaml b/zebra-agent/workflows/search_zebra_source.yaml
+index a0d1c23..cfb3584 100644
+--- a/zebra-agent/workflows/search_zebra_source.yaml
++++ b/zebra-agent/workflows/search_zebra_source.yaml
+@@ -2,7 +2,8 @@ name: "Search Zebra Source"
+ description: "Search Zebra's own deployed source code for a regex; returns path:line: text hits. Covers zebra-py/, zebra-tasks/, zebra-agent/, zebra-agent-web/, specs/, docs/, openspec/, scripts/, deploy/ and the root *.md files."
+ tags: ["code", "source", "search"]
+ use_when: "You need to find where something is defined or used in Zebra's own codebase."
+-version: 2
++# v3 (#285): brace alternatives in glob, documented. Replaces the installed v2.
++version: 3
+ first_task: search
+ result_key: source
+ # Requires a pattern, so it is a tool for llm_agent and never selected for a goal (#190).
+@@ -15,7 +16,7 @@ inputs:
+       description: "Python regex matched against each line, e.g. 'class \\w+Action'"
+     glob:
+       type: string
+-      description: "Files to search, relative to the repository root, e.g. 'zebra-tasks/**/*.py' (default: all source)"
++      description: "Files to search, relative to the repository root: * ? [..], ** for any depth and {a,b} alternatives, e.g. 'zebra-tasks/**/*.py' or 'zebra-*/**/*.{py,yaml}' (default: all source)"
+ 
+ tasks:
+   search:
+diff --git a/zebra-tasks/AGENTS.md b/zebra-tasks/AGENTS.md
+index 4b410b6..5547d08 100644
+--- a/zebra-tasks/AGENTS.md
++++ b/zebra-tasks/AGENTS.md
+@@ -55,7 +55,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
+ | `zebra_tasks/agent/record_dilemma_resolution.py` | RecordDilemmaResolutionAction - record a human ethics-dilemma resolution and route (F22) |
+ | `zebra_tasks/agent/stuck.py` | AssessStuckAction (`assess_stuck`: route `proceed`/`ask_human`, `max_help_requests` budget in `__help_requests__`, low-tier help request with plain fallback), ApplyHelpResponseAction (`apply_help_response`: route `retry`/`redirect`/`abandon`, `__help_history__`), `with_help_guidance()` appended to the child goal by `execute_goal_workflow` (#176) |
+ | `zebra_tasks/agent/postmortem.py` | WritePostmortemAction (`write_postmortem`: low-tier postmortem — what happened / root cause / lesson + voice — stored via `MemoryStore.add_postmortem`, one per run, skips successful `failure` runs and without an LLM; never fails), `with_lessons()` appends recalled lessons to the child goal (#175) |
+-| `zebra_tasks/agent/zebra_source.py` | ZebraSourceAction (`zebra_source`): read-only `read` (line range, `max_chars`) / `search` (regex, glob, `max_results`) / `list` (one level, or by glob) of Zebra's own source; a missing path with one clear match (`confident_match()`: the only same-name file, else the only path ≥ 0.9 similar whose name is ≥ 0.85 similar) is read with a `Note:` first line and `output.path` (#221, #223); otherwise it fails with nearest-path suggestions and a list/search hint (#211). An unknown top-level entry that does not exist is a miss, not a refusal; refusals say why. `list` of a file returns its entry; a glob with no match returns `No files match …` (both succeed, #255). Every failure starts with a `[reason]` tag (`REASONS`): `protected` (outside the tree, hidden/secret/runtime, off the allowlist), `not_deployed` (an allowlisted entry absent from this tree, e.g. repo-only), `missing`, `invalid` (bad request), `error` (an `OSError` reading) (#258). Root `ZEBRA_SOURCE_ROOT` or the checkout above `zebra_tasks` (`/app` in prod); allowlisted top-level entries only; refuses dot-entries, databases, keys, `tmp/`, symlinks, anything outside the root (#190). `is_expected_miss(error)` (`EXPECTED_MISS_MARKERS`) tells its not-found / not-deployed / directory-to-read failures from refusals and crashes, for the dream metrics (#256) |
++| `zebra_tasks/agent/zebra_source.py` | ZebraSourceAction (`zebra_source`): read-only `read` (line range, `max_chars`) / `search` (regex, glob, `max_results`) / `list` (one level, or by glob) of Zebra's own source; a missing path with one clear match (`confident_match()`: the only same-name file, else the only path ≥ 0.9 similar whose name is ≥ 0.85 similar) is read with a `Note:` first line and `output.path` (#221, #223); otherwise it fails with nearest-path suggestions and a list/search hint (#211). An unknown top-level entry that does not exist is a miss, not a refusal; refusals say why. `list` of a file returns its entry; a glob with no match returns `No files match …` (both succeed, #255). Globs take `{a,b}` alternatives (`expand_braces()`, nested, capped at `MAX_BRACE_EXPANSIONS` 64), and a `list` whose `path` has glob characters (`* ? [ {`) and no `glob` lists by that glob from the root (#285). Every failure starts with a `[reason]` tag (`REASONS`): `protected` (outside the tree, hidden/secret/runtime, off the allowlist), `not_deployed` (an allowlisted entry absent from this tree, e.g. repo-only), `missing`, `invalid` (bad request), `error` (an `OSError` reading) (#258). Root `ZEBRA_SOURCE_ROOT` or the checkout above `zebra_tasks` (`/app` in prod); allowlisted top-level entries only; refuses dot-entries, databases, keys, `tmp/`, symlinks, anything outside the root (#190). `is_expected_miss(error)` (`EXPECTED_MISS_MARKERS`) tells its not-found / not-deployed / directory-to-read failures from refusals and crashes, for the dream metrics (#256) |
+ | `zebra_tasks/agent/outcome_review.py` | CompareOutcomeReviewsAction (`compare_outcome_reviews`): `parse_review()`, `compare_reviews()`; per-outcome Zebra vs Claude verdicts, route `agreed`/`disputed` (unreadable or missing = disputed), `reconsidered_key` overlay, `ruling_key` → `ruled`, `final` (no route); writes `review_result` with `table_markdown` (issue, with evidence), `summary_markdown` (ruling form) and a `dispute_notes` section per disputed outcome; `outcome_texts()` (#190, #215) |
+ | `zebra_tasks/agent/record_ethics_review.py` | RecordEthicsReviewAction - normalise + audit the post-execution ethics review (#143) |
+ | `zebra_tasks/agent/record_ethics_rejection.py` | RecordEthicsRejectionAction - record which ethics gate rejected a goal and why (#143) |
+diff --git a/zebra-tasks/tests/test_zebra_source.py b/zebra-tasks/tests/test_zebra_source.py
+index 39963c0..d5f2aac 100644
+--- a/zebra-tasks/tests/test_zebra_source.py
++++ b/zebra-tasks/tests/test_zebra_source.py
+@@ -9,9 +9,11 @@ from zebra.core.models import ProcessDefinition, ProcessInstance, TaskDefinition
+ from zebra.tasks.base import ExecutionContext
+ 
+ from zebra_tasks.agent.zebra_source import (
++    MAX_BRACE_EXPANSIONS,
+     REASONS,
+     RECOVERY_HINT,
+     ZebraSourceAction,
++    expand_braces,
+     is_expected_miss,
+     source_root,
+ )
+@@ -259,6 +261,67 @@ async def test_list_of_a_hidden_file_is_still_refused(root, context):
+     assert "never reads" in result.error
+ 
+ 
++# Brace globs and a glob given as list's path (#285).
++
++
++@pytest.mark.parametrize(
++    ("glob", "expected"),
++    [
++        ("*.py", ("*.py",)),
++        ("*.{py,yaml}", ("*.py", "*.yaml")),
++        ("{a,b}/{c,d}", ("a/c", "a/d", "b/c", "b/d")),
++        ("x{a,{b,c}}", ("xa", "xb", "xc")),
++        ("{single}.py", ("{single}.py",)),
++    ],
++)
++def test_expand_braces(glob, expected):
++    assert sorted(expand_braces(glob)) == sorted(expected)
++
++
++def test_expand_braces_is_capped():
++    assert len(expand_braces("{a,b}" * 10)) == MAX_BRACE_EXPANSIONS
++
++
++async def test_search_with_a_brace_glob(root, context):
++    (root / "zebra-tasks" / "zebra_tasks" / "other.yaml").write_text("ThingAction: yes\n")
++    (root / "zebra-tasks" / "zebra_tasks" / "skip.txt").write_text("ThingAction: no\n")
++
++    result = await ZebraSourceAction().run(
++        _task(operation="search", pattern="ThingAction", glob="zebra-tasks/**/*.{py,yaml}"),
++        context,
++    )
++
++    files = {line.split(":", 1)[0] for line in result.output["text"].splitlines()}
++    assert files == {"zebra-tasks/zebra_tasks/thing.py", "zebra-tasks/zebra_tasks/other.yaml"}
++
++
++async def test_list_with_a_brace_glob(root, context):
++    (root / "zebra-tasks" / "zebra_tasks" / "other.yaml").write_text("x")
++
++    result = await ZebraSourceAction().run(_list(glob="**/{thing,other}.{py,yaml}"), context)
++
++    assert result.output["text"].splitlines() == [
++        "zebra-tasks/zebra_tasks/other.yaml",
++        "zebra-tasks/zebra_tasks/thing.py",
++    ]
++
++
++async def test_list_takes_a_glob_given_as_path(root, context):
++    result = await ZebraSourceAction().run(_list(path="zebra-tasks/**/th*.py"), context)
++
++    assert result.success
++    assert result.output["text"] == "zebra-tasks/zebra_tasks/thing.py"
++
++
++async def test_a_glob_path_never_lists_hidden_or_outside(root, context):
++    hidden = await ZebraSourceAction().run(_list(path="**/*"), context)
++    outside = await ZebraSourceAction().run(_list(path="../*"), context)
++
++    assert not any(h in hidden.output["text"] for h in HIDDEN)
++    assert not outside.success
++    assert outside.error.startswith("[invalid] ")
++
++
+ async def test_ambiguous_typo_suggests_the_right_one(root, context):
+     (root / "zebra-tasks" / "zebra_tasks" / "thin.py").write_text("x")
+ 
+diff --git a/zebra-tasks/zebra_tasks/agent/zebra_source.py b/zebra-tasks/zebra_tasks/agent/zebra_source.py
+index ce3c8cf..5da5eea 100644
+--- a/zebra-tasks/zebra_tasks/agent/zebra_source.py
++++ b/zebra-tasks/zebra_tasks/agent/zebra_source.py
+@@ -14,6 +14,7 @@ search, so an agent can recover. Every failure starts with a ``[reason]`` tag
+ 
+ import difflib
+ import fnmatch
++import functools
+ import logging
+ import os
+ import re
+@@ -234,12 +235,51 @@ def missing_path_error(root: Path, path: str, resolved: Path) -> SourceAccessErr
+     return SourceAccessError(message, reason)
+ 
+ 
++_BRACE_GROUP = re.compile(r"\{([^{}]*)\}")
++#: Most plain globs one braced glob may expand to, so a pathological pattern stays cheap.
++MAX_BRACE_EXPANSIONS = 64
++_GLOB_CHARS = set("*?[{")
++
++
++@functools.lru_cache(maxsize=256)
++def expand_braces(glob: str) -> tuple[str, ...]:
++    """Expand ``{a,b}`` alternatives (nested or several) into plain globs (#285).
++
++    ``fnmatch`` has no braces, so ``*.{py,yaml}`` would otherwise match nothing. A group
++    without a comma is kept as literal text; at most MAX_BRACE_EXPANSIONS are returned.
++    """
++    pending, done = [glob], []
++    while pending and len(done) < MAX_BRACE_EXPANSIONS:
++        current = pending.pop(0)
++        group = next(
++            (m for m in _BRACE_GROUP.finditer(current) if "," in m.group(1)),
++            None,
++        )
++        if group is None:
++            done.append(current)
++            continue
++        head, tail = current[: group.start()], current[group.end() :]
++        pending.extend(head + option + tail for option in group.group(1).split(","))
++    return tuple(dict.fromkeys(done))
++
++
++def _is_glob(text: str) -> bool:
++    """Whether ``text`` uses glob syntax rather than naming one path."""
++    return any(c in _GLOB_CHARS for c in text)
++
++
+ def _glob_match(rel: Path, glob: str) -> bool:
+-    """Match a root-relative path against a glob; ``**/`` also matches top-level files."""
++    """Match a root-relative path against a glob; ``**/`` also matches top-level files.
++
++    ``{a,b}`` alternatives match when any expansion does.
++    """
+     text = rel.as_posix()
+-    if fnmatch.fnmatch(text, glob):
+-        return True
+-    return glob.startswith("**/") and fnmatch.fnmatch(text, glob[3:])
++    for plain in expand_braces(glob):
++        if fnmatch.fnmatch(text, plain):
++            return True
++        if plain.startswith("**/") and fnmatch.fnmatch(text, plain[3:]):
++            return True
++    return False
+ 
+ 
+ def _checked_glob(glob: str) -> str:
+@@ -433,6 +473,10 @@ class ZebraSourceAction(TaskAction):
+ 
+     def _list(self, root: Path, props: dict) -> str:
+         raw = (props.get("path") or "").strip()
++        if not props.get("glob") and _is_glob(raw):
++            # A glob given as the path is what an agent means, not a missing directory (#285).
++            props = {**props, "glob": raw}
++            raw = ""
+         directory = root if raw in ("", ".", "./") else resolve_source_path(root, raw)
+         label = raw or "the source root"
+         if directory.is_file():

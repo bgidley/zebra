@@ -30,8 +30,9 @@ statement says which Zebra proposed the PR; it does not make the code trusted.
 Diff scanner interface (slice A, ``contribute_diff_scan``): if
 ``zebra_tasks.contribute.diff_scan.scan_diff_text(patch, *, paths, commit_messages,
 author_emails, pr_body)`` exists it is used and must return ``{"verdict": "clean"|"rejected",
-"findings": [...]}``. Until then a conservative built-in scan runs (pii rules on added lines,
-blocked paths). Either way the scan fails closed.
+"findings": [...]}``. Slice A ships it: every rule of the contribution scan without the LLM
+pass, plus a rejection for CI / deploy / scripts paths. The built-in scan below runs only if
+that import fails (pii rules on added lines, blocked paths). Either way the scan fails closed.
 
 Usage:
   uv run python scripts/import_github_pr.py prepare <PR> [--slug words] [--allow-unsigned]
