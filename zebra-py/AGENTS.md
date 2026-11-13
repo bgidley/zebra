@@ -237,6 +237,7 @@ get_user_input:
 | `coerce_form_data(schema, raw_data)` | Converts HTML form strings to int/float/bool/list |
 | `get_routes_from_definition(task_def_id, routings)` | Extracts route names for conditional routing UI |
 | `resolve_task_schema(schema, process_properties)` | Static schema dict, or resolve a `"{{reference}}"` schema to a JSON Schema generated at runtime (#179); `None` if unusable |
+| `resolve_schema_templates(schema, process_properties)` | Copy of a schema with `{{…}}` filled in its `title` / `description` and each field's `title` / `description` / string `default` (#231); `resolve_template_text(text, props)` for one string |
 
 **Supported output types:** Any JSON-serializable value (string, dict, list, etc.)
 

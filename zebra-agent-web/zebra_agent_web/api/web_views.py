@@ -1593,7 +1593,7 @@ async def _review_action(request, task_id: str, action) -> HttpResponse | None:
 @require_POST
 async def review_task_retry(request, task_id):
     """Retry a task flagged for manual review (HTMX)."""
-    await engine.ensure_initialized()
+    await agent_engine.ensure_initialized()
     wf_engine = engine.get_engine()
     error = await _review_action(
         request, task_id, lambda: manual_review.retry_review_task(wf_engine, task_id)
@@ -1604,7 +1604,7 @@ async def review_task_retry(request, task_id):
 @require_POST
 async def review_task_fail(request, task_id):
     """Fail the run owning a task flagged for manual review (HTMX)."""
-    await engine.ensure_initialized()
+    await agent_engine.ensure_initialized()
     wf_engine = engine.get_engine()
     reason = request.POST.get("reason", "").strip() or None
     error = await _review_action(
@@ -2181,47 +2181,14 @@ async def nav_needs_you(request):
 
 
 def _resolve_schema_defaults(schema: dict, process_properties: dict) -> dict:
-    """Resolve {{template}} variables in schema field default values.
+    """Resolve {{template}} variables in a task schema's display text.
 
-    When a task schema uses {{var}} as a default (e.g. to pre-populate a
-    read-only field with output from a previous task), those references must
-    be resolved against the process properties before the form is rendered.
-    Only string defaults are resolved; other types are left unchanged.
+    Titles, descriptions and string defaults, at the top level and per field, are filled
+    from the process properties before the form is rendered (``zebra.forms``).
     """
-    import copy
-    import re
+    from zebra.forms import resolve_schema_templates
 
-    def _resolve(value: str) -> str:
-        def replace_var(match: re.Match) -> str:
-            var = match.group(1)
-            if "." in var:
-                task_id, attr = var.split(".", 1)
-                if attr == "output":
-                    key = f"__task_output_{task_id}"
-                    output = process_properties.get(key)
-                    return str(output) if output is not None else ""
-                # A field of a dict property, e.g. {{review_result.dispute_notes}} (#215),
-                # at any depth: {{__task_output_await_build.test.rc}} (#98)
-                parent = process_properties.get(task_id)
-                if isinstance(parent, dict):
-                    value = parent
-                    for part in attr.split("."):
-                        value = value.get(part) if isinstance(value, dict) else None
-                    return str(value) if value is not None else ""
-            return str(process_properties.get(var, ""))
-
-        return re.sub(r"\{\{(\w+(?:\.\w+)*)\}\}", replace_var, value)
-
-    schema = copy.deepcopy(schema)
-    # Resolve top-level description (used as form_description in the template)
-    if "description" in schema and isinstance(schema["description"], str):
-        schema["description"] = _resolve(schema["description"])
-    for field_schema in schema.get("properties", {}).values():
-        if "default" in field_schema and isinstance(field_schema["default"], str):
-            field_schema["default"] = _resolve(field_schema["default"])
-        if "description" in field_schema and isinstance(field_schema["description"], str):
-            field_schema["description"] = _resolve(field_schema["description"])
-    return schema
+    return resolve_schema_templates(schema, process_properties)
 
 
 def _task_schema(task_def, process_properties: dict) -> dict:
@@ -2365,7 +2332,7 @@ async def human_task_submit(request, task_id):
     from zebra.core.models import TaskResult
     from zebra.forms import coerce_form_data, schema_to_form, validate_form_data
 
-    await engine.ensure_initialized()
+    await agent_engine.ensure_initialized()
     store = engine.get_store()
     wf_engine = engine.get_engine()
 

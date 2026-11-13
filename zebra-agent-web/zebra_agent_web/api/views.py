@@ -1028,7 +1028,7 @@ def task_complete(request, task_id):
     refused: list[str] = []
 
     async def _load():
-        await engine.ensure_initialized()
+        await agent_engine.ensure_initialized()
         store = engine.get_store()
 
         task = await store.load_task(task_id)
@@ -1160,7 +1160,7 @@ def task_retry(request, task_id):
     """
 
     async def _retry():
-        await engine.ensure_initialized()
+        await agent_engine.ensure_initialized()
         return await manual_review.retry_review_task(engine.get_engine(), task_id)
 
     try:
@@ -1189,7 +1189,7 @@ def task_fail(request, task_id):
         reason = request.data.get("reason") or None
 
     async def _fail():
-        await engine.ensure_initialized()
+        await agent_engine.ensure_initialized()
         return await manual_review.fail_review_task(engine.get_engine(), task_id, reason)
 
     try:
