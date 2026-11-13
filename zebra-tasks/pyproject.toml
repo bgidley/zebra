@@ -91,6 +91,7 @@ run_golden_gym = "zebra_tasks.agent.gym:RunGoldenGymAction"
 # Agent - Outcome review: read own source, compare reviews (#190)
 zebra_source = "zebra_tasks.agent.zebra_source:ZebraSourceAction"
 compare_outcome_reviews = "zebra_tasks.agent.outcome_review:CompareOutcomeReviewsAction"
+brief_outcome_disputes = "zebra_tasks.agent.outcome_review:BriefOutcomeDisputesAction"
 # Agent - Ethics outcome recording (#143)
 record_ethics_review = "zebra_tasks.agent.record_ethics_review:RecordEthicsReviewAction"
 record_ethics_rejection = "zebra_tasks.agent.record_ethics_rejection:RecordEthicsRejectionAction"

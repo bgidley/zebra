@@ -4,15 +4,26 @@ from unittest.mock import MagicMock
 
 import pytest
 from zebra.core.models import ProcessDefinition, ProcessInstance, TaskDefinition, TaskInstance
+from zebra.forms import validate_form_data
 from zebra.tasks.base import ExecutionContext
 
+from zebra_tasks.agent import outcome_review
 from zebra_tasks.agent.outcome_review import (
+    MAX_BRIEF_CHARS,
+    BriefOutcomeDisputesAction,
     CompareOutcomeReviewsAction,
+    _verdict_labels,
     compare_reviews,
+    first_sentence,
     outcome_ids,
     outcome_texts,
+    parse_briefs,
     parse_review,
+    record_ruling,
+    ruling_form,
+    takes_a_side,
 )
+from zebra_tasks.llm.base import LLMResponse, TokenUsage
 
 _DEF = ProcessDefinition(
     id="d1", name="D", first_task_id="c", tasks={"c": TaskDefinition(id="c", name="C")}
@@ -250,3 +261,304 @@ async def test_final_step_records_without_routing():
 
     assert result.next_route is None
     assert context.process.properties["review_result"]["status"] == "agreed"
+
+
+# --- Clearer ruling form (#295) -------------------------------------------------------------
+
+
+def _rows(*triples: tuple[str, str, str]) -> list[dict]:
+    """Rows from (id, zebra, claude) with evidence that names the side."""
+    zebra = {i: {"verdict": z, "evidence": f"Zebra on {i}. Detail."} for i, z, _ in triples}
+    claude = {i: {"verdict": c, "evidence": f"Claude on {i}; more."} for i, _, c in triples}
+    return compare_reviews(zebra, claude)["rows"]
+
+
+def test_first_sentence_cuts_at_the_first_full_stop_and_caps():
+    assert first_sentence("See a.py:12. Then more.") == "See a.py:12."
+    assert first_sentence("no stop here") == "no stop here"
+    assert first_sentence("x" * 300, limit=10) == "x" * 9 + "…"
+    assert first_sentence("") == ""
+
+
+def test_ruling_form_has_a_section_and_a_required_pick_per_disputed_outcome():
+    rows = _rows(("O1", "met", "met"), ("O2", "partial", "met"), ("O3", "met", "missed"))
+    briefs = {
+        "O2": {
+            "crux": "Lock files",
+            "zebra": "Skipped.",
+            "claude": "Scanned.",
+            "settle": "Run test_x.",
+        }
+    }
+
+    form = ruling_form(rows, {"O2": "Scans everything"}, briefs, "#9 Scan (abc)")
+    fields = form["properties"]
+
+    assert form["title"] == "Zebra and Claude disagree on 2 of 3 outcomes"
+    assert form["description"].startswith("#9 Scan (abc)\nPick a verdict")
+    assert form["required"] == ["O2", "O3"]
+    assert list(fields) == [
+        "agreed",
+        "O2_case",
+        "O2",
+        "O2_note",
+        "O3_case",
+        "O3",
+        "O3_note",
+        "notes",
+        "evidence",
+    ]
+    assert fields["agreed"]["default"] == "O1 met"
+    assert "O1" not in fields["evidence"]["default"]
+    case = fields["O2_case"]["default"]
+    assert case.startswith("*Scans everything*")
+    assert "**In dispute:** Lock files" in case
+    assert "| **Zebra** | partial | Skipped. |" in case
+    assert "**What would settle it:** Run test_x." in case
+    assert fields["O2"]["enum"] == ["met", "partial", "missed"]
+    assert fields["O2"]["enumLabels"] == ["Met (Claude)", "Partial (Zebra)", "Missed"]
+    # No brief for O3: each side's first sentence stands in, and no crux line
+    assert "In dispute" not in fields["O3_case"]["default"]
+    assert "| **Claude** | missed | Claude on O3; more. |" in fields["O3_case"]["default"]
+    assert "| **Zebra** | met | Zebra on O3. |" in fields["O3_case"]["default"]
+
+
+def test_a_shared_verdict_label_names_both_sides():
+    (row,) = _rows(("O1", "", "met"))
+
+    assert _verdict_labels(row) == ["Met (Claude)", "Partial", "Missed"]
+    row["zebra"] = "met"
+    assert _verdict_labels(row)[0] == "Met (Zebra and Claude)"
+
+
+def test_ruling_form_text_cannot_inject_templates():
+    """The form resolves {{templates}} in defaults; reviewer text must stay literal."""
+    rows = compare_reviews(
+        {"O1": {"verdict": "met", "evidence": "uses {{__secret__}}"}},
+        {"O1": {"verdict": "missed", "evidence": "no"}},
+    )["rows"]
+
+    form = ruling_form(rows, {}, {"O1": {"crux": "{{x}}"}}, "#1 {{title}}")
+
+    texts = [form["description"]] + [
+        str(f.get(k, "")) for f in form["properties"].values() for k in ("default", "description")
+    ]
+    assert not [t for t in texts if "{{" in t or "}}" in t]
+    assert "uses { {__secret__} }" in form["properties"]["evidence"]["default"]
+
+
+def test_ruling_form_without_readable_verdicts_asks_in_words():
+    form = compare_reviews({}, {})["ruling_form"]
+
+    assert form["required"] == ["ruling"]
+    assert form["properties"]["ruling"]["format"] == "multiline"
+
+
+def test_a_ruling_without_a_pick_is_refused():
+    form = ruling_form(_rows(("O1", "met", "partial")), {})
+
+    errors = validate_form_data(form, {"O1": "", "O1_note": "x"})
+
+    assert [e.field for e in errors] == ["O1"]
+    assert validate_form_data(form, {"O1": "maybe"})
+    assert validate_form_data(form, {"O1": "partial"}) == []
+
+
+def test_record_ruling_sets_per_outcome_verdicts_and_followups():
+    result = compare_reviews(
+        {
+            i: {"verdict": v, "evidence": ""}
+            for i, v in [("O1", "partial"), ("O2", "met"), ("O3", "met")]
+        },
+        {
+            i: {"verdict": v, "evidence": ""}
+            for i, v in [("O1", "partial"), ("O2", "missed"), ("O3", "partial")]
+        },
+    )
+
+    record_ruling(result, {"O2": "missed", "O2_note": " no  test ", "O3": "met", "notes": "ok"})
+
+    assert result["status"] == "ruled"
+    assert result["followups"] == ["O1", "O2"]  # agreed partial + ruled missed; ruled met is not
+    assert result["ruling"] == "O2: missed: no test\nO3: met\nok"
+    assert result["unruled"] == []
+    rows = {r["id"]: r for r in result["rows"]}
+    assert (rows["O2"]["ruling"], rows["O2"]["ruling_note"]) == ("missed", "no test")
+    assert "| O2 | met | missed | **no** | **missed** (no test) |" in result["table_markdown"]
+    assert "| O1 | partial | partial | yes | — |" in result["table_markdown"]
+
+
+def test_record_ruling_keeps_a_free_text_answer_and_names_what_is_unruled():
+    result = compare_reviews(
+        {"O1": {"verdict": "met", "evidence": ""}}, {"O1": {"verdict": "missed", "evidence": ""}}
+    )
+
+    record_ruling(result, {"ruling": "Zebra is right"})
+
+    assert result["ruling"] == "Zebra is right"
+    assert result["unruled"] == ["O1"]
+    assert result["followups"] == []
+    assert "Ruling" not in result["table_markdown"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Zebra is right: the lock files are skipped.",
+        "Claude's correct about the tests.",
+        "This should be partial.",
+        "O1 must remain met.",
+        "The correct verdict is missed.",
+        "I recommend ruling for Zebra.",
+        "We would rule partial.",
+        "Rule in favour of Claude.",
+    ],
+)
+def test_a_brief_that_takes_a_side_is_dropped(text):
+    assert takes_a_side(text)
+    reply = {"disputes": [{"id": "O1", "crux": "Lock files", "zebra": text, "settle": text}]}
+
+    assert parse_briefs(reply, {"O1"}) == {"O1": {"crux": "Lock files"}}
+    assert parse_briefs({"disputes": [{"id": "O1", "crux": text}]}, {"O1"}) == {}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Whether a pending prod check makes O1 partial or met",
+        "Zebra says it is partial because lock lines skip the PII rules.",
+        "Claude did not address the lock-file path.",
+        "Read diff_scan.py:655-697 to see whether lock lines reach the PII rules.",
+    ],
+)
+def test_describing_the_sides_is_not_taking_one(text):
+    assert not takes_a_side(text)
+
+
+def test_parse_briefs_keeps_only_disputed_ids_with_a_crux():
+    reply = {
+        "disputes": [
+            {"id": "o1", "crux": " Lock\n files ", "zebra": "z", "claude": 3, "settle": "s"},
+            {"id": "O2", "crux": "agreed one"},
+            {"id": "O3", "zebra": "no crux"},
+            "junk",
+        ]
+    }
+
+    briefs = parse_briefs(reply, {"O1", "O3"})
+
+    assert briefs == {"O1": {"crux": "Lock files", "zebra": "z", "settle": "s"}}
+    assert parse_briefs("not json", {"O1"}) == {}
+    assert (
+        parse_briefs({"disputes": [{"id": "O1", "crux": "x" * 900}]}, {"O1"})["O1"]["crux"]
+        == "x" * MAX_BRIEF_CHARS
+    )
+
+
+class _BriefLLM:
+    def __init__(self, reply: str | Exception):
+        self.reply = reply
+        self.calls: list[list] = []
+
+    async def complete(self, messages, **kw):
+        self.calls.append(messages)
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        return LLMResponse(
+            content=self.reply,
+            tool_calls=None,
+            finish_reason="end_turn",
+            usage=TokenUsage(10, 10),
+            model="test/low",
+        )
+
+
+def _disputed_context() -> ExecutionContext:
+    result = compare_reviews(
+        parse_review(_review(("O1", "met"), ("O2", "met"))),
+        parse_review(_review(("O1", "met"), ("O2", "partial"))),
+        texts={"O1": "Reviews compare", "O2": "Disputes escalate"},
+    )
+    return _context(
+        {
+            "review_result": result,
+            "outcomes": OUTCOMES,
+            "issue": "295",
+            "title": "Ruling form",
+            "deployed_hash": "abc1234",
+        }
+    )
+
+
+async def test_brief_action_puts_the_crux_in_the_form(monkeypatch):
+    llm = _BriefLLM(
+        '{"disputes": [{"id": "O2", "crux": "Is there a test?", "zebra": "Yes.",'
+        ' "claude": "No.", "settle": "Run it."}]}'
+    )
+    tiers = []
+    monkeypatch.setattr(outcome_review, "get_llm", lambda model, ctx: tiers.append(model) or llm)
+    context = _disputed_context()
+
+    result = await BriefOutcomeDisputesAction().run(_task(), context)
+
+    assert result.success and result.output == {"briefed": ["O2"]}
+    assert tiers == ["low"] and len(llm.calls) == 1
+    system, user = (m.content for m in llm.calls[0])
+    assert "NOT to decide it" in system
+    assert "## O2: Disputes escalate" in user and "O2 partial" in user and "## O1" not in user
+    stored = context.process.properties["review_result"]
+    assert stored["briefs"]["O2"]["crux"] == "Is there a test?"
+    form = stored["ruling_form"]
+    assert form["description"].startswith("#295 Ruling form (abc1234)")
+    assert "**In dispute:** Is there a test?" in form["properties"]["O2_case"]["default"]
+
+
+@pytest.mark.parametrize(
+    "reply", [RuntimeError("down"), "not json at all", '{"disputes": [{"id": "O9"}]}']
+)
+async def test_brief_action_never_fails(monkeypatch, reply):
+    monkeypatch.setattr(outcome_review, "get_llm", lambda model, ctx: _BriefLLM(reply))
+    context = _disputed_context()
+
+    result = await BriefOutcomeDisputesAction().run(_task(), context)
+
+    assert result.success
+    assert result.output["briefed"] == [] and result.output["error"]
+    stored = context.process.properties["review_result"]
+    assert stored["briefs"] == {}
+    assert (
+        "| **Claude** | partial | O2 partial |"
+        in (stored["ruling_form"]["properties"]["O2_case"]["default"])
+    )
+
+
+async def test_brief_action_without_an_llm_still_builds_the_form(monkeypatch):
+    def no_llm(model, ctx):
+        raise ValueError("OPENROUTER_API_KEY is not set")
+
+    monkeypatch.setattr(outcome_review, "get_llm", no_llm)
+    context = _disputed_context()
+
+    result = await BriefOutcomeDisputesAction().run(_task(), context)
+
+    assert result.success and "OPENROUTER_API_KEY" in result.output["error"]
+    assert context.process.properties["review_result"]["ruling_form"]["required"] == ["O2"]
+
+
+async def test_brief_action_with_nothing_to_brief_is_a_no_op():
+    result = await BriefOutcomeDisputesAction().run(_task(), _context({}))
+
+    assert result.success and result.output["briefed"] == []
+
+
+async def test_compare_carries_the_brief_into_the_recorded_result():
+    context = _disputed_context()
+    context.process.properties["review_result"]["briefs"] = {"O2": {"crux": "c"}}
+    context.process.properties["zebra_review"] = _review(("O1", "met"), ("O2", "met"))
+    context.process.properties["claude_review"] = _review(("O1", "met"), ("O2", "partial"))
+    context.process.properties["__task_output_human_ruling"] = {"O2": "partial"}
+
+    result = await CompareOutcomeReviewsAction().run(_task(ruling_key="human_ruling"), context)
+
+    assert result.output["briefs"] == {"O2": {"crux": "c"}}
+    assert result.output["followups"] == ["O2"]

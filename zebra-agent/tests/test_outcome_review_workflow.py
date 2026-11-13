@@ -12,9 +12,13 @@ import pytest
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import TaskResult
 from zebra.definitions.loader import load_definition, validate_definition
+from zebra.forms import resolve_task_schema
 from zebra.storage.memory import InMemoryStore
 from zebra.tasks.registry import ActionRegistry
-from zebra_tasks.agent.outcome_review import CompareOutcomeReviewsAction
+from zebra_tasks.agent.outcome_review import (
+    BriefOutcomeDisputesAction,
+    CompareOutcomeReviewsAction,
+)
 from zebra_tasks.agent.zebra_source import ZebraSourceAction
 from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.llm.agent import LLMAgentAction
@@ -48,7 +52,8 @@ def _response(content: str = "", tool_calls: list[ToolCall] | None = None) -> LL
 class ReviewModel(LLMProvider):
     """Reads one source file, then answers; reconsiders when asked to.
 
-    ``reconsidered`` may be a list of replies, one per reconsidering answer.
+    ``reconsidered`` may be a list of replies, one per reconsidering answer. ``brief`` answers
+    the dispute brief (#295); ``None`` makes that call raise.
     """
 
     def __init__(
@@ -56,16 +61,24 @@ class ReviewModel(LLMProvider):
         review: str,
         reconsidered: str | list[str] = "",
         calls: list[ToolCall] | None = None,
+        brief: str | None = None,
     ):
         self.review = review
         self.reconsidered = reconsidered
         self.calls = calls
+        self.brief = brief
         self.review_prompts: list[str] = []
         self.reconsider_prompts: list[str] = []
+        self.brief_prompts: list[str] = []
         self.tool_results: list[str] = []
 
     async def complete(self, messages, tools=None, temperature=0.7, max_tokens=4096, **kw):
         text = "\n".join(str(m.content) for m in messages)
+        if "make the disagreement easy to see" in text:
+            self.brief_prompts.append(text)
+            if self.brief is None:
+                raise RuntimeError("brief model down")
+            return _response(self.brief)
         reconsidering = "disagreed with you" in text
         (self.reconsider_prompts if reconsidering else self.review_prompts).append(text)
         tool_results = [m.content for m in messages if m.role.value == "tool"]
@@ -124,6 +137,7 @@ def engine(library, monkeypatch) -> WorkflowEngine:
     registry.register_action("llm_call", LLMCallAction)
     registry.register_action("zebra_source", ZebraSourceAction)
     registry.register_action("compare_outcome_reviews", CompareOutcomeReviewsAction)
+    registry.register_action("brief_outcome_disputes", BriefOutcomeDisputesAction)
     return WorkflowEngine(InMemoryStore(), registry, extras={"__workflow_library__": library})
 
 
@@ -191,7 +205,7 @@ async def test_review_can_list_source_and_recover_from_a_bad_path(engine, librar
     assert "zebra-tasks/zebra_tasks/agent/outcome_review.py (" in listing
     # One clear match is read in the same call (#223)
     assert "read 'zebra-tasks/zebra_tasks/agent/outcome_review.py' instead" in typo_read
-    assert "class CompareOutcomeReviewsAction" in typo_read
+    assert "def parse_review" in typo_read
     assert "zebra-tasks/zebra_tasks/agent/outcome_review.py" in bad_read.split("Did you mean: ")[1]
     assert "list_zebra_source" in bad_read
 
@@ -327,10 +341,26 @@ async def test_reconsideration_that_stays_junk_fails_the_review(engine, library)
     assert "zebra_reconsidered" not in process.properties
 
 
+BRIEF = json.dumps(
+    {
+        "disputes": [
+            {
+                "id": "O2",
+                "crux": "Whether a lasting dispute is covered by a test",
+                "zebra": "Tests cover it.",
+                "claude": "Only the happy path is tested.",
+                "settle": "Read test_outcome_review_workflow.py.",
+            }
+        ]
+    }
+)
+
+
 async def test_a_lasting_dispute_waits_for_a_human_ruling(engine, library):
     model = ReviewModel(
         _verdicts(("O1", "met"), ("O2", "met")),
         reconsidered=_verdicts(("O2", "met"), evidence="tests cover it"),
+        brief=BRIEF,
     )
 
     status = await _run(engine, library, model)
@@ -338,25 +368,67 @@ async def test_a_lasting_dispute_waits_for_a_human_ruling(engine, library):
     assert status["status"] == "awaiting_input"
     assert status["task_name"] == "Outcome Review — Your Ruling"
 
-    # The ruling form shows the summary and the dispute, not the raw reviews (#215)
+    # One brief call sees both sides' cases; the agreed outcome is not in it (#295)
+    (brief_prompt,) = model.brief_prompts
+    assert "tests cover it" in brief_prompt and CLAUDE_SECRET in brief_prompt
+    assert "## O1" not in brief_prompt
+
+    # The form is generated: the crux and a required pick per disputed outcome (#295)
     process = await engine.store.load_process(status["process_id"])
     form = (await engine.store.load_definition(process.definition_id)).tasks["human_ruling"]
-    fields = form.properties["schema"]["properties"]
     assert form.properties["show_prior_outputs"] is False
-    assert fields["comparison"]["default"] == "{{review_result.summary_markdown}}"
-    assert fields["positions"]["default"] == "{{review_result.dispute_notes}}"
-    result = process.properties["review_result"]
-    assert "| O2 | Disputes escalate | met | partial | **no** |" in result["summary_markdown"]
-    assert result["dispute_notes"].startswith("#### O2: Zebra met, Claude partial")
-    assert f"**Claude:** {CLAUDE_SECRET}" in result["dispute_notes"]
+    schema = resolve_task_schema(form.properties["schema"], process.properties)
+    fields = schema["properties"]
+    assert schema["title"] == "Zebra and Claude disagree on 1 of 2 outcomes"
+    assert schema["description"].startswith("#190 Outcome review (abc1234)")
+    assert schema["required"] == ["O2"]
+    assert fields["agreed"]["default"] == "O1 met"
+    case = fields["O2_case"]["default"]
+    assert "*Disputes escalate*" in case
+    assert "**In dispute:** Whether a lasting dispute is covered by a test" in case
+    assert "| **Zebra** | met | Tests cover it. |" in case
+    assert "| **Claude** | partial | Only the happy path is tested. |" in case
+    assert "**What would settle it:** Read test_outcome_review_workflow.py." in case
+    assert fields["O2"]["enumLabels"] == ["Met (Zebra)", "Partial (Claude)", "Missed"]
+    assert f"**Claude:** {CLAUDE_SECRET}" in fields["evidence"]["default"]
 
-    await engine.complete_task(status["task_id"], TaskResult.ok(output={"ruling": "O2 partial"}))
+    await engine.complete_task(
+        status["task_id"],
+        TaskResult.ok(output={"O2": "partial", "O2_note": "add a dispute test"}),
+    )
     status = await workflow_status(engine, status["process_id"])
 
     assert status["status"] == "complete"
-    assert status["output"]["status"] == "ruled"
-    assert status["output"]["ruling"] == "O2 partial"
-    assert status["output"]["disputed"] == ["O2"]
+    output = status["output"]
+    assert output["status"] == "ruled"
+    assert output["disputed"] == ["O2"]
+    assert output["ruling"] == "O2: partial: add a dispute test"
+    assert output["followups"] == ["O2"]
+    assert output["unruled"] == []
+    assert (
+        "| O2 | met | partial | **no** | **partial** (add a dispute test) |"
+        in (output["table_markdown"])
+    )
+    assert output["briefs"]["O2"]["crux"].startswith("Whether a lasting dispute")
+
+
+async def test_a_failed_brief_still_asks_for_a_ruling(engine, library):
+    """With the brief model down the form shows each side's first sentence (#295)."""
+    model = ReviewModel(
+        _verdicts(("O1", "met"), ("O2", "met")),
+        reconsidered=_verdicts(("O2", "met"), evidence="Tests cover it. More detail."),
+        brief=None,
+    )
+
+    status = await _run(engine, library, model)
+
+    assert status["status"] == "awaiting_input"
+    process = await engine.store.load_process(status["process_id"])
+    result = process.properties["review_result"]
+    assert result["briefs"] == {}
+    case = result["ruling_form"]["properties"]["O2_case"]["default"]
+    assert "In dispute" not in case
+    assert "| **Zebra** | met | Tests cover it. |" in case
 
 
 async def test_missing_inputs_or_unknown_workflow_do_not_start(engine, library):
