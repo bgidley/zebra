@@ -23,8 +23,12 @@ from zebra_agent.commons.sync import (
     configured_direction,
 )
 
-from zebra_agent_web.api.commons_identity import _chain_events, commons_enabled, get_commons_keys
-from zebra_agent_web.api.models import SystemStateModel
+from zebra_agent_web.api.commons_identity import (
+    _chain_events,
+    _state,
+    commons_enabled,
+    get_commons_keys,
+)
 
 if TYPE_CHECKING:
     from zebra.core.engine import WorkflowEngine
@@ -86,7 +90,7 @@ async def build_sync_service(library: WorkflowLibrary) -> SyncService | None:
     if not sync_configured():
         return None
     try:
-        state, _ = await SystemStateModel.objects.aget_or_create(pk=1)
+        state = await _state()
         if not state.zebra_pubkey:
             logger.info("Skill sync: ZEBRA_SYNC_RELAY is set but this device has no Zebra yet")
             return None
