@@ -468,7 +468,12 @@ Host setup is `deploy/podman/bootstrap-host.sh` (idempotent).
 `version.json` (and `/api/version/`, footer) carries a `version` from the newest `vX.Y.Z` tag
 (`0.3.0`, `0.3.0+4.gabc1234` after it, `0.0.0+g<hash>` before the first release). The manual
 `release:tag` job (`scripts/release_tag.py`) cuts the next tag from green master as a GitLab
-release with notes from the issues closed since the last tag. See
+release with notes from the issues closed since the last tag. Release manifests (schema v1:
+version, image digest, `min_from`, `breaking`, expand/contract migrations, `security`,
+`unsupported_below`) are validated and cosign-verified by `zebra_agent/release.py`, and built,
+signed, promoted (`next` → `stable`, only the channel file changes) and uploaded by
+`scripts/release_manifest.py`; the tag-pipeline jobs `release:manifest` / `release:promote-stable`
+stay dormant until the image publish (R2), bucket and key exist. See
 [release-pipeline-design.md](release-pipeline-design.md).
 
 ### User instances on OCI (#279, onboarding; S1 stack skeleton only)
