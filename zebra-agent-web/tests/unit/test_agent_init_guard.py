@@ -86,6 +86,28 @@ async def test_a_failed_initialisation_resets_and_the_next_call_retries(fresh_ag
     assert len(calls) == 2
 
 
+async def test_a_caller_that_gives_up_does_not_cancel_the_initialisation(fresh_agent, monkeypatch):
+    """The health check's client times out after 5 s and init takes longer (#231 deploys).
+
+    Cancelling that caller used to count as a failed init: it reset, the next probe started
+    again from nothing, and the container never became healthy.
+    """
+    calls: list = []
+    monkeypatch.setattr(agent_engine, "_do_init", _slow_init(calls, delay=0.3))
+
+    probe = asyncio.create_task(agent_engine.ensure_initialized())
+    await asyncio.sleep(0.05)
+    probe.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await probe
+
+    assert agent_engine._initializing is True  # still running without its caller
+    await agent_engine.ensure_initialized()  # the next probe waits for the same init
+
+    assert agent_engine._agent_loop is not None
+    assert len(calls) == 1
+
+
 async def test_waiting_gives_up_on_a_stuck_initialisation(fresh_agent, monkeypatch):
     monkeypatch.setattr(agent_engine, "INIT_WAIT_SECONDS", 0.3)
     monkeypatch.setattr(agent_engine, "_initializing", True)  # someone else, stuck

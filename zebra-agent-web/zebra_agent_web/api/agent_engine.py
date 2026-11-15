@@ -82,13 +82,32 @@ async def install_builtin_workflows(library: "WorkflowLibrary", builtin_path: Pa
     return copied
 
 
+#: The running initialisation; held so it is not garbage-collected while callers come and go.
+_init_task = None
+
+
 async def _async_init() -> None:
-    """Initialise the agent once; a failure resets it so the next caller retries."""
-    global _library, _initializing
+    """Initialise the agent once; a failure resets it so the next caller retries.
+
+    The work runs as its own task and the caller waits on it through ``asyncio.shield``: a
+    caller that goes away (the health check's 5 s client timeout) no longer cancels it.
+    Before, a cancelled caller counted as a failure, so each health probe threw the
+    initialisation away and started again, and the container never became healthy (#231).
+    """
+    global _initializing, _init_task
+    import asyncio
 
     if _library is not None or _initializing:
         return
     _initializing = True
+    _init_task = asyncio.ensure_future(_run_init())
+    await asyncio.shield(_init_task)
+
+
+async def _run_init() -> None:
+    """Run ``_do_init``; on a real failure leave nothing half-initialised."""
+    global _library, _initializing
+
     try:
         await _do_init()
     except BaseException:
