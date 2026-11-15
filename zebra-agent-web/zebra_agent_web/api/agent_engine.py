@@ -5,6 +5,7 @@ that can be used across all agent views.
 """
 
 import logging
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -82,13 +83,47 @@ async def install_builtin_workflows(library: "WorkflowLibrary", builtin_path: Pa
     return copied
 
 
+#: A long-lived event loop (own daemon thread) that every initialisation runs on (#231).
+_init_loop = None
+_init_loop_lock = threading.Lock()
+
+
+def _get_init_loop():
+    """The init loop, started on first use. It outlives any request or ``asyncio.run`` loop."""
+    global _init_loop
+    import asyncio
+
+    with _init_loop_lock:
+        if _init_loop is None:
+            loop = asyncio.new_event_loop()
+            threading.Thread(target=loop.run_forever, name="zebra-agent-init", daemon=True).start()
+            _init_loop = loop
+        return _init_loop
+
+
 async def _async_init() -> None:
-    """Initialise the agent once; a failure resets it so the next caller retries."""
-    global _library, _initializing
+    """Initialise the agent once; a failure resets it so the next caller retries.
+
+    The work runs on ``_get_init_loop()`` and the caller waits on it through
+    ``asyncio.shield``: a caller that goes away (the health check's 5 s client timeout), even
+    with its whole event loop (``async_to_sync``, ``asyncio.run``), cannot cancel or destroy
+    it. Before, a cancelled caller counted as a failure, so each health probe threw the
+    initialisation away and started again, and the container never became healthy (#231).
+    """
+    global _initializing
+    import asyncio
 
     if _library is not None or _initializing:
         return
     _initializing = True
+    future = asyncio.run_coroutine_threadsafe(_run_init(), _get_init_loop())
+    await asyncio.shield(asyncio.wrap_future(future))
+
+
+async def _run_init() -> None:
+    """Run ``_do_init``; on a real failure leave nothing half-initialised."""
+    global _library, _initializing
+
     try:
         await _do_init()
     except BaseException:
