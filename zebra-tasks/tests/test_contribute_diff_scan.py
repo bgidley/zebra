@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from zebra_tasks.contribute.diff_scan import (
+    LLM_BOOKKEEPING_KEYS,
     ROUTE_CLEAN,
     ROUTE_REJECTED,
     ContributeDiffScanAction,
@@ -330,6 +331,41 @@ async def test_lock_files_get_secret_rules_only_and_skip_the_llm():
     assert "secret" in _kinds(result)
 
 
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    [
+        ("# maintained by jane.roe@gmail.com", "email"),
+        ("# call 020 7946 0958", "phone"),
+        ("# office SW1A 1AA", "postcode"),
+        ("# built for zorblax", "confidential_pattern"),
+    ],
+)
+async def test_lock_files_get_personal_data_and_confidential_rules(line, kind):
+    result, llm = await _scan(added("uv.lock", line), patterns=["zorblax"])
+    assert result["verdict"] == ROUTE_REJECTED, result["findings"]
+    assert kind in _kinds(result)
+    assert {f["path"] for f in result["findings"]} <= {"uv.lock:2"}
+
+
+async def test_lock_file_tuning_spares_versions_urls_and_hashes():
+    # False positives found on this repo's uv.lock (#301): four-part versions (ip_address,
+    # phone), digit runs in package URLs and hashes (card_number, phone).
+    url = "https://files.pythonhosted.org/packages/63/9b/7f723cea1386fdf5757/x-0.8.0.13.whl"
+    lines = [
+        'version = "0.10.0.1"',
+        'version = "6.0.12.20250915"',
+        f'{{ url = "{url}", hash = "sha256:' + "4111111111111111" * 4 + '" }',
+    ]
+    result, _ = await _scan(added("uv.lock", *lines))
+    assert result["verdict"] == ROUTE_CLEAN, result["findings"]
+
+
+async def test_real_lock_file_is_clean():
+    lock = (REPO / "uv.lock").read_text().splitlines()
+    result, _ = await _scan(added("uv.lock", *lock, new=True))
+    assert result["verdict"] == ROUTE_CLEAN, result["findings"][:3]
+
+
 # --- fail closed -------------------------------------------------------------------------
 
 
@@ -368,6 +404,61 @@ async def test_size_cap_fails_closed():
     result, llm = await _scan(added("a.py", "x = 1" * 50), max_chars=100)
     assert result["failed_closed"] and "scan limit" in result["reason"]
     llm.complete.assert_not_called()
+
+
+async def test_raw_diff_size_cap_fails_closed(monkeypatch):
+    monkeypatch.setattr("zebra_tasks.contribute.diff_scan.MAX_DIFF_CHARS", 500)
+    big = added("uv.lock", *[f"line {n}" for n in range(100)])  # lock lines never reach the LLM
+    assert len(big) > 500
+    result, llm = await _scan(big)
+    assert result["failed_closed"] and "cap" in result["reason"]
+    llm.complete.assert_not_called()
+    assert scan_diff_text(big)["failed_closed"]
+
+
+async def test_raw_diff_size_cap_boundary(monkeypatch):
+    diff = added("uv.lock", "x = 1")
+    monkeypatch.setattr("zebra_tasks.contribute.diff_scan.MAX_DIFF_CHARS", len(diff))
+    result, _ = await _scan(diff)
+    assert result["verdict"] == ROUTE_CLEAN
+    monkeypatch.setattr("zebra_tasks.contribute.diff_scan.MAX_DIFF_CHARS", len(diff) - 1)
+    result, _ = await _scan(diff)
+    assert result["failed_closed"] and "cap" in result["reason"]
+
+
+HEAD = "diff --" + "git "
+
+
+@pytest.mark.parametrize(
+    "diff",
+    [
+        HEAD + "a/a.py b/a.py\n",
+        HEAD + "a/a.py b/a.py\nindex 1111111..2222222 100644\n",
+        HEAD + "a/a.py b/a.py\nindex 1111111..2222222 100644\n--- a/a.py\n+++ b/a.py\n",
+        added("ok.py", "x = 1") + HEAD + "a/b.py b/b.py\n",
+    ],
+)
+async def test_file_entry_without_a_change_fails_closed(diff):
+    with pytest.raises(DiffParseError, match="no change"):
+        parse_diff(diff)
+    result, _ = await _scan(diff)
+    assert result["failed_closed"] and "does not parse" in result["reason"]
+
+
+@pytest.mark.parametrize(
+    "diff",
+    [
+        HEAD + "a/run.sh b/run.sh\nold mode 100644\nnew mode 100755\n",
+        HEAD + "a/empty.txt b/empty.txt\nnew file mode 100644\nindex 0000000..e69de29\n",
+        HEAD + "a/old.txt b/old.txt\ndeleted file mode 100644\nindex e69de29..0000000\n",
+        HEAD + "a/a.py b/b.py\nsimilarity index 100%\nrename from a.py\nrename to b.py\n",
+    ],
+)
+async def test_mode_only_empty_and_rename_entries_still_parse(diff):
+    parsed = parse_diff(diff)
+    assert len(parsed.files) == 1
+    result, _ = await _scan(diff)
+    assert result["verdict"] == ROUTE_CLEAN, result["findings"]
 
 
 async def test_no_llm_fails_closed():
@@ -480,9 +571,12 @@ async def _run_action(properties, reply=CLEAN_REPLY, extras=None):
 async def test_action_routes_and_stores_only_its_output():
     result, ctx = await _run_action({"diff": added("a.py", "x = 1"), "output_key": "scan"})
     assert result.success and result.next_route == ROUTE_CLEAN
-    # Besides the LLM cost bookkeeping (``__total_cost__`` etc.), only its own output
-    own = {k: v for k, v in ctx.process.properties.items() if not k.startswith("__")}
-    assert own == {"scan": result.output}
+    # The guarantee: it writes its output property, plus the LLM client's cost bookkeeping
+    # (named in LLM_BOOKKEEPING_KEYS), and nothing else.
+    written = set(ctx.process.properties)
+    assert written <= {"scan"} | LLM_BOOKKEEPING_KEYS, written
+    assert ctx.process.properties["scan"] == result.output
+    assert LLM_BOOKKEEPING_KEYS == {"__total_tokens__", "__total_cost__", "__token_history__"}
 
 
 async def test_action_rejects_and_uses_sync_service_patterns():
@@ -504,6 +598,8 @@ async def test_action_without_llm_fails_closed():
     result = await ContributeDiffScanAction().run(task, ctx)
     assert result.next_route == ROUTE_REJECTED
     assert ctx.process.properties["diff_scan"]["failed_closed"]
+    # A fail-closed run made no LLM call, so it wrote its output and no bookkeeping at all.
+    assert set(ctx.process.properties) == {"diff_scan"}
 
 
 def test_action_is_registered_and_reversible():
