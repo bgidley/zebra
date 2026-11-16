@@ -66,12 +66,13 @@ COPY --from=builder /app/zebra-agent zebra-agent/
 COPY --from=builder /app/zebra-agent-web zebra-agent-web/
 COPY --from=builder /app/pyproject.toml pyproject.toml
 
-# Project docs, specs and scripts, so Zebra can read them with zebra_source (#212)
+# Project docs, specs, scripts and root tests (#300), so Zebra can read them with zebra_source (#212)
 COPY specs/ specs/
 COPY docs/ docs/
 COPY openspec/ openspec/
 COPY scripts/ scripts/
 COPY deploy/ deploy/
+COPY tests/ tests/
 COPY *.md ./
 
 # Copy version metadata baked by CI (falls back to absent if not present in build context)
