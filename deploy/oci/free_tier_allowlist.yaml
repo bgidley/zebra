@@ -9,9 +9,11 @@
 #   max_count  most resources of this type in one plan
 #   require    attribute path -> exact value it must have (and be known at plan time)
 #   max        attribute path -> largest number allowed
+#   one_of     attribute path -> list of allowed values
+#   nonempty   attribute paths that must be known and not empty
 # Paths are dotted; a number indexes a nested block list (shape_config.0.ocpus).
 
-checked: 2026-11-09
+checked: 2026-11-16
 
 limits:
   a1_ocpus: 2
@@ -72,3 +74,45 @@ resources:
   oci_objectstorage_bucket:
     require:
       storage_tier: Standard
+
+  # --- Billing guardrails (S2). Budgets and quotas are free; these rules stop a change from
+  # quietly weakening them. Statement and threshold values match deploy/oci/locals.tf.
+  oci_budget_budget:
+    max_count: 2 # tenancy root + Zebra compartment
+    require:
+      amount: 1
+      reset_period: MONTHLY
+      target_type: COMPARTMENT
+
+  oci_budget_alert_rule:
+    max_count: 8 # guardrails.alert_rules_per_budget for each budget
+    one_of:
+      type: [ACTUAL, FORECAST]
+      threshold_type: [ABSOLUTE, PERCENTAGE]
+    nonempty: [recipients]
+
+  oci_limits_quota:
+    max_count: 1
+    require:
+      statements:
+        - zero compute-core quotas in compartment zebra
+        - set compute-core quota standard-a1-core-count to 2 in compartment zebra
+        - zero compute-memory quotas in compartment zebra
+        - set compute-memory quota standard-a1-memory-count to 12 in compartment zebra
+        - zero database quotas in compartment zebra
+        - set database quota adb-free-count to 1 in compartment zebra
+        - zero load-balancer quotas in compartment zebra
+        - set block-storage quota total-storage-gb to 200 in compartment zebra
+
+# Plan-level guardrail checks. The guardrails are optional (create_guardrails, needs a tenancy
+# admin) but never partial: either none of these types is planned or exactly these counts are,
+# and every budget gets exactly the alert rules listed here.
+guardrails:
+  all_or_none:
+    oci_budget_budget: 2
+    oci_limits_quota: 1
+  alert_rules_per_budget:
+    - { type: ACTUAL, threshold_type: ABSOLUTE, threshold: 0.01 }
+    - { type: ACTUAL, threshold_type: PERCENTAGE, threshold: 50 }
+    - { type: ACTUAL, threshold_type: PERCENTAGE, threshold: 100 }
+    - { type: FORECAST, threshold_type: PERCENTAGE, threshold: 100 }

@@ -15,6 +15,15 @@ output "zebra_url" {
   value       = var.domain != "" ? "https://${var.domain}/" : "https://${oci_core_instance.zebra.public_ip}/"
 }
 
+output "guardrails" {
+  description = "Whether the billing guardrails (budgets, alerts, compartment quota) were created."
+  value = var.create_guardrails ? (
+    "Created: budgets of ${local.budget_amount}/month on the tenancy and the ${local.name} compartment email alert_email on any spend, and quota ${local.quota_name} refuses paid shapes and services."
+    ) : (
+    "Skipped (create_guardrails = false): no budget alerts and no compartment quota, so nothing stops or reports spend. Ask a tenancy administrator to re-apply with create_guardrails = true."
+  )
+}
+
 output "autonomous_database_id" {
   description = "The Always Free Autonomous Database."
   value       = oci_database_autonomous_database.zebra.id

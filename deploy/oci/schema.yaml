@@ -15,6 +15,10 @@ variableGroups:
     variables:
       - region
       - compartment_ocid
+  - title: Billing guardrails
+    variables:
+      - create_guardrails
+      - alert_email
   - title: Options
     variables:
       - domain
@@ -46,6 +50,24 @@ variables:
     description: A new "zebra" compartment is created inside this one.
     required: true
 
+  create_guardrails:
+    type: boolean
+    title: Create billing guardrails
+    description: >-
+      Budgets on the tenancy and the Zebra compartment that email you on any spend, and a
+      compartment quota that refuses paid shapes and services. Needs a tenancy administrator,
+      and the parent compartment must be the root. Untick only if you are not an administrator.
+    default: true
+    required: true
+
+  alert_email:
+    type: string
+    title: Alert email
+    description: Where budget alerts are sent. Required when the guardrails are on.
+    required: false
+    pattern: "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+    visible: create_guardrails
+
   domain:
     type: string
     title: Domain name (optional)
@@ -75,6 +97,7 @@ outputGroups:
     outputs:
       - zebra_url
       - instance_public_ip
+      - guardrails
 
 outputs:
   zebra_url:
@@ -84,4 +107,8 @@ outputs:
   instance_public_ip:
     type: copyableString
     title: Public IP address
+    visible: true
+  guardrails:
+    type: string
+    title: Billing guardrails
     visible: true

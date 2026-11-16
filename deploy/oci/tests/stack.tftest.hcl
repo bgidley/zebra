@@ -6,6 +6,7 @@ mock_provider "oci" {}
 variables {
   tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaatest"
   compartment_ocid = "ocid1.tenancy.oc1..aaaaaaaatest"
+  alert_email      = "owner@example.com"
 }
 
 run "always_free_by_default" {
@@ -116,4 +117,122 @@ run "rejects_malformed_ssh_key" {
   }
 
   expect_failures = [var.ssh_public_key]
+}
+
+# --- Billing guardrails (S2) ---
+
+run "guardrails_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(oci_budget_budget.guardrail) == 2
+    error_message = "Two budgets: the tenancy root and the Zebra compartment."
+  }
+  assert {
+    condition     = oci_budget_budget.guardrail["root"].targets == tolist(["ocid1.tenancy.oc1..aaaaaaaatest"])
+    error_message = "The root budget must target the tenancy."
+  }
+  assert {
+    condition = alltrue([
+      for b in oci_budget_budget.guardrail :
+      b.compartment_id == var.tenancy_ocid && b.amount == 1 && b.reset_period == "MONTHLY" && b.target_type == "COMPARTMENT"
+    ])
+    error_message = "Budgets live in the tenancy, are 1 a month and target a compartment."
+  }
+  assert {
+    condition     = length(oci_budget_alert_rule.guardrail) == 8
+    error_message = "Four alert rules per budget."
+  }
+  assert {
+    condition = alltrue(flatten([
+      for budget in ["root", "zebra"] : [
+        oci_budget_alert_rule.guardrail["${budget}-actual-any"].type == "ACTUAL",
+        oci_budget_alert_rule.guardrail["${budget}-actual-any"].threshold_type == "ABSOLUTE",
+        oci_budget_alert_rule.guardrail["${budget}-actual-any"].threshold == 0.01,
+        oci_budget_alert_rule.guardrail["${budget}-actual-50"].type == "ACTUAL",
+        oci_budget_alert_rule.guardrail["${budget}-actual-50"].threshold_type == "PERCENTAGE",
+        oci_budget_alert_rule.guardrail["${budget}-actual-50"].threshold == 50,
+        oci_budget_alert_rule.guardrail["${budget}-actual-100"].type == "ACTUAL",
+        oci_budget_alert_rule.guardrail["${budget}-actual-100"].threshold_type == "PERCENTAGE",
+        oci_budget_alert_rule.guardrail["${budget}-actual-100"].threshold == 100,
+        oci_budget_alert_rule.guardrail["${budget}-forecast-100"].type == "FORECAST",
+        oci_budget_alert_rule.guardrail["${budget}-forecast-100"].threshold_type == "PERCENTAGE",
+        oci_budget_alert_rule.guardrail["${budget}-forecast-100"].threshold == 100,
+      ]
+    ]))
+    error_message = "Alert rules: ACTUAL 0.01 absolute, ACTUAL 50 % and 100 %, FORECAST 100 %."
+  }
+  assert {
+    condition     = alltrue([for r in oci_budget_alert_rule.guardrail : r.recipients == "owner@example.com"])
+    error_message = "Every alert goes to alert_email."
+  }
+  assert {
+    condition     = oci_limits_quota.guardrail[0].compartment_id == var.tenancy_ocid
+    error_message = "The quota policy lives in the tenancy."
+  }
+  assert {
+    condition = oci_limits_quota.guardrail[0].statements == tolist([
+      "zero compute-core quotas in compartment zebra",
+      "set compute-core quota standard-a1-core-count to 2 in compartment zebra",
+      "zero compute-memory quotas in compartment zebra",
+      "set compute-memory quota standard-a1-memory-count to 12 in compartment zebra",
+      "zero database quotas in compartment zebra",
+      "set database quota adb-free-count to 1 in compartment zebra",
+      "zero load-balancer quotas in compartment zebra",
+      "set block-storage quota total-storage-gb to 200 in compartment zebra",
+    ])
+    error_message = "The quota must zero paid compute, database and load balancers and allow only the free A1, ADB and 200 GB."
+  }
+  assert {
+    condition     = startswith(output.guardrails, "Created")
+    error_message = "The guardrails output must say they were created."
+  }
+}
+
+run "non_admin_skips_guardrails" {
+  command = plan
+
+  variables {
+    create_guardrails = false
+    alert_email       = ""
+  }
+
+  assert {
+    condition     = length(oci_budget_budget.guardrail) == 0 && length(oci_budget_alert_rule.guardrail) == 0 && length(oci_limits_quota.guardrail) == 0
+    error_message = "create_guardrails = false must create no budget, alert rule or quota."
+  }
+  assert {
+    condition     = startswith(output.guardrails, "Skipped") && strcontains(output.guardrails, "tenancy administrator")
+    error_message = "The guardrails output must say they were skipped and who can add them."
+  }
+}
+
+run "guardrails_need_an_email" {
+  command = plan
+
+  variables {
+    alert_email = ""
+  }
+
+  expect_failures = [oci_budget_budget.guardrail]
+}
+
+run "guardrails_need_a_root_parent" {
+  command = plan
+
+  variables {
+    compartment_ocid = "ocid1.compartment.oc1..aaaaaaaanotroot"
+  }
+
+  expect_failures = [oci_limits_quota.guardrail]
+}
+
+run "rejects_malformed_alert_email" {
+  command = plan
+
+  variables {
+    alert_email = "not an email"
+  }
+
+  expect_failures = [var.alert_email]
 }

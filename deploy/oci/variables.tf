@@ -40,6 +40,23 @@ variable "domain" {
   }
 }
 
+variable "create_guardrails" {
+  description = "Create the billing guardrails (budgets with email alerts, compartment quota). Needs a tenancy administrator; set false otherwise."
+  type        = bool
+  default     = true
+}
+
+variable "alert_email" {
+  description = "Owner email address the budget alerts go to. Required when create_guardrails is true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.alert_email == "" || can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.alert_email))
+    error_message = "alert_email must be empty or an email address."
+  }
+}
+
 variable "release_channel" {
   description = "Zebra release channel the instance follows."
   type        = string

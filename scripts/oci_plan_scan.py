@@ -4,10 +4,12 @@ Reads the JSON from ``terraform show -json <plan>`` and checks every managed res
 plan creates or keeps against ``deploy/oci/free_tier_allowlist.yaml``:
 
 - a resource type not under ``resources`` fails (named ``denied`` types say why);
-- each type's ``max_count``, ``require`` and ``max`` rules must hold, with values known at
-  plan time;
+- each type's ``max_count``, ``require``, ``max``, ``one_of`` and ``nonempty`` rules must hold,
+  with values known at plan time;
 - across the plan, Arm A1 OCPUs and memory and total block storage stay within ``limits``; a
-  boot-volume size unknown at plan time fails rather than being guessed (#298).
+  boot-volume size unknown at plan time fails rather than being guessed (#298);
+- the billing guardrails (``guardrails``) are all planned or none, and every budget gets exactly
+  the listed alert rules.
 
 Exit 0 when the plan is clean, 1 when it breaks a rule, 2 on bad input.
 
@@ -37,6 +39,7 @@ def load_allowlist(path: Path) -> dict[str, Any]:
         raise ValueError(f"{path}: allowlist needs a 'resources' mapping")
     data.setdefault("denied", {})
     data.setdefault("limits", {})
+    data.setdefault("guardrails", {})
     return data
 
 
@@ -102,6 +105,7 @@ def scan(plan: dict[str, Any], allowlist: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     counts: Counter[str] = Counter()
     a1_ocpus = a1_memory = storage = 0.0
+    alert_rules: list[dict[str, Any]] = []
 
     for rc in _planned(plan):
         rtype, address = rc.get("type", "?"), rc.get("address", "?")
@@ -120,8 +124,25 @@ def scan(plan: dict[str, Any], allowlist: dict[str, Any]) -> list[str]:
             actual = _lookup(after, path)
             if actual is _MISSING or actual is None:
                 errors.append(f"{address}: {path} must be {expected!r} but is not set at plan time")
+            elif isinstance(expected, list) and isinstance(actual, list) and actual != expected:
+                missing = [item for item in expected if item not in actual]
+                extra = [item for item in actual if item not in expected]
+                errors.append(
+                    f"{address}: {path} must be exactly the {len(expected)} listed values in order"
+                    f"; missing {missing}, unexpected {extra}"
+                )
             elif actual != expected:
                 errors.append(f"{address}: {path} must be {expected!r}, got {actual!r}")
+        for path, allowed in (rules.get("one_of") or {}).items():
+            actual = _lookup(after, path)
+            if actual is _MISSING or actual is None:
+                errors.append(f"{address}: {path} must be one of {allowed} but is not set")
+            elif actual not in allowed:
+                errors.append(f"{address}: {path} must be one of {allowed}, got {actual!r}")
+        for path in rules.get("nonempty") or []:
+            actual = _lookup(after, path)
+            if actual is _MISSING or actual is None or actual == "" or actual == []:
+                errors.append(f"{address}: {path} must be set at plan time")
         for path, ceiling in (rules.get("max") or {}).items():
             actual = _number(_lookup(after, path))
             if actual is None:
@@ -145,13 +166,15 @@ def scan(plan: dict[str, Any], allowlist: dict[str, Any]) -> list[str]:
                 )
             else:
                 storage += _number(raw)
+        elif rtype == "oci_budget_alert_rule":
+            alert_rules.append(after)
         elif rtype == "oci_core_volume":
             storage += _number(after.get("size_in_gbs")) or 0
 
     for rtype, count in sorted(counts.items()):
         most = (resources.get(rtype) or {}).get("max_count")
         if most is not None and count > most:
-            errors.append(f"{rtype}: {count} planned, Always Free allows {most}")
+            errors.append(f"{rtype}: {count} planned, the allowlist allows {most}")
 
     for name, total, unit in (
         ("a1_ocpus", a1_ocpus, "OCPU"),
@@ -160,6 +183,41 @@ def scan(plan: dict[str, Any], allowlist: dict[str, Any]) -> list[str]:
     ):
         if name in limits and total > limits[name]:
             errors.append(f"plan total: {total:g} {unit}, Always Free allows {limits[name]}")
+    errors.extend(_guardrail_errors(allowlist.get("guardrails") or {}, counts, alert_rules))
+    return errors
+
+
+def _alert_key(rule: dict[str, Any]) -> tuple[Any, Any, float | None]:
+    return (rule.get("type"), rule.get("threshold_type"), _number(rule.get("threshold")))
+
+
+def _guardrail_errors(
+    guardrails: dict[str, Any], counts: Counter[str], alert_rules: list[dict[str, Any]]
+) -> list[str]:
+    """Guardrails are all planned or none, and each budget has exactly the listed alerts."""
+    errors: list[str] = []
+    expected_counts: dict[str, int] = guardrails.get("all_or_none") or {}
+    if any(counts[rtype] for rtype in expected_counts):
+        for rtype, want in sorted(expected_counts.items()):
+            if counts[rtype] != want:
+                errors.append(
+                    f"guardrails: {counts[rtype]} {rtype} planned, need exactly {want} "
+                    "(guardrails are all or none)"
+                )
+    per_budget = guardrails.get("alert_rules_per_budget")
+    if per_budget is not None:
+        budgets = counts["oci_budget_budget"]
+        want = Counter(_alert_key(rule) for rule in per_budget for _ in range(budgets))
+        got = Counter(_alert_key(rule) for rule in alert_rules)
+        for key in sorted(set(want) | set(got), key=repr):
+            if want[key] != got[key]:
+                kind, threshold_type, threshold = key
+                errors.append(
+                    f"guardrails: {got[key]} alert rule(s) {kind} {threshold_type} {threshold:g} "
+                    f"planned, need {want[key]} ({len(per_budget)} per budget)"
+                    if threshold is not None
+                    else f"guardrails: alert rule {kind} {threshold_type} has no threshold"
+                )
     return errors
 
 

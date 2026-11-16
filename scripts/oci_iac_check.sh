@@ -52,6 +52,7 @@ tf() {
     -e TF_IN_AUTOMATION=1 \
     -e TF_VAR_tenancy_ocid="$FAKE_TENANCY" \
     -e TF_VAR_compartment_ocid="$FAKE_TENANCY" \
+    -e TF_VAR_alert_email=owner@example.com \
     -w /stack "$IMAGE" "$@"
 }
 
