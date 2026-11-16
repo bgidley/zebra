@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Check the OCI Resource Manager stack (deploy/oci) without OCI credentials (#279).
 #
-#   1. terraform fmt -check, init, validate
+#   0. self-test: fmt -check must reject tests/iac/fixtures/misformatted (#299)
+#   1. terraform fmt -check (prints the diff on failure), init, validate
 #   2. terraform test        (deploy/oci/tests, mocked oci provider)
 #   3. terraform plan + show -json with throwaway credentials, then
 #      scripts/oci_plan_scan.py checks the plan against deploy/oci/free_tier_allowlist.yaml
@@ -54,8 +55,32 @@ tf() {
     -w /stack "$IMAGE" "$@"
 }
 
+# terraform fmt aligns `=` only within a run of consecutive single-line attributes; a blank line,
+# comment line or nested block starts a new run, so differently aligned groups are correct.
+fmt_check() { # $1: directory under $WORK; prints the diff, exits non-zero when unformatted
+  podman run --rm -v "$WORK/$1:/fmt:Z" -w /fmt "$IMAGE" fmt -check -recursive -diff -no-color
+}
+
+echo "== terraform fmt self-test (a mis-formatted file must fail)"
+cp -r "$ROOT/tests/iac/fixtures/misformatted" "$WORK/misformatted"
+if fmt_check misformatted >"$WORK/fmt-selftest.diff" 2>&1; then
+  echo "FAIL: terraform fmt -check passed a mis-formatted file; the fmt gate is not checking"
+  exit 1
+fi
+if ! grep -q '^[-+] ' "$WORK/fmt-selftest.diff"; then
+  echo "FAIL: terraform fmt -check rejected the fixture but printed no diff:"
+  cat "$WORK/fmt-selftest.diff"
+  exit 1
+fi
+echo "ok: rejected, with a diff"
+
 echo "== terraform fmt"
-tf fmt -check -recursive -diff -no-color
+if ! fmt_check stack >"$WORK/fmt.diff" 2>&1; then
+  cat "$WORK/fmt.diff"
+  echo "FAIL: deploy/oci is not terraform fmt clean; apply the diff above (terraform fmt -recursive)"
+  exit 1
+fi
+echo "ok: clean"
 echo "== terraform init"
 tf init -input=false -backend=false -lockfile=readonly -no-color >/dev/null
 echo "== terraform validate"
