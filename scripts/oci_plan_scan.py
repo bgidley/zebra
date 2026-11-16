@@ -6,7 +6,8 @@ plan creates or keeps against ``deploy/oci/free_tier_allowlist.yaml``:
 - a resource type not under ``resources`` fails (named ``denied`` types say why);
 - each type's ``max_count``, ``require`` and ``max`` rules must hold, with values known at
   plan time;
-- across the plan, Arm A1 OCPUs and memory and total block storage stay within ``limits``.
+- across the plan, Arm A1 OCPUs and memory and total block storage stay within ``limits``; a
+  boot-volume size unknown at plan time fails rather than being guessed (#298).
 
 Exit 0 when the plan is clean, 1 when it breaks a rule, 2 on bad input.
 
@@ -50,6 +51,21 @@ def _lookup(values: Any, path: str) -> Any:
         else:
             return _MISSING
     return current
+
+
+def _is_unknown(rc: dict[str, Any], path: str) -> bool:
+    """True when ``after_unknown`` marks the value, or a parent of it, as known only after apply."""
+    current = rc.get("change", {}).get("after_unknown")
+    for part in path.split("."):
+        if current is True:
+            return True
+        if isinstance(current, list) and part.isdigit() and int(part) < len(current):
+            current = current[int(part)]
+        elif isinstance(current, dict) and part in current:
+            current = current[part]
+        else:
+            return False
+    return current is True
 
 
 def _planned(plan: dict[str, Any]) -> list[dict[str, Any]]:
@@ -117,8 +133,18 @@ def scan(plan: dict[str, Any], allowlist: dict[str, Any]) -> list[str]:
             if after.get("shape") == A1_SHAPE:
                 a1_ocpus += _number(_lookup(after, "shape_config.0.ocpus")) or 0
                 a1_memory += _number(_lookup(after, "shape_config.0.memory_in_gbs")) or 0
-            boot = _number(_lookup(after, "source_details.0.boot_volume_size_in_gbs"))
-            storage += boot if boot is not None else limits.get("default_boot_volume_gb", 47)
+            boot_path = "source_details.0.boot_volume_size_in_gbs"
+            raw = _lookup(after, boot_path)
+            if raw is None and not _is_unknown(rc, boot_path):
+                storage += limits.get("default_boot_volume_gb", 47)  # omitted: OCI's default
+            elif raw is _MISSING or _is_unknown(rc, boot_path) or _number(raw) is None:
+                # Unknown until apply: it could resolve above the free limit, so fail closed.
+                errors.append(
+                    f"{address}: {boot_path} is unknown at plan time; "
+                    "set it so the block storage limit can be checked"
+                )
+            else:
+                storage += _number(raw)
         elif rtype == "oci_core_volume":
             storage += _number(after.get("size_in_gbs")) or 0
 

@@ -63,6 +63,15 @@ def _duplicate(plan: Plan, rtype: str) -> None:
     _add(plan, rtype, copy.deepcopy(_after(plan, rtype)), name="second")
 
 
+def _unknown_boot_size(plan: Plan) -> None:
+    """What `terraform show -json` gives for a size known only after apply (#298)."""
+    rc = _resource(plan, "oci_core_instance")
+    rc["change"]["after"]["source_details"][0].pop("boot_volume_size_in_gbs")
+    unknown = rc["change"].get("after_unknown")  # absent from `after` alone also means unknown
+    if unknown:
+        unknown["source_details"][0]["boot_volume_size_in_gbs"] = True
+
+
 def _set(rtype: str, path: str, value: Any) -> Callable[[Plan], None]:
     def mutate(plan: Plan) -> None:
         target: Any = _after(plan, rtype)
@@ -150,6 +159,7 @@ BAD_PLANS: list[tuple[str, Callable[[Plan], None], str]] = [
         _set("oci_objectstorage_bucket", "storage_tier", "Archive"),
         "storage_tier must be 'Standard'",
     ),
+    ("boot_volume_unknown", _unknown_boot_size, "boot_volume_size_in_gbs is unknown at plan time"),
 ]
 
 
@@ -177,6 +187,15 @@ def test_clean_plan_counts_the_real_boot_volume(clean_plan: Plan, allowlist: dic
     """The provider plans boot_volume_size_in_gbs as a string; it must still count."""
     _add(clean_plan, "oci_core_volume", {"size_in_gbs": 101})  # 100 boot + 101 > 200
     assert any("201 GB block storage" in e for e in oci_plan_scan.scan(clean_plan, allowlist))
+
+
+def test_omitted_boot_size_counts_the_default(clean_plan: Plan, allowlist: dict) -> None:
+    """An explicitly unset (null, not unknown) size is OCI's 47 GB default, not a failure."""
+    _after(clean_plan, "oci_core_instance")["source_details"][0]["boot_volume_size_in_gbs"] = None
+    _add(clean_plan, "oci_core_volume", {"size_in_gbs": 154})  # 47 + 154 = 201 > 200
+    errors = oci_plan_scan.scan(clean_plan, allowlist)
+    assert any("201 GB block storage" in e for e in errors), errors
+    assert not any("unknown at plan time" in e for e in errors)
 
 
 def test_deleted_resources_are_ignored(clean_plan: Plan, allowlist: dict[str, Any]) -> None:
