@@ -10,7 +10,7 @@ This is an agent-only web application with simplified URL structure:
 
 from django.urls import include, path
 
-from zebra_agent_web.api import commons_views, web_views
+from zebra_agent_web.api import commons_views, onboarding_views, web_views
 
 urlpatterns = [
     # Auth endpoints (passkey)
@@ -51,6 +51,13 @@ urlpatterns = [
         "commons/workflows/<str:name>/clear-supervision/",
         commons_views.commons_clear_supervision,
         name="commons_clear_supervision",
+    ),
+    # Oracle Cloud signup guidance and pre-flight (#277)
+    path("onboarding/signup/", onboarding_views.signup_guide, name="onboarding_signup"),
+    path(
+        "onboarding/signup/confirm/",
+        onboarding_views.signup_confirm,
+        name="onboarding_signup_confirm",
     ),
     # First-run setup
     path("setup/", web_views.setup_view, name="setup"),

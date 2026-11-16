@@ -1041,3 +1041,18 @@ class TrustFreedModel(models.Model):
 
     def __str__(self):
         return f"TrustFreed(user={self.user_id}, freed={self.freed})"
+
+
+class OnboardingSignupModel(models.Model):
+    """Per-user Oracle Cloud signup pre-flight answers (#277, S2).
+
+    ``data`` holds only non-secret values: tenancy OCID, region id, the list of ticked
+    "I've done this" steps and the self-attested ``payg`` status (none / pending / active).
+    """
+
+    user_id = models.IntegerField(unique=True)
+    data = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "zebra_onboarding_signup"

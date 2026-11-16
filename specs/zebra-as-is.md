@@ -437,6 +437,10 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 - **No multi-run comparison** UI.
 - **Django models manually track engine state** — they must stay in sync with `zebra-py` schema changes.
 
+### Onboarding signup guide (#277, off by default)
+
+`/onboarding/signup/` is a versioned static guide to Oracle Cloud signup (London home region, permanent; Pay-As-You-Go advised with a 1-2 day delay, do not wait; Always Free limits; budget alert; reclamation) with a pre-flight form (`/onboarding/signup/confirm/`) validating tenancy OCID and region by shape only (`api/onboarding_preflight.py`, `api/onboarding_views.py`), secret-shaped input refused, state per user in `OnboardingSignupModel` (migration 0037). 404 unless `ZEBRA_ONBOARDING_ENABLED`. No wizard shell link yet (#276). Design: [onboarding-signup-design.md](onboarding-signup-design.md).
+
 ---
 
 ## 7. Deployment & CI/CD (F117)

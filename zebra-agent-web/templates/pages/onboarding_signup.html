@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Sign up for Oracle Cloud - Zebra Agent{% endblock %}
+{% block page_title %}Oracle Cloud signup{% endblock %}
+
+{% block content %}
+{% comment %}
+Static, versioned signup guide (#277). Oracle's documentation is the source of truth: every
+figure links to it. Statements not confirmed against Oracle's docs carry a "needs verification"
+badge. Bump ONBOARDING_GUIDE_VERSION in api/onboarding_views.py when this text changes.
+{% endcomment %}
+<div class="space-y-6 max-w-3xl" data-testid="signup-guide">
+    <div>
+        <h1 class="text-xl font-semibold text-ink">Sign up for Oracle Cloud</h1>
+        <p class="text-muted mt-1 max-w-[65ch]">Zebra runs on your own Oracle Cloud (OCI) account, inside the Always Free allowance. You do the sign-up yourself; this page tells you what to choose. Oracle's pages change, so the links are the source of truth.</p>
+        <p class="text-faint text-xs mt-2" data-testid="guide-version">Guide version {{ guide_version }}, checked against Oracle's documentation on {{ guide_checked }}.</p>
+    </div>
+
+    <section class="panel px-6 py-5 border-needs/40" data-testid="payg-warning">
+        <h2 class="text-base font-semibold text-ink">Read first: the Pay-As-You-Go upgrade can take 1-2 days</h2>
+        <p class="text-sm text-muted mt-2">We strongly advise upgrading to Pay-As-You-Go: it needs a card, and it should improve your chance of getting Arm capacity and protect against free-account reclamation. Staying within the Always Free limits still costs nothing. The upgrade can take 1-2 days to take effect (some people report longer).</p>
+        <p class="text-sm text-ink mt-2"><strong>Do not wait for it.</strong> Carry on with the next steps on the free account. Arm capacity retries pick up the priority once the upgrade lands, and this page shows the account as "upgrade pending" until you say it is active.</p>
+        <p class="text-xs text-needs mt-2">Needs verification: the 1-2 day delay and the capacity-priority benefit come from user reports and the project owner's experience; Oracle's own page only describes the upgrade steps.</p>
+    </section>
+
+    <section class="panel px-6 py-5 border-fail/40" data-testid="home-region-warning">
+        <h2 class="text-base font-semibold text-ink">Choose your home region before you click create</h2>
+        <p class="text-sm text-muted mt-2">Pick <strong class="text-ink font-mono">uk-london-1</strong> (UK South, London). Your home region is permanent and <strong class="text-ink">cannot be changed later</strong>. Always Free resources can only be created in the home region, and Oracle lists London among the few regions with the Always Free 26ai database (needed for vector search; Newport has no Always Free 26ai).</p>
+        <p class="text-sm text-muted mt-2">Other regions with Always Free 26ai, if London does not suit you:</p>
+        <ul class="text-sm text-muted mt-1 list-disc pl-5">
+            {% for rid, label in regions.items %}<li><span class="font-mono">{{ rid }}</span> {{ label }}</li>{% endfor %}
+        </ul>
+        <p class="text-xs text-needs mt-2">Needs verification: Arm A1 capacity in London varies day to day and is not published. Zebra's tested region is {{ default_region }}.</p>
+        <p class="text-sm mt-2"><a class="text-accent underline" href="https://docs.oracle.com/en-us/iaas/autonomous-database-serverless/doc/autonomous-always-free.html" target="_blank" rel="noopener">Oracle: Always Free Autonomous AI Database and its regions</a></p>
+    </section>
+
+    <section class="panel px-6 py-5" data-testid="free-limits">
+        <h2 class="text-base font-semibold text-ink">1. What you get, and the limits</h2>
+        <ul class="text-sm text-muted mt-2 list-disc pl-5 space-y-1">
+            <li>Arm compute (VM.Standard.A1.Flex): for Always Free tenancies 2 OCPUs and 12 GB of memory in total. Zebra uses all of it.</li>
+            <li>200 GB of combined boot and block volume storage, in the home region.</li>
+            <li>Two Always Free Autonomous Databases, 20 GB storage each (cannot be scaled).</li>
+            <li>10 TB per month of outbound data.</li>
+            <li>A card is needed for identity verification; Oracle may place a temporary hold. Anything beyond these limits is charged, which is why a budget alert comes next.</li>
+        </ul>
+        <p class="text-xs text-needs mt-2">Needs verification: the card verification hold amount, and how long any trial credit lasts, change over time: read Oracle's Free Tier page when you sign up.</p>
+        <p class="text-sm mt-2 space-x-4">
+            <a class="text-accent underline" href="https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm" target="_blank" rel="noopener">Oracle: Always Free resources</a>
+            <a class="text-accent underline" href="https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier.htm" target="_blank" rel="noopener">Oracle: Free Tier</a>
+        </p>
+    </section>
+
+    <section class="panel px-6 py-5" data-testid="signup-steps">
+        <h2 class="text-base font-semibold text-ink">2. Create the account</h2>
+        <ol class="text-sm text-muted mt-2 list-decimal pl-5 space-y-1">
+            <li>Open Oracle's sign-up page and create a Free Tier account. Select <span class="font-mono">uk-london-1</span> as the home region when asked.</li>
+            <li>Once in, create a dedicated administrator user instead of working as the root sign-in, and turn on multi-factor authentication (MFA) for it.</li>
+            <li>Note your tenancy OCID (Profile menu, Tenancy) and keep it for the pre-flight form below.</li>
+        </ol>
+        <p class="text-xs text-needs mt-2">Needs verification: Oracle changes the sign-up screens and identity-domain wording often, so these steps are deliberately general.</p>
+        <p class="text-sm mt-2"><a class="text-accent underline" href="https://signup.cloud.oracle.com/" target="_blank" rel="noopener">Oracle Cloud sign-up</a></p>
+    </section>
+
+    <section class="panel px-6 py-5" data-testid="payg-steps">
+        <h2 class="text-base font-semibold text-ink">3. Upgrade to Pay-As-You-Go (strongly advised, not mandatory)</h2>
+        <p class="text-sm text-muted mt-2">In the console open Billing &amp; Cost Management, then Upgrade and Manage Payment. Free-only accounts still work, with the capacity and reclamation caveats below.</p>
+        <p class="text-sm mt-2"><a class="text-accent underline" href="https://docs.oracle.com/iaas/Content/Billing/Tasks/changingpaymentmethod.htm" target="_blank" rel="noopener">Oracle: upgrading an account and managing payment</a></p>
+    </section>
+
+    <section class="panel px-6 py-5" data-testid="budget-alert">
+        <h2 class="text-base font-semibold text-ink">4. Budget alert: a $1 tripwire</h2>
+        <p class="text-sm text-muted mt-2">Inside Always Free you should never be charged. A budget alert at about $1 tells you at once if something starts costing money. Zebra's provisioning stack creates it for you in the next step and checks it exists; you only acknowledge it here.</p>
+        <p class="text-sm mt-2"><a class="text-accent underline" href="https://docs.oracle.com/en-us/iaas/Content/Billing/Concepts/budgetsoverview.htm" target="_blank" rel="noopener">Oracle: budgets</a></p>
+    </section>
+
+    <section class="panel px-6 py-5" data-testid="reclamation">
+        <h2 class="text-base font-semibold text-ink">5. Idle resources can be reclaimed</h2>
+        <ul class="text-sm text-muted mt-2 list-disc pl-5 space-y-1">
+            <li>Oracle may reclaim an Always Free compute instance that is idle for 7 days: 95th percentile CPU under 20%, network under 20% and (Arm) memory under 20%.</li>
+            <li>An Always Free database that is inactive for 7 days is stopped automatically, and one that stays stopped for 90 days cumulative may be permanently deleted. Connecting and running SQL resets the clock.</li>
+        </ul>
+        <p class="text-sm mt-2"><a class="text-accent underline" href="https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm" target="_blank" rel="noopener">Oracle: Always Free resources, idle instances</a></p>
+    </section>
+
+    {% if errors %}
+    <div class="rounded-md border border-fail/40 bg-fail/10 text-fail px-4 py-3 text-sm" role="alert" data-testid="preflight-errors">
+        {% for field, msg in errors.items %}<p>{{ msg }}</p>{% endfor %}
+    </div>
+    {% endif %}
+    {% for w in warnings %}
+    <div class="rounded-md border border-needs/40 bg-needs/10 text-needs px-4 py-3 text-sm" role="status">{{ w }}</div>
+    {% endfor %}
+
+    <form method="post" action="/onboarding/signup/confirm/" class="panel px-6 py-5 space-y-4" data-testid="preflight-form">
+        {% csrf_token %}
+        <h2 class="text-base font-semibold text-ink">Pre-flight: tell Zebra what you have</h2>
+        <p class="text-sm text-muted">Only non-secret values. Never paste a password, API key or private key here: they are refused.</p>
+        <label class="block text-sm text-ink">Tenancy OCID (optional)
+            <input name="tenancy_ocid" value="{{ state.tenancy_ocid }}" placeholder="ocid1.tenancy.oc1..aaaa" class="mt-1 w-full rounded-md border border-line bg-transparent px-3 py-2 font-mono text-sm" autocomplete="off">
+        </label>
+        <label class="block text-sm text-ink">Home region
+            <input name="region" value="{{ state.region }}" class="mt-1 w-full rounded-md border border-line bg-transparent px-3 py-2 font-mono text-sm" autocomplete="off">
+        </label>
+        <fieldset class="text-sm text-ink">
+            <legend>Pay-As-You-Go status (self-reported)</legend>
+            {% for value, label in payg_options %}
+            <label class="mr-4"><input type="radio" name="payg" value="{{ value }}" {% if state.payg == value %}checked{% endif %}> {{ label }}</label>
+            {% endfor %}
+        </fieldset>
+        <fieldset class="space-y-1 text-sm text-ink">
+            <legend>I've done this</legend>
+            {% for key, label in checklist %}
+            <label class="block"><input type="checkbox" name="{{ key }}" value="1" {% if key in state.done %}checked{% endif %}> {{ label }}</label>
+            {% endfor %}
+        </fieldset>
+        <button class="btn btn-primary" type="submit">Save</button>
+        <p class="text-sm" data-testid="payg-status">
+            {% if state.payg == "pending" %}Account status: <strong>upgrade pending</strong>. Carry on; do not wait for it.
+            {% elif state.payg == "active" %}Account status: Pay-As-You-Go active (self-reported).
+            {% else %}Account status: Always Free only (Pay-As-You-Go advised).{% endif %}
+        </p>
+        {% if ready %}
+        <p class="text-ok text-sm" data-testid="ready">Ready for the next step.</p>
+        {% else %}
+        <p class="text-faint text-sm" data-testid="not-ready">The next step stays locked until you tick that you created the account and understand the budget alert.</p>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}
