@@ -55,7 +55,7 @@ unit-postgres:
     - export PG_CONTAINER="ci-pg-${CI_JOB_ID}"
     - export PGPASSWORD="pg$(openssl rand -hex 16)"
     - podman run -d --name "$PG_CONTAINER" --memory=512m -p 127.0.0.1::5432 -e POSTGRES_USER="$PGUSER" -e POSTGRES_DB="$PGDATABASE" -e POSTGRES_PASSWORD="$PGPASSWORD" "$PG_IMAGE"
-    - export PGPORT="$(podman port "$PG_CONTAINER" 5432/tcp | head -1 | cut -d: -f2)"
+    - export PGPORT="$(podman port "$PG_CONTAINER" 5432/tcp | head -1 | sed 's/.*://')"
     # TCP readiness: the image's init server listens on the socket only.
     - for i in $(seq 60); do podman exec "$PG_CONTAINER" pg_isready -q -h 127.0.0.1 -U "$PGUSER" && break; sleep 1; done
     - podman exec "$PG_CONTAINER" pg_isready -h 127.0.0.1 -U "$PGUSER"
