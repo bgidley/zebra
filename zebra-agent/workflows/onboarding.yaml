@@ -1,0 +1,317 @@
+# Onboarding (#276, epic #275)
+#
+# The "get your own Zebra" wizard. Started only by the web's /onboarding/ page
+# (zebra_agent_web.api.onboarding) for an anonymous visitor: one process per
+# visitor, no account, no secrets. The process properties are the session state;
+# the visitor's resume token is checked against __onboarding_nonce_sha256__.
+#
+# Every visitor step is `auto: false` with `external: onboarding_visitor`, so the
+# process parks on it but it never shows in the owner's task inbox
+# (zebra.forms.is_human_task). Each step carries what happens / what it costs /
+# how to undo it, shown by the wizard before the visitor acts.
+#
+# A step the visitor reports as failed routes to its retry task, which shows the
+# reason and loops back to the step; later steps stay locked until it is done.
+# Step content beyond the shell (access grant, provisioning, callback) lands in
+# later slices (#277, #278, #279). See specs/onboarding-design.md.
+#
+# This is a system workflow: the goal selector never picks it, and the wizard
+# starts it only while its content matches the shipped built-in.
+
+name: "Onboarding"
+version: 1
+description: "Guide a visitor through getting their own Zebra in their own Oracle Cloud tenancy."
+tags: ["system", "onboarding"]
+use_when: "INTERNAL USE ONLY — started by the /onboarding/ wizard"
+first_task: signup
+
+tasks:
+  signup:
+    name: "Oracle Cloud account"
+    auto: false
+    properties:
+      external: onboarding_visitor
+      onboarding_step: signup
+      onboarding_order: 1
+      what_happens: >-
+        You sign up for an Oracle Cloud (OCI) account, or use one you already have. Your Zebra
+        will live in your own tenancy, not on this server.
+      cost: >-
+        Nothing. Zebra fits inside OCI's Always Free tier (2 OCPU / 12 GB Arm). Oracle asks for a
+        card to verify you, but Always Free resources are not charged.
+      undo: >-
+        You can close an OCI account at any time from the OCI console. Nothing is created here.
+      schema:
+        type: object
+        title: "Your Oracle Cloud account"
+        description: "Sign up at https://signup.cloud.oracle.com/ (or sign in), then tell us your home region."
+        required: [home_region]
+        properties:
+          home_region:
+            type: string
+            title: "Home region"
+            description: "Shown in the OCI console's top bar. London is the default."
+            enum: [uk-london-1, eu-frankfurt-1, eu-amsterdam-1, us-ashburn-1, us-phoenix-1, other]
+            enumLabels: ["UK South (London) uk-london-1", "Germany Central (Frankfurt) eu-frankfurt-1", "Netherlands Northwest (Amsterdam) eu-amsterdam-1", "US East (Ashburn) us-ashburn-1", "US West (Phoenix) us-phoenix-1", "Another region"]
+            default: uk-london-1
+          problem:
+            type: string
+            title: "Something went wrong?"
+            description: "Only if you are stuck: what happened, in your own words. Never paste passwords or keys."
+            format: multiline
+            maxLength: 2000
+
+  signup_retry:
+    name: "Oracle Cloud account: try again"
+    auto: false
+    properties: &retry
+      external: onboarding_visitor
+      onboarding_step: signup
+      onboarding_retry: true
+      show_prior_outputs: false
+      schema:
+        type: object
+        title: "This step did not finish"
+        properties:
+          reason:
+            type: string
+            title: "What went wrong"
+            readOnly: true
+            default: "{{__task_output_signup.problem}}"
+
+  access:
+    name: "Give access"
+    auto: false
+    properties:
+      external: onboarding_visitor
+      onboarding_step: access
+      onboarding_order: 2
+      what_happens: >-
+        You let a published Oracle Resource Manager stack build Zebra in one compartment of your
+        tenancy. You apply it yourself; this server never holds a key to your tenancy.
+      cost: >-
+        Nothing: the stack creates Always Free resources only.
+      undo: >-
+        Destroy the stack in Resource Manager and delete its compartment.
+      schema:
+        type: object
+        title: "Give access"
+        description: "The guided access step is coming in a later release. Confirm when you are ready to continue."
+        required: [ready]
+        properties:
+          ready:
+            type: boolean
+            title: "I am a tenancy administrator (or have one to hand) and am ready to apply the stack"
+          problem:
+            type: string
+            title: "Something went wrong?"
+            format: multiline
+            maxLength: 2000
+
+  access_retry:
+    name: "Give access: try again"
+    auto: false
+    properties:
+      <<: *retry
+      onboarding_step: access
+      schema:
+        type: object
+        title: "This step did not finish"
+        properties:
+          reason:
+            type: string
+            title: "What went wrong"
+            readOnly: true
+            default: "{{__task_output_access.problem}}"
+
+  provision:
+    name: "Build your Zebra"
+    auto: false
+    properties:
+      external: onboarding_visitor
+      onboarding_step: provision
+      onboarding_order: 3
+      what_happens: >-
+        The stack creates a small Arm instance and an Autonomous Database in your compartment and
+        installs Zebra on it.
+      cost: >-
+        Nothing on Always Free shapes. Your own LLM key (OpenRouter) is set on your new Zebra, not
+        here, and its spend is yours.
+      undo: >-
+        Destroy the stack; every resource it made is removed.
+      schema:
+        type: object
+        title: "Build your Zebra"
+        description: "Apply the stack in Resource Manager and wait for the job to succeed."
+        required: [applied]
+        properties:
+          applied:
+            type: boolean
+            title: "The Resource Manager job succeeded"
+          problem:
+            type: string
+            title: "Something went wrong?"
+            format: multiline
+            maxLength: 2000
+
+  provision_retry:
+    name: "Build your Zebra: try again"
+    auto: false
+    properties:
+      <<: *retry
+      onboarding_step: provision
+      schema:
+        type: object
+        title: "This step did not finish"
+        properties:
+          reason:
+            type: string
+            title: "What went wrong"
+            readOnly: true
+            default: "{{__task_output_provision.problem}}"
+
+  verify:
+    name: "Check it works"
+    auto: false
+    properties:
+      external: onboarding_visitor
+      onboarding_step: verify
+      onboarding_order: 4
+      what_happens: >-
+        You open your new Zebra and check it answers. Later releases check this for you.
+      cost: "Nothing."
+      undo: "Nothing to undo."
+      schema:
+        type: object
+        title: "Check it works"
+        required: [working]
+        properties:
+          working:
+            type: boolean
+            title: "My new Zebra's page loads and I can sign in"
+          problem:
+            type: string
+            title: "Something went wrong?"
+            format: multiline
+            maxLength: 2000
+
+  verify_retry:
+    name: "Check it works: try again"
+    auto: false
+    properties:
+      <<: *retry
+      onboarding_step: verify
+      schema:
+        type: object
+        title: "This step did not finish"
+        properties:
+          reason:
+            type: string
+            title: "What went wrong"
+            readOnly: true
+            default: "{{__task_output_verify.problem}}"
+
+  commons:
+    name: "Join the Commons"
+    auto: false
+    properties:
+      external: onboarding_visitor
+      onboarding_step: commons
+      onboarding_order: 5
+      what_happens: >-
+        Optionally, your Zebra makes its own Commons identity so it can share and receive
+        workflows. Its keys are made on your Zebra and never leave it.
+      cost: "Nothing."
+      undo: "Turn the Commons off on your Zebra; you can revoke its devices at any time."
+      schema:
+        type: object
+        title: "Join the Commons"
+        properties:
+          join:
+            type: boolean
+            title: "I want my Zebra to join the Commons"
+          problem:
+            type: string
+            title: "Something went wrong?"
+            format: multiline
+            maxLength: 2000
+
+  commons_retry:
+    name: "Join the Commons: try again"
+    auto: false
+    properties:
+      <<: *retry
+      onboarding_step: commons
+      schema:
+        type: object
+        title: "This step did not finish"
+        properties:
+          reason:
+            type: string
+            title: "What went wrong"
+            readOnly: true
+            default: "{{__task_output_commons.problem}}"
+
+  contribute:
+    name: "Contribute"
+    auto: false
+    properties:
+      external: onboarding_visitor
+      onboarding_step: contribute
+      onboarding_order: 6
+      what_happens: >-
+        Optionally, learn how improvements your Zebra makes can be offered back to Zebra on
+        GitHub. Nothing is sent without your review.
+      cost: "Nothing."
+      undo: "Close any pull request you opened."
+      schema:
+        type: object
+        title: "Contribute"
+        properties:
+          interested:
+            type: boolean
+            title: "Tell me how to contribute improvements back"
+          problem:
+            type: string
+            title: "Something went wrong?"
+            format: multiline
+            maxLength: 2000
+
+  contribute_retry:
+    name: "Contribute: try again"
+    auto: false
+    properties:
+      <<: *retry
+      onboarding_step: contribute
+      schema:
+        type: object
+        title: "This step did not finish"
+        properties:
+          reason:
+            type: string
+            title: "What went wrong"
+            readOnly: true
+            default: "{{__task_output_contribute.problem}}"
+
+  finished:
+    name: "All done"
+
+routings:
+  - {from: signup, to: access, condition: route_name, name: done}
+  - {from: signup, to: signup_retry, condition: route_name, name: problem}
+  - {from: signup_retry, to: signup}
+  - {from: access, to: provision, condition: route_name, name: done}
+  - {from: access, to: access_retry, condition: route_name, name: problem}
+  - {from: access_retry, to: access}
+  - {from: provision, to: verify, condition: route_name, name: done}
+  - {from: provision, to: provision_retry, condition: route_name, name: problem}
+  - {from: provision_retry, to: provision}
+  - {from: verify, to: commons, condition: route_name, name: done}
+  - {from: verify, to: verify_retry, condition: route_name, name: problem}
+  - {from: verify_retry, to: verify}
+  - {from: commons, to: contribute, condition: route_name, name: done}
+  - {from: commons, to: commons_retry, condition: route_name, name: problem}
+  - {from: commons_retry, to: commons}
+  - {from: contribute, to: finished, condition: route_name, name: done}
+  - {from: contribute, to: contribute_retry, condition: route_name, name: problem}
+  - {from: contribute_retry, to: contribute}

@@ -363,6 +363,7 @@ These workflows are internal to the agent and excluded from LLM selection:
 | `Dream Cycle` | `dream_cycle.yaml` | Self-improvement: analyze, evaluate, optimize workflows |
 | `Create Goal` | `create_goal.yaml` | Human input → queue goal as CREATED process |
 | `Postmortem` | `postmortem.yaml` | `write_postmortem` for timed-out / crashed goals and runs rated 1–2, started by `zebra_agent/postmortem.py` (#175) |
+| `Onboarding` | `onboarding.yaml` | The anonymous `/onboarding/` wizard (#276): six visitor steps (`external: onboarding_visitor`, never in the inbox) with what / cost / undo and a retry screen each; started only by `zebra_agent_web.api.onboarding` while its content is the shipped built-in |
 | `Bug Report` | `bug_report.yaml` | Web UI "Report a bug": one human review task over the stored report (#186) |
 | `Zebra Improvement Request` | `zebra_improvement_request.yaml` | Dream cycle request for a change to Zebra's code: human review task (accept / accept and build / reject / duplicate / later, issue link) (#189), then `file_issue` files an accepted request as a GitLab issue (#194) and `start_build` starts *Improve Zebra* for a `build` verdict (#251) |
 | `Outcome Review` | `outcome_review.yaml` | Delivery review of a deployed change: Zebra reviews blind with *List/Read/Search Zebra Source* tools, compares with Claude's verdicts, reconsiders once, then a human ruling task (#190). Run with `manage.py run_workflow` |

@@ -36,6 +36,8 @@ _SETUP_URL = "/auth/setup/"
 _LOGIN_URL = "/auth/login/"
 _AUTH_PREFIX = "/auth/"
 _STATIC_PREFIX = "/static/"
+# The anonymous onboarding wizard (#276) works whatever this Zebra's own setup state
+_ONBOARDING_PREFIX = "/onboarding/"
 
 # URLs that are always allowed even when no users exist
 _ALWAYS_ALLOWED = {
@@ -55,6 +57,8 @@ def _is_exempt(path: str) -> bool:
     if path.startswith(_STATIC_PREFIX):
         return True
     if path.startswith(_AUTH_PREFIX):
+        return True
+    if path.startswith(_ONBOARDING_PREFIX):
         return True
     if path in _ALWAYS_ALLOWED:
         return True

@@ -225,6 +225,12 @@ async def _do_init() -> None:
     from zebra_agent_web.api.commons_import import WebCommonsServices
 
     engine.extras["__commons__"] = WebCommonsServices()
+    # Onboarding (#276): refuse onboarding LLM calls once today's onboarding cap is spent
+    from zebra_tasks.llm.client import LLM_GUARD_KEY
+
+    from zebra_agent_web.api.onboarding import llm_guard
+
+    engine.extras[LLM_GUARD_KEY] = llm_guard
     # Skill sync over the private relay (#246): only with COMMONS_ENABLED + ZEBRA_SYNC_RELAY.
     from zebra_agent_web.api.commons_sync import SYNC_KEY, build_sync_service
 

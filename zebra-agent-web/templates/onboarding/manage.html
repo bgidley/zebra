@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load format_tags %}
+{% comment %}
+Owner switch for the onboarding wizard (#276). Context: is_owner, env_enabled, owner_enabled,
+enabled, live_sessions, max_live_sessions, spent_today, daily_cap, session_cap.
+{% endcomment %}
+{% block title %}Onboarding - Zebra Agent{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <h1 class="text-2xl font-semibold tracking-tight">Onboarding wizard</h1>
+    <p class="mt-2 text-sm text-muted">
+        Lets anonymous visitors use <a class="underline" href="{% url 'onboarding_wizard' %}">/onboarding/</a>
+        to get their own Zebra. Visitors get no account and never see this Zebra's data.
+    </p>
+
+    <dl class="mt-6 grid gap-3 text-sm sm:grid-cols-2">
+        <div class="rounded-md border border-line bg-surface p-3"><dt class="text-faint">Status</dt>
+            <dd class="mt-1 font-medium">{% if enabled %}On{% else %}Off{% endif %}</dd></div>
+        <div class="rounded-md border border-line bg-surface p-3"><dt class="text-faint">ZEBRA_ONBOARDING_ENABLED</dt>
+            <dd class="mt-1">{% if env_enabled %}on{% else %}off (the wizard stays off whatever the switch says){% endif %}</dd></div>
+        <div class="rounded-md border border-line bg-surface p-3"><dt class="text-faint">Live sessions</dt>
+            <dd class="mt-1">{{ live_sessions }} of {{ max_live_sessions }}</dd></div>
+        <div class="rounded-md border border-line bg-surface p-3"><dt class="text-faint">LLM spend today</dt>
+            <dd class="mt-1">{{ spent_today|usd }} of {{ daily_cap|usd }} (per session {{ session_cap|usd }})</dd></div>
+    </dl>
+
+    {% if is_owner %}
+    <form method="post" class="mt-6">
+        {% csrf_token %}
+        <input type="hidden" name="enabled" value="{% if owner_enabled %}0{% else %}1{% endif %}">
+        <button type="submit" class="rounded-md bg-ink px-4 py-2 text-sm font-medium text-ground hover:opacity-90">
+            {% if owner_enabled %}Switch onboarding off{% else %}Switch onboarding on{% endif %}
+        </button>
+    </form>
+    {% else %}
+    <p class="mt-6 text-sm text-muted">Only the owner can switch onboarding on or off.</p>
+    {% endif %}
+</div>
+{% endblock %}

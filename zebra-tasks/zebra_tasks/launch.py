@@ -3,7 +3,8 @@
 Every start of a workflow loaded from the workflow library goes through
 ``create_library_process``: goals (``execute_goal_workflow``), the agent loop
 (goal + dream cycle), direct runs, scheduled routines, ``subworkflow``,
-``parallel_subworkflows`` and ``llm_agent`` tool calls. It calls ``check_launch``
+``parallel_subworkflows``, ``llm_agent`` tool calls and the onboarding wizard (#276).
+It calls ``check_launch``
 before the process is created, so a refusal leaves nothing to clean up.
 
 ``check_launch`` enforces the Commons' supervised use (S3, #230): a library workflow
@@ -45,6 +46,8 @@ LAUNCH_ENTRIES = frozenset(
         "subworkflow",
         "parallel_subworkflows",
         "llm_agent_tool",
+        # The anonymous /onboarding/ wizard (#276): built-in onboarding workflows only.
+        "onboarding",
     }
 )
 

@@ -290,6 +290,11 @@ async def _tick(
 
     await publish_tick(engine)
 
+    # 0e. Onboarding (#276): fail wizard sessions idle past ONBOARDING_SESSION_IDLE_DAYS (hourly)
+    from zebra_agent_web.api.onboarding import expire_idle_sessions
+
+    await expire_idle_sessions(engine)
+
     # 1. Record goals that finished since the last tick (e.g. after a human answered)
     for finished in await tracker.reconcile():
         await _record_finished(finished, engine, library)

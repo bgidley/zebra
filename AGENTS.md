@@ -787,6 +787,7 @@ See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking fl
 | `SYNC_RELAY` | `ZEBRA_SYNC_RELAY` | — | Private sync relay (`wss://…/relay/sync`); unset = no skill sync, no connection (#246) |
 | `COMMONS_RELAYS` | `ZEBRA_COMMONS_RELAYS` | — | Public Commons relays (`wss://…`, canonical first, then mirrors); unset = no offers published, no connection (#231) |
 | `COMMONS_RECEIPT_PUBKEY` | `ZEBRA_COMMONS_RECEIPT_PUBKEY` | — | Canonical public relay's operator key trusted for offer receipts (#231) |
+| `ONBOARDING_ENABLED` | `ZEBRA_ONBOARDING_ENABLED` | false | Anonymous `/onboarding/` wizard; also needs the owner's switch on `/onboarding/manage/`. Caps and limits: `ZEBRA_ONBOARDING_*` in `specs/onboarding-design.md` (#276) |
 | `SYNC_RECEIPT_PUBKEY` | `ZEBRA_SYNC_RECEIPT_PUBKEY` | — | Relay operator key trusted for receipts (revocation by receipt order); the operator secret is only the sidecar's `ZEBRA_SYNC_OPERATOR_SECRET` (#246) |
 | — | `ZEBRA_SYNC_DIRECTION` | both | Skill sync direction of this device: `send` / `receive` / `both` / `off` (unknown → `off`); read by `SyncService` (#236) |
 | — | `ZEBRA_SYNC_CONFIDENTIAL_PATTERNS` | — | Extra regexes (codenames, domains; one per line or `;;`-separated) that block sending a workflow from this device (#236) |
