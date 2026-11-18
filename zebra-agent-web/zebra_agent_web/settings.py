@@ -275,6 +275,9 @@ ZEBRA_AGENT_SETTINGS = {
     # first canonical (its operator key signs receipts), the rest mirrors. Unset = no publishing.
     "COMMONS_RELAYS": os.environ.get("ZEBRA_COMMONS_RELAYS", ""),
     "COMMONS_RECEIPT_PUBKEY": os.environ.get("ZEBRA_COMMONS_RECEIPT_PUBKEY", ""),
+    # Onboarding guide pages (#275, off by default): 404 unless on.
+    "ONBOARDING_ENABLED": os.environ.get("ZEBRA_ONBOARDING_ENABLED", "0").lower()
+    in ("1", "true", "yes", "on"),
 }
 
 # Logging
