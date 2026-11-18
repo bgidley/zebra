@@ -63,13 +63,38 @@ def _duplicate(plan: Plan, rtype: str) -> None:
     _add(plan, rtype, copy.deepcopy(_after(plan, rtype)), name="second")
 
 
+def _remove(
+    plan: Plan, rtype: str, where: Callable[[dict[str, Any]], bool] = lambda _: True
+) -> None:
+    plan["resource_changes"] = [
+        rc for rc in plan["resource_changes"] if not (rc["type"] == rtype and where(rc))
+    ]
+
+
+def _unknown_boot_size(plan: Plan) -> None:
+    """What `terraform show -json` gives for a size known only after apply (#298)."""
+    rc = _resource(plan, "oci_core_instance")
+    rc["change"]["after"]["source_details"][0].pop("boot_volume_size_in_gbs")
+    unknown = rc["change"].get("after_unknown")  # absent from `after` alone also means unknown
+    if unknown:
+        unknown["source_details"][0]["boot_volume_size_in_gbs"] = True
+
+
+def _without_guardrails(plan: Plan) -> None:
+    for rtype in GUARDRAIL_TYPES:
+        _remove(plan, rtype)
+
+
+GUARDRAIL_TYPES = ("oci_budget_budget", "oci_budget_alert_rule", "oci_limits_quota")
+
+
 def _set(rtype: str, path: str, value: Any) -> Callable[[Plan], None]:
     def mutate(plan: Plan) -> None:
         target: Any = _after(plan, rtype)
         *parents, last = path.split(".")
         for part in parents:
             target = target[int(part)] if part.isdigit() else target[part]
-        target[last] = value
+        target[int(last) if last.isdigit() else last] = value
 
     return mutate
 
@@ -150,6 +175,86 @@ BAD_PLANS: list[tuple[str, Callable[[Plan], None], str]] = [
         _set("oci_objectstorage_bucket", "storage_tier", "Archive"),
         "storage_tier must be 'Standard'",
     ),
+    ("boot_volume_unknown", _unknown_boot_size, "boot_volume_size_in_gbs is unknown at plan time"),
+    # --- Billing guardrails (S2): weakened or partial guardrails fail. ---
+    ("budget_amount_raised", _set("oci_budget_budget", "amount", 100), "amount must be 1"),
+    (
+        "budget_not_monthly",
+        _set("oci_budget_budget", "reset_period", "ANNUAL"),
+        "reset_period must be 'MONTHLY'",
+    ),
+    (
+        "budget_on_tag",
+        _set("oci_budget_budget", "target_type", "TAG"),
+        "target_type must be 'COMPARTMENT'",
+    ),
+    (
+        "third_budget",
+        lambda p: _duplicate(p, "oci_budget_budget"),
+        "oci_budget_budget: 3 planned",
+    ),
+    (
+        "one_budget_only",
+        lambda p: _remove(p, "oci_budget_budget", lambda rc: rc["index"] == "zebra"),
+        "1 oci_budget_budget planned, need exactly 2",
+    ),
+    (
+        "alert_rule_missing",
+        lambda p: _remove(
+            p, "oci_budget_alert_rule", lambda rc: rc["index"] == "zebra-forecast-100"
+        ),
+        "1 alert rule(s) FORECAST PERCENTAGE 100 planned, need 2",
+    ),
+    (
+        "alert_rule_extra",
+        lambda p: _duplicate(p, "oci_budget_alert_rule"),
+        "oci_budget_alert_rule: 9 planned",
+    ),
+    (
+        "alert_threshold_raised",
+        _set("oci_budget_alert_rule", "threshold", 500),
+        "PERCENTAGE 500 planned, need 0",
+    ),
+    (
+        "alert_bad_type",
+        _set("oci_budget_alert_rule", "type", "USAGE"),
+        "type must be one of ['ACTUAL', 'FORECAST']",
+    ),
+    (
+        "alert_type_unknown",
+        lambda p: _after(p, "oci_budget_alert_rule").pop("type"),
+        "type must be one of",
+    ),
+    (
+        "alert_no_recipients",
+        _set("oci_budget_alert_rule", "recipients", ""),
+        "recipients must be set at plan time",
+    ),
+    (
+        "quota_allows_more_a1",
+        _set(
+            "oci_limits_quota",
+            "statements.1",
+            "set compute-core quota standard-a1-core-count to 4 in compartment zebra",
+        ),
+        "statements must be exactly",
+    ),
+    (
+        "quota_statement_dropped",
+        lambda p: _after(p, "oci_limits_quota")["statements"].pop(0),
+        "statements must be exactly",
+    ),
+    ("second_quota", lambda p: _duplicate(p, "oci_limits_quota"), "oci_limits_quota: 2 planned"),
+    (
+        "budgets_without_quota",
+        lambda p: _remove(p, "oci_limits_quota"),
+        "0 oci_limits_quota planned, need exactly 1",
+    ),
+    (
+        "quota_without_budgets",
+        lambda p: (_remove(p, "oci_budget_budget"), _remove(p, "oci_budget_alert_rule")),
+        "0 oci_budget_budget planned, need exactly 2",
+    ),
 ]
 
 
@@ -177,6 +282,29 @@ def test_clean_plan_counts_the_real_boot_volume(clean_plan: Plan, allowlist: dic
     """The provider plans boot_volume_size_in_gbs as a string; it must still count."""
     _add(clean_plan, "oci_core_volume", {"size_in_gbs": 101})  # 100 boot + 101 > 200
     assert any("201 GB block storage" in e for e in oci_plan_scan.scan(clean_plan, allowlist))
+
+
+def test_plan_without_guardrails_passes(clean_plan: Plan, allowlist: dict[str, Any]) -> None:
+    """A non-admin apply (create_guardrails = false) plans none of them, which is allowed."""
+    _without_guardrails(clean_plan)
+    assert not any(rc["type"] in GUARDRAIL_TYPES for rc in clean_plan["resource_changes"])
+    assert oci_plan_scan.scan(clean_plan, allowlist) == []
+
+
+def test_clean_plan_has_the_guardrails(clean_plan: Plan) -> None:
+    types = [rc["type"] for rc in clean_plan["resource_changes"]]
+    assert types.count("oci_budget_budget") == 2
+    assert types.count("oci_budget_alert_rule") == 8
+    assert types.count("oci_limits_quota") == 1
+
+
+def test_omitted_boot_size_counts_the_default(clean_plan: Plan, allowlist: dict) -> None:
+    """An explicitly unset (null, not unknown) size is OCI's 47 GB default, not a failure."""
+    _after(clean_plan, "oci_core_instance")["source_details"][0]["boot_volume_size_in_gbs"] = None
+    _add(clean_plan, "oci_core_volume", {"size_in_gbs": 154})  # 47 + 154 = 201 > 200
+    errors = oci_plan_scan.scan(clean_plan, allowlist)
+    assert any("201 GB block storage" in e for e in errors), errors
+    assert not any("unknown at plan time" in e for e in errors)
 
 
 def test_deleted_resources_are_ignored(clean_plan: Plan, allowlist: dict[str, Any]) -> None:
@@ -219,6 +347,8 @@ ALLOWED_VARIABLES = {
     "ssh_public_key",
     "domain",
     "release_channel",
+    "create_guardrails",
+    "alert_email",
 }
 
 

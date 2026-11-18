@@ -30,6 +30,31 @@ locals {
 
   name = "zebra"
 
+  # Billing guardrails (S2): budgets only alert, the quota is the hard stop. Budget amounts are
+  # whole numbers in the tenancy's rate-card currency (1 GBP for a UK tenancy).
+  budget_amount = 1
+  budget_alerts = {
+    actual-any   = { type = "ACTUAL", threshold_type = "ABSOLUTE", threshold = 0.01 }
+    actual-50    = { type = "ACTUAL", threshold_type = "PERCENTAGE", threshold = 50 }
+    actual-100   = { type = "ACTUAL", threshold_type = "PERCENTAGE", threshold = 100 }
+    forecast-100 = { type = "FORECAST", threshold_type = "PERCENTAGE", threshold = 100 }
+  }
+
+  # Quota statements name the compartment by path from the root. The stack's compartment sits
+  # directly under the tenancy when guardrails are on (precondition in guardrails.tf), so its
+  # path is its name. Later statements override earlier ones in the same policy.
+  quota_name = "${local.name}-always-free"
+  quota_statements = [
+    "zero compute-core quotas in compartment ${local.name}",
+    "set compute-core quota standard-a1-core-count to ${local.free_a1_ocpus} in compartment ${local.name}",
+    "zero compute-memory quotas in compartment ${local.name}",
+    "set compute-memory quota standard-a1-memory-count to ${local.free_a1_memory_gb} in compartment ${local.name}",
+    "zero database quotas in compartment ${local.name}",
+    "set database quota adb-free-count to 1 in compartment ${local.name}",
+    "zero load-balancer quotas in compartment ${local.name}",
+    "set block-storage quota total-storage-gb to ${local.free_storage_gb} in compartment ${local.name}",
+  ]
+
   freeform_tags = {
     "zebra-stack"   = "oci-provision"
     "zebra-channel" = var.release_channel

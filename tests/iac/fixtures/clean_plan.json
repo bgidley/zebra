@@ -16,6 +16,12 @@
      "sort_by": "TIMECREATED",
      "sort_order": "DESC",
      "state": null
+    },
+    "after_unknown": {
+     "compartment_id": true,
+     "filter": [],
+     "id": true,
+     "images": true
     }
    },
    "mode": "data",
@@ -30,6 +36,12 @@
     ],
     "after": {
      "filter": []
+    },
+    "after_unknown": {
+     "availability_domains": true,
+     "compartment_id": true,
+     "filter": [],
+     "id": true
     }
    },
    "mode": "data",
@@ -42,11 +54,399 @@
     "actions": [
      "read"
     ],
-    "after": {}
+    "after": {},
+    "after_unknown": {
+     "compartment_id": true,
+     "id": true,
+     "namespace": true
+    }
    },
    "mode": "data",
    "name": "ns",
    "type": "oci_objectstorage_namespace"
+  },
+  {
+   "address": "oci_budget_alert_rule.guardrail[\"root-actual-100\"]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-root-actual-100",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "message": "Zebra should cost nothing on the Always Free tier. Check Cost Analysis for what is billing.",
+     "recipients": "owner@example.com",
+     "threshold": 100,
+     "threshold_type": "PERCENTAGE",
+     "timeouts": null,
+     "type": "ACTUAL"
+    },
+    "after_unknown": {
+     "budget_id": true,
+     "defined_tags": true,
+     "description": true,
+     "freeform_tags": {},
+     "id": true,
+     "state": true,
+     "time_created": true,
+     "time_updated": true,
+     "version": true
+    }
+   },
+   "index": "root-actual-100",
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_budget_alert_rule"
+  },
+  {
+   "address": "oci_budget_alert_rule.guardrail[\"root-actual-50\"]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-root-actual-50",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "message": "Zebra should cost nothing on the Always Free tier. Check Cost Analysis for what is billing.",
+     "recipients": "owner@example.com",
+     "threshold": 50,
+     "threshold_type": "PERCENTAGE",
+     "timeouts": null,
+     "type": "ACTUAL"
+    },
+    "after_unknown": {
+     "budget_id": true,
+     "defined_tags": true,
+     "description": true,
+     "freeform_tags": {},
+     "id": true,
+     "state": true,
+     "time_created": true,
+     "time_updated": true,
+     "version": true
+    }
+   },
+   "index": "root-actual-50",
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_budget_alert_rule"
+  },
+  {
+   "address": "oci_budget_alert_rule.guardrail[\"root-actual-any\"]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-root-actual-any",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "message": "Zebra should cost nothing on the Always Free tier. Check Cost Analysis for what is billing.",
+     "recipients": "owner@example.com",
+     "threshold": 0.01,
+     "threshold_type": "ABSOLUTE",
+     "timeouts": null,
+     "type": "ACTUAL"
+    },
+    "after_unknown": {
+     "budget_id": true,
+     "defined_tags": true,
+     "description": true,
+     "freeform_tags": {},
+     "id": true,
+     "state": true,
+     "time_created": true,
+     "time_updated": true,
+     "version": true
+    }
+   },
+   "index": "root-actual-any",
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_budget_alert_rule"
+  },
+  {
+   "address": "oci_budget_alert_rule.guardrail[\"root-forecast-100\"]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-root-forecast-100",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "message": "Zebra should cost nothing on the Always Free tier. Check Cost Analysis for what is billing.",
+     "recipients": "owner@example.com",
+     "threshold": 100,
+     "threshold_type": "PERCENTAGE",
+     "timeouts": null,
+     "type": "FORECAST"
+    },
+    "after_unknown": {
+     "budget_id": true,
+     "defined_tags": true,
+     "description": true,
+     "freeform_tags": {},
+     "id": true,
+     "state": true,
+     "time_created": true,
+     "time_updated": true,
+     "version": true
+    }
+   },
+   "index": "root-forecast-100",
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_budget_alert_rule"
+  },
+  {
+   "address": "oci_budget_alert_rule.guardrail[\"zebra-actual-100\"]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-zebra-actual-100",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "message": "Zebra should cost nothing on the Always Free tier. Check Cost Analysis for what is billing.",
+     "recipients": "owner@example.com",
+     "threshold": 100,
+     "threshold_type": "PERCENTAGE",
+     "timeouts": null,
+     "type": "ACTUAL"
+    },
+    "after_unknown": {
+     "budget_id": true,
+     "defined_tags": true,
+     "description": true,
+     "freeform_tags": {},
+     "id": true,
+     "state": true,
+     "time_created": true,
+     "time_updated": true,
+     "version": true
+    }
+   },
+   "index": "zebra-actual-100",
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_budget_alert_rule"
+  },
+  {
+   "address": "oci_budget_alert_rule.guardrail[\"zebra-actual-50\"]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-zebra-actual-50",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "message": "Zebra should cost nothing on the Always Free tier. Check Cost Analysis for what is billing.",
+     "recipients": "owner@example.com",
+     "threshold": 50,
+     "threshold_type": "PERCENTAGE",
+     "timeouts": null,
+     "type": "ACTUAL"
+    },
+    "after_unknown": {
+     "budget_id": true,
+     "defined_tags": true,
+     "description": true,
+     "freeform_tags": {},
+     "id": true,
+     "state": true,
+     "time_created": true,
+     "time_updated": true,
+     "version": true
+    }
+   },
+   "index": "zebra-actual-50",
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_budget_alert_rule"
+  },
+  {
+   "address": "oci_budget_alert_rule.guardrail[\"zebra-actual-any\"]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-zebra-actual-any",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "message": "Zebra should cost nothing on the Always Free tier. Check Cost Analysis for what is billing.",
+     "recipients": "owner@example.com",
+     "threshold": 0.01,
+     "threshold_type": "ABSOLUTE",
+     "timeouts": null,
+     "type": "ACTUAL"
+    },
+    "after_unknown": {
+     "budget_id": true,
+     "defined_tags": true,
+     "description": true,
+     "freeform_tags": {},
+     "id": true,
+     "state": true,
+     "time_created": true,
+     "time_updated": true,
+     "version": true
+    }
+   },
+   "index": "zebra-actual-any",
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_budget_alert_rule"
+  },
+  {
+   "address": "oci_budget_alert_rule.guardrail[\"zebra-forecast-100\"]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "display_name": "zebra-zebra-forecast-100",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "message": "Zebra should cost nothing on the Always Free tier. Check Cost Analysis for what is billing.",
+     "recipients": "owner@example.com",
+     "threshold": 100,
+     "threshold_type": "PERCENTAGE",
+     "timeouts": null,
+     "type": "FORECAST"
+    },
+    "after_unknown": {
+     "budget_id": true,
+     "defined_tags": true,
+     "description": true,
+     "freeform_tags": {},
+     "id": true,
+     "state": true,
+     "time_created": true,
+     "time_updated": true,
+     "version": true
+    }
+   },
+   "index": "zebra-forecast-100",
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_budget_alert_rule"
+  },
+  {
+   "address": "oci_budget_budget.guardrail[\"root\"]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "amount": 1,
+     "compartment_id": "ocid1.tenancy.oc1..aaaaaaaazebraplanscanzebraplanscanzebraplanscanzebrapla",
+     "description": "Zebra Always Free guardrail: any spend on the tenancy is unexpected",
+     "display_name": "zebra-root",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "reset_period": "MONTHLY",
+     "target_type": "COMPARTMENT",
+     "targets": [
+      "ocid1.tenancy.oc1..aaaaaaaazebraplanscanzebraplanscanzebraplanscanzebrapla"
+     ],
+     "timeouts": null
+    },
+    "after_unknown": {
+     "actual_spend": true,
+     "alert_rule_count": true,
+     "budget_processing_period_start_offset": true,
+     "defined_tags": true,
+     "end_date": true,
+     "forecasted_spend": true,
+     "freeform_tags": {},
+     "id": true,
+     "processing_period_type": true,
+     "start_date": true,
+     "state": true,
+     "system_tags": true,
+     "target_compartment_id": true,
+     "targets": [
+      false
+     ],
+     "time_created": true,
+     "time_spend_computed": true,
+     "time_updated": true,
+     "version": true
+    }
+   },
+   "index": "root",
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_budget_budget"
+  },
+  {
+   "address": "oci_budget_budget.guardrail[\"zebra\"]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "amount": 1,
+     "compartment_id": "ocid1.tenancy.oc1..aaaaaaaazebraplanscanzebraplanscanzebraplanscanzebrapla",
+     "description": "Zebra Always Free guardrail: any spend on the Zebra compartment is unexpected",
+     "display_name": "zebra-zebra",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "reset_period": "MONTHLY",
+     "target_type": "COMPARTMENT",
+     "timeouts": null
+    },
+    "after_unknown": {
+     "actual_spend": true,
+     "alert_rule_count": true,
+     "budget_processing_period_start_offset": true,
+     "defined_tags": true,
+     "end_date": true,
+     "forecasted_spend": true,
+     "freeform_tags": {},
+     "id": true,
+     "processing_period_type": true,
+     "start_date": true,
+     "state": true,
+     "system_tags": true,
+     "target_compartment_id": true,
+     "targets": true,
+     "time_created": true,
+     "time_spend_computed": true,
+     "time_updated": true,
+     "version": true
+    }
+   },
+   "index": "zebra",
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_budget_budget"
   },
   {
    "address": "oci_core_instance.zebra",
@@ -88,6 +488,86 @@
      ],
      "timeouts": null,
      "update_operation_constraint": null
+    },
+    "after_unknown": {
+     "agent_config": true,
+     "availability_config": true,
+     "availability_domain": true,
+     "boot_volume_id": true,
+     "capacity_reservation_id": true,
+     "compartment_id": true,
+     "compute_cluster_id": true,
+     "create_vnic_details": [
+      {
+       "assign_ipv6ip": true,
+       "defined_tags": true,
+       "display_name": true,
+       "freeform_tags": true,
+       "ipv6address_ipv6subnet_cidr_pair_details": true,
+       "nsg_ids": true,
+       "private_ip": true,
+       "security_attributes": true,
+       "skip_source_dest_check": true,
+       "subnet_cidr": true,
+       "subnet_id": true,
+       "vlan_id": true
+      }
+     ],
+     "dedicated_vm_host_id": true,
+     "defined_tags": true,
+     "extended_metadata": true,
+     "fault_domain": true,
+     "freeform_tags": {},
+     "hostname_label": true,
+     "id": true,
+     "image": true,
+     "instance_configuration_id": true,
+     "instance_options": true,
+     "ipxe_script": true,
+     "is_ai_enterprise_enabled": true,
+     "is_cross_numa_node": true,
+     "is_pv_encryption_in_transit_enabled": true,
+     "launch_mode": true,
+     "launch_options": true,
+     "launch_volume_attachments": true,
+     "licensing_configs": true,
+     "metadata": true,
+     "placement_constraint_details": true,
+     "platform_config": true,
+     "preemptible_instance_config": true,
+     "private_ip": true,
+     "public_ip": true,
+     "region": true,
+     "security_attributes": true,
+     "security_attributes_state": true,
+     "shape_config": [
+      {
+       "baseline_ocpu_utilization": true,
+       "gpu_description": true,
+       "gpus": true,
+       "local_disk_description": true,
+       "local_disks": true,
+       "local_disks_total_size_in_gbs": true,
+       "max_vnic_attachments": true,
+       "networking_bandwidth_in_gbps": true,
+       "nvmes": true,
+       "processor_description": true,
+       "resource_management": true,
+       "vcpus": true
+      }
+     ],
+     "source_details": [
+      {
+       "boot_volume_vpus_per_gb": true,
+       "instance_source_image_filter_details": true,
+       "source_id": true
+      }
+     ],
+     "state": true,
+     "subnet_id": true,
+     "system_tags": true,
+     "time_created": true,
+     "time_maintenance_reboot_due": true
     }
    },
    "mode": "managed",
@@ -108,6 +588,16 @@
       "zebra-stack": "oci-provision"
      },
      "timeouts": null
+    },
+    "after_unknown": {
+     "compartment_id": true,
+     "defined_tags": true,
+     "freeform_tags": {},
+     "id": true,
+     "route_table_id": true,
+     "state": true,
+     "time_created": true,
+     "vcn_id": true
     }
    },
    "mode": "managed",
@@ -133,6 +623,23 @@
       }
      ],
      "timeouts": null
+    },
+    "after_unknown": {
+     "compartment_id": true,
+     "defined_tags": true,
+     "freeform_tags": {},
+     "id": true,
+     "route_rules": [
+      {
+       "cidr_block": true,
+       "description": true,
+       "network_entity_id": true,
+       "route_type": true
+      }
+     ],
+     "state": true,
+     "time_created": true,
+     "vcn_id": true
     }
    },
    "mode": "managed",
@@ -177,6 +684,38 @@
       }
      ],
      "timeouts": null
+    },
+    "after_unknown": {
+     "compartment_id": true,
+     "defined_tags": true,
+     "egress_security_rules": [
+      {
+       "description": true,
+       "destination_type": true,
+       "icmp_options": [],
+       "stateless": true,
+       "tcp_options": [],
+       "udp_options": []
+      }
+     ],
+     "freeform_tags": {},
+     "id": true,
+     "ingress_security_rules": [
+      {
+       "description": true,
+       "icmp_options": [],
+       "source_type": true,
+       "tcp_options": [
+        {
+         "source_port_range": []
+        }
+       ],
+       "udp_options": []
+      }
+     ],
+     "state": true,
+     "time_created": true,
+     "vcn_id": true
     }
    },
    "mode": "managed",
@@ -199,6 +738,27 @@
      },
      "prohibit_public_ip_on_vnic": false,
      "timeouts": null
+    },
+    "after_unknown": {
+     "availability_domain": true,
+     "compartment_id": true,
+     "defined_tags": true,
+     "dhcp_options_id": true,
+     "freeform_tags": {},
+     "id": true,
+     "ipv4cidr_blocks": true,
+     "ipv6cidr_block": true,
+     "ipv6cidr_blocks": true,
+     "ipv6virtual_router_ip": true,
+     "prohibit_internet_ingress": true,
+     "route_table_id": true,
+     "security_list_ids": true,
+     "state": true,
+     "subnet_domain_name": true,
+     "time_created": true,
+     "vcn_id": true,
+     "virtual_router_ip": true,
+     "virtual_router_mac": true
     }
    },
    "mode": "managed",
@@ -222,6 +782,29 @@
       "zebra-stack": "oci-provision"
      },
      "timeouts": null
+    },
+    "after_unknown": {
+     "byoipv6cidr_blocks": true,
+     "byoipv6cidr_details": true,
+     "cidr_block": true,
+     "cidr_blocks": [
+      false
+     ],
+     "compartment_id": true,
+     "default_dhcp_options_id": true,
+     "default_route_table_id": true,
+     "default_security_list_id": true,
+     "defined_tags": true,
+     "freeform_tags": {},
+     "id": true,
+     "ipv6cidr_blocks": true,
+     "ipv6private_cidr_blocks": true,
+     "is_ipv6enabled": true,
+     "is_oracle_gua_allocation_enabled": true,
+     "security_attributes": true,
+     "state": true,
+     "time_created": true,
+     "vcn_domain_name": true
     }
    },
    "mode": "managed",
@@ -254,6 +837,157 @@
      "switchover_to": null,
      "switchover_to_remote_peer_id": null,
      "timeouts": null
+    },
+    "after_unknown": {
+     "actual_used_data_storage_size_in_tbs": true,
+     "additional_attributes": true,
+     "admin_password": true,
+     "allocated_storage_size_in_tbs": true,
+     "apex_details": true,
+     "are_primary_whitelisted_ips_used": true,
+     "auto_refresh_frequency_in_seconds": true,
+     "auto_refresh_point_lag_in_seconds": true,
+     "autonomous_container_database_id": true,
+     "autonomous_database_backup_id": true,
+     "autonomous_database_id": true,
+     "autonomous_database_maintenance_window": true,
+     "autonomous_maintenance_schedule_type": true,
+     "availability_domain": true,
+     "available_upgrade_versions": true,
+     "backup_config": true,
+     "backup_retention_period_in_days": true,
+     "byol_compute_count_limit": true,
+     "character_set": true,
+     "clone_table_space_list": true,
+     "clone_type": true,
+     "cluster_placement_group_id": true,
+     "compartment_id": true,
+     "compute_count": true,
+     "compute_model": true,
+     "connection_strings": true,
+     "connection_urls": true,
+     "cpu_core_count": true,
+     "customer_contacts": true,
+     "data_safe_status": true,
+     "data_storage_size_in_gb": true,
+     "data_storage_size_in_tbs": true,
+     "database_edition": true,
+     "database_management_status": true,
+     "dataguard_region_type": true,
+     "db_tools_details": true,
+     "defined_tags": true,
+     "disaster_recovery_region_type": true,
+     "disaster_recovery_type": true,
+     "encryption_key": true,
+     "encryption_key_history_entry": true,
+     "encryption_key_location_details": true,
+     "failed_data_recovery_in_seconds": true,
+     "freeform_tags": {},
+     "id": true,
+     "in_memory_area_in_gbs": true,
+     "in_memory_percentage": true,
+     "infrastructure_type": true,
+     "is_access_control_enabled": true,
+     "is_auto_scaling_enabled": true,
+     "is_auto_scaling_for_storage_enabled": true,
+     "is_backup_retention_locked": true,
+     "is_data_guard_enabled": true,
+     "is_dedicated": true,
+     "is_dev_tier": true,
+     "is_disable_db_version_upgrade_schedule": true,
+     "is_local_data_guard_enabled": true,
+     "is_preview": true,
+     "is_preview_version_with_service_terms_accepted": true,
+     "is_reconnect_clone_enabled": true,
+     "is_refreshable_clone": true,
+     "is_remote_data_guard_enabled": true,
+     "is_replicate_automatic_backups": true,
+     "is_schedule_db_version_upgrade_to_earliest": true,
+     "key_history_entry": true,
+     "key_store_id": true,
+     "key_store_wallet_name": true,
+     "kms_key_id": true,
+     "kms_key_lifecycle_details": true,
+     "kms_key_version_id": true,
+     "license_model": true,
+     "lifecycle_details": true,
+     "local_adg_auto_failover_max_data_loss_limit": true,
+     "local_adg_resource_pool_leader_id": true,
+     "local_disaster_recovery_type": true,
+     "local_standby_db": true,
+     "long_term_backup_schedule": true,
+     "maintenance_target_component": true,
+     "max_cpu_core_count": true,
+     "memory_per_compute_unit_in_gbs": true,
+     "memory_per_oracle_compute_unit_in_gbs": true,
+     "ncharacter_set": true,
+     "net_services_architecture": true,
+     "next_long_term_backup_time_stamp": true,
+     "nsg_ids": true,
+     "ocpu_count": true,
+     "open_mode": true,
+     "operations_insights_status": true,
+     "peer_db_id": true,
+     "peer_db_ids": true,
+     "permission_level": true,
+     "private_endpoint": true,
+     "private_endpoint_ip": true,
+     "private_endpoint_label": true,
+     "provisionable_cpus": true,
+     "public_connection_urls": true,
+     "public_endpoint": true,
+     "refreshable_mode": true,
+     "refreshable_status": true,
+     "remote_disaster_recovery_configuration": true,
+     "remote_disaster_recovery_type": true,
+     "resource_pool_leader_id": true,
+     "resource_pool_summary": true,
+     "role": true,
+     "scheduled_operations": true,
+     "secret_id": true,
+     "security_attributes": true,
+     "service_console_url": true,
+     "shrink_adb_trigger": true,
+     "source": true,
+     "source_id": true,
+     "standby_db": true,
+     "standby_whitelisted_ips": true,
+     "state": true,
+     "subnet_id": true,
+     "subscription_id": true,
+     "supported_regions_to_clone_to": true,
+     "system_tags": true,
+     "time_created": true,
+     "time_data_guard_role_changed": true,
+     "time_deletion_of_free_autonomous_database": true,
+     "time_disaster_recovery_role_changed": true,
+     "time_earliest_available_db_version_upgrade": true,
+     "time_latest_available_db_version_upgrade": true,
+     "time_local_data_guard_enabled": true,
+     "time_maintenance_begin": true,
+     "time_maintenance_end": true,
+     "time_maintenance_pause_until": true,
+     "time_of_auto_refresh_start": true,
+     "time_of_joining_resource_pool": true,
+     "time_of_last_failover": true,
+     "time_of_last_refresh": true,
+     "time_of_last_refresh_point": true,
+     "time_of_last_switchover": true,
+     "time_of_next_refresh": true,
+     "time_reclamation_of_free_autonomous_database": true,
+     "time_scheduled_db_version_upgrade": true,
+     "time_undeleted": true,
+     "time_until_reconnect_clone_enabled": true,
+     "timestamp": true,
+     "total_backup_storage_size_in_gbs": true,
+     "transportable_tablespace": true,
+     "use_latest_available_backup_time_stamp": true,
+     "used_data_storage_size_in_gbs": true,
+     "used_data_storage_size_in_tbs": true,
+     "vanity_connection_urls": true,
+     "vanity_url_details": true,
+     "vault_id": true,
+     "whitelisted_ips": true
     }
    },
    "mode": "managed",
@@ -276,6 +1010,15 @@
      },
      "name": "zebra",
      "timeouts": null
+    },
+    "after_unknown": {
+     "defined_tags": true,
+     "freeform_tags": {},
+     "id": true,
+     "inactive_state": true,
+     "is_accessible": true,
+     "state": true,
+     "time_created": true
     }
    },
    "mode": "managed",
@@ -305,6 +1048,33 @@
      "restore_from_object_store": [],
      "restore_trigger": null,
      "timeouts": null
+    },
+    "after_unknown": {
+     "auto_key_rotation_details": true,
+     "compartment_id": true,
+     "current_key_version": true,
+     "defined_tags": true,
+     "desired_state": true,
+     "external_key_reference": true,
+     "external_key_reference_details": true,
+     "freeform_tags": {},
+     "id": true,
+     "is_auto_rotation_enabled": true,
+     "is_primary": true,
+     "key_shape": [
+      {
+       "curve_id": true
+      }
+     ],
+     "management_endpoint": true,
+     "replica_details": true,
+     "restore_from_file": [],
+     "restore_from_object_store": [],
+     "restored_from_key_id": true,
+     "state": true,
+     "time_created": true,
+     "time_of_deletion": true,
+     "vault_id": true
     }
    },
    "mode": "managed",
@@ -328,11 +1098,81 @@
      "restore_trigger": null,
      "timeouts": null,
      "vault_type": "DEFAULT"
+    },
+    "after_unknown": {
+     "compartment_id": true,
+     "crypto_endpoint": true,
+     "defined_tags": true,
+     "external_key_manager_metadata": true,
+     "external_key_manager_metadata_summary": true,
+     "freeform_tags": {},
+     "id": true,
+     "is_primary": true,
+     "is_vault_replicable": true,
+     "management_endpoint": true,
+     "replica_details": true,
+     "restore_from_file": [],
+     "restore_from_object_store": [],
+     "restored_from_vault_id": true,
+     "state": true,
+     "time_created": true,
+     "time_of_deletion": true
     }
    },
    "mode": "managed",
    "name": "zebra",
    "type": "oci_kms_vault"
+  },
+  {
+   "address": "oci_limits_quota.guardrail[0]",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "compartment_id": "ocid1.tenancy.oc1..aaaaaaaazebraplanscanzebraplanscanzebraplanscanzebrapla",
+     "description": "Zebra Always Free guardrail: only the free A1 shape, the free Autonomous Database and 200 GB of block storage in the zebra compartment",
+     "freeform_tags": {
+      "zebra-channel": "stable",
+      "zebra-stack": "oci-provision"
+     },
+     "name": "zebra-always-free",
+     "statements": [
+      "zero compute-core quotas in compartment zebra",
+      "set compute-core quota standard-a1-core-count to 2 in compartment zebra",
+      "zero compute-memory quotas in compartment zebra",
+      "set compute-memory quota standard-a1-memory-count to 12 in compartment zebra",
+      "zero database quotas in compartment zebra",
+      "set database quota adb-free-count to 1 in compartment zebra",
+      "zero load-balancer quotas in compartment zebra",
+      "set block-storage quota total-storage-gb to 200 in compartment zebra"
+     ],
+     "timeouts": null
+    },
+    "after_unknown": {
+     "defined_tags": true,
+     "freeform_tags": {},
+     "id": true,
+     "is_lock_override": true,
+     "locks": true,
+     "state": true,
+     "statements": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "time_created": true
+    }
+   },
+   "index": 0,
+   "mode": "managed",
+   "name": "guardrail",
+   "type": "oci_limits_quota"
   },
   {
    "address": "oci_objectstorage_bucket.models",
@@ -352,6 +1192,26 @@
      "storage_tier": "Standard",
      "timeouts": null,
      "versioning": "Disabled"
+    },
+    "after_unknown": {
+     "approximate_count": true,
+     "approximate_size": true,
+     "auto_tiering": true,
+     "bucket_id": true,
+     "compartment_id": true,
+     "created_by": true,
+     "defined_tags": true,
+     "etag": true,
+     "freeform_tags": {},
+     "id": true,
+     "is_read_only": true,
+     "kms_key_id": true,
+     "namespace": true,
+     "object_events_enabled": true,
+     "object_lifecycle_policy_etag": true,
+     "replication_enabled": true,
+     "retention_rules": [],
+     "time_created": true
     }
    },
    "mode": "managed",
@@ -382,6 +1242,34 @@
      ],
      "secret_name": "zebra-adb-admin",
      "timeouts": null
+    },
+    "after_unknown": {
+     "compartment_id": true,
+     "current_version_number": true,
+     "defined_tags": true,
+     "freeform_tags": {},
+     "id": true,
+     "is_auto_generation_enabled": true,
+     "is_replica": true,
+     "key_id": true,
+     "last_rotation_time": true,
+     "lifecycle_details": true,
+     "metadata": true,
+     "next_rotation_time": true,
+     "replication_config": [],
+     "rotation_config": true,
+     "rotation_status": true,
+     "secret_content": true,
+     "secret_generation_context": [
+      {}
+     ],
+     "secret_rules": true,
+     "source_region_information": true,
+     "state": true,
+     "time_created": true,
+     "time_of_current_version_expiry": true,
+     "time_of_deletion": true,
+     "vault_id": true
     }
    },
    "mode": "managed",

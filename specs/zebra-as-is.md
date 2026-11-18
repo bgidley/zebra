@@ -476,7 +476,7 @@ signed, promoted (`next` → `stable`, only the channel file changes) and upload
 stay dormant until the image publish (R2), bucket and key exist. See
 [release-pipeline-design.md](release-pipeline-design.md).
 
-### User instances on OCI (#279, onboarding; S1 stack skeleton only)
+### User instances on OCI (#279, onboarding; S1 stack skeleton, S2 billing guardrails)
 
 `deploy/oci/` is a Resource Manager stack for a user's own Zebra, Always Free only: a `zebra`
 compartment, VCN with one public subnet (TCP 443 in only), one A1.Flex instance (2 OCPU / 12 GB,
@@ -488,8 +488,18 @@ release channel (`schema.yaml` is the form). CI job `iac` (stage `test`) runs
 `scripts/oci_iac_check.sh` in a pinned `hashicorp/terraform` container: fmt, validate,
 `terraform test` (mocked `oci` provider), a plan with throwaway credentials (lookups are keyed on
 the new compartment so the plan makes no API calls) and `scripts/oci_plan_scan.py` against
-`deploy/oci/free_tier_allowlist.yaml`; `tests/iac/` has one bad plan per rule. No cloud-init,
-guardrails or TLS yet (S2–S6). Spec: `openspec/specs/oci-provision-stack/`.
+`deploy/oci/free_tier_allowlist.yaml`; `tests/iac/` has one bad plan per rule. A boot-volume
+size unknown at plan time fails the scan (#298); the fmt step self-tests against a mis-formatted
+fixture and prints its diff (#299). **Billing guardrails (S2)**, behind `create_guardrails`
+(default true, needs a tenancy admin and a root parent compartment; `alert_email` required):
+budgets of 1/month on the tenancy and the `zebra` compartment, each alerting `alert_email` at
+ACTUAL 0.01 / 50 % / 100 % and FORECAST 100 %, and quota `zebra-always-free` zeroing
+compute-core, compute-memory, database and load-balancer in `zebra` except A1 2 / 12 GB,
+`adb-free-count` 1 and 200 GB block storage; output `guardrails` says created or skipped. The
+allowlist checks their exact values (`one_of`, `nonempty`, plan-level `guardrails`: all or none,
+four alert rules per budget). Not yet run in a real tenancy; unverified quota names in
+[oci-guardrails-design.md](oci-guardrails-design.md). No cloud-init or TLS yet (S3–S6). Specs:
+`openspec/specs/oci-provision-stack/`, `openspec/specs/oci-billing-guardrails/`.
 
 ### Delivery review (#190)
 
