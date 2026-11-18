@@ -41,9 +41,15 @@ from zebra_tasks.llm.structured import complete_json
 
 logger = logging.getLogger(__name__)
 
+# Process properties the LLM client writes when ``get_llm`` is given a context (``record_usage``):
+# the only writes besides ``output_key`` (#303).
+LLM_BOOKKEEPING_KEYS = frozenset({"__total_tokens__", "__total_cost__", "__token_history__"})
+
 ROUTE_CLEAN = "clean"
 ROUTE_REJECTED = "rejected"
 DEFAULT_MAX_CHARS = 100_000
+# Hard cap on the raw diff, lock files included, before anything is parsed or scanned (#302).
+MAX_DIFF_CHARS = 2_000_000
 
 # Changes here need extra owner attention, but are not refused (same list as the host builder).
 SENSITIVE_PATHS = (".gitlab-ci.yml", "scripts/", "deploy/", "docker/", "Dockerfile")
@@ -53,8 +59,16 @@ SENSITIVE_PATHS = (".gitlab-ci.yml", "scripts/", "deploy/", "docker/", "Dockerfi
 # below replace them.
 _SKIPPED_CONFIDENTIAL_KINDS = frozenset({"url", "credential", "internal_host"})
 
-# Lock files hold only versions, hashes and package URLs: secret rules only, and not sent to
-# the LLM (four-part versions read as IP addresses).
+# Lock files hold only versions, hashes and package URLs: secret, personal-data and confidential
+# rules (#301), but no host rule (four-part versions read as IP addresses) and not sent to the
+# LLM (size).
+# Tuning (#301), measured on this repo's ``uv.lock``: four-part versions read as ``ip_address`` and
+# ``phone``, digit runs inside package URLs and hashes as ``card_number`` / ``phone``. For lock
+# lines only, URLs, hashes and ``version = "..."`` values are blanked and ``ip_address`` is
+# dropped; emails, postcodes and the confidential patterns still fire.
+_LOCK_SKIPPED_KINDS = frozenset({"ip_address"})
+_VERSION_RE = re.compile(r"\bversion\s*=\s*\"[^\"]*\"")
+_HASH_RE = re.compile(r"\b(?:sha\d+:|md5:)?[0-9a-fA-F]{32,}\b|\bsha\d+-[A-Za-z0-9+/=]{20,}")
 _LOCK_FILES = frozenset(
     {"uv.lock", "poetry.lock", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "Cargo.lock"}
 )
@@ -162,6 +176,20 @@ _GITHUB_LOGIN_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,3
 
 _HUNK_RE = re.compile(r"^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 _DIFF_GIT_RE = re.compile(r"^diff --git a/(.*) b/(.*)$")
+# Header lines that say a file changed (a bare ``diff --git`` plus ``index`` / ``---`` / ``+++``
+# does not, #302).
+_CHANGE_PREFIXES = (
+    "old mode ",
+    "new mode ",
+    "deleted file mode ",
+    "new file mode ",
+    "similarity index ",
+    "dissimilarity index ",
+    "rename from ",
+    "rename to ",
+    "copy from ",
+    "copy to ",
+)
 _HEADER_PREFIXES = (
     "index ",
     "old mode ",
@@ -203,6 +231,7 @@ class DiffFile:
     new: bool = False
     deleted: bool = False
     binary: bool = False
+    changed: bool = False  # saw a hunk, binary patch, mode, rename or copy line
     added: list[tuple[int, str]] = field(default_factory=list)
 
 
@@ -232,7 +261,8 @@ def parse_diff(diff: str) -> ParsedDiff:
     line. Lines outside hunks that are not git headers are kept as loose text to scan.
 
     Raises:
-        DiffParseError: A hunk runs short or a hunk has no file.
+        DiffParseError: A hunk runs short, a hunk has no file, or a file entry has no
+            hunk, binary patch, mode or rename line.
     """
     files: list[DiffFile] = []
     loose: list[ScanText] = []
@@ -251,6 +281,7 @@ def parse_diff(diff: str) -> ParsedDiff:
         if hunk:
             if current is None:
                 raise DiffParseError(f"hunk without a file at line {i + 1}")
+            current.changed = True
             old_left = int(hunk.group(1)) if hunk.group(1) is not None else 1
             new_line = int(hunk.group(2))
             new_left = int(hunk.group(3)) if hunk.group(3) is not None else 1
@@ -284,6 +315,8 @@ def parse_diff(diff: str) -> ParsedDiff:
             # A plain unified diff without ``diff --git`` headers.
             current = DiffFile(path=_strip_prefix(line[4:]), old_path=_strip_prefix(line[4:]))
             files.append(current)
+        if current is not None and line.startswith(_CHANGE_PREFIXES):
+            current.changed = True
         if current is not None and line.startswith(_HEADER_PREFIXES):
             if line.startswith("+++ "):
                 target = line[4:].strip()
@@ -303,9 +336,13 @@ def parse_diff(diff: str) -> ParsedDiff:
             line.startswith("Binary files ") or line.strip() == "GIT binary patch"
         ):
             current.binary = True
+            current.changed = True
         elif line.strip():
             loose.append(ScanText(f"diff line {i + 1}", line))
         i += 1
+    for f in files:
+        if not f.changed:
+            raise DiffParseError(f"{f.path} has no change, mode or rename information")
     return ParsedDiff(files=files, loose=loose)
 
 
@@ -428,6 +465,11 @@ def _normalise(text: str) -> str:
     """Drop what the personal-data rules misread: noreply emails, ISO timestamps (phones)."""
     text = _ALLOWED_EMAIL_RE.sub("noreply@example.com", text)
     return _ISO_TIME_RE.sub("DATE", text)
+
+
+def _lock_text(text: str) -> str:
+    """A lock-file line without its package URLs and hashes (see ``_LOCK_SKIPPED_KINDS``)."""
+    return _normalise(_HASH_RE.sub(" ", _VERSION_RE.sub(" ", _URL_PATH_RE.sub(" ", text))))
 
 
 def _dedupe(findings: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -614,6 +656,11 @@ def _rule_scan(
 
     if not isinstance(diff, str) or not diff.strip():
         return rejected("no diff to scan — failing closed", failed=True)
+    if len(diff) > MAX_DIFF_CHARS:
+        return rejected(
+            f"diff is {len(diff)} characters, more than the {MAX_DIFF_CHARS} cap — failing closed",
+            failed=True,
+        )
     result["diff_sha256"] = hashlib.sha256(diff.encode("utf-8")).hexdigest()
     try:
         parsed = parse_diff(diff)
@@ -678,7 +725,16 @@ def _rule_scan(
         if f["kind"] not in _SKIPPED_CONFIDENTIAL_KINDS
     ]
     findings += host_findings(scanned)
-    findings += secret_findings(scanned + lock_lines)
+    # Lock files: personal-data and confidential rules too (an email or codename in a lock
+    # file still leaves the instance), but no host rule and no LLM.
+    locked = [ScanText(t.path, _lock_text(t.text)) for t in lock_lines]
+    findings += [f for f in rule_findings(locked) if f["kind"] not in _LOCK_SKIPPED_KINDS]
+    findings += [
+        f
+        for f in confidential_rule_findings(locked, compiled)
+        if f["kind"] not in _SKIPPED_CONFIDENTIAL_KINDS
+    ]
+    findings += secret_findings(scanned + locked)
     if findings:
         return rejected(
             "secrets, personal data or blocked files found by rules", findings, failed=False
@@ -724,7 +780,9 @@ class ContributeDiffScanAction(TaskAction):
         "Scan a code diff, its commit messages and PR text for secrets, personal data, "
         "confidential material and blocked files before it is proposed upstream; fails closed."
     )
-    # Reads and one LLM call; nothing outside this run changes (#245 convention).
+    # Reads and one LLM call. The only writes are its ``output_key`` property and the LLM
+    # client's cost bookkeeping on this process (``LLM_BOOKKEEPING_KEYS``, #303); nothing
+    # outside this run changes (#245 convention).
     reversibility_hint = "always_reversible"
 
     inputs = [
