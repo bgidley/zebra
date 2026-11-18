@@ -38,6 +38,32 @@ unit:
   script:
     - uv run pytest -m "not e2e and not smoke" --ignore=zebra-agent-web/tests/e2e_live --ignore=zebra-agent-web/tests/smoke --ds=zebra_agent_web.test_settings
 
+# PostgreSQL parity (#305): migrate from empty + the web unit suite on a throwaway
+# pgvector/pg16 container per job (pinned digest, 512 MB, loopback, random port and
+# password), removed in after_script. Rootless Podman here has no cpu cgroup, so no
+# --cpus cap. lock_timeout turns a cross-connection lock wait into a failure, not a hang.
+unit-postgres:
+  stage: test
+  variables:
+    PG_IMAGE: docker.io/pgvector/pgvector:pg16@sha256:d153dea9f9bb6ee63ec539d2febf8264848ba962808484054ea77bb32e5a3853
+    ZEBRA_TEST_DB_ENGINE: postgresql
+    PGHOST: 127.0.0.1
+    PGUSER: zebra
+    PGDATABASE: zebra
+    PGOPTIONS: "-c lock_timeout=15s -c statement_timeout=120s"
+  script:
+    - export PG_CONTAINER="ci-pg-${CI_JOB_ID}"
+    - export PGPASSWORD="pg$(openssl rand -hex 16)"
+    - podman run -d --name "$PG_CONTAINER" --memory=512m -p 127.0.0.1::5432 -e POSTGRES_USER="$PGUSER" -e POSTGRES_DB="$PGDATABASE" -e POSTGRES_PASSWORD="$PGPASSWORD" "$PG_IMAGE"
+    - export PGPORT="$(podman port "$PG_CONTAINER" 5432/tcp | head -1 | cut -d: -f2)"
+    # TCP readiness: the image's init server listens on the socket only.
+    - for i in $(seq 60); do podman exec "$PG_CONTAINER" pg_isready -q -h 127.0.0.1 -U "$PGUSER" && break; sleep 1; done
+    - podman exec "$PG_CONTAINER" pg_isready -h 127.0.0.1 -U "$PGUSER"
+    - ZEBRA_DB_ENGINE=postgresql uv run python zebra-agent-web/manage.py migrate --noinput
+    - uv run pytest zebra-agent-web/tests/unit --ds=zebra_agent_web.test_settings
+  after_script:
+    - podman rm -f "ci-pg-${CI_JOB_ID}" || true
+
 # OCI Resource Manager stack (#279): fmt, validate, `terraform test` with a mocked oci
 # provider, and a plan scanned against the Always Free allowlist. Terraform runs in a pinned
 # container; no OCI credentials, never applies. The scanner's pytest cases run in `unit`.

@@ -1,3 +1,10 @@
+# cli-persistent-store Specification
+
+## Purpose
+The `zebra` terminal client (F34 / REQ-UI-003): goals run and are listed against the same server-database-backed stores as the web application.
+
+## Requirements
+
 ### Requirement: zebra CLI processes goals against persistent Oracle storage
 The system SHALL provide a `zebra goal "<text>"` console command (entry point in
 `zebra-agent-web`) that processes a goal using the same Oracle-backed stores

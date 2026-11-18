@@ -390,8 +390,10 @@ In development/testing, `DaemonStarterMiddleware` spawns `run_daemon_loop()` via
 
 - `DjangoStore` (workflow state — `ProcessInstanceModel`, `TaskInstanceModel`, `FlowOfExecutionModel`, `ProcessEventModel` step journal in `zebra_process_events`, #184)
 - `DjangoMemoryStore`, `DjangoMetricsStore`
-- Works against SQLite, PostgreSQL, Oracle (Oracle is the integration-test target).
-- Oracle uses `zebra_agent_web.db_backends.oracle`, a thin subclass of Django's backend whose `ensure_connection()` pings a connection that has seen an error and reconnects if Oracle closed it. Needed because ORM calls run in `sync_to_async(thread_sensitive=False)` workers and the daemon, where Django's request-signal `close_old_connections()` never fires — without it a dropped session wedged prod until restart (#133).
+- Server backends: **Oracle** (prod, ADB 26ai; the e2e target) and **PostgreSQL 16+** (#305, for non-OCI hosting, tracking #311). SQLite is for unit tests only: a live Zebra locks up on it.
+- Selection (`zebra_agent_web/db_config.py`): `ZEBRA_DB_ENGINE` = `oracle` | `postgresql` (`postgres`) | `sqlite`; unset = Oracle when `ORACLE_DSN` is set, else SQLite; unknown values fail start-up. PostgreSQL reads `PGHOST` / `PGPORT` / `PGDATABASE` / `PGUSER` / `PGPASSWORD` (psycopg 3). `ZEBRA_TEST_DB_ENGINE=postgresql` runs the unit suite on Postgres.
+- Both server backends (`zebra_agent_web.db_backends.oracle` / `.postgresql`) mix in `ReconnectOnErrorMixin` (`db_backends/reconnect.py`): `ensure_connection()` probes a connection that has seen an error and reconnects if the server closed it. Needed because ORM calls run in `sync_to_async(thread_sensitive=False)` workers and the daemon, where Django's request-signal `close_old_connections()` (and `CONN_HEALTH_CHECKS`) never fire — without it a dropped session wedged prod until restart (#133).
+- On PostgreSQL, vector memory search falls back to keyword ranking until pgvector support (#306).
 
 ### Forms
 

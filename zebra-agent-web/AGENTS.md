@@ -265,7 +265,7 @@ Key settings in `settings.py`:
 | Setting | Purpose |
 |---------|---------|
 | `CHANNEL_LAYERS` | Redis configuration for WebSockets |
-| `DATABASES` | Database connection (via Django ORM) |
+| `DATABASES` | Database connection (via Django ORM), built by `db_config.database_config()`: `ZEBRA_DB_ENGINE` = `oracle` / `postgresql` / `sqlite` (unset: Oracle if `ORACLE_DSN`, else SQLite; unknown fails start-up). Postgres uses `PGHOST`/`PGPORT`/`PGDATABASE`/`PGUSER`/`PGPASSWORD`. Unit suite on Postgres: `ZEBRA_TEST_DB_ENGINE=postgresql` (#305) |
 | `CORS_ALLOWED_ORIGINS` | CORS configuration |
 | `REST_FRAMEWORK` | DRF settings |
 | `ZEBRA_AGENT_SETTINGS.DAEMON_AUTO_START` | Auto-start budget daemon in ASGI server (default: true) |
