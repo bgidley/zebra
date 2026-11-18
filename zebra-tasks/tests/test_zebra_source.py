@@ -620,3 +620,25 @@ async def test_unreadable_file_is_an_error_not_a_crash(root, context, monkeypatc
     assert not result.success
     assert result.error.startswith("[error] Could not read the source: Permission denied. ")
     assert result.error.endswith(RECOVERY_HINT)
+
+
+# --- repo-root tests/ is readable and shipped (#300) ---
+async def test_root_tests_file_is_readable(root, context):
+    (root / "tests" / "iac").mkdir(parents=True)
+    (root / "tests" / "iac" / "test_scan.py").write_text("def test_scan():\n    assert True\n")
+
+    result = await ZebraSourceAction().run(_task(path="tests/iac/test_scan.py"), context)
+
+    assert result.success
+    assert "def test_scan" in result.output["text"]
+
+
+def test_image_ships_every_allowlisted_top_level_directory():
+    from zebra_tasks.agent.zebra_source import ALLOWED_TOP_LEVEL
+
+    repo = Path(__file__).resolve().parents[2]
+    dockerfile = (repo / "Dockerfile").read_text()
+    for entry in ALLOWED_TOP_LEVEL:
+        if (repo / entry).is_dir() and entry != "tests":
+            assert f"COPY {entry}/ " in dockerfile or f"{entry}/ {entry}/" in dockerfile, entry
+    assert "COPY tests/ tests/" in dockerfile

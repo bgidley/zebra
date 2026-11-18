@@ -35,6 +35,7 @@ ALLOWED_TOP_LEVEL = {
     "docs",
     "scripts",
     "deploy",
+    "tests",
     "pyproject.toml",
     "version.json",
 }
