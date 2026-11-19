@@ -10,4 +10,4 @@
 
 ## 3. Delivery
 
-- [ ] 3.1 Pipeline green, merged, prod verified, outcome review
+- [x] 3.1 Pipeline green, merged, prod verified, outcome review

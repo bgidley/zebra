@@ -63,3 +63,15 @@ on prod, so it replaces that copy.
 #### Scenario: Range read through the workflow
 - **WHEN** Read Zebra Source runs with `start_line: 20` and `end_line: 25`
 - **THEN** its result holds lines 20 to 25 and no others
+
+### Requirement: Root tests are readable
+`zebra_source` SHALL allow the repo-root `tests/` directory, and the prod image SHALL ship it, so
+a review can cite a root test file as evidence.
+
+#### Scenario: Read a root test file
+- **WHEN** a caller reads `tests/iac/test_scan.py` and the file exists in the source root
+- **THEN** the task succeeds and returns its text
+
+#### Scenario: Image ships the allowlist
+- **WHEN** the `Dockerfile` runtime stage is inspected
+- **THEN** it copies `tests/` alongside the other allowlisted top-level directories
