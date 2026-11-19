@@ -21,6 +21,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from zebra_agent_web.api.models import ValuesTagModel
+from zebra_agent_web.locking import first_for_update
 
 FIELDS = tuple(choice[0] for choice in ValuesTagModel.FIELD_CHOICES)
 STATUSES = tuple(choice[0] for choice in ValuesTagModel.STATUS_CHOICES)
@@ -175,7 +176,7 @@ def _check_field(field: str) -> None:
 
 def _get_for_update(field: str, slug: str, allowed: set[str], verb: str) -> ValuesTagModel:
     _check_field(field)
-    row = ValuesTagModel.objects.select_for_update().filter(field=field, slug=slug).first()
+    row = first_for_update(ValuesTagModel.objects.filter(field=field, slug=slug))
     if row is None:
         raise TaxonomyError(f"No tag '{slug}' in {field}")
     if row.status not in allowed:

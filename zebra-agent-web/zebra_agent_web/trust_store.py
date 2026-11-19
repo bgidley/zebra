@@ -25,6 +25,8 @@ from zebra_agent.storage.trust import (
     validate_domain,
 )
 
+from zebra_agent_web.locking import first_for_update
+
 logger = logging.getLogger(__name__)
 
 
@@ -258,11 +260,7 @@ class DjangoTrustStore(TrustStore):
             from zebra_agent_web.api.models import TrustSuggestionModel
 
             with transaction.atomic():
-                row = (
-                    TrustSuggestionModel.objects.select_for_update()
-                    .filter(id=suggestion_id)
-                    .first()
-                )
+                row = first_for_update(TrustSuggestionModel.objects.filter(id=suggestion_id))
                 if row is None:
                     raise ValueError(f"Unknown trust suggestion {suggestion_id!r}")
                 if row.status != SUGGESTION_PENDING:
@@ -369,7 +367,7 @@ class DjangoTrustStore(TrustStore):
             from zebra_agent_web.api.models import TrustFreedModel
 
             with transaction.atomic():
-                row = TrustFreedModel.objects.select_for_update().filter(user_id=user_id).first()
+                row = first_for_update(TrustFreedModel.objects.filter(user_id=user_id))
                 if row is None:
                     raise ValueError("Freeing has not been initiated")
                 if row.freed:
