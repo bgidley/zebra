@@ -201,7 +201,8 @@ class DjangoMetricsStore(MetricsStore):
                 qs.values("workflow_name")
                 .annotate(
                     total_runs=Count("id"),
-                    successful_runs=Sum("success"),
+                    # Count, not Sum: PostgreSQL has no sum(boolean) (#305).
+                    successful_runs=Count("id", filter=Q(success=True)),
                     avg_rating=Avg("user_rating"),
                     last_used=Max("started_at"),
                     continued_runs=_CONTINUED_COUNT,

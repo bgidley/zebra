@@ -115,7 +115,8 @@ def test_recent_dream_cycles_only_returns_dream_cycle_processes_newest_first():
     assert cycles[1]["health_score"] is None
 
 
-@pytest.mark.django_db
+# Committed: the view reads on a worker-thread connection (#305).
+@pytest.mark.django_db(transaction=True)
 def test_page_renders_cycles_and_schedule(authenticated_client, completed_setup):
     _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v5")
     _process("p1", "dream-v5", "complete", FULL_PROPS, T0)
@@ -143,6 +144,8 @@ def test_page_renders_cycles_and_schedule(authenticated_client, completed_setup)
     assert "2026-10-10 03:00" in html
 
 
+# Committed: the view reads on a worker-thread connection (#305).
+@pytest.mark.django_db(transaction=True)
 def test_page_shows_leak_guard_rejection(authenticated_client, completed_setup):
     """A change the leak guard rejected lists what it copied from runs (#237)."""
     props = json.loads(json.dumps(FULL_PROPS))
@@ -167,7 +170,8 @@ def test_page_shows_leak_guard_rejection(authenticated_client, completed_setup):
     assert "Acme" in html and "jane@acme.com" in html
 
 
-@pytest.mark.django_db
+# Committed: the view reads on a worker-thread connection (#305).
+@pytest.mark.django_db(transaction=True)
 def test_page_empty_state(authenticated_client, completed_setup):
     response = authenticated_client.get("/dreams/")
 
@@ -278,7 +282,8 @@ def test_reviewer_link_wins_over_filed_issue():
     assert request["issue_filed_by_zebra"] is False
 
 
-@pytest.mark.django_db
+# Committed: the view reads on a worker-thread connection (#305).
+@pytest.mark.django_db(transaction=True)
 def test_page_shows_filed_issue_and_filing_error(authenticated_client, completed_setup):
     _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v7")
     _definition(dream_history.IMPROVEMENT_WORKFLOW, "improve-v2")
@@ -313,7 +318,8 @@ def test_page_shows_filed_issue_and_filing_error(authenticated_client, completed
     assert "Couldn't file an issue: ZEBRA_GITLAB_TOKEN is not set" in html
 
 
-@pytest.mark.django_db
+# Committed: the view reads on a worker-thread connection (#305).
+@pytest.mark.django_db(transaction=True)
 def test_page_lists_improvement_requests(authenticated_client, completed_setup):
     _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v7")
     _definition(dream_history.IMPROVEMENT_WORKFLOW, "improve-v1")
@@ -374,6 +380,8 @@ def test_summarize_cycle_keeps_the_commons_report():
     assert old["commons"] is None  # cycles before #235 have no Commons block
 
 
+# Committed: the view reads on a worker-thread connection (#305).
+@pytest.mark.django_db(transaction=True)
 def test_page_shows_the_commons_block(authenticated_client, completed_setup):
     _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v10")
     _process("p1", "dream-v10", "complete", {**FULL_PROPS, "commons": COMMONS}, T0)
@@ -389,6 +397,8 @@ def test_page_shows_the_commons_block(authenticated_client, completed_setup):
     assert "/processes/pi/trace/" in html
 
 
+# Committed: the view reads on a worker-thread connection (#305).
+@pytest.mark.django_db(transaction=True)
 def test_page_shows_commons_off(authenticated_client, completed_setup):
     off = {"status": "off", "voice": ["Commons off: no public relays are set on this device."]}
     _definition(dream_history.DREAM_CYCLE_WORKFLOW, "dream-v10")

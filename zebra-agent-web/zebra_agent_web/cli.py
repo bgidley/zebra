@@ -92,21 +92,23 @@ def _init_django() -> None:
 
 
 def _check_backend(allow_sqlite: bool) -> None:
-    """Abort unless the active DB backend is Oracle (or --allow-sqlite given).
+    """Abort unless the active DB backend is a server database (or --allow-sqlite given).
 
-    Django settings silently fall back to SQLite when ORACLE_* variables are
-    missing; without this guard the CLI would "succeed" against a local
-    db.sqlite3 that the web dashboard never reads.
+    Server databases are Oracle and PostgreSQL (#305). Django settings fall
+    back to SQLite when no database is configured; without this guard the CLI
+    would "succeed" against a local db.sqlite3 that the web dashboard never reads.
     """
     from django.db import connections
 
     vendor = connections["default"].vendor
-    if vendor == "oracle" or allow_sqlite:
+    if vendor in ("oracle", "postgresql") or allow_sqlite:
         return
     print(
-        f"Error: active database backend is '{vendor}', not Oracle.\n"
-        "The web dashboard reads Oracle — goals written here would not appear in it.\n"
-        "Set ORACLE_DSN, ORACLE_USERNAME and ORACLE_PASSWORD (e.g. in .env),\n"
+        f"Error: active database backend is '{vendor}', not Oracle or PostgreSQL.\n"
+        "The web dashboard reads its server database — goals written here would not "
+        "appear in it.\n"
+        "Set ORACLE_DSN, ORACLE_USERNAME and ORACLE_PASSWORD, or ZEBRA_DB_ENGINE=postgresql\n"
+        "with PGHOST, PGDATABASE, PGUSER and PGPASSWORD (e.g. in .env),\n"
         "or pass --allow-sqlite to run against the local SQLite database anyway.",
         file=sys.stderr,
     )

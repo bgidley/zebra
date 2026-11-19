@@ -113,44 +113,11 @@ CHANNEL_LAYERS = {
 # The DjangoStore and DjangoMetricsStore implementations use these models
 # defined in zebra_agent_web/api/models.py
 #
-# Configure your preferred database backend below (Oracle, PostgreSQL, SQLite, etc.)
-if os.environ.get("ORACLE_DSN"):
-    DATABASES = {
-        "default": {
-            "ENGINE": "zebra_agent_web.db_backends.oracle",
-            "NAME": os.environ.get("ORACLE_DSN", ""),
-            "USER": os.environ.get("ORACLE_USERNAME", ""),
-            "PASSWORD": os.environ.get("ORACLE_PASSWORD", ""),
-        }
-    }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
+# The backend is chosen by ZEBRA_DB_ENGINE (oracle / postgresql / sqlite). Unset, it is
+# Oracle when ORACLE_DSN is set, else SQLite (#305). See zebra_agent_web.db_config.
+from zebra_agent_web.db_config import database_config  # noqa: E402
 
-# Alternative configurations:
-# PostgreSQL:
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.postgresql",
-#         "NAME": os.environ.get("PGDATABASE", "zebra"),
-#         "USER": os.environ.get("PGUSER", "zebra"),
-#         "PASSWORD": os.environ.get("PGPASSWORD", ""),
-#         "HOST": os.environ.get("PGHOST", "localhost"),
-#         "PORT": os.environ.get("PGPORT", "5432"),
-#     }
-# }
-#
-# SQLite (development):
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.sqlite3",
-#         "NAME": BASE_DIR / "db.sqlite3",
-#     }
-# }
+DATABASES = {"default": database_config(os.environ, BASE_DIR / "db.sqlite3")}
 
 # Internationalization
 LANGUAGE_CODE = "en-us"

@@ -31,6 +31,15 @@ class TestCheckBackend:
         err = capsys.readouterr().err
         assert "sqlite" in err
         assert "ORACLE_DSN" in err
+        assert "ZEBRA_DB_ENGINE=postgresql" in err
+
+    def test_postgresql_proceeds(self):
+        from zebra_agent_web.cli import _check_backend
+
+        connection = MagicMock()
+        connection.vendor = "postgresql"
+        with patch("django.db.connections", {"default": connection}):
+            _check_backend(allow_sqlite=False)  # must not raise
 
     def test_sqlite_with_flag_proceeds(self):
         from zebra_agent_web.cli import _check_backend
