@@ -5,6 +5,11 @@
 context, every call it makes adds its tokens and cost to that process and to the
 spend ledger (#206). ``model_for`` picks the model a task should use. Tests swap the
 backend with ``set_llm_factory``.
+
+Hard cost caps (#276): before each call a process whose ``__cost_cap_usd__`` property is set
+is refused once its ``__total_cost__`` has reached it, and an ``__llm_guard__`` engine extra
+(an async ``(process) -> reason | None``) may refuse it too. A refusal raises
+``LLMCostCapExceeded`` and spends nothing.
 """
 
 from collections.abc import Callable
@@ -15,6 +20,16 @@ from zebra_tasks.llm.models import normalize_model
 from zebra_tasks.llm.usage import record_spend, record_usage
 
 LLMFactory = Callable[[str], LLMProvider]
+
+#: Process property: the most this process may spend on LLM calls, in USD (#276).
+COST_CAP_KEY = "__cost_cap_usd__"
+#: Engine extra: ``async (process) -> str | None``; a reason refuses the call (#276).
+LLM_GUARD_KEY = "__llm_guard__"
+
+
+class LLMCostCapExceeded(RuntimeError):
+    """An LLM call refused before it was made: the process is over its cost cap."""
+
 
 _factory: LLMFactory | None = None
 
@@ -65,7 +80,36 @@ class _Recorded(LLMProvider):
         return self._llm.model
 
     async def complete(self, *args: Any, **kwargs: Any) -> LLMResponse:
+        await check_cost_cap(self._context)
         response = await self._llm.complete(*args, **kwargs)
         record_usage(self._context, response)
         await record_spend(self._context, response)
         return response
+
+
+async def check_cost_cap(context: Any) -> None:
+    """Raise ``LLMCostCapExceeded`` if *context*'s process may not make another LLM call.
+
+    Checks the process's own ``__cost_cap_usd__`` against its ``__total_cost__``, then the
+    engine's ``__llm_guard__`` extra, if any. Without either it allows the call.
+    """
+    process = getattr(context, "process", None)
+    props = getattr(process, "properties", None)
+    props = props if isinstance(props, dict) else {}
+    cap = props.get(COST_CAP_KEY)
+    if cap is not None:
+        try:
+            cap_usd = float(cap)
+        except (TypeError, ValueError):
+            cap_usd = 0.0  # an unreadable cap fails closed
+        spent = float(props.get("__total_cost__") or 0)
+        if spent >= cap_usd:
+            raise LLMCostCapExceeded(
+                f"LLM cost cap reached: spent ${spent:.4f} of ${cap_usd:.4f} for this process"
+            )
+    extras = getattr(context, "extras", None)
+    guard = extras.get(LLM_GUARD_KEY) if isinstance(extras, dict) else None
+    if guard is not None and process is not None:
+        reason = await guard(process)
+        if reason:
+            raise LLMCostCapExceeded(reason)

@@ -10,7 +10,12 @@ This is an agent-only web application with simplified URL structure:
 
 from django.urls import include, path
 
-from zebra_agent_web.api import commons_views, onboarding_views, web_views
+from zebra_agent_web.api import (
+    commons_views,
+    onboarding_views,
+    onboarding_wizard_views,
+    web_views,
+)
 
 urlpatterns = [
     # Auth endpoints (passkey)
@@ -59,6 +64,14 @@ urlpatterns = [
         onboarding_views.signup_confirm,
         name="onboarding_signup_confirm",
     ),
+    # Onboarding wizard for anonymous visitors (#276): 404 while off
+    path("onboarding/", onboarding_wizard_views.wizard, name="onboarding_wizard"),
+    path("onboarding/start/", onboarding_wizard_views.start, name="onboarding_start"),
+    path("onboarding/step/", onboarding_wizard_views.submit, name="onboarding_submit"),
+    path("onboarding/r/<str:token>/", onboarding_wizard_views.resume, name="onboarding_resume"),
+    path("onboarding/new-link/", onboarding_wizard_views.new_link, name="onboarding_new_link"),
+    path("onboarding/forget/", onboarding_wizard_views.forget, name="onboarding_forget"),
+    path("onboarding/manage/", onboarding_wizard_views.manage, name="onboarding_manage"),
     # First-run setup
     path("setup/", web_views.setup_view, name="setup"),
     # Web UI (HTML + HTMX) - Agent focused

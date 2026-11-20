@@ -47,8 +47,11 @@ def configure_logging(json_logs: bool = True) -> None:
         ],
     )
 
+    from zebra_agent_web.logging_filters import RedactSecretsFilter
+
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
+    handler.addFilter(RedactSecretsFilter())  # onboarding tokens and nonces (#276)
 
     root = logging.getLogger()
     root.handlers = [handler]

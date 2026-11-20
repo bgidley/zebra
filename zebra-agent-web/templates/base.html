@@ -55,6 +55,9 @@
                     {% if commons_enabled %}
                     {% include "partials/nav_item.html" with url="/commons/" icon="fingerprint" label="Commons" %}
                     {% endif %}
+                    {% if onboarding_available %}
+                    {% include "partials/nav_item.html" with url="/onboarding/manage/" icon="check-circle" label="Onboarding" %}
+                    {% endif %}
                     {% if user.is_staff %}
                     {% include "partials/nav_item.html" with url="/ethics-audit/" icon="scales" label="Ethics Audit" %}
                     {% endif %}

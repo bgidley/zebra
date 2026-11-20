@@ -79,6 +79,8 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 # `commons_enabled` for the Commons nav link (#228).
                 "zebra_agent_web.api.context_processors.commons",
+                # `onboarding_available` for the owner's Onboarding link (#276).
+                "zebra_agent_web.api.context_processors.onboarding",
             ],
         },
     },
@@ -242,9 +244,31 @@ ZEBRA_AGENT_SETTINGS = {
     # first canonical (its operator key signs receipts), the rest mirrors. Unset = no publishing.
     "COMMONS_RELAYS": os.environ.get("ZEBRA_COMMONS_RELAYS", ""),
     "COMMONS_RECEIPT_PUBKEY": os.environ.get("ZEBRA_COMMONS_RECEIPT_PUBKEY", ""),
-    # Onboarding guide pages (#275, off by default): 404 unless on.
+    # Onboarding (#275, off by default): the #277 signup guide 404s unless on; the #276
+    # anonymous wizard also needs the owner's switch (SystemStateModel.onboarding_enabled).
     "ONBOARDING_ENABLED": os.environ.get("ZEBRA_ONBOARDING_ENABLED", "0").lower()
     in ("1", "true", "yes", "on"),
+    # Hard LLM caps: per wizard session (its __cost_cap_usd__) and per UTC day for all of them.
+    "ONBOARDING_SESSION_COST_CAP_USD": float(
+        os.environ.get("ZEBRA_ONBOARDING_SESSION_COST_CAP_USD", "0.05")
+    ),
+    "ONBOARDING_DAILY_COST_CAP_USD": float(
+        os.environ.get("ZEBRA_ONBOARDING_DAILY_COST_CAP_USD", "1.00")
+    ),
+    # Per-IP rate limits (Django cache), the live-session cap and idle expiry.
+    "ONBOARDING_SESSIONS_PER_IP_HOUR": int(
+        os.environ.get("ZEBRA_ONBOARDING_SESSIONS_PER_IP_HOUR", "5")
+    ),
+    "ONBOARDING_REQUESTS_PER_IP_MINUTE": int(
+        os.environ.get("ZEBRA_ONBOARDING_REQUESTS_PER_IP_MINUTE", "60")
+    ),
+    "ONBOARDING_MAX_LIVE_SESSIONS": int(
+        os.environ.get("ZEBRA_ONBOARDING_MAX_LIVE_SESSIONS", "200")
+    ),
+    "ONBOARDING_SESSION_IDLE_DAYS": int(os.environ.get("ZEBRA_ONBOARDING_SESSION_IDLE_DAYS", "30")),
+    # Header holding the visitor's IP behind a trusted proxy (CF-Connecting-IP behind the
+    # Cloudflare Tunnel); empty = REMOTE_ADDR. Only set it when every request comes via the proxy.
+    "ONBOARDING_CLIENT_IP_HEADER": os.environ.get("ZEBRA_ONBOARDING_CLIENT_IP_HEADER", ""),
 }
 
 # Logging
@@ -254,6 +278,10 @@ LOG_DIR.mkdir(exist_ok=True)
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    # Onboarding resume tokens and nonces never reach a log line (#276)
+    "filters": {
+        "redact_secrets": {"()": "zebra_agent_web.logging_filters.RedactSecretsFilter"},
+    },
     "formatters": {
         "verbose": {
             "format": "{levelname} {asctime} {module} {message}",
@@ -264,6 +292,7 @@ LOGGING = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
+            "filters": ["redact_secrets"],
         },
         "file_zebra": {
             "class": "logging.handlers.RotatingFileHandler",
@@ -271,6 +300,7 @@ LOGGING = {
             "maxBytes": 5 * 1024 * 1024,  # 5 MB
             "backupCount": 5,
             "formatter": "verbose",
+            "filters": ["redact_secrets"],
         },
         "file_django": {
             "class": "logging.handlers.RotatingFileHandler",
@@ -278,6 +308,7 @@ LOGGING = {
             "maxBytes": 5 * 1024 * 1024,  # 5 MB
             "backupCount": 5,
             "formatter": "verbose",
+            "filters": ["redact_secrets"],
         },
     },
     "root": {

@@ -10,6 +10,7 @@ _SETUP_EXEMPT_PREFIXES = (
     "/static/",
     "/admin/",
     "/ws/",
+    "/onboarding/",  # the anonymous onboarding wizard (#276)
 )
 
 

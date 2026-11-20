@@ -1,0 +1,94 @@
+{% comment %}
+Onboarding wizard page (#276) for anonymous visitors. No nav, no user, no host data.
+Context: message (a refusal/notice, optional), halted, and with a session: state
+(onboarding.WizardState), form, field_errors, submitted_values, route_labels, resume_url.
+The step area is partials/step.html, swapped in place by HTMX on submit.
+{% endcomment %}<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+    {% include "partials/head_assets.html" %}
+    <meta name="referrer" content="same-origin">
+    <title>Get your own Zebra</title>
+</head>
+<body class="min-h-full flex flex-col text-ink" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    <header class="flex items-center gap-2.5 h-14 px-5 sm:px-8">
+        <span class="zebra-mark" aria-hidden="true"></span>
+        <span class="text-[15px] font-semibold tracking-tight">Zebra</span>
+    </header>
+
+    <main class="flex-1 px-4 py-8 sm:py-12">
+        <div class="mx-auto w-full max-w-3xl">
+            <h1 class="text-2xl font-semibold tracking-tight">Get your own Zebra</h1>
+            <p class="mt-2 text-sm text-muted max-w-prose">
+                A step-by-step guide to running Zebra in your own Oracle Cloud account. No account
+                is needed here and nothing secret is ever asked for.
+            </p>
+
+            {% if message %}
+            <div class="mt-6 rounded-md border border-line bg-surface p-4 text-sm" role="status">{{ message }}</div>
+            {% endif %}
+
+            {% if halted %}
+            <div class="mt-6 rounded-md border border-needs/40 bg-needs/10 p-4 text-sm text-needs" role="status">
+                The wizard is paused right now. Your progress is kept; please come back later.
+            </div>
+            {% endif %}
+
+            {% if state %}
+            {% include "onboarding/partials/step.html" %}
+
+            <section id="resume" class="mt-10 rounded-lg border border-line bg-surface p-5">
+                <h2 class="text-sm font-semibold">Come back later</h2>
+                <p class="mt-1 text-sm text-muted">
+                    This browser remembers where you are. To continue on another device, keep this
+                    link private: anyone with it can see your progress.
+                </p>
+                {% if resume_url %}
+                <input type="text" readonly value="{{ resume_url }}" aria-label="Resume link"
+                       class="mt-3 w-full rounded-md border border-line bg-ground px-3 py-2 font-mono text-xs text-ink"
+                       onclick="this.select()">
+                {% endif %}
+                <div class="mt-3 flex flex-wrap gap-3">
+                    <form method="post" action="{% url 'onboarding_new_link' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="rounded-md bg-gray-700 px-3 py-1.5 text-sm hover:bg-gray-600">
+                            Make a new link (old links stop working)
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'onboarding_forget' %}"
+                          onsubmit="return confirm('End this session? Your progress here is discarded.')">
+                        {% csrf_token %}
+                        <button type="submit" class="rounded-md bg-gray-700 px-3 py-1.5 text-sm text-fail hover:bg-gray-600">
+                            Forget me
+                        </button>
+                    </form>
+                </div>
+            </section>
+            {% elif not halted %}
+            <section class="mt-8 rounded-lg border border-line bg-surface p-6">
+                <h2 class="text-base font-semibold">What you will do</h2>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-muted">
+                    <li>Sign up for Oracle Cloud (free tier)</li>
+                    <li>Give a published stack access to one compartment</li>
+                    <li>Build your Zebra</li>
+                    <li>Check it works</li>
+                    <li>Join the Commons (optional)</li>
+                    <li>Contribute back (optional)</li>
+                </ol>
+                <p class="mt-3 text-sm text-muted">Each step says what happens, what it costs and how to undo it before you act.</p>
+                <form method="post" action="{% url 'onboarding_start' %}" class="mt-5">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-md bg-ink px-4 py-2 text-sm font-medium text-ground hover:opacity-90">
+                        Start
+                    </button>
+                </form>
+            </section>
+            {% endif %}
+        </div>
+    </main>
+
+    <footer class="flex justify-center px-4 py-4">
+        {% include "partials/version_info.html" %}
+    </footer>
+</body>
+</html>

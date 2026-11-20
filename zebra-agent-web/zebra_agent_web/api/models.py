@@ -443,6 +443,9 @@ class SystemStateModel(models.Model):
     )
     commons_owner_user_id = models.IntegerField(null=True, blank=True)
 
+    # Onboarding wizard (#276): the owner's switch, ANDed with ZEBRA_ONBOARDING_ENABLED.
+    onboarding_enabled = models.BooleanField(default=False)
+
     class Meta:
         db_table = "zebra_system_state"
         verbose_name = "System State"

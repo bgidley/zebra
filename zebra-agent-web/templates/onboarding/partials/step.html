@@ -1,0 +1,80 @@
+{% comment %}
+Onboarding step area (#276): the step list (done / current / failed / locked) and the
+current step with what happens / cost / undo and its form. Swapped in place by HTMX.
+Context: state, form, field_errors, submitted_values, route_labels, halted.
+{% endcomment %}{% load form_tags %}
+<div id="onboarding-step" class="mt-8 grid gap-6 sm:grid-cols-[13rem_1fr]">
+    <nav aria-label="Steps">
+        <ol class="space-y-1">
+            {% for step in state.steps %}
+            <li class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm
+                       {% if step.state == 'current' or step.state == 'failed' %}bg-surface-2 text-ink{% elif step.state == 'done' %}text-muted{% else %}text-faint{% endif %}"
+                {% if step.state == 'current' or step.state == 'failed' %}aria-current="step"{% endif %}>
+                {% if step.state == 'done' %}{% include "components/state_dot.html" with state="ok" label="done" %}
+                {% elif step.state == 'failed' %}{% include "components/state_dot.html" with state="fail" label="did not finish" %}
+                {% elif step.state == 'current' %}{% include "components/state_dot.html" with state="needs" label="current step" %}
+                {% else %}{% include "components/state_dot.html" with state="locked" label="locked" %}{% endif %}
+                <span>{{ step.order }}. {{ step.title }}</span>
+                {% if step.state == 'locked' %}<span class="sr-only">(locked until the steps before it are done)</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ol>
+    </nav>
+
+    <section class="rounded-lg border border-line bg-surface p-6" aria-live="polite">
+        {% if state.status == "finished" %}
+            <h2 class="text-lg font-semibold">All done</h2>
+            <p class="mt-2 text-sm text-muted">Every step is complete. Enjoy your Zebra.</p>
+        {% elif state.status == "ended" %}
+            <h2 class="text-lg font-semibold">This session has ended</h2>
+            {% if state.ended_reason %}<p class="mt-2 text-sm text-muted">{{ state.ended_reason }}</p>{% endif %}
+            <form method="post" action="{% url 'onboarding_start' %}" class="mt-4">
+                {% csrf_token %}
+                <button type="submit" class="rounded-md bg-ink px-4 py-2 text-sm font-medium text-ground hover:opacity-90">Start again</button>
+            </form>
+        {% elif state.status == "waiting" %}
+            <h2 class="text-lg font-semibold">Working on it</h2>
+            <p class="mt-2 text-sm text-muted">This step is waiting on something outside this page. Check back soon.</p>
+        {% else %}
+            {% with step=state.current %}
+            {% if state.retry %}
+                <p class="text-xs font-medium uppercase tracking-wide text-fail">Step {{ step.order }} did not finish</p>
+            {% else %}
+                <p class="text-xs font-medium uppercase tracking-wide text-faint">Step {{ step.order }} of {{ state.steps|length }}</p>
+            {% endif %}
+            <h2 class="mt-1 text-lg font-semibold">{% if state.retry %}{{ step.title }}{% else %}{{ form.title|default:step.title }}{% endif %}</h2>
+            {% if form.description %}<p class="mt-1 text-sm text-muted">{{ form.description }}</p>{% endif %}
+
+            {% if not state.retry %}
+            <dl class="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+                <div class="rounded-md bg-surface-2 p-3"><dt class="text-xs font-medium text-faint">What happens</dt><dd class="mt-1">{{ step.what_happens }}</dd></div>
+                <div class="rounded-md bg-surface-2 p-3"><dt class="text-xs font-medium text-faint">What it costs</dt><dd class="mt-1">{{ step.cost }}</dd></div>
+                <div class="rounded-md bg-surface-2 p-3"><dt class="text-xs font-medium text-faint">How to undo it</dt><dd class="mt-1">{{ step.undo }}</dd></div>
+            </dl>
+            {% endif %}
+
+            <form method="post" action="{% url 'onboarding_submit' %}" class="mt-6"
+                  hx-post="{% url 'onboarding_submit' %}" hx-target="#onboarding-step" hx-swap="outerHTML">
+                {% csrf_token %}
+                <input type="hidden" name="task_id" value="{{ state.task_id }}">
+                {% render_schema_form form field_errors submitted_values %}
+                <div class="mt-6 flex flex-wrap items-center gap-3">
+                    {% if state.routes %}
+                        {% for route in state.routes %}
+                        <button type="submit" name="next_route" value="{{ route }}" {% if halted %}disabled{% endif %}
+                                class="rounded-md px-4 py-2 text-sm font-medium {% if route == 'done' %}bg-ink text-ground hover:opacity-90{% else %}bg-gray-700 text-gray-200 hover:bg-gray-600{% endif %}">
+                            {% for name, label in route_labels.items %}{% if name == route %}{{ label }}{% endif %}{% endfor %}
+                        </button>
+                        {% endfor %}
+                    {% else %}
+                        <button type="submit" {% if halted %}disabled{% endif %}
+                                class="rounded-md bg-ink px-4 py-2 text-sm font-medium text-ground hover:opacity-90">
+                            {% if state.retry %}Try this step again{% else %}Continue{% endif %}
+                        </button>
+                    {% endif %}
+                </div>
+            </form>
+            {% endwith %}
+        {% endif %}
+    </section>
+</div>

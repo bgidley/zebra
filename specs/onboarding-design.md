@@ -157,6 +157,24 @@ owner toggle), `ONBOARDING_SESSION_COST_CAP_USD`, `ONBOARDING_DAILY_COST_CAP_USD
 `ONBOARDING_STACK_ZIP_URL` (stubbed until #283). New endpoints: `/onboarding/*`,
 `POST /onboarding/callback/`, `manage.py onboarding_call_home` (instance side, wired in #279).
 
+## 6a. As built (S1 + S2, #276)
+
+- Workflow `zebra-agent/workflows/onboarding.yaml` (top level, so it installs and its hash is a
+  built-in's). Visitor steps are `external: onboarding_visitor` waits with `onboarding_step`,
+  `onboarding_order`, `what_happens`, `cost`, `undo`. Each has a `problem` route to `<step>_retry`
+  (reason shown read-only, then back to the step); later auto steps route failures there too.
+- `zebra_agent_web/api/onboarding.py` (sessions, launch, counts, expiry, `llm_guard`) and
+  `api/onboarding_wizard_views.py`. Routes: `/onboarding/`, `start/`, `step/`, `r/<token>/`, `new-link/`,
+  `forget/`, `manage/` (owner, signed in). Cookie `zebra_onboarding`, path `/onboarding/`.
+- Settings (`ZEBRA_ONBOARDING_*`): `ENABLED` (false), `SESSION_COST_CAP_USD` (0.05),
+  `DAILY_COST_CAP_USD` (1.00), `SESSIONS_PER_IP_HOUR` (5), `REQUESTS_PER_IP_MINUTE` (60),
+  `MAX_LIVE_SESSIONS` (200), `SESSION_IDLE_DAYS` (30), `CLIENT_IP_HEADER` (empty = `REMOTE_ADDR`;
+  `CF-Connecting-IP` behind the Cloudflare Tunnel).
+- Idle = no step progress (`updated_at`). Expiry runs from the daemon tick, hourly, in the web
+  module rather than `zebra_agent/scheduler/`.
+- S3 must pass `__onboarding__` and `__cost_cap_usd__` to its child workflow and add it to
+  `ONBOARDING_WORKFLOWS`.
+
 ## 7. Open questions
 
 - #283 `zipUrl` does not exist yet; S3 stubs it.

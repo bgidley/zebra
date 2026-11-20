@@ -5,7 +5,14 @@ from types import SimpleNamespace
 import pytest
 
 from zebra_tasks.llm.base import LLMProvider, LLMResponse, Message, TokenUsage
-from zebra_tasks.llm.client import get_llm, model_for, set_llm_factory
+from zebra_tasks.llm.client import (
+    LLM_GUARD_KEY,
+    LLMCostCapExceeded,
+    check_cost_cap,
+    get_llm,
+    model_for,
+    set_llm_factory,
+)
 from zebra_tasks.llm.models import DEFAULT_TIER, normalize_model
 from zebra_tasks.llm.openrouter import OpenRouterLLM
 
@@ -163,3 +170,65 @@ async def test_ledger_failure_does_not_fail_the_call(fake, caplog):
 
     assert response.content == "ok"
     assert "Could not record LLM spend" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Hard cost caps (#276)
+# ---------------------------------------------------------------------------
+
+
+class CountingLLM(FakeLLM):
+    calls = 0
+
+    async def complete(self, *args, **kwargs):
+        CountingLLM.calls += 1
+        return await super().complete(*args, **kwargs)
+
+
+@pytest.fixture
+def counting():
+    CountingLLM.calls = 0
+    previous = set_llm_factory(lambda model: CountingLLM(model, cost=0.03))
+    yield CountingLLM
+    set_llm_factory(previous)
+
+
+async def test_cost_cap_allows_calls_until_it_is_reached(counting):
+    context = _context(__cost_cap_usd__=0.05)
+    llm = get_llm("low", context)
+    await llm.complete([Message.user("one")])
+    await llm.complete([Message.user("two")])  # 0.03 spent, still under 0.05
+    with pytest.raises(LLMCostCapExceeded, match="cost cap"):
+        await llm.complete([Message.user("three")])  # 0.06 spent: refused
+    assert counting.calls == 2
+    assert context.process.properties["__total_cost__"] == pytest.approx(0.06)
+
+
+async def test_zero_or_unreadable_cap_refuses_before_any_call(counting):
+    for cap in (0, "not a number"):
+        with pytest.raises(LLMCostCapExceeded):
+            await get_llm("low", _context(__cost_cap_usd__=cap)).complete([Message.user("x")])
+    assert counting.calls == 0
+
+
+async def test_no_cap_no_guard_calls_freely(counting):
+    llm = get_llm("low", _context())
+    for _ in range(3):
+        await llm.complete([Message.user("x")])
+    assert counting.calls == 3
+
+
+async def test_llm_guard_extra_can_refuse(counting):
+    seen = []
+
+    async def guard(process):
+        seen.append(process.id)
+        return "daily cap reached"
+
+    with pytest.raises(LLMCostCapExceeded, match="daily cap reached"):
+        await get_llm("low", _context(extras={LLM_GUARD_KEY: guard})).complete([Message.user("x")])
+    assert seen == ["proc-1"] and counting.calls == 0
+
+
+async def test_check_cost_cap_without_context_process_allows():
+    await check_cost_cap(SimpleNamespace(extras={}))
