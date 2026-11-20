@@ -217,7 +217,8 @@ async def manage(request):
 
     user = await request.auser()
     if not user.is_authenticated:
-        return redirect(f"{settings.LOGIN_URL}?next={request.path}")
+        # A constant "next", never the request path (CodeQL py/url-redirection, #276)
+        return redirect(f"{settings.LOGIN_URL}?next={reverse('onboarding_manage')}")
     owner = await is_owner(user)
     if request.method == "POST":
         if not owner:
