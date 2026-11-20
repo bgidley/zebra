@@ -15,6 +15,7 @@ from django.db import IntegrityError, transaction
 from zebra_agent.commons.offers import OfferRecord, OfferStore, check_transition
 
 from zebra_agent_web.api.models import WorkflowOfferModel
+from zebra_agent_web.locking import first_for_update
 
 
 def _record(row: WorkflowOfferModel) -> OfferRecord:
@@ -75,11 +76,7 @@ class DjangoOfferStore(OfferStore):
         self, content_sha256: str, status: str, judgement: dict[str, Any] | None = None
     ) -> OfferRecord:
         with transaction.atomic():
-            row = (
-                WorkflowOfferModel.objects.select_for_update()
-                .filter(content_sha256=content_sha256)
-                .first()
-            )
+            row = first_for_update(WorkflowOfferModel.objects.filter(content_sha256=content_sha256))
             if row is None:
                 raise KeyError(content_sha256)
             check_transition(row.status, status)
