@@ -153,23 +153,50 @@ retry the latest deploy job again to turn it off.
 
 ## 7. Second-Zebra check: offers seen, import, attestations (closes #232)
 
-S5 (#232) needs a second Zebra: a dev instance with its **own** identity and database, never prod's
-Oracle, never port 8000. Prod (Zebra A) keeps its offer from step 6; the dev instance is Zebra B.
+S5 (#232) needs a second Zebra: an instance with its **own** identity and database, never prod's
+schema, never port 8000. Prod (Zebra A) keeps its offer from step 6; the second instance is Zebra B.
+**Never run a live Zebra on SQLite**: its single writer locks under the web server, the daemon and
+`sync_to_async` pool threads together. Give it a throwaway Oracle schema (or PostgreSQL, #305).
 
-1. **Start Zebra B** (any machine that can reach `wss://<host>/relay/commons`; a checkout of master):
+1. **Start Zebra B** on the prod host, from the prod image, in its own containers and volumes:
    ```bash
-   export DJANGO_SETTINGS_MODULE=zebra_agent_web.e2e_settings   # file SQLite, not Oracle
-   export ZEBRA_COMMONS_ENABLED=1 ZEBRA_COMMONS_KEY_DIR=$HOME/.zebra-b/keys
-   export ZEBRA_COMMONS_RELAYS=wss://<host>/relay/commons
-   export ZEBRA_COMMONS_RECEIPT_PUBKEY=<operator pubkey hex>
-   export OPENROUTER_API_KEY=<a dev key>        # the import's scans, ethics gate and gym
-   cd zebra-agent-web && uv run python manage.py migrate
-   uv run python scripts/build_css.py            # from the repo root
-   uv run daphne -b 127.0.0.1 -p 8233 zebra_agent_web.asgi:application &
-   uv run python manage.py run_daemon &          # polls the relay every tick
+   T=~/.zebra-b && install -d -m 700 $T
+   # a) E2E provisioner creds (CI variables E2E_PROVISIONER_DSN / _USERNAME / _PASSWORD; the
+   #    password is a hidden variable, so the owner types it in): $T/provisioner.env, mode 600
+   # b) the schema, with a password that is generated, kept in a file and never printed
+   S=E2E_ZEBRAB_$(date +%Y%m%d); P="Az9$(openssl rand -hex 13)"
+   DSN=$(grep '^E2E_PROVISIONER_DSN=' $T/provisioner.env | cut -d= -f2-)
+   (umask 077; printf 'ORACLE_DSN=%s\nORACLE_USERNAME=%s\nORACLE_PASSWORD=%s\n' "$DSN" "$S" "$P" > $T/b.env)
+   E2E_SCHEMA_PASSWORD="$P" podman run --rm --network=host --env-file $T/provisioner.env \
+     -e E2E_SCHEMA_PASSWORD -v ~/code/zebra/scripts:/s:ro,Z --entrypoint /app/.venv/bin/python \
+     localhost/zebra-web:prod /s/e2e_oracle_schema.py create --schema $S; unset P
+   # c) the rest of B's settings: an LLM key, its own secret, the public relay, a small budget
+   grep '^OPENROUTER_API_KEY=' ~/.config/zebra/prod.env >> $T/b.env
+   printf 'DJANGO_SECRET_KEY=%s\n' "$(openssl rand -hex 32)" >> $T/b.env
+   cat >> $T/b.env <<'EOF'
+   DJANGO_DEBUG=0
+   DJANGO_ALLOWED_HOSTS=*
+   APP_PORT=8233
+   ZEBRA_DAEMON_AUTO_START=0
+   ZEBRA_DAILY_BUDGET_USD=2.00
+   ZEBRA_LLM_MODEL=low
+   ZEBRA_COMMONS_ENABLED=1
+   ZEBRA_COMMONS_DREAM_ENABLED=0
+   ZEBRA_COMMONS_RELAYS=wss://<host>/relay/commons
+   ZEBRA_COMMONS_RECEIPT_PUBKEY=<operator pubkey hex>
+   EOF
+   # d) web (migrates the schema on start) and daemon (polls the relay every tick)
+   V="-v zebra-b-workflows:/root/.zebra/workflows -v zebra-b-keys:/root/.zebra-agent/commons-keys"
+   podman run -d --name zebra-b-web -p 127.0.0.1:8233:8233 --env-file $T/b.env $V localhost/zebra-web:prod
+   podman run -d --name zebra-b-daemon --env-file $T/b.env $V --entrypoint /app/.venv/bin/python \
+     -w /app localhost/zebra-web:prod zebra-agent-web/manage.py run_daemon
    ```
-   Open `http://127.0.0.1:8233/`, finish setup, then `/commons/` → **Start a new Zebra**. The
-   "Public Commons" section says publishing is on.
+   Then in `zebra-b-web` (`podman exec -it -w /app/zebra-agent-web zebra-b-web /app/.venv/bin/python
+   manage.py shell`): create the owner (a superuser with an unusable password), finish first-run
+   setup (`api.identity.set_identity("<name>")`, or every page redirects to `/setup/`), and
+   `commons_identity.start_zebra(...)`. Login is passkey-only on a real host; for a browser on B use
+   `manage.py smoke_session --username <owner>` as the `sessionid` cookie. B's `/commons/` says
+   publishing is on.
 2. **B sees A's offer.** Within a daemon tick (`ZEBRA_DAEMON_POLL_INTERVAL`, 30 s) "Offers I have
    seen" lists A's workflow as `seen`, from A's fingerprint and npub (compare with A's
    `/commons/`), with its stats. The daemon log shows `Commons: saw offer`.
@@ -182,7 +209,9 @@ Oracle, never port 8000. Prod (Zebra A) keeps its offer from step 6; the dev ins
    fingerprint within a tick (prod's daemon must run with `ZEBRA_COMMONS_RELAYS` set, step 5).
 5. **A run attests `worked`.** On B, run a goal the adopted workflow fits (or `/run/` choosing
    it), approve its supervised pre-run task, and let it finish. Within a tick A shows
-   `1 worked`. Check the relay holds only labels, hashes and fixed reasons:
+   `1 worked`. Only a **goal** run attests (`assess_and_record` calls the exchange's `after_run`);
+   `manage.py run_workflow` of the adopted workflow does not. If B also has the same workflow as
+   a built-in, retire the built-in on B so the selector picks the adopted copy. Check the relay holds only labels, hashes and fixed reasons:
    ```bash
    podman exec -i zebra-web python - <<'PY'
    import asyncio
@@ -203,13 +232,15 @@ Oracle, never port 8000. Prod (Zebra A) keeps its offer from step 6; the dev ins
    nothing else: no goal, output or name.
 6. **Hash rule.** Edit the adopted workflow on B (any saved change), run it again: no new
    attestation appears (the new version has a new hash, which matches no adopted offer).
-7. Post the `/commons/` screenshots and the output on #232 and close it. Stop Zebra B and delete
-   `$HOME/.zebra-b` and its `db.sqlite3` if it was only for the check.
+7. Post the `/commons/` screenshots and the output on #232 and close it. When B is no longer needed
+   (§8 uses it too): `podman rm -f zebra-b-web zebra-b-daemon`, `podman volume rm zebra-b-workflows
+   zebra-b-keys`, drop the schema (`e2e_oracle_schema.py drop --schema $S` as in step 1b) and
+   delete `~/.zebra-b`.
 
 ## 8. Web-of-trust check (closes #233)
 
 S6 (#233) needs three Zebras: prod (Zebra A), Zebra B from §7 and a third dev instance, Zebra C,
-started exactly like B (own `ZEBRA_COMMONS_KEY_DIR`, own SQLite file, another port such as 8234,
+started exactly like B (own Oracle schema, own volumes, another port such as 8234,
 never 8000). All three run with `ZEBRA_COMMONS_RELAYS` and the receipt key set, and a daemon.
 
 1. **Nothing without relays.** Before setting `ZEBRA_COMMONS_RELAYS` anywhere, `/commons/` on
