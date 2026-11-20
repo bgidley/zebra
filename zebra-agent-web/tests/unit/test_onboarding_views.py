@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 
 import pytest
@@ -107,7 +108,13 @@ def test_the_manage_page_is_behind_login_and_owner_only(onboarding_env, settings
     from zebra_agent_web.api.models import SystemStateModel
 
     settings.MIDDLEWARE = _prod_middleware()
-    assert Client().get("/onboarding/manage/").status_code == 302
+    anonymous = Client().get("/onboarding/manage/")
+    assert anonymous.status_code == 302
+    assert anonymous.url == f"{settings.LOGIN_URL}?next=/onboarding/manage/"
+    # The view never echoes the request path into the login redirect
+    from zebra_agent_web.api.onboarding_wizard_views import manage
+
+    assert "request.path" not in inspect.getsource(manage)
 
     owner = Client()
     owner.force_login(test_user)  # the first user is the owner
