@@ -8,4 +8,4 @@
 - [x] 2.2 Update `zebra-agent/AGENTS.md` and `specs/zebra-as-is.md`
 
 ## 3. Delivery
-- [ ] 3.1 ruff check/format, full unit tests, pipeline green, archive change
+- [x] 3.1 ruff check/format, full unit tests, pipeline green, archive change
