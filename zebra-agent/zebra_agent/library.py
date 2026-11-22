@@ -61,6 +61,7 @@ class WorkflowInfo:
     retired: dict[str, Any] | None = None  # {reason, retired_at, superseded_by} (#148)
     inputs: dict[str, Any] | None = None  # JSON Schema of tool arguments; None = {goal} (#146)
     commons: dict[str, Any] | None = None  # Provenance block (#229); None for older files
+    entry_point: bool = True  # False = never offered to goal routing, still callable (#324)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -72,6 +73,7 @@ class WorkflowInfo:
             "use_when": self.use_when,
             "success_rate": self.success_rate,
             "use_count": self.use_count,
+            "entry_point": self.entry_point,
         }
 
 
@@ -161,7 +163,9 @@ async def list_goal_workflows(library: "WorkflowLibrary") -> list[dict[str, Any]
     This is the single source of the Agent Main Loop's ``available_workflows``:
     every entry point that creates a goal process, and the workflow selector
     itself, build the list here. Workflows tagged ``system`` are excluded, and so
-    are tool-only workflows whose ``inputs`` require more than a ``goal`` (#146).
+    are tool-only workflows whose ``inputs`` require more than a ``goal`` (#146) and
+    workflows that set ``entry_point: false`` (#324). Those stay in ``list_workflows``
+    and callable by name.
 
     Args:
         library: The workflow library to list.
@@ -181,7 +185,7 @@ async def list_goal_workflows(library: "WorkflowLibrary") -> list[dict[str, Any]
             "use_when": w.use_when,
         }
         for w in workflows
-        if SYSTEM_TAG not in (w.tags or []) and not is_tool_only(w)
+        if SYSTEM_TAG not in (w.tags or []) and not is_tool_only(w) and w.entry_point
     ]
 
 
@@ -392,6 +396,14 @@ class WorkflowLibrary:
             version = data.get("version", 1)
             use_when = data.get("use_when")  # LLM selection hint
             inputs = data.get("inputs") or (data.get("properties") or {}).get("inputs")
+            entry_point = data.get("entry_point", True)
+            if not isinstance(entry_point, bool):
+                logger.warning(
+                    "Workflow %s: entry_point must be a boolean, got %r; treating as true",
+                    name,
+                    entry_point,
+                )
+                entry_point = True
 
             # Get stats from metrics store (if available)
             stats = WorkflowStats(workflow_name=name)  # Default stats
@@ -412,6 +424,7 @@ class WorkflowLibrary:
                 success_rate=stats.success_rate,
                 use_count=stats.total_runs,
                 inputs=inputs if isinstance(inputs, dict) else None,
+                entry_point=entry_point,
                 commons=data.get("commons") if isinstance(data.get("commons"), dict) else None,
             )
         except Exception as e:

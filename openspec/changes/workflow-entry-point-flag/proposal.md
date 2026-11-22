@@ -12,9 +12,9 @@ only meant to be a sub-workflow of another needs a way to say "never route a goa
   ones, so the selector, `queue_goal` and the agent loop never offer them.
 - `WorkflowInfo` carries `entry_point`; `get_workflow`, subworkflow calls and tool calls by name are
   unchanged, so a non-entry-point workflow stays callable from a dispatcher.
-- The curator, optimizer and variant creator prompts tell the LLM about the flag so dream-cycle
-  edits can use it (the #324 fix is then data: mark the Compute variants `entry_point: false`).
+- `WorkflowInfo.to_dict()` and `WorkflowInfoSerializer` expose the flag. The #324 fix is then data: mark the Compute variants `entry_point: false`.
 - Docs: `zebra-agent/AGENTS.md` and `specs/zebra-as-is.md`.
+- Non-goal: curator/optimizer/variant-creator prompt edits (no workflow sets the flag yet).
 
 ## Non-goals
 
@@ -26,8 +26,8 @@ only meant to be a sub-workflow of another needs a way to say "never route a goa
 
 | # | Outcome | How we'll know |
 |---|---------|----------------|
-| O1 | A workflow with `entry_point: false` is never in the selector's candidate list | unit test on `list_goal_workflows`; selector prompt in a test has no such name |
-| O2 | A workflow without the key (every existing one) is still offered | unit test; existing selector/library tests pass unchanged |
-| O3 | An `entry_point: false` workflow can still be run as a sub-workflow and fetched by name | unit/engine test using `get_workflow` and a subworkflow task |
-| O4 | The flag survives `WorkflowLibrary.save()` and a malformed value (non-bool) is rejected or treated as `true` with a warning | unit tests on save round-trip and bad value |
-| O5 | Authoring guidance documents the flag | `zebra-agent/AGENTS.md`, `specs/zebra-as-is.md` and the curator prompt mention `entry_point` |
+| O1 | A workflow with `entry_point: false` is absent from `list_goal_workflows` (the source of `available_workflows`) | unit test on `list_goal_workflows` output |
+| O2 | A workflow without the key, or with `true`, is still offered | unit tests |
+| O3 | A hidden workflow is still in `list_workflows()` and loadable by `get_workflow(name)` | unit tests |
+| O4 | A non-bool value logs a warning and is treated as `true` (workflow not dropped) | unit test asserting the warning |
+| O5 | The flag is read from a saved file and exposed by `WorkflowInfo.to_dict()` and `WorkflowInfoSerializer` | save/`get_workflow_info` round-trip test; serializer field |

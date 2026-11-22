@@ -447,6 +447,7 @@ routings:
 - `name`: Human-readable workflow name
 - `description`: Brief description of what the workflow does
 - `use_when`: Detailed hint for when this workflow should be selected
+- `entry_point`: optional bool, default `true`. `false` keeps the workflow out of goal routing (`list_goal_workflows`: selector, `queue_goal`, agent loop) while it stays in `list_workflows`/the library UI and callable by name as a sub-workflow or tool. Use it for variants only a dispatcher should call; a non-bool value logs a warning and counts as `true` (#324)
 - `tags`: Categories for grouping similar workflows
 
 ### Modify the Agent Loop Flow

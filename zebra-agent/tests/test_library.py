@@ -1,5 +1,6 @@
 """Tests for the library module."""
 
+import logging
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -1243,3 +1244,67 @@ routings: []
 
     def test_clean_workflow_saves(self, library, sample_workflow_yaml):
         assert library.save(sample_workflow_yaml, writer="human").exists()
+
+
+class TestEntryPointFlag:
+    """``entry_point: false`` hides a workflow from goal routing only (#324)."""
+
+    @staticmethod
+    def _write(library, name: str, entry_point: str | None) -> None:
+        text = _workflow_yaml(name, ["x"])
+        if entry_point is not None:
+            text = f"entry_point: {entry_point}\n" + text
+        (library.library_path / f"{name}.yaml").write_text(text)
+
+    async def test_hidden_from_goal_list_but_still_listed(self, library):
+        self._write(library, "Hidden", "false")
+        self._write(library, "Visible", None)
+
+        assert [w["name"] for w in await list_goal_workflows(library)] == ["Visible"]
+        assert {w.name for w in await library.list_workflows()} == {"Hidden", "Visible"}
+
+    async def test_explicit_true_is_offered(self, library):
+        self._write(library, "Explicit", "true")
+
+        assert [w["name"] for w in await list_goal_workflows(library)] == ["Explicit"]
+
+    async def test_hidden_workflow_still_loadable_by_name(self, library):
+        self._write(library, "Hidden", "false")
+
+        assert library.get_workflow("Hidden").name == "Hidden"
+
+    async def test_non_bool_warns_and_is_offered(self, library):
+        self._write(library, "Typo", '"false"')
+        records: list[logging.LogRecord] = []
+
+        class _Capture(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        # Attached to the logger itself: the web settings turn propagation off.
+        logger = logging.getLogger("zebra_agent.library")
+        handler = _Capture(logging.WARNING)
+        logger.addHandler(handler)
+        try:
+            names = [w["name"] for w in await list_goal_workflows(library)]
+        finally:
+            logger.removeHandler(handler)
+
+        assert names == ["Typo"]
+        assert any("entry_point must be a boolean" in r.getMessage() for r in records)
+
+    async def test_save_round_trip_and_exposed_on_info(self, library):
+        library.save("entry_point: false\n" + _workflow_yaml("Saved", ["x"]), writer="human")
+
+        info = await library.get_workflow_info("Saved")
+
+        assert info is not None
+        assert info.entry_point is False
+        assert info.to_dict()["entry_point"] is False
+        assert await list_goal_workflows(library) == []
+
+    def test_default_entry_point(self, temp_dir):
+        info = WorkflowInfo("W", "d", [], 1, temp_dir / "w.yaml")
+
+        assert info.entry_point is True
+        assert info.to_dict()["entry_point"] is True

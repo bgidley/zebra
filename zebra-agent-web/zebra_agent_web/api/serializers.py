@@ -20,6 +20,7 @@ class WorkflowInfoSerializer(serializers.Serializer):
     use_when = serializers.CharField(allow_null=True, required=False)
     success_rate = serializers.FloatField()
     use_count = serializers.IntegerField()
+    entry_point = serializers.BooleanField(required=False, default=True)
 
 
 class WorkflowDetailSerializer(WorkflowInfoSerializer):
