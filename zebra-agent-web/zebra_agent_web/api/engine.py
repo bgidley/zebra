@@ -45,6 +45,7 @@ async def _async_init():
     from dependency_injector import providers
     from zebra.core.engine import WorkflowEngine
     from zebra_agent.ioc import IoCActionRegistry, ZebraContainer
+    from zebra_tasks.compute.sandbox import describe_contract
 
     from zebra_agent_web.storage import DjangoStore
 
@@ -61,7 +62,7 @@ async def _async_init():
     registry.discover_and_register()
 
     # Create engine
-    _engine = WorkflowEngine(_store, registry)
+    _engine = WorkflowEngine(_store, registry, extras={"__python_sandbox__": describe_contract()})
 
     logger.info("Zebra engine initialized with %d actions", len(registry.list_actions()))
 

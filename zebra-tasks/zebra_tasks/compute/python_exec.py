@@ -9,6 +9,13 @@ from typing import Any
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
 
+from zebra_tasks.compute.sandbox import (
+    ALLOWED_MODULES,
+    BLOCKED_BUILTINS,
+    build_globals,
+    failure_appendix,
+)
+
 
 class PythonExecAction(TaskAction):
     """
@@ -49,14 +56,19 @@ class PythonExecAction(TaskAction):
         ```
 
     Security note:
-        Code runs in the same process with limited restrictions.
-        Do not execute untrusted code.
+        Code runs in the same process with limited restrictions (a restricted execution
+        contract, not isolation). Do not execute untrusted code. The contract (allowed
+        modules, blocked builtins, ``props`` / ``result``) is defined in
+        ``zebra_tasks.compute.sandbox``.
     """
 
     # #245: writes outside this run; judged at runtime, refused by strict gym
     reversibility_hint = "context_dependent"
 
-    description = "Execute Python code in a restricted environment and capture the result."
+    description = (
+        "Execute Python code in a restricted environment and capture the result. "
+        "Allowed imports, blocked builtins and the result rule: zebra_tasks.compute.sandbox."
+    )
 
     inputs = [
         ParameterDef(
@@ -109,38 +121,9 @@ class PythonExecAction(TaskAction):
         ),
     ]
 
-    # Allowed built-in modules
-    ALLOWED_MODULES = {
-        "math",
-        "json",
-        "datetime",
-        "collections",
-        "itertools",
-        "functools",
-        "operator",
-        "string",
-        "re",
-        "random",
-        "statistics",
-        "decimal",
-        "fractions",
-        "hashlib",
-        "base64",
-        "uuid",
-        "copy",
-        "pprint",
-    }
-
-    # Blocked built-ins for safety
-    BLOCKED_BUILTINS = {
-        "eval",
-        "exec",
-        "compile",
-        "__import__",
-        "open",
-        "input",
-        "breakpoint",
-    }
+    # The contract lives in zebra_tasks.compute.sandbox (#323)
+    ALLOWED_MODULES = ALLOWED_MODULES
+    BLOCKED_BUILTINS = BLOCKED_BUILTINS
 
     async def run(self, task: TaskInstance, context: ExecutionContext) -> TaskResult:
         """Execute Python code."""
@@ -199,43 +182,8 @@ class PythonExecAction(TaskAction):
         except Exception as e:
             error_msg = f"{type(e).__name__}: {e}"
             tb = traceback.format_exc()
-            return TaskResult.fail(f"Execution error: {error_msg}\n{tb}")
+            return TaskResult.fail(f"Execution error: {error_msg}\n{tb}{failure_appendix(e)}")
 
     def _build_globals(self, context: ExecutionContext) -> dict[str, Any]:
         """Build the global namespace for code execution."""
-        # Start with safe builtins
-        safe_builtins = (
-            {k: v for k, v in __builtins__.items() if k not in self.BLOCKED_BUILTINS}
-            if isinstance(__builtins__, dict)
-            else {
-                k: getattr(__builtins__, k)
-                for k in dir(__builtins__)
-                if not k.startswith("_") and k not in self.BLOCKED_BUILTINS
-            }
-        )
-
-        # Create a restricted __import__ that only allows certain modules
-        def safe_import(name, *args, **kwargs):
-            if name.split(".")[0] not in self.ALLOWED_MODULES:
-                raise ImportError(f"Module '{name}' is not allowed")
-            return (
-                __builtins__["__import__"](name, *args, **kwargs)
-                if isinstance(__builtins__, dict)
-                else __import__(name, *args, **kwargs)
-            )
-
-        safe_builtins["__import__"] = safe_import
-
-        # Build globals with process properties accessible
-        props = {k: v for k, v in context.process.properties.items() if not k.startswith("__")}
-
-        return {
-            "__builtins__": safe_builtins,
-            "props": props,
-            # Pre-import common modules for convenience
-            "math": __import__("math"),
-            "json": __import__("json"),
-            "datetime": __import__("datetime"),
-            "re": __import__("re"),
-            "random": __import__("random"),
-        }
+        return build_globals(context.process.properties)

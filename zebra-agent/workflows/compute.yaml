@@ -2,7 +2,7 @@ name: "Compute"
 description: "Perform calculations and data processing using Python code"
 tags: ["compute", "calculation", "math", "data", "python"]
 use_when: "User needs numerical calculations, math operations, data transformations, or any task requiring actual computation (not just reasoning about numbers)"
-version: 1
+version: 2
 first_task: plan
 
 tasks:
@@ -16,11 +16,11 @@ tasks:
 
         Guidelines:
         - Use clear variable names
-        - Assign the final result to a variable called `result`
-        - Available modules: math, json, datetime, re, random, statistics, collections
         - You can use print() for debugging but the main output should be in `result`
         - Keep code simple and readable
         - Handle edge cases appropriately
+
+        {{python_sandbox}}
 
         Respond with ONLY the Python code, no explanations or markdown code blocks.
       prompt: "Write Python code to: {{goal}}"

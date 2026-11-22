@@ -17,7 +17,7 @@ from zebra.core.models import ProcessDefinition
 TEMPLATE_REF = re.compile(r"\{\{(\w+(?:\.\w+)*)\}\}")
 
 # Roots the caller or engine supplies at run time rather than the definition
-_RUNTIME_ROOTS = frozenset({"goal", "user_id", "run_id", "model"})
+_RUNTIME_ROOTS = frozenset({"goal", "user_id", "run_id", "model", "python_sandbox"})
 
 ERROR = "error"
 WARNING = "warning"

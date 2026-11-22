@@ -287,3 +287,44 @@ async def test_strict_templates_fails_the_task_naming_the_reference(engine):
     tasks = await engine.store.load_tasks_for_process(process.id)
     failed = [t for t in tasks if t.error and "{{typo_key}}" in t.error]
     assert failed, [t.error for t in tasks]
+
+
+class TestPythonSandboxRoot:
+    """``{{python_sandbox}}`` is a runtime root served from the engine's extras (#323)."""
+
+    YAML = """
+name: sb
+tasks:
+  a:
+    name: A
+    action: ok
+    properties: {prompt: "rules: {{python_sandbox}}"}
+"""
+
+    def test_not_flagged_as_unknown_reference(self):
+        assert validate_contracts(load(self.YAML)) == []
+
+    async def _prompt(self, extras: dict, properties: dict | None = None) -> str:
+        definition = load(self.YAML)
+        engine = WorkflowEngine(InMemoryStore(), ActionRegistry(), extras=extras)
+        process = await engine.create_process(definition, properties=properties or {})
+        task_def = definition.tasks["a"]
+        context = ExecutionContext(
+            engine=engine,
+            store=engine.store,
+            process=process,
+            process_definition=definition,
+            task_definition=task_def,
+            extras=engine.extras,
+        )
+        return context.resolve_template(task_def.properties["prompt"])
+
+    async def test_resolves_from_extras(self):
+        assert await self._prompt({"__python_sandbox__": "THE RULES"}) == "rules: THE RULES"
+
+    async def test_process_property_wins(self):
+        out = await self._prompt({"__python_sandbox__": "X"}, {"python_sandbox": "mine"})
+        assert out == "rules: mine"
+
+    async def test_missing_extra_is_unresolved(self):
+        assert await self._prompt({}) == "rules: "
