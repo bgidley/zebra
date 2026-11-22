@@ -36,9 +36,9 @@ variable), so any prompt or edit is a guess and at least one workflow fails at r
 
 | # | Outcome | How we'll know |
 |---|---------|----------------|
-| O1 | The sandbox contract is defined once and `python_exec` runs by it | `test_python_exec_sandbox.py`: `PythonExecAction` has no module or builtin list of its own; every module in the contract imports, every other module fails with `ImportError`, every blocked builtin is absent; a source scan finds no second hand-written module list in `zebra-agent/workflows/*.yaml` |
+| O1 | The sandbox contract is defined once and `python_exec` runs by it | `test_python_exec_sandbox.py`: `PythonExecAction` has no module or builtin list of its own; every module in the contract imports, a module outside the contract is refused by the import gate (checked separately from the `__import__` hook), every blocked builtin is absent; a source scan finds no second hand-written module list in `zebra-agent/workflows/*.yaml` |
 | O2 | Prompts get the real contract | `{{python_sandbox}}` resolves to text naming each allowed module and the `result` rule; the built-in *Compute* planner prompt uses it, and a test fails if its text and `ALLOWED_MODULES` diverge |
-| O3 | A workflow whose literal `python_exec` code breaks the contract cannot be saved | `WorkflowLibrary.save()` of a workflow with `import os` (or `open(...)`) raises `WorkflowContractError` naming the task and `os`; the same workflow with `import json` saves; templated `code: "{{code}}"` is not rejected |
+| O3 | A workflow whose literal `python_exec` code has statically detectable violations cannot be saved | `WorkflowLibrary.save()` of a workflow with `import os` (or `open(...)`) raises `WorkflowContractError` naming the task and `os`; the same workflow with `import json` saves; templated `code: "{{code}}"` is not rejected |
 | O4 | Every shipped workflow already honours it | A test loads all `zebra-agent/workflows/*.yaml` and `zebra-py` templates and finds no sandbox findings |
 | O5 | A runtime failure tells the author what is allowed | A run of disallowed code fails with the import error followed by the contract text, visible in the task's failure message |
 

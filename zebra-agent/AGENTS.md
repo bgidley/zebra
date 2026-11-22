@@ -386,6 +386,13 @@ The Dream Cycle can be triggered explicitly via:
 - `python manage.py dream_cycle` in Django (zebra-agent-web)
 - `POST /api/dream-cycle/` API endpoint (zebra-agent-web)
 
+### `python_exec` code in workflows
+
+Never hand-write which modules `python_exec` allows in a prompt: use `{{python_sandbox}}`
+(contract in `zebra_tasks/compute/sandbox.py`, set in `engine.extras["__python_sandbox__"]` by
+`AgentLoop` and the web engine factory; a new engine factory must set it too). `save()` refuses
+literal `python_exec` code that breaks the contract (#323).
+
 ### Add a New Built-in Workflow
 
 1. Create YAML file in `workflows/` directory

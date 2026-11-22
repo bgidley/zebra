@@ -181,6 +181,8 @@ class ExecutionContext:
         - ``{{task_id.output}}`` — legacy task output shorthand
         - ``{{property_name.key}}`` — dict key access on a process property
         - ``{{property_name.key.subkey}}`` — nested dict key access
+        - ``{{python_sandbox}}`` — the ``python_exec`` contract text from
+          ``extras["__python_sandbox__"]`` (#323)
 
         A reference that resolves to nothing becomes ``""`` but is logged and recorded in
         the process property ``__contract_violations__`` (#271). When the process property
@@ -204,6 +206,10 @@ class ExecutionContext:
 
         def replace_var(match: re.Match) -> str:
             var = match.group(1)
+            # Runtime root supplied by the engine's extras, never a process property (#323)
+            if var == "python_sandbox" and var not in self.process.properties:
+                text = self.extras.get("__python_sandbox__")
+                return str(text) if text else unresolved(var)
             if "." in var:
                 parts = var.split(".")
                 root, rest = parts[0], parts[1:]

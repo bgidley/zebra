@@ -152,7 +152,7 @@ fetch_repo:
 
 | Action | Class | Purpose |
 |--------|-------|---------|
-| `python_exec` | `PythonExecAction` | Execute Python code in a sandboxed environment |
+| `python_exec` | `PythonExecAction` | Execute Python code in a restricted in-process environment (not isolation); contract in `compute/sandbox.py`, exposed to prompts as `{{python_sandbox}}` |
 
 ## Usage
 

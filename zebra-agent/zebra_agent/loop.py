@@ -21,6 +21,7 @@ from typing import Any
 
 from zebra.core.engine import WorkflowEngine
 from zebra.core.models import ProcessState, TaskState
+from zebra_tasks.compute.sandbox import describe_contract
 from zebra_tasks.launch import create_library_process
 
 from zebra_agent.human_tasks import find_pending_human_task
@@ -123,6 +124,7 @@ class AgentLoop:
         self.engine.extras["__profile_store__"] = profile
         self.engine.extras["__knowledge_store__"] = knowledge
         self.engine.extras["__workflow_library__"] = library
+        self.engine.extras["__python_sandbox__"] = describe_contract()
 
     async def process_goal(
         self,

@@ -778,10 +778,28 @@ class WorkflowLibrary:
             if finding.severity != ERROR:
                 logger.warning("Workflow %r: %s", name, finding)
         errors = [str(f) for f in findings if f.severity == ERROR]
+        errors += WorkflowLibrary._sandbox_errors(definition)
         if errors:
             raise WorkflowContractError(
                 f"Workflow {name!r} breaks its contracts: " + "; ".join(errors)
             )
+
+    @staticmethod
+    def _sandbox_errors(definition: Any) -> list[str]:
+        """Violations of the ``python_exec`` sandbox contract in literal task code (#323).
+
+        Code with a ``{{...}}`` reference is skipped: it is checked when it runs.
+        """
+        from zebra_tasks.compute.sandbox import check_task_code
+
+        errors: list[str] = []
+        for task_id, task_def in definition.tasks.items():
+            code = task_def.properties.get("code")
+            if task_def.action != "python_exec" or not isinstance(code, str):
+                continue
+            for finding in check_task_code(code) or []:
+                errors.append(f"task '{task_id}' python_exec: {finding}")
+        return errors
 
     @staticmethod
     def _check_leaks(
