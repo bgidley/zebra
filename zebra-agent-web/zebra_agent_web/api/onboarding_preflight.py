@@ -1,4 +1,4 @@
-"""Pure pre-flight validators for the Oracle Cloud signup guide (#277, S2).
+"""Pure pre-flight validators for the Oracle Cloud signup guide (#277, S2; wizard step #312).
 
 No network calls and no OCI SDK: everything here checks the *shape* of what a user pastes.
 Only non-secret values are accepted (tenancy OCID, region id); anything that looks like a
@@ -9,6 +9,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+
+# Bump ONBOARDING_GUIDE_VERSION whenever the guide text (partials/signup_guide.html) changes;
+# it is shown on the page with the date the text was last checked against Oracle's docs.
+ONBOARDING_GUIDE_VERSION = "2026-11-23.1"
+ONBOARDING_GUIDE_CHECKED = "2026-11-16"
 
 # Regions that offer Always Free Autonomous AI Database 26ai (Oracle docs, checked 2026-11-16;
 # the page says they are the only homes where vector search is free). uk-london-1 is the default.
@@ -99,3 +104,43 @@ def validate_region(raw: str) -> PreflightResult:
     elif value != DEFAULT_REGION:
         warnings.append(f"Zebra's default and tested region is {DEFAULT_REGION}.")
     return PreflightResult(ok=True, value=value, warnings=warnings)
+
+
+def check_signup(output: dict) -> tuple[dict, dict[str, list[str]]]:
+    """Validate and normalise the signup step's answers.
+
+    Returns ``(clean_output, field_errors)``. Shape only, no network. A rejected value may be
+    a pasted secret, so it is dropped from ``clean_output`` and never named in an error.
+    ``payg`` becomes ``pending`` when the upgrade was requested but not reported active.
+    """
+    clean = dict(output)
+    errors: dict[str, list[str]] = {}
+    ocid = validate_tenancy_ocid(str(output.get("tenancy_ocid") or ""))
+    region = validate_region(str(output.get("home_region") or ""))
+    for name, result in (("tenancy_ocid", ocid), ("home_region", region)):
+        if not result.ok:
+            errors[name] = [result.error]
+    clean["tenancy_ocid"] = ocid.value if ocid.ok else ""
+    clean["home_region"] = (region.value if region.ok else "") or DEFAULT_REGION
+    payg = output.get("payg")
+    payg = payg if payg in PAYG_STATES else "none"
+    if payg == "none" and output.get("payg_requested"):
+        payg = "pending"
+    clean["payg"] = payg
+    return clean, errors
+
+
+def signup_summary(output: dict | None) -> list[str]:
+    """Short, non-secret lines about the signup answers, for later wizard steps."""
+    if not isinstance(output, dict) or not output.get("account_created"):
+        return []
+    lines = [f"Home region: {output.get('home_region') or DEFAULT_REGION}"]
+    payg = output.get("payg")
+    if payg == "pending":
+        lines.append("Pay-As-You-Go: upgrade pending (carry on, do not wait for it)")
+    elif payg == "active":
+        lines.append("Pay-As-You-Go: active (self-reported)")
+    else:
+        lines.append("Pay-As-You-Go: Always Free only")
+    region = validate_region(str(output.get("home_region") or ""))
+    return lines + region.warnings

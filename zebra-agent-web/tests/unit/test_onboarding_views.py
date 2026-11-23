@@ -11,6 +11,9 @@ from zebra_agent_web.api import onboarding as ob
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
+#: Answers that complete the signup step (the two ticks are the next-step lock)
+SIGNUP = {"home_region": "uk-london-1", "account_created": "on", "budget_ack": "on"}
+
 
 def _prod_middleware() -> list[str]:
     """settings.MIDDLEWARE as declared in settings.py (test settings drop login + setup)."""
@@ -141,7 +144,7 @@ def test_the_manage_page_is_behind_login_and_owner_only(onboarding_env, settings
 def test_resume_link_brings_a_new_browser_back_to_the_same_step(onboarding_env):
     first = Client()
     _start(first)
-    assert _submit(first, "done", home_region="uk-london-1").status_code == 302
+    assert _submit(first, "done", **SIGNUP).status_code == 302
     html = first.get("/onboarding/").content.decode()
     assert "Give access" in html
     resume = html.split('aria-label="Resume link"', 1)[0].rsplit('value="', 1)[1].split('"')[0]
@@ -160,7 +163,7 @@ def test_no_secret_in_properties(onboarding_env):
     client = Client()
     _start(client)
     token = client.cookies[ob.COOKIE_NAME].value
-    _submit(client, "done", home_region="uk-london-1")
+    _submit(client, "done", **SIGNUP)
     _model, props = _process_props()
     _pid, nonce = ob.read_token(token)
     text = json.dumps(props)
@@ -238,7 +241,7 @@ def test_problem_needs_a_reason(onboarding_env):
 def test_a_required_confirmation_must_be_ticked(onboarding_env):
     client = Client()
     _start(client)
-    _submit(client, "done", home_region="uk-london-1")
+    _submit(client, "done", **SIGNUP)
     _submit(client, "done", name="mine")  # access (#278): nothing to tick
     client.post("/onboarding/token/")  # provision needs its callback token first
     response = _submit(client, "done")
@@ -249,7 +252,7 @@ def test_a_required_confirmation_must_be_ticked(onboarding_env):
 def test_unknown_route_is_refused(onboarding_env):
     client = Client()
     _start(client)
-    assert _submit(client, "skip_ahead", home_region="uk-london-1").status_code == 400
+    assert _submit(client, "skip_ahead", **SIGNUP).status_code == 400
 
 
 def test_the_whole_wizard_finishes(onboarding_env, monkeypatch):
@@ -261,7 +264,7 @@ def test_the_whole_wizard_finishes(onboarding_env, monkeypatch):
     monkeypatch.setattr(cb, "verify_control", proved)
     client = Client()
     _start(client)
-    _submit(client, "done", home_region="uk-london-1")
+    _submit(client, "done", **SIGNUP)
     _submit(client, "done", name="mine")
     client.post("/onboarding/token/")
     _submit(client, "done", applied="on")
@@ -282,7 +285,7 @@ def test_the_whole_wizard_finishes(onboarding_env, monkeypatch):
 def test_htmx_submit_returns_the_step_partial(onboarding_env):
     client = Client()
     _start(client)
-    data = {"task_id": _current_task_id(client), "next_route": "done", "home_region": "uk-london-1"}
+    data = {"task_id": _current_task_id(client), "next_route": "done", **SIGNUP}
     response = client.post("/onboarding/step/", data, HTTP_HX_REQUEST="true")
     html = response.content.decode()
     assert response.status_code == 200
@@ -340,7 +343,7 @@ def test_kill_switch_pauses_the_wizard(onboarding_env):
     assert "paused" in client.get("/onboarding/").content.decode()
     response = client.post(
         "/onboarding/step/",
-        {"task_id": task_id, "next_route": "done", "home_region": "uk-london-1"},
+        {"task_id": task_id, "next_route": "done", **SIGNUP},
     )
     assert response.status_code == 503
     assert Client(REMOTE_ADDR="203.0.113.7").post("/onboarding/start/").status_code == 503

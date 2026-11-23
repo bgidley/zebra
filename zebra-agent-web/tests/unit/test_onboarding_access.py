@@ -30,7 +30,12 @@ def _submit(client: Client, route: str | None, **fields):
 
 def _to_access(client: Client) -> None:
     assert client.post("/onboarding/start/").status_code == 302
-    assert _submit(client, "done", home_region="uk-london-1").status_code == 302
+    assert (
+        _submit(
+            client, "done", home_region="uk-london-1", account_created="on", budget_ack="on"
+        ).status_code
+        == 302
+    )
 
 
 def _props():

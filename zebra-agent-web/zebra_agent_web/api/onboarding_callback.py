@@ -390,9 +390,14 @@ async def _waiting_task_id(store: StateStore, process: ProcessInstance) -> str |
 
 
 async def _claim_token(store: StateStore, process_id: str, digest: str) -> None:
-    """Mark the token used, only if it is still this session's live token (else 410)."""
+    """Mark the token used, only if it is still this session's live token (else 410).
+
+    Store locks are re-entrant per owner, so each claim takes the lock under its own owner
+    name: two concurrent callbacks must not both hold it.
+    """
+    owner = f"{ob._LOCK_OWNER}:claim:{secrets.token_hex(8)}"
     for _attempt in range(20):
-        async with store.lock(process_id, ob._LOCK_OWNER, timeout_seconds=10) as acquired:
+        async with store.lock(process_id, owner, timeout_seconds=10) as acquired:
             if acquired:
                 process = await store.load_process(process_id)
                 props = (process.properties if process else None) or {}

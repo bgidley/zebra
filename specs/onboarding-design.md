@@ -178,7 +178,7 @@ owner toggle), `ONBOARDING_SESSION_COST_CAP_USD`, `ONBOARDING_DAILY_COST_CAP_USD
 
 ## 6b. As built (S3 + S4, #278)
 
-**Step graph** (`onboarding.yaml` v2; `*_retry` tasks show the reason and loop back):
+**Step graph** (`onboarding.yaml` v3; `*_retry` tasks show the reason and loop back):
 
 ```
 signup ─done→ access ─done→ provision ─done→ await_instance ─done→ verify → commons → contribute → finished
@@ -242,6 +242,10 @@ under step 3 and the visitor may only report a problem from it). A task's `onboa
    verify step shows `instance_url`. A failed proof leaves the token unused.
 7. Manual fallback: `POST /onboarding/instance/` (session cookie, CSRF, 10/min/IP) with
    `instance_url` runs the same proof against the session's current token.
+
+## 6b. Signup step (#312)
+
+The #277 guide and pre-flight are wizard step 1, still account-less: the guide is a partial shown with the `signup` task's form, whose answers (tenancy OCID, home region, Pay-As-You-Go status, ticks) are the task output in the visitor's process properties, validated by shape and secret-refused in `step_output`. No table (`OnboardingSignupModel` dropped, migration 0039). `/onboarding/signup/*` redirect to the wizard and obey the same off-means-404 switch. See [onboarding-signup-design.md](onboarding-signup-design.md).
 
 ## 7. Open questions
 

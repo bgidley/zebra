@@ -44,6 +44,7 @@ from zebra.core.models import ProcessState, TaskResult, TaskState
 from zebra_tasks.launch import create_library_process
 from zebra_tasks.llm.client import COST_CAP_KEY
 
+from zebra_agent_web.api.onboarding_preflight import check_signup, signup_summary
 from zebra_agent_web.middleware import _current_user_id_var
 
 if TYPE_CHECKING:
@@ -201,9 +202,13 @@ async def load_session(store: StateStore, token: str | None) -> ProcessInstance 
 
 
 async def _update_properties(store: StateStore, process_id: str, changes: dict[str, Any]) -> None:
-    """Merge *changes* into one process's properties under its lock."""
+    """Merge *changes* into one process's properties under its lock.
+
+    Store locks are re-entrant per owner, so each update locks under its own owner name.
+    """
+    owner = f"{_LOCK_OWNER}:{secrets.token_hex(8)}"
     for _attempt in range(20):
-        async with store.lock(process_id, _LOCK_OWNER, timeout_seconds=10) as acquired:
+        async with store.lock(process_id, owner, timeout_seconds=10) as acquired:
             if acquired:
                 process = await store.load_process(process_id)
                 if process is None:
@@ -461,6 +466,12 @@ class WizardState:
     panel: str = ""
     #: The READY ``external: onboarding_callback`` wait while the session waits on its instance
     waiting_task_id: str | None = None
+    summary: list[str] = field(default_factory=list)
+
+    @property
+    def current_key(self) -> str | None:
+        """The ``onboarding_step`` key of the step being asked, or None."""
+        return self.current.key if self.current else None
 
     @property
     def current(self) -> StepView | None:
@@ -522,6 +533,7 @@ async def wizard_state(store: StateStore, process: ProcessInstance) -> WizardSta
         key=lambda item: item[0],
     )
     state = WizardState(process.id, "active")
+    state.summary = signup_summary((process.properties or {}).get("__task_output_signup"))
     current_key = None
     if process.state == ProcessState.COMPLETE:
         state.status = "finished"
@@ -631,8 +643,8 @@ def step_output(
 
     The "problem" route keeps only the visitor's description of what went wrong. Any other
     route validates the schema (a required checkbox must be ticked) and drops ``problem``.
-    Fields not in the schema, and read-only ones, are ignored. Nothing that looks like a
-    private key or secret is accepted.
+    Fields not in the schema, and read-only ones, are ignored. The signup step's answers get
+    shape checks (``check_signup``). Nothing that looks like a private key or secret is accepted.
     """
     from zebra.forms import coerce_form_data, validate_form_data
 
@@ -657,6 +669,9 @@ def step_output(
             spec = fields.get(name) or {}
             if spec.get("type") == "boolean" and output.get(name) is not True:
                 errors.setdefault(name, []).append("Tick this to continue.")
+    if route != PROBLEM_ROUTE and state.current_key == "signup":
+        output, signup_errors = check_signup(output)
+        errors.update(signup_errors)
     for name, value in output.items():
         if find_private_material(value):
             errors.setdefault(name, []).append(PRIVATE_MATERIAL_ERROR)

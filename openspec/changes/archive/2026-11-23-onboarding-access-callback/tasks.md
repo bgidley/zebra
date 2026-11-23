@@ -2,7 +2,7 @@
 
 ## 1. Workflow
 
-- [x] 1.1 `onboarding.yaml` v2: `access` / `access_policy` / `provision` / `await_instance` (+ retry), `onboarding_panel`, verify shows the instance URL
+- [x] 1.1 `onboarding.yaml` v3: `access` / `access_policy` / `provision` / `await_instance` (+ retry), `onboarding_panel`, verify shows the instance URL
 
 ## 2. Access (S3)
 

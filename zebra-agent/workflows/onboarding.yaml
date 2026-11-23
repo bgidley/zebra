@@ -25,7 +25,7 @@
 # starts it only while its content matches the shipped built-in.
 
 name: "Onboarding"
-version: 2
+version: 3
 description: "Guide a visitor through getting their own Zebra in their own Oracle Cloud tenancy."
 tags: ["system", "onboarding"]
 use_when: "INTERNAL USE ONLY — started by the /onboarding/ wizard"
@@ -50,16 +50,38 @@ tasks:
       schema:
         type: object
         title: "Your Oracle Cloud account"
-        description: "Sign up at https://signup.cloud.oracle.com/ (or sign in), then tell us your home region."
-        required: [home_region]
+        description: "Read the guide above, sign up (or sign in), then tell us what you have. Only non-secret values: passwords, API keys and private keys are refused."
+        required: [account_created, budget_ack]
         properties:
+          tenancy_ocid:
+            type: string
+            title: "Tenancy OCID (optional)"
+            description: "Looks like ocid1.tenancy.oc1..aaaa. Profile menu, Tenancy in the OCI console."
+            maxLength: 200
           home_region:
             type: string
             title: "Home region"
-            description: "Shown in the OCI console's top bar. London is the default."
-            enum: [uk-london-1, eu-frankfurt-1, eu-amsterdam-1, us-ashburn-1, us-phoenix-1, other]
-            enumLabels: ["UK South (London) uk-london-1", "Germany Central (Frankfurt) eu-frankfurt-1", "Netherlands Northwest (Amsterdam) eu-amsterdam-1", "US East (Ashburn) us-ashburn-1", "US West (Phoenix) us-phoenix-1", "Another region"]
+            description: "Shown in the OCI console's top bar, e.g. uk-london-1 (London, the default)."
             default: uk-london-1
+            maxLength: 60
+          payg:
+            type: string
+            title: "Pay-As-You-Go status (self-reported)"
+            enum: ["none", "pending", "active"]
+            enumLabels: ["Always Free only", "Upgrade requested (pending)", "Pay-As-You-Go active"]
+            default: "none"
+          account_created:
+            type: boolean
+            title: "I created my Oracle Cloud account with my chosen home region"
+          admin_mfa:
+            type: boolean
+            title: "I made a dedicated admin user and turned on MFA"
+          payg_requested:
+            type: boolean
+            title: "I asked for the Pay-As-You-Go upgrade (or chose to stay Always Free)"
+          budget_ack:
+            type: boolean
+            title: "I understand a $1 budget alert is created for me in the next step"
           problem:
             type: string
             title: "Something went wrong?"

@@ -276,7 +276,7 @@ def _make_token(client: Client) -> str:
 
 def _to_provision(client: Client) -> None:
     assert client.post("/onboarding/start/").status_code == 302
-    _submit(client, "done", home_region="uk-london-1")
+    _submit(client, "done", home_region="uk-london-1", account_created="on", budget_ack="on")
     _submit(client, "done", name="mine")
 
 
@@ -528,14 +528,29 @@ def test_the_token_never_reaches_a_log(onboarding_env, instance, caplog):
     assert token not in caplog.text
 
 
-@pytest.mark.django_db(transaction=True)
-async def test_two_concurrent_callbacks_complete_once(onboarding_env, monkeypatch):
-    engine, library = onboarding_env
-    process, _ = await ob.start_session(engine, library)
-    # Drive the session to the instance wait through the engine
-    from zebra.core.models import TaskResult
+async def test_two_concurrent_callbacks_complete_once(monkeypatch):
+    """Both pass the proof; the compare-and-set lets exactly one claim the token.
 
-    for route, output in [("done", {"home_region": "uk-london-1"}), ("done", {"name": "mine"})]:
+    An in-memory store keeps SQLite's single-writer locking out of the race; its process lock
+    is re-entrant per owner like the Django store's, so this also guards the per-claim owner.
+    """
+    from zebra.core.engine import WorkflowEngine
+    from zebra.core.models import TaskResult
+    from zebra.definitions.loader import load_definition
+    from zebra.storage.memory import InMemoryStore
+    from zebra.tasks.registry import ActionRegistry
+    from zebra_agent.library import BUILTIN_WORKFLOWS_DIR
+
+    registry = ActionRegistry()
+    registry.register_defaults()
+    engine = WorkflowEngine(InMemoryStore(), registry)
+    definition = load_definition(BUILTIN_WORKFLOWS_DIR / "onboarding.yaml")
+    process = await engine.create_process(
+        definition, properties={ob.MARKER_KEY: True, ob.NONCE_KEY: "0" * 64}
+    )
+    process = await engine.start_process(process.id)
+    signup = {"home_region": "uk-london-1", "account_created": True, "budget_ack": True}
+    for route, output in [("done", signup), ("done", {"name": "mine"})]:
         state = await ob.wizard_state(engine.store, process)
         await engine.complete_task(
             state.task_id, TaskResult(success=True, output=output, next_route=route)
@@ -550,6 +565,16 @@ async def test_two_concurrent_callbacks_complete_once(onboarding_env, monkeypatc
         await asyncio.sleep(0.05)  # both pass the proof before either claims
 
     monkeypatch.setattr(cb, "verify_control", proof)
+    # Reads take time and return copies, as a database does: without the lock both would see
+    # the token unused
+    real_load = engine.store.load_process
+
+    async def slow_load(process_id):
+        loaded = await real_load(process_id)
+        await asyncio.sleep(0.02)
+        return loaded.model_copy(deep=True) if loaded else loaded
+
+    monkeypatch.setattr(engine.store, "load_process", slow_load)
     body = json.dumps({"token": token, "instance_url": "https://zebra.example.com"}).encode()
     results = await asyncio.gather(
         cb.handle_callback(engine, body), cb.handle_callback(engine, body), return_exceptions=True

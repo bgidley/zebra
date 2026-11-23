@@ -8,7 +8,7 @@ instance must be able to tell the host where it is without the host trusting a U
 
 ## What Changes
 
-- `onboarding.yaml` v2: `access` (stack or `policy` route), `access_policy` (option B policy text,
+- `onboarding.yaml` v3: `access` (stack or `policy` route), `access_policy` (option B policy text,
   no key upload, `back` route), `provision` (needs a one-time callback token), `await_instance`
   (`external: onboarding_callback`) with `await_instance_retry`; verify shows the verified URL.
 - `api/onboarding_access.py`: "Deploy to Oracle Cloud" link from `ONBOARDING_STACK_ZIP_URL`
