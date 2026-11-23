@@ -12,7 +12,6 @@ from django.urls import include, path
 
 from zebra_agent_web.api import (
     commons_views,
-    onboarding_views,
     onboarding_wizard_views,
     web_views,
 )
@@ -57,11 +56,11 @@ urlpatterns = [
         commons_views.commons_clear_supervision,
         name="commons_clear_supervision",
     ),
-    # Oracle Cloud signup guidance and pre-flight (#277)
-    path("onboarding/signup/", onboarding_views.signup_guide, name="onboarding_signup"),
+    # The #277 signup URLs now redirect to the wizard's signup step (#312)
+    path("onboarding/signup/", onboarding_wizard_views.legacy_signup, name="onboarding_signup"),
     path(
         "onboarding/signup/confirm/",
-        onboarding_views.signup_confirm,
+        onboarding_wizard_views.legacy_signup,
         name="onboarding_signup_confirm",
     ),
     # Onboarding wizard for anonymous visitors (#276): 404 while off
