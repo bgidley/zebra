@@ -16,10 +16,12 @@ from django.contrib.auth.decorators import login_not_required
 from django.http import Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
 
 from zebra_agent_web.api import agent_engine, engine
 from zebra_agent_web.api import onboarding as ob
+from zebra_agent_web.api import onboarding_preflight as pf
 from zebra_agent_web.middleware import _current_user_id_var
 
 logger = logging.getLogger(__name__)
@@ -97,6 +99,13 @@ async def _render_wizard(request, wf_engine, process, *, errors=None, values=Non
         "route_labels": {"done": "Done, next step", ob.PROBLEM_ROUTE: "Something went wrong"},
         "resume_url": resume_url(request, process.id, parsed[1]) if parsed else "",
     }
+    if state.current_key == "signup" and not state.retry:
+        context.update(
+            guide_version=pf.ONBOARDING_GUIDE_VERSION,
+            guide_checked=pf.ONBOARDING_GUIDE_CHECKED,
+            regions=pf.ALWAYS_FREE_26AI_REGIONS,
+            default_region=pf.DEFAULT_REGION,
+        )
     template = _STEP_PARTIAL if request.headers.get("HX-Request") else _WIZARD
     response = render(request, template, context, status=status)
     if parsed is not None:
@@ -164,8 +173,10 @@ async def submit(request):
             return await _render_wizard(request, wf_engine, process, status=409)
         raise
     if errors:
+        # A rejected value may be a pasted secret: it is never shown back
+        kept = {k: v for k, v in raw.items() if k not in errors}
         return await _render_wizard(
-            request, wf_engine, process, errors=errors, values=raw, status=400
+            request, wf_engine, process, errors=errors, values=kept, status=400
         )
     if request.headers.get("HX-Request"):
         process = await wf_engine.store.load_process(process.id)
@@ -237,3 +248,22 @@ async def manage(request):
         "session_cap": ob.config("SESSION_COST_CAP_USD"),
     }
     return render(request, "onboarding/manage.html", context)
+
+
+# ---------------------------------------------------------------------------
+# The #277 signup URLs, kept as redirects (#312): the guide is now wizard step 1
+# ---------------------------------------------------------------------------
+
+
+@login_not_required
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+async def legacy_signup(request):
+    """``/onboarding/signup/`` and ``signup/confirm/``: 404 while off, else on to the wizard.
+
+    Nothing is read or stored here (a POST body is ignored), so skipping CSRF is safe and a
+    POST gets the same 404 as a GET while onboarding is off.
+    """
+    if not await ob.is_enabled():
+        raise Http404("Not found")
+    return redirect(reverse("onboarding_wizard"), permanent=False)

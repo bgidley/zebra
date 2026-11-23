@@ -1,27 +1,18 @@
-"""Oracle Cloud signup guide and pre-flight (#277)."""
+"""The Oracle Cloud signup guide and pre-flight as the wizard's step 1 (#277, #312)."""
 
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.test import Client
+from zebra_agent_web.api import onboarding as ob
 from zebra_agent_web.api import onboarding_preflight as pf
-from zebra_agent_web.api.models import OnboardingSignupModel
 
 OCID = "ocid1.tenancy.oc1..aaaaaaaabcdefghijklmnopqrstuvwxyz234567"
-
-
-@pytest.fixture(autouse=True)
-def completed_setup(db):
-    from zebra_agent_web.api.identity import set_identity_sync
-
-    set_identity_sync("Test User")
-
-
-@pytest.fixture
-def on(settings):
-    settings.ZEBRA_AGENT_SETTINGS = {**settings.ZEBRA_AGENT_SETTINGS, "ONBOARDING_ENABLED": True}
+TICKS = {"account_created": "on", "budget_ack": "on"}
 
 
 @pytest.mark.parametrize(
@@ -65,90 +56,180 @@ def test_cardiff_warning_says_no_26ai():
     assert "26ai" in pf.validate_region("uk-cardiff-1").warnings[0]
 
 
-def test_off_returns_404(client, test_user):
-    client.force_login(test_user)
-    assert client.get("/onboarding/signup/").status_code == 404
-    assert client.post("/onboarding/signup/confirm/", {}).status_code == 404
+def test_check_signup_marks_a_requested_upgrade_pending():
+    clean, errors = pf.check_signup({"payg": "none", "payg_requested": True, "home_region": ""})
+    assert not errors
+    assert clean["payg"] == "pending" and clean["home_region"] == pf.DEFAULT_REGION
+    clean, _ = pf.check_signup({"payg": "active", "payg_requested": True})
+    assert clean["payg"] == "active"
+    clean, _ = pf.check_signup({"payg": "bogus"})
+    assert clean["payg"] == "none"
 
 
-@pytest.mark.django_db
-def test_guide_content(on, authenticated_client):
-    html = authenticated_client.get("/onboarding/signup/").content.decode()
+def test_check_signup_drops_rejected_values():
+    clean, errors = pf.check_signup({"tenancy_ocid": "-----BEGIN RSA PRIVATE KEY-----abc"})
+    assert "tenancy_ocid" in errors
+    assert clean["tenancy_ocid"] == ""
+    assert "PRIVATE KEY" not in json.dumps(errors)
+
+
+# ---------------------------------------------------------------------------
+# In the wizard (needs the engine)
+# ---------------------------------------------------------------------------
+
+db = pytest.mark.django_db(transaction=True)
+
+
+def _start() -> Client:
+    client = Client()
+    assert client.post("/onboarding/start/").status_code == 302
+    return client
+
+
+def _task_id(client: Client) -> str:
+    html = client.get("/onboarding/").content.decode()
+    return html.split('name="task_id" value="', 1)[1].split('"', 1)[0]
+
+
+def _submit(client: Client, route: str = "done", **fields):
+    return client.post(
+        "/onboarding/step/", {"task_id": _task_id(client), "next_route": route, **fields}
+    )
+
+
+def _props() -> dict:
+    from zebra_agent_web.api.models import ProcessInstanceModel
+
+    [model] = ProcessInstanceModel.objects.all()
+    return json.loads(model.properties)
+
+
+@db
+def test_step_one_is_the_guide_with_no_login_and_no_user(onboarding_env):
+    users = get_user_model().objects.count()
+    html = _start().get("/onboarding/").content.decode()
+    assert 'data-testid="signup-guide"' in html
     assert "uk-london-1" in html
     assert "1-2 days" in html
-    assert "Do not wait" in html or "do not wait" in html.lower()
     assert "cannot be changed later" in html
     assert "2 OCPUs and 12 GB" in html
-    assert 'data-testid="guide-version"' in html
-    assert html.index("1-2 days") < html.index("preflight-form")
+    assert 'data-testid="guide-version"' in html and pf.ONBOARDING_GUIDE_VERSION in html
+    assert html.index("1-2 days") < html.index('name="tenancy_ocid"')
     assert html.index("cannot be changed later") < html.index("signup-steps")
+    assert get_user_model().objects.count() == users
 
 
-@pytest.mark.django_db
-def test_external_links_open_safely(on, authenticated_client):
-    html = authenticated_client.get("/onboarding/signup/").content.decode()
+@db
+def test_external_links_open_safely(onboarding_env):
+    html = _start().get("/onboarding/").content.decode()
     external = re.findall(r"<a [^>]*href=\"https://[^\"]+\"[^>]*>", html)
     assert len(external) >= 6
-    assert all('target="_blank"' in a and "noopener" in a for a in external)
+    assert all('target="_blank" rel="noopener"' in a for a in external)
 
 
-@pytest.mark.django_db
-def test_requires_login(on, client):
-    response = client.get("/onboarding/signup/")
+@db
+def test_answers_are_kept_in_process_properties_and_resume(onboarding_env):
+    first = _start()
+    response = _submit(
+        first, tenancy_ocid=OCID, home_region="uk-london-1", payg_requested="on", **TICKS
+    )
     assert response.status_code == 302
+    stored = _props()["__task_output_signup"]
+    assert stored["tenancy_ocid"] == OCID
+    assert stored["payg"] == "pending"
+
+    html = first.get("/onboarding/").content.decode()
+    assert "Pay-As-You-Go: upgrade pending" in html and "Home region: uk-london-1" in html
+    assert "Give access" in html
+
+    token = first.cookies[ob.COOKIE_NAME].value
+    second = Client()
+    path = f"/onboarding/r/{token}/"
+    assert second.get(path).status_code == 302
+    assert "Pay-As-You-Go: upgrade pending" in second.get("/onboarding/").content.decode()
+
+    other = _start()  # another visitor sees none of it
+    other_html = other.get("/onboarding/").content.decode()
+    assert OCID not in other_html and "Pay-As-You-Go: upgrade pending" not in other_html
 
 
-@pytest.mark.django_db
-def test_confirm_persists_and_resumes(on, authenticated_client, test_user):
-    response = authenticated_client.post(
-        "/onboarding/signup/confirm/",
-        {
-            "tenancy_ocid": OCID,
-            "region": "uk-london-1",
-            "payg": "pending",
-            "account_created": "1",
-            "budget_ack": "1",
-        },
-    )
-    assert response.status_code == 200
+@db
+def test_the_next_step_stays_locked_until_the_ticks_are_set(onboarding_env):
+    client = _start()
+    response = _submit(client, home_region="uk-london-1", account_created="on")
+    assert response.status_code == 400
+    assert "Tick this to continue" in response.content.decode()
+    assert "__task_output_signup" not in _props()
+    assert "Give access" not in client.get("/onboarding/").content.decode().split("Steps")[0]
+    assert "Step 1 of 6" in client.get("/onboarding/").content.decode()
+
+
+@db
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("tenancy_ocid", "-----BEGIN RSA PRIVATE KEY-----abc"),
+        ("tenancy_ocid", "password: hunter2"),
+        ("tenancy_ocid", "ocid1.user.oc1..aaaaaaaabcdefghijklmnopqrstuvwxyz234567"),
+        ("home_region", "sk-or-v1-abcdefghijklmnopqrstuvwx"),
+        ("home_region", "nowhere"),
+        ("tenancy_ocid", "ocid1.tenancy.oc1..short"),
+    ],
+)
+def test_bad_values_are_refused_never_stored_or_echoed(onboarding_env, field, value):
+    client = _start()
+    data = {"home_region": "uk-london-1", **TICKS, field: value}
+    response = _submit(client, **data)
+    assert response.status_code == 400
     html = response.content.decode()
-    assert "upgrade pending" in html
-    assert 'data-testid="ready"' in html
-    row = OnboardingSignupModel.objects.get(user_id=test_user.pk)
-    assert row.data["tenancy_ocid"] == OCID
-    assert row.data["payg"] == "pending"
-    again = authenticated_client.get("/onboarding/signup/").content.decode()
-    assert OCID in again
-    assert "upgrade pending" in again
+    assert value not in html
+    assert value not in json.dumps(_props())
+    assert "__task_output_signup" not in _props()
 
 
-@pytest.mark.django_db
-def test_not_ready_without_budget_ack(on, authenticated_client):
-    html = authenticated_client.post(
-        "/onboarding/signup/confirm/", {"region": "uk-london-1", "account_created": "1"}
-    ).content.decode()
-    assert 'data-testid="not-ready"' in html
-    assert 'data-testid="ready"' not in html
+@db
+def test_a_secret_in_the_problem_text_is_not_echoed_back(onboarding_env):
+    client = _start()
+    pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----"
+    response = _submit(client, "problem", problem=pem)
+    assert response.status_code == 400
+    assert "PRIVATE KEY" not in response.content.decode()
 
 
-@pytest.mark.django_db
-def test_bad_values_rejected_not_stored_or_echoed(on, authenticated_client, test_user):
-    secret = "-----BEGIN RSA PRIVATE KEY-----abc"
-    response = authenticated_client.post(
-        "/onboarding/signup/confirm/", {"tenancy_ocid": secret, "region": "nowhere"}
-    )
-    assert response.status_code == 422
-    html = response.content.decode()
-    assert "PRIVATE KEY" not in html
-    assert "region id looks like" in html
-    assert not OnboardingSignupModel.objects.filter(user_id=test_user.pk).exists()
+# ---------------------------------------------------------------------------
+# The #277 URLs and the removed model
+# ---------------------------------------------------------------------------
 
 
-@pytest.mark.django_db
-def test_state_is_per_user(on, authenticated_client, client, test_user):
-    authenticated_client.post(
-        "/onboarding/signup/confirm/", {"tenancy_ocid": OCID, "region": "uk-london-1"}
-    )
-    other = get_user_model().objects.create_user("other", password="x")
-    client.force_login(other)
-    assert OCID not in client.get("/onboarding/signup/").content.decode()
+@db
+@pytest.mark.parametrize("path", ["/onboarding/signup/", "/onboarding/signup/confirm/"])
+def test_old_urls_redirect_to_the_wizard_without_login(onboarding_env, path):
+    anonymous = Client(enforce_csrf_checks=True)
+    for method in (anonymous.get, anonymous.post):
+        response = method(path)
+        assert response.status_code == 302
+        assert response.url == "/onboarding/"
+
+
+@db
+@pytest.mark.parametrize("env_on, owner_on", [(False, True), (True, False), (False, False)])
+@pytest.mark.parametrize("path", ["/onboarding/signup/", "/onboarding/signup/confirm/"])
+def test_old_urls_are_404_while_off_for_get_and_post(
+    onboarding_env, settings, env_on, owner_on, path
+):
+    from zebra_agent_web.api.models import SystemStateModel
+
+    settings.ZEBRA_AGENT_SETTINGS = {**settings.ZEBRA_AGENT_SETTINGS, "ONBOARDING_ENABLED": env_on}
+    SystemStateModel.objects.filter(pk=1).update(onboarding_enabled=owner_on)
+    client = Client(enforce_csrf_checks=True)
+    assert client.get(path).status_code == 404
+    assert client.post(path).status_code == 404
+
+
+def test_the_per_user_table_is_gone():
+    from django.apps import apps
+
+    assert not any(m.__name__ == "OnboardingSignupModel" for m in apps.get_models())
+    from zebra_agent_web.api import models
+
+    assert not hasattr(models, "OnboardingSignupModel")

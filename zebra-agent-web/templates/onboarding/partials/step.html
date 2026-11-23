@@ -22,6 +22,11 @@ Context: state, form, field_errors, submitted_values, route_labels, halted.
     </nav>
 
     <section class="rounded-lg border border-line bg-surface p-6" aria-live="polite">
+        {% if state.summary and state.status != "ended" %}
+        <ul class="mb-5 rounded-md bg-surface-2 p-3 text-sm text-muted" data-testid="account-summary" aria-label="Your Oracle Cloud account">
+            {% for line in state.summary %}<li>{{ line }}</li>{% endfor %}
+        </ul>
+        {% endif %}
         {% if state.status == "finished" %}
             <h2 class="text-lg font-semibold">All done</h2>
             <p class="mt-2 text-sm text-muted">Every step is complete. Enjoy your Zebra.</p>
@@ -52,6 +57,8 @@ Context: state, form, field_errors, submitted_values, route_labels, halted.
                 <div class="rounded-md bg-surface-2 p-3"><dt class="text-xs font-medium text-faint">How to undo it</dt><dd class="mt-1">{{ step.undo }}</dd></div>
             </dl>
             {% endif %}
+
+            {% if guide_version %}{% include "onboarding/partials/signup_guide.html" %}{% endif %}
 
             <form method="post" action="{% url 'onboarding_submit' %}" class="mt-6"
                   hx-post="{% url 'onboarding_submit' %}" hx-target="#onboarding-step" hx-swap="outerHTML">

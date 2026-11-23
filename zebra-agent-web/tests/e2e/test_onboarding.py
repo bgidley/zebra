@@ -55,7 +55,13 @@ async def test_resume_lands_on_the_same_step_after_a_failure_and_retry(onboardin
     # Step 1 done
     response = await browser.post(
         "/onboarding/step/",
-        {"task_id": await _task_id(browser), "next_route": "done", "home_region": "uk-london-1"},
+        {
+            "task_id": await _task_id(browser),
+            "next_route": "done",
+            "home_region": "uk-london-1",
+            "account_created": "on",
+            "budget_ack": "on",
+        },
     )
     assert response.status_code == 302
 

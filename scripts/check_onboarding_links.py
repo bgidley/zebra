@@ -11,14 +11,20 @@ import sys
 import urllib.request
 from pathlib import Path
 
-TEMPLATES = Path(__file__).resolve().parent.parent / "zebra-agent-web" / "templates" / "pages"
+TEMPLATES = (
+    Path(__file__).resolve().parent.parent
+    / "zebra-agent-web"
+    / "templates"
+    / "onboarding"
+    / "partials"
+)
 
 
 def main() -> int:
     urls = sorted(
         {
             u
-            for f in TEMPLATES.glob("onboarding_*.html")
+            for f in TEMPLATES.glob("signup_guide.html")
             for u in re.findall(r'href="(https://[^"]+)"', f.read_text())
         }
     )
