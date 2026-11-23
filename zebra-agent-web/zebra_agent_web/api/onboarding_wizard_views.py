@@ -13,13 +13,16 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_not_required
-from django.http import Http404, HttpResponse, HttpResponseForbidden
+from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
 
 from zebra_agent_web.api import agent_engine, engine
 from zebra_agent_web.api import onboarding as ob
+from zebra_agent_web.api import onboarding_access as access
+from zebra_agent_web.api import onboarding_callback as cb
 from zebra_agent_web.middleware import _current_user_id_var
 
 logger = logging.getLogger(__name__)
@@ -83,19 +86,52 @@ async def _halted() -> bool:
     return await is_halted()
 
 
-async def _render_wizard(request, wf_engine, process, *, errors=None, values=None, status=200):
+_ROUTE_LABELS = {
+    "done": "Done, next step",
+    ob.PROBLEM_ROUTE: "Something went wrong",
+    "policy": "I can't use the stack: show the policy for my admin",
+    "back": "Back",
+}
+
+
+def _session_name(process) -> str:
+    """The short name the visitor chose on the access step (or the placeholder)."""
+    output = (process.properties or {}).get("__task_output_access") or {}
+    return access.clean_name(output.get("name") if isinstance(output, dict) else None)
+
+
+async def _render_wizard(
+    request,
+    wf_engine,
+    process,
+    *,
+    errors=None,
+    values=None,
+    status=200,
+    new_token: str = "",
+    message: str = "",
+):
     from zebra.forms import schema_to_form
 
     state = await ob.wizard_state(wf_engine.store, process)
     parsed = ob.read_token(request.COOKIES.get(ob.COOKIE_NAME))
+    name = _session_name(process)
     context = {
         "state": state,
         "form": schema_to_form(state.schema) if state.task_id else None,
         "field_errors": errors or {},
         "submitted_values": values or {},
         "halted": await _halted(),
-        "route_labels": {"done": "Done, next step", ob.PROBLEM_ROUTE: "Something went wrong"},
+        "route_labels": _ROUTE_LABELS,
         "resume_url": resume_url(request, process.id, parsed[1]) if parsed else "",
+        "message": message,
+        # Access step (#278 S3) and callback (S4) panels
+        "stack": access.stack(),
+        "policy": access.policy_text(name) if state.panel == "policy" else None,
+        "zebra_name": name,
+        "callback_token": cb.token_status(process.properties or {}),
+        "new_token": new_token,
+        "callback_url": request.build_absolute_uri(reverse("onboarding_callback")),
     }
     template = _STEP_PARTIAL if request.headers.get("HX-Request") else _WIZARD
     response = render(request, template, context, status=status)
@@ -196,6 +232,97 @@ async def forget(request):
         await ob.forget_session(wf_engine, process.id)
     response.delete_cookie(ob.COOKIE_NAME, path="/onboarding/")
     return response
+
+
+# ---------------------------------------------------------------------------
+# Access step and callback (#278 S3, S4)
+# ---------------------------------------------------------------------------
+
+
+@require_http_methods(["GET"])
+@_wizard_view
+async def revoke(request):
+    """How to undo everything: reachable from every terminal state, with or without a session."""
+    name = access.NAME_PLACEHOLDER
+    if request.COOKIES.get(ob.COOKIE_NAME):
+        _wf_engine, process = await _session(request)
+        if process is not None:
+            name = _session_name(process)
+    return render(
+        request,
+        "onboarding/revoke.html",
+        {"steps": access.revoke_steps(name), "zebra_name": name},
+    )
+
+
+@require_POST
+@_wizard_view
+async def callback_token(request):
+    """Make (or rotate) the session's one-time callback token and show it once."""
+    wf_engine, process = await _session(request)
+    if process is None:
+        return _message(request, "Your session has ended. You can start again.", 403)
+    if await _halted():
+        return _message(request, "The wizard is paused right now. Please come back later.", 503)
+    state = await ob.wizard_state(wf_engine.store, process)
+    if state.panel not in ("provision", "await"):
+        return await _render_wizard(request, wf_engine, process, status=409)
+    token = await cb.issue_token(wf_engine.store, process.id)
+    process = await wf_engine.store.load_process(process.id)
+    response = await _render_wizard(request, wf_engine, process, new_token=token)
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_POST
+@_wizard_view
+async def manual_instance(request):
+    """The visitor pastes their instance URL: the same control proof as the callback."""
+    wf_engine, process = await _session(request)
+    if process is None:
+        return _message(request, "Your session has ended. You can start again.", 403)
+    if await _halted():
+        return _message(request, "The wizard is paused right now. Please come back later.", 503)
+    if not ob.allow("instance", ob.client_ip(request), cb.CALLBACKS_PER_IP_MINUTE, 60):
+        return _message(request, "Too many checks. Please wait a minute.", 429)
+    try:
+        await cb.manual_instance(wf_engine, process, request.POST.get("instance_url", ""))
+    except cb.CallbackError as e:
+        return await _render_wizard(request, wf_engine, process, status=e.status, message=e.message)
+    return redirect(reverse("onboarding_wizard"))
+
+
+def _json(payload: dict, status: int) -> JsonResponse:
+    response = JsonResponse(payload, status=status)
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@csrf_exempt
+@login_not_required
+@require_POST
+async def callback(request):
+    """``POST /onboarding/callback/``: the new instance calls home (contract: design §4).
+
+    JSON in ``{token, instance_url, version?, commons_fingerprint?}``; JSON out ``{status}``
+    or ``{error}``. 200 done; 400 bad body; 404 onboarding off; 409 session not waiting yet;
+    410 unknown, used, rotated or expired token; 413 body over 4 KB; 422 control proof
+    failed (token stays unused); 429 rate limited; 503 paused.
+    """
+    if not await ob.is_enabled():
+        raise Http404("Not found")
+    if not ob.allow("callback", ob.client_ip(request), cb.CALLBACKS_PER_IP_MINUTE, 60):
+        return _json({"error": "Too many requests; retry later."}, 429)
+    if await _halted():
+        return _json({"error": "Paused; retry later."}, 503)
+    reset = _current_user_id_var.set(None)
+    try:
+        await cb.handle_callback(await _engine(), request.body)
+    except cb.CallbackError as e:
+        return _json({"error": e.message}, e.status)
+    finally:
+        _current_user_id_var.reset(reset)
+    return _json({"status": "ok"}, 200)
 
 
 def resume_url(request, process_id: str, nonce: str) -> str:

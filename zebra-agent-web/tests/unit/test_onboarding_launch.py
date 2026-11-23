@@ -25,7 +25,12 @@ from zebra_agent.library import (
 from zebra_agent_web.api import onboarding as ob
 
 WEB = Path(ob.__file__).resolve().parents[1]
-WIZARD_MODULES = [WEB / "api" / "onboarding.py", WEB / "api" / "onboarding_wizard_views.py"]
+WIZARD_MODULES = [
+    WEB / "api" / "onboarding.py",
+    WEB / "api" / "onboarding_wizard_views.py",
+    WEB / "api" / "onboarding_access.py",
+    WEB / "api" / "onboarding_callback.py",
+]
 
 
 def _model(process_id):
@@ -42,10 +47,15 @@ def _model(process_id):
 def test_every_visitor_step_stays_out_of_the_owner_inbox():
     definition = load_definition(BUILTIN_WORKFLOWS_DIR / "onboarding.yaml")
     steps = [td for td in definition.tasks.values() if not td.auto]
-    assert len(steps) == 12  # six steps and their retry screens
+    # six steps and their retry screens, the access policy screen, and the instance wait
+    # (#278) with its retry screen
+    assert len(steps) == 15
     for td in steps:
-        assert ob.is_visitor_task(td)
+        assert ob.is_visitor_task(td) or ob.is_callback_task(td)
         assert not is_human_task(td)
+    waits = [td for td in steps if ob.is_callback_task(td)]
+    assert [td.id for td in waits] == ["await_instance"]
+    assert waits[0].properties["external"] == "onboarding_callback"
 
 
 def test_each_step_says_what_happens_what_it_costs_and_how_to_undo():

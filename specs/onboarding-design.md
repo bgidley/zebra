@@ -88,11 +88,12 @@ Allow group zebra-<name>-admins to read compartments in compartment zebra-<name>
 ```
 
 **Tenancy-level part**, shown separately and optional, because it breaks the one-compartment
-claim. Only for a user who accepts both grants (budgets and quotas for #279):
+claim. Only for a user who accepts both grants (budgets and quotas for #279; the OCI resource
+type is `quota`, as in `specs/oci-guardrails-design.md` §4):
 
 ```
 Allow group zebra-<name>-admins to manage usage-budgets in tenancy
-Allow group zebra-<name>-admins to manage quotas in tenancy
+Allow group zebra-<name>-admins to manage quota in tenancy
 ```
 
 **Runtime (option C)**, tenancy-level objects an admin creates; the instance gets read only:
@@ -172,11 +173,82 @@ owner toggle), `ONBOARDING_SESSION_COST_CAP_USD`, `ONBOARDING_DAILY_COST_CAP_USD
   `CF-Connecting-IP` behind the Cloudflare Tunnel).
 - Idle = no step progress (`updated_at`). Expiry runs from the daemon tick, hourly, in the web
   module rather than `zebra_agent/scheduler/`.
-- S3 must pass `__onboarding__` and `__cost_cap_usd__` to its child workflow and add it to
-  `ONBOARDING_WORKFLOWS`.
+- S3 built the access step inside `onboarding.yaml` rather than as a child workflow (below), so
+  `ONBOARDING_WORKFLOWS` stays `{"Onboarding"}` and the wizard still reads one process.
+
+## 6b. As built (S3 + S4, #278)
+
+**Step graph** (`onboarding.yaml` v2; `*_retry` tasks show the reason and loop back):
+
+```
+signup ─done→ access ─done→ provision ─done→ await_instance ─done→ verify → commons → contribute → finished
+                 │ └policy→ access_policy ─done→ provision        └problem→ await_instance_retry → provision
+                 │            └back→ access
+                 └problem→ access_retry → access     (every visitor step: problem → <step>_retry)
+```
+
+Visitor steps are `external: onboarding_visitor`; `await_instance` is the only
+`external: onboarding_callback` wait (this is the task section 4 calls `await_instance`; it shows
+under step 3 and the visitor may only report a problem from it). A task's `onboarding_panel`
+(`access`, `policy`, `provision`, `await`) names the extra content `partials/panel.html` renders.
+
+**S3, access** (`api/onboarding_access.py`):
+- `ONBOARDING_STACK_ZIP_URL` / `ONBOARDING_STACK_ZIP_SHA256` (env `ZEBRA_…`, default empty). The
+  "Deploy to Oracle Cloud" link is
+  `https://cloud.oracle.com/resourcemanager/stacks/create?zipUrl=<url-encoded zip>`, shown only
+  for an https URL without credentials; otherwise the page says the stack is not published yet.
+  The SHA-256 is shown when set (T6).
+- Access and policy screens state the tenancy-admin requirement (#279 S2: budgets and quota live
+  in the root; a non-admin sets `create_guardrails = false`).
+- `access_policy` shows section 3's three blocks (a test compares them with this file) with
+  `<name>` = the visitor's short name (`^[a-z][a-z0-9-]{0,19}$`, default `mine`). No form on any
+  step accepts a key, OCID or secret.
+- `GET /onboarding/revoke/`: the revoke steps, linked from every step, the finished and ended
+  screens and the start screen; works without a session (name filled in when there is one).
+
+**S4, callback** (`api/onboarding_callback.py`). The contract the instance side (#279 S5,
+`manage.py onboarding_call_home`, run by cloud-init) implements:
+
+1. Token: `secrets.token_urlsafe(32)` (43 base64url chars), made by `POST /onboarding/token/` on
+   the provision step (shown once, `Cache-Control: no-store`; again rotates). Session properties:
+   `__onboarding_cb_sha256__` (lowercase hex), `__onboarding_cb_expires__` (ISO-8601 UTC,
+   now + 1 h), `__onboarding_cb_used__` (bool). Cache: Django default cache (LocMem),
+   key `onboarding:cb:<sha256 hex>` → process id, 1 h TTL; a miss scans RUNNING onboarding
+   processes. The provision step cannot be completed before a token exists.
+2. The instance serves `GET /.well-known/zebra-onboarding` over https on 443 with body
+   `sha256(token)` as 64 lowercase hex chars (`text/plain`, trailing newline allowed, no
+   compression, no redirect), from first boot until the callback succeeds.
+3. It calls `POST https://<host>/onboarding/callback/` with `Content-Type: application/json`,
+   body ≤ 4 KB: `{"token": "<43 chars>", "instance_url": "https://<host>", "version": "<semver>",
+   "commons_fingerprint": "<64 hex | npub1…>"}` (`version` and `commons_fingerprint` optional).
+   `instance_url` is an origin only: https, port 443, no credentials, path, query or fragment.
+   No CSRF token, no cookie.
+4. Responses (JSON, `no-store`): `200 {"status": "ok"}`; `{"error": "…"}` with `400` bad body,
+   `404` onboarding off, `405` not POST, `409` the session is not waiting yet (the visitor has not
+   reached `await_instance`), `410` unknown, used, rotated or expired token (one answer for all,
+   nothing fetched), `413` body too large, `422` control proof failed, `429` more than
+   10 callbacks per IP per minute, `503` kill switch. The instance retries `409`, `422`, `429`,
+   `5xx` and network errors with backoff until the token's hour is up; it stops on `200`, `400`,
+   `404`, `410`, `413`.
+5. Control proof: `instance_url` is checked as in 3; every DNS answer must be a global unicast
+   address (IPv4-mapped, 6to4 and Teredo unwrapped; private, loopback, link-local, CGNAT,
+   multicast, reserved refused), then the GET goes to the first checked IP with `Host` and TLS
+   SNI set to the host name (certificate verified against it), so a second lookup cannot rebind
+   it. No proxy, no redirects (any non-200 fails), 5 s total including DNS, 4 KB cap on the raw
+   body.
+6. Success: the token is marked used under the process lock (compare-and-set, so two concurrent
+   callbacks complete once) and `await_instance` completes by route `done` with the non-secret
+   output `{instance_url, version, commons_fingerprint, verified_at, via: callback|manual}`. The
+   verify step shows `instance_url`. A failed proof leaves the token unused.
+7. Manual fallback: `POST /onboarding/instance/` (session cookie, CSRF, 10/min/IP) with
+   `instance_url` runs the same proof against the session's current token.
 
 ## 7. Open questions
 
-- #283 `zipUrl` does not exist yet; S3 stubs it.
+- #283 `zipUrl` does not exist yet; the link stays hidden until `ONBOARDING_STACK_ZIP_URL` is set.
+- The stack (#279) has no `onboarding_token` variable yet and names its compartment `zebra`, not
+  `zebra-<name>`; S5 adds the variable, and the policy name should follow whatever the stack uses.
+- The verify step is still the visitor's tick; checking `/api/health` and `/api/version` on the
+  verified URL is left to #279.
 - Whether B ever uploads a key (v1: no). Revisit only with a concrete user who cannot use A.
 - Update path: does a later release update need any stored credential? Tracked in the update issue.

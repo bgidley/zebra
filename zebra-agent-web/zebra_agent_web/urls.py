@@ -72,6 +72,15 @@ urlpatterns = [
     path("onboarding/new-link/", onboarding_wizard_views.new_link, name="onboarding_new_link"),
     path("onboarding/forget/", onboarding_wizard_views.forget, name="onboarding_forget"),
     path("onboarding/manage/", onboarding_wizard_views.manage, name="onboarding_manage"),
+    # Access step and the new instance's callback (#278)
+    path("onboarding/revoke/", onboarding_wizard_views.revoke, name="onboarding_revoke"),
+    path("onboarding/token/", onboarding_wizard_views.callback_token, name="onboarding_token"),
+    path(
+        "onboarding/instance/",
+        onboarding_wizard_views.manual_instance,
+        name="onboarding_instance",
+    ),
+    path("onboarding/callback/", onboarding_wizard_views.callback, name="onboarding_callback"),
     # First-run setup
     path("setup/", web_views.setup_view, name="setup"),
     # Web UI (HTML + HTMX) - Agent focused

@@ -84,6 +84,9 @@ The step area is partials/step.html, swapped in place by HTMX on submit.
                 </form>
             </section>
             {% endif %}
+            {% if not state %}
+            <p class="mt-6 text-sm"><a class="text-muted underline hover:text-ink" href="{% url 'onboarding_revoke' %}">Already set one up? How to undo everything</a></p>
+            {% endif %}
         </div>
     </main>
 
