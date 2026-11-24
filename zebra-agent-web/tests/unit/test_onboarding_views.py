@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 
 import pytest
 from django.test import Client
@@ -271,7 +272,7 @@ def test_the_whole_wizard_finishes(onboarding_env, monkeypatch):
     assert "call home" in client.get("/onboarding/").content.decode()
     client.post("/onboarding/instance/", {"instance_url": "https://zebra.example.com"})
     html = client.get("/onboarding/").content.decode()
-    assert "https://zebra.example.com" in html  # verify shows the verified instance
+    assert re.search(r"https://zebra\.example\.com", html)  # verify shows the verified instance
     _submit(client, "done", working="on")
     _submit(client, "done")
     _submit(client, "done")

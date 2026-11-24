@@ -7,6 +7,8 @@ lands on the same step. O3: a failed step shows its reason and a retry, later st
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from django.test import AsyncClient
 
@@ -140,4 +142,4 @@ async def test_the_instance_calls_home_once(onboarding_on, monkeypatch):
     replay = await instance.post("/onboarding/callback/", body, content_type="application/json")
     assert replay.status_code == 410
     html = (await browser.get("/onboarding/")).content.decode()
-    assert "Check it works" in html and "https://zebra.example.com" in html
+    assert "Check it works" in html and re.search(r"https://zebra\.example\.com", html)

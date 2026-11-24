@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -341,7 +342,7 @@ def test_a_token_completes_exactly_one_session(onboarding_env, instance):
     assert output["version"] == "1.4.0" and output["commons_fingerprint"] == fingerprint
     assert output["via"] == "callback"
     page = client.get("/onboarding/").content.decode()
-    assert "Check it works" in page and "https://zebra.example.com" in page
+    assert "Check it works" in page and re.search(r"https://zebra\.example\.com", page)
 
     # O1: the token itself is nowhere in the session
     assert token not in json.dumps(props)
