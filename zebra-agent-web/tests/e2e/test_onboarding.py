@@ -7,6 +7,9 @@ lands on the same step. O3: a failed step shows its reason and a retry, later st
 
 from __future__ import annotations
 
+import re
+from urllib.parse import urlsplit
+
 import pytest
 from django.test import AsyncClient
 
@@ -15,6 +18,11 @@ pytestmark = pytest.mark.e2e
 
 async def _noop() -> None:
     return None
+
+
+def _page_hosts(page: str) -> set[str]:
+    """Hostnames of every https URL shown on *page* (parsed, not substring-matched)."""
+    return {urlsplit(url).hostname for url in re.findall(r"https://[^\s\"'<>]+", page)}
 
 
 @pytest.fixture
@@ -140,4 +148,4 @@ async def test_the_instance_calls_home_once(onboarding_on, monkeypatch):
     replay = await instance.post("/onboarding/callback/", body, content_type="application/json")
     assert replay.status_code == 410
     html = (await browser.get("/onboarding/")).content.decode()
-    assert "Check it works" in html and "https://zebra.example.com" in html
+    assert "Check it works" in html and "zebra.example.com" in _page_hosts(html)

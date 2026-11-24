@@ -87,7 +87,15 @@ def test_a_bad_name_falls_back_to_the_placeholder(bad):
 
 
 @pytest.mark.parametrize(
-    "url", ["", "   ", "http://example.com/zebra.zip", "ftp://x/y.zip", "https://u:p@x/y.zip"]
+    "url",
+    [
+        "",
+        "   ",
+        "http://example.com/zebra.zip",
+        "ftp://x/y.zip",
+        "https://u:p@x/y.zip",
+        "https://@x/y.zip",
+    ],
 )
 def test_no_deploy_link_without_an_https_stack_url(settings, url):
     settings.ZEBRA_AGENT_SETTINGS = {

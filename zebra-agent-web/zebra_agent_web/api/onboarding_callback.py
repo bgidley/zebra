@@ -227,6 +227,8 @@ def is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         embedded = ip.ipv4_mapped or ip.sixtofour or (ip.teredo[1] if ip.teredo else None)
         if embedded is not None:
             return is_public_ip(embedded)
+        if ip.is_site_local:  # deprecated fec0::/10, which is_global still counts as global
+            return False
     return bool(ip.is_global) and not (
         ip.is_multicast or ip.is_reserved or ip.is_unspecified or ip.is_link_local
     )
@@ -448,6 +450,14 @@ async def complete_with_instance(
         await engine.complete_task(
             task_id, TaskResult(success=True, output=output, next_route="done")
         )
+    except Exception as e:
+        # The wait did not complete (e.g. the visitor reported a problem at the same
+        # moment): hand the token back so the instance can retry while it is live.
+        logger.warning("Onboarding session %s: completing the wait failed: %s", process.id, e)
+        await ob._update_properties(store, process.id, {USED_KEY: False})
+        raise CallbackError(
+            "This session is not waiting for its instance; retry later.", 409
+        ) from e
     finally:
         _current_user_id_var.reset(reset)
     cache.delete(_CACHE_PREFIX + digest)

@@ -90,7 +90,8 @@ def stack() -> Stack:
     zip_url = str(ob.config("STACK_ZIP_URL") or "").strip()
     sha = str(ob.config("STACK_ZIP_SHA256") or "").strip().lower()
     parts = urlsplit(zip_url)
-    if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
+    # "@" anywhere in the authority is userinfo, even empty (https://@host/)
+    if parts.scheme != "https" or not parts.hostname or "@" in parts.netloc:
         return Stack("", "", "")
     deploy = f"{DEPLOY_BASE}?zipUrl={quote(zip_url, safe='')}"
     return Stack(zip_url, sha if _SHA256.match(sha) else "", deploy)
