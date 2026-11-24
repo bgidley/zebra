@@ -77,6 +77,7 @@ def _resolver(*answers):
         ("8.8.8.8", "192.168.1.1"),  # one private answer refuses the host
         ("100.100.1.1",),
         ("fe80::1",),
+        ("fec0::1",),  # deprecated site-local
         ("::ffff:10.0.0.1",),
         ("2002:a00:1::1",),  # 6to4 around 10.0.0.1
         (),

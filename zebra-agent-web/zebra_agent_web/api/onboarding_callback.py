@@ -227,6 +227,8 @@ def is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         embedded = ip.ipv4_mapped or ip.sixtofour or (ip.teredo[1] if ip.teredo else None)
         if embedded is not None:
             return is_public_ip(embedded)
+        if ip.is_site_local:  # deprecated fec0::/10, which is_global still counts as global
+            return False
     return bool(ip.is_global) and not (
         ip.is_multicast or ip.is_reserved or ip.is_unspecified or ip.is_link_local
     )
