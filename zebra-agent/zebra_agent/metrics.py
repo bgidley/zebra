@@ -9,6 +9,7 @@ zebra_agent.storage.interfaces.
 """
 
 import logging
+import math
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -37,6 +38,28 @@ async def run_process_ids(store: StateStore, root_id: str) -> list[str]:
         ids.extend(children)
         frontier = children
     return ids[:MAX_RUN_PROCESSES]
+
+
+#: z for a 95% two-sided interval.
+WILSON_Z = 1.96
+
+
+def wilson_interval(successes: int, n: int, z: float = WILSON_Z) -> tuple[float, float] | None:
+    """Wilson score interval for a success rate; ``None`` when there are no runs (n == 0)."""
+    if n <= 0:
+        return None
+    p = successes / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
+    return max(0.0, centre - half), min(1.0, centre + half)
+
+
+def sample_confidence(runs: int, min_runs: int) -> str:
+    """Data sufficiency of ``runs`` eligible runs: ``none``, ``insufficient`` or ``adequate``."""
+    if runs <= 0:
+        return "none"
+    return "insufficient" if runs < min_runs else "adequate"
 
 
 async def record_run_totals(

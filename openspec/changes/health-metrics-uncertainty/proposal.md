@@ -20,7 +20,7 @@ The dream cycle's health report (#328) called all workflows healthy from 16 goal
 | # | Outcome | How we'll know |
 |---|---------|----------------|
 | O1 | Every per-workflow stat in the metrics analysis carries successes, eligible runs and a 95% Wilson interval | Unit tests with known values (e.g. 3/3 gives about 0.44-1.0; 0/0 gives no interval) |
-| O2 | Workflows with no runs are reported as `none`, distinct from `insufficient` (under the minimum) and `adequate` | Unit test over a store with a zero-run, a 2-run and a 20-run workflow |
-| O3 | A small perfect sample is no longer a "high performer"; categorisation uses the interval | Unit test: 3/3 not in `high_performers`, 40/40 is |
-| O4 | The evaluator prompt shows `successes/runs`, the interval and the sufficiency tag, and tells the model not to assess thin-data workflows | Prompt-building test asserting the text; next dream-cycle report cites sample sizes in prod log |
-| O5 | Existing consumers (`success_rate`, `low_performers`, tool stats) keep working | Existing analyzer/evaluator tests pass unchanged |
+| O2 | Workflows with no runs are reported as `none`, distinct from `insufficient` (under the minimum) and `adequate` | Unit test: a zero-run workflow (runs only outside the window) appears in `workflow_stats` with `confidence: none`, `success_rate: None`, no interval; a 2-run is `insufficient`, a 20-run `adequate` |
+| O3 | A small perfect sample is no longer a "high performer"; categorisation uses the interval | Unit test: 3/3 not in `high_performers`, 40/40 is. The rule keeps `rate >= 0.9` and adds `adequate` + Wilson lower bound >= 0.7, so 9/10 and 75%-of-400 stay not-high (pinned by test); `low_performers` keeps `rate < 0.7` with `adequate` data, so 2/3 is still low |
+| O4 | The evaluator prompt shows `successes/runs`, the interval and the sufficiency tag, and tells the model not to assess thin-data workflows | Prompt-building test asserting the text; no check of LLM output |
+| O5 | Existing consumers (`success_rate`, `low_performers`, tool stats) keep working | New fields are additive: no existing key is removed or renamed. Existing analyzer/evaluator tests pass, except the two assertions that pin the exact tool-stat dict and the old `N runs, X% success` prompt line, which change with the new fields/text |

@@ -10,6 +10,7 @@ from typing import Any
 
 from zebra.core.models import TaskInstance, TaskResult
 from zebra.tasks.base import ExecutionContext, ParameterDef, TaskAction
+from zebra_agent.metrics import sample_confidence, wilson_interval
 
 from zebra_tasks.agent.continuation_analysis import (
     analyze_continuations,
@@ -20,11 +21,40 @@ from zebra_tasks.agent.zebra_source import is_expected_miss
 
 logger = logging.getLogger(__name__)
 
+#: A high performer's 95% interval must start at or above this success rate.
+HIGH_PERFORMER_CI_LOW = 0.7
+
 
 def _user_id(run: Any) -> int | None:
     """The run's ``user_id`` when it is an int (None for unowned runs)."""
     user_id = getattr(run, "user_id", None)
     return user_id if isinstance(user_id, int) and not isinstance(user_id, bool) else None
+
+
+def _interval_fields(successes: int, runs: int, min_runs: int) -> dict[str, Any]:
+    """The 95% Wilson interval and sufficiency label of ``successes`` out of ``runs``."""
+    interval = wilson_interval(successes, runs)
+    return {
+        "success_ci_low": interval[0] if interval else None,
+        "success_ci_high": interval[1] if interval else None,
+        "confidence": sample_confidence(runs, min_runs),
+    }
+
+
+def _idle_stat(name: str) -> dict[str, Any]:
+    """Stat of a known workflow with no runs in the window: no rate, no interval."""
+    return {
+        "workflow_name": name,
+        "total_runs": 0,
+        "successful_runs": 0,
+        "success_rate": None,
+        **_interval_fields(0, 0, 0),
+        "avg_rating": None,
+        "avg_tokens": 0,
+        "last_used": None,
+        "continued_runs": 0,
+        "continuation_rate": 0.0,
+    }
 
 
 class MetricsAnalyzerAction(TaskAction):
@@ -54,7 +84,9 @@ class MetricsAnalyzerAction(TaskAction):
     Output includes:
         - workflow_stats: Per-workflow statistics of goal runs (incl. continuation_rate)
         - low_performers: Workflows with success rate < 70%
-        - high_performers: Workflows with success rate >= 90%
+        - high_performers: Adequate-data workflows with success rate >= 90% and a 95% Wilson
+          interval lower bound >= 70%
+        - workflows_without_runs: Known workflows with no goal runs (listed, ``confidence: none``)
         - unrated_runs_count: Number of goal runs without user ratings
         - failure_patterns: Common failure reasons of goal runs
         - usage_trends: Workflow usage over time
@@ -280,14 +312,26 @@ class MetricsAnalyzerAction(TaskAction):
         continued_ids = set(continuation_analysis["continued_run_ids"])
 
         known_workflows = [stat.workflow_name for stat in all_stats]
-        workflow_stats = self._workflow_stats(goal_runs, known_workflows, continued_ids)
+        # Known goal workflows that did not run at all (any kind) in the window are listed
+        # as ``none`` rather than dropped; system workflows are never goal workflows
+        active = {r["workflow_name"] for r in run_dicts} | (system_workflows or set())
+        idle = {name for name in known_workflows if name not in active}
+        workflow_stats = self._workflow_stats(
+            goal_runs, known_workflows, continued_ids, min_runs, idle
+        )
+        ran_stats = [w for w in workflow_stats if w["total_runs"] > 0]
 
-        # Categorize workflows
+        # Categorize workflows: low is the point rate; high also needs the interval's lower
+        # bound clear of 0.7, so a tiny perfect sample is not "high performing"
         low_performers = [
-            w for w in workflow_stats if w["success_rate"] < 0.7 and w["total_runs"] >= min_runs
+            w for w in ran_stats if w["success_rate"] < 0.7 and w["confidence"] == "adequate"
         ]
         high_performers = [
-            w for w in workflow_stats if w["success_rate"] >= 0.9 and w["total_runs"] >= min_runs
+            w
+            for w in ran_stats
+            if w["success_rate"] >= 0.9
+            and w["confidence"] == "adequate"
+            and w["success_ci_low"] >= HIGH_PERFORMER_CI_LOW
         ]
 
         # Get unrated runs
@@ -313,7 +357,8 @@ class MetricsAnalyzerAction(TaskAction):
         return {
             "analysis_period_days": days,
             "total_runs_analyzed": len(run_dicts),
-            "unique_workflows": len(workflow_stats),
+            "unique_workflows": len(ran_stats),
+            "workflows_without_runs": len(workflow_stats) - len(ran_stats),
             "workflow_stats": workflow_stats,
             "low_performers": low_performers,
             "high_performers": high_performers,
@@ -328,12 +373,12 @@ class MetricsAnalyzerAction(TaskAction):
                 SYSTEM_RUN: len(by_kind[SYSTEM_RUN]),
                 "expected_misses": len(miss_ids),
             },
-            "tool_workflow_stats": self._tool_workflow_stats(tool_runs),
+            "tool_workflow_stats": self._tool_workflow_stats(tool_runs, min_runs),
             "tool_failure_patterns": self._analyze_failures(
                 [r for r in tool_runs if r["id"] not in miss_ids]
             ),
             "system_workflow_stats": self._workflow_stats(
-                by_kind[SYSTEM_RUN], known_workflows, continued_ids
+                by_kind[SYSTEM_RUN], known_workflows, continued_ids, min_runs
             ),
             # Users whose runs this analysis shows the dream cycle (#229 foreign_users)
             "run_user_ids": sorted(
@@ -344,13 +389,23 @@ class MetricsAnalyzerAction(TaskAction):
 
     @staticmethod
     def _workflow_stats(
-        runs: list[dict], known_workflows: list[str], continued_ids: set[str]
+        runs: list[dict],
+        known_workflows: list[str],
+        continued_ids: set[str],
+        min_runs: int = 3,
+        idle: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Per-workflow statistics of ``runs`` for the store's known workflows, busiest first."""
+        """Per-workflow statistics of ``runs`` for the store's known workflows, busiest first.
+
+        Each stat carries a 95% Wilson interval and a ``confidence`` label. A workflow in
+        ``idle`` is listed with no runs (``confidence: none``, no rate).
+        """
         workflow_stats = []
         for name in known_workflows:
             period_runs = [r for r in runs if r["workflow_name"] == name]
             if not period_runs:
+                if idle and name in idle:
+                    workflow_stats.append(_idle_stat(name))
                 continue
             total = len(period_runs)
             successful = sum(1 for r in period_runs if r["success"])
@@ -362,6 +417,7 @@ class MetricsAnalyzerAction(TaskAction):
                     "total_runs": total,
                     "successful_runs": successful,
                     "success_rate": successful / total,
+                    **_interval_fields(successful, total, min_runs),
                     "avg_rating": sum(ratings) / len(ratings) if ratings else None,
                     "avg_tokens": sum(r["tokens_used"] for r in period_runs) / total,
                     "last_used": max(r["started_at"] for r in period_runs),
@@ -373,7 +429,7 @@ class MetricsAnalyzerAction(TaskAction):
         return workflow_stats
 
     @staticmethod
-    def _tool_workflow_stats(runs: list[dict]) -> list[dict[str, Any]]:
+    def _tool_workflow_stats(runs: list[dict], min_runs: int = 3) -> list[dict[str, Any]]:
         """Per tool workflow: calls, successes, expected misses and real failures (#256).
 
         The success rate leaves expected misses out: a miss is a correct answer, neither a
@@ -395,6 +451,7 @@ class MetricsAnalyzerAction(TaskAction):
                     "expected_misses": misses,
                     "failures": judged - successful,
                     "success_rate": successful / judged if judged else None,
+                    **_interval_fields(successful, judged, min_runs),
                 }
             )
         stats.sort(key=lambda w: w["total_runs"], reverse=True)

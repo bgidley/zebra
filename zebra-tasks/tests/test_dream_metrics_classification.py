@@ -126,6 +126,9 @@ class TestAnalyzerSplit:
             "expected_misses": 2,
             "failures": 1,
             "success_rate": 0.75,
+            "success_ci_low": pytest.approx(0.3006, abs=1e-3),
+            "success_ci_high": pytest.approx(0.9544, abs=1e-3),
+            "confidence": "adequate",
         }
         assert by_name["Read Zebra Source"]["success_rate"] == 1.0
         patterns = analysis["tool_failure_patterns"]
@@ -188,7 +191,10 @@ class TestEvaluatorPrompt:
         prompt = WorkflowEvaluatorAction()._build_prompt(analysis, {})
 
         assert "Goal runs: 2, tool calls by agents: 16, system runs: 1" in prompt
-        assert "### Workflow Statistics (goal runs)\n- Research: 2 runs, 50% success" in prompt
+        assert (
+            "### Workflow Statistics (goal runs)\n- Research: 1/2 successes (50%, 95% CI 9-91%)"
+            in prompt
+        )
         assert (
             "- List Zebra Source: 6 calls, 2 expected misses, 1 failures, "
             "75% success excluding misses"

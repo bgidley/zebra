@@ -205,6 +205,11 @@ Your task is to:
 4. Recommend new workflows for capability gaps
 5. Prioritize changes by impact
 
+Every rate comes with successes/runs and a 95% confidence interval. Workflows tagged
+[no data] or [insufficient data] have too few runs to judge: do not assess their health,
+say "insufficient evidence" instead of "performing well", and state the sample size
+whenever you summarise a rate.
+
 Be specific and actionable in your recommendations. Focus on:
 - Root causes of failures
 - Patterns in unsuccessful goals
@@ -361,6 +366,30 @@ Respond with JSON only:
                 pass
         return resolved or default
 
+    @staticmethod
+    def _rate_text(ws: dict[str, Any]) -> str:
+        """``successes/runs successes (rate%, 95% CI lo-hi%)`` for a workflow stat."""
+        runs = ws.get("total_runs", 0)
+        if not runs or ws.get("success_rate") is None:
+            return "0 runs, no success rate"
+        text = f"{ws.get('successful_runs', round(ws['success_rate'] * runs))}/{runs} successes"
+        text += f" ({ws['success_rate'] * 100:.0f}%"
+        if ws.get("success_ci_low") is not None:
+            text += f", 95% CI {ws['success_ci_low'] * 100:.0f}-{ws['success_ci_high'] * 100:.0f}%"
+        return text + ")"
+
+    def _workflow_stat_line(self, ws: dict[str, Any]) -> str:
+        """One workflow's prompt line, tagged when its data is thin or missing."""
+        confidence = ws.get("confidence", "adequate")
+        tag = {"none": " [no data]", "insufficient": " [insufficient data]"}.get(confidence, "")
+        if confidence == "none":
+            return f"- {ws['workflow_name']}: {self._rate_text(ws)}{tag}"
+        return (
+            f"- {ws['workflow_name']}: {self._rate_text(ws)}{tag}, "
+            f"{ws.get('continuation_rate', 0) * 100:.0f}% continued, "
+            f"avg rating: {ws.get('avg_rating', 'N/A')}"
+        )
+
     def _build_prompt(
         self,
         metrics_analysis: dict[str, Any],
@@ -387,12 +416,7 @@ Respond with JSON only:
         # Add workflow stats
         prompt_parts.append("### Workflow Statistics (goal runs)")
         for ws in metrics_analysis.get("workflow_stats", []):
-            prompt_parts.append(
-                f"- {ws['workflow_name']}: {ws['total_runs']} runs, "
-                f"{ws['success_rate'] * 100:.0f}% success, "
-                f"{ws.get('continuation_rate', 0) * 100:.0f}% continued, "
-                f"avg rating: {ws.get('avg_rating', 'N/A')}"
-            )
+            prompt_parts.append(self._workflow_stat_line(ws))
         prompt_parts.append("")
 
         prompt_parts.extend(self._continuation_section(metrics_analysis))
@@ -402,9 +426,7 @@ Respond with JSON only:
         if low_performers:
             prompt_parts.append("### Low-Performing Workflows (< 70% success)")
             for lp in low_performers:
-                prompt_parts.append(
-                    f"- {lp['workflow_name']}: {lp['success_rate'] * 100:.0f}% success"
-                )
+                prompt_parts.append(f"- {lp['workflow_name']}: {self._rate_text(lp)}")
             prompt_parts.append("")
 
         prompt_parts.extend(
