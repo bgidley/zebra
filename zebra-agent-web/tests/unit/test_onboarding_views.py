@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 import re
+from urllib.parse import urlsplit
 
 import pytest
 from django.test import Client
@@ -14,6 +15,11 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 #: Answers that complete the signup step (the two ticks are the next-step lock)
 SIGNUP = {"home_region": "uk-london-1", "account_created": "on", "budget_ack": "on"}
+
+
+def _page_hosts(page: str) -> set[str]:
+    """Hostnames of every https URL shown on *page* (parsed, not substring-matched)."""
+    return {urlsplit(url).hostname for url in re.findall(r"https://[^\s\"'<>]+", page)}
 
 
 def _prod_middleware() -> list[str]:
@@ -272,7 +278,8 @@ def test_the_whole_wizard_finishes(onboarding_env, monkeypatch):
     assert "call home" in client.get("/onboarding/").content.decode()
     client.post("/onboarding/instance/", {"instance_url": "https://zebra.example.com"})
     html = client.get("/onboarding/").content.decode()
-    assert re.search(r"https://zebra\.example\.com", html)  # verify shows the verified instance
+    # verify shows the verified instance
+    assert "zebra.example.com" in _page_hosts(html)
     _submit(client, "done", working="on")
     _submit(client, "done")
     _submit(client, "done")

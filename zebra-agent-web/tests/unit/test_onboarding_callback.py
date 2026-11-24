@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -61,6 +62,11 @@ def test_refused_instance_urls(url):
 )
 def test_accepted_instance_urls(url, origin):
     assert cb.normalize_instance_url(url) == origin
+
+
+def _page_hosts(page: str) -> set[str]:
+    """Hostnames of every https URL shown on *page* (parsed, not substring-matched)."""
+    return {urlsplit(url).hostname for url in re.findall(r"https://[^\s\"'<>]+", page)}
 
 
 def _resolver(*answers):
@@ -343,7 +349,7 @@ def test_a_token_completes_exactly_one_session(onboarding_env, instance):
     assert output["version"] == "1.4.0" and output["commons_fingerprint"] == fingerprint
     assert output["via"] == "callback"
     page = client.get("/onboarding/").content.decode()
-    assert "Check it works" in page and re.search(r"https://zebra\.example\.com", page)
+    assert "Check it works" in page and "zebra.example.com" in _page_hosts(page)
 
     # O1: the token itself is nowhere in the session
     assert token not in json.dumps(props)
