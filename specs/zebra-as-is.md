@@ -406,6 +406,10 @@ Template tag `{% render_schema_form %}` renders Tailwind-styled fields with per-
 
 ### Onboarding wizard (#276)
 
+Share link (#330): signed-in `/invite/` (main-nav "Invite a friend", 404 while onboarding is off) shows the
+wizard URL built from `ZEBRA_PUBLIC_BASE_URL` (`PUBLIC_BASE_URL`, else the first https
+`CSRF_TRUSTED_ORIGINS`), never the Host header, with `navigator.share` / copy; no user identity in it.
+
 `/onboarding/` lets an anonymous visitor walk through getting their own Zebra (off unless
 `ZEBRA_ONBOARDING_ENABLED` and the owner's switch on `/onboarding/manage/` are both on; 404
 otherwise). State is one *Onboarding* process per visitor (`zebra-agent/workflows/onboarding.yaml`,

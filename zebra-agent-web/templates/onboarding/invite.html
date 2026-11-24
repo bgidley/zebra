@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% comment %}
+Share the public onboarding link with friends (#330). Context: link (https URL or None).
+The link is the same for everyone: no user identity in it.
+{% endcomment %}
+{% block title %}Invite a friend - Zebra Agent{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <h1 class="text-2xl font-semibold tracking-tight">Invite a friend</h1>
+    <p class="mt-2 text-sm text-muted">
+        Anyone with this link can set up their own Zebra, with no account on this one. The link is
+        the same for everyone and says nothing about you.
+    </p>
+
+    {% if link %}
+    <div class="mt-6 rounded-md border border-line bg-surface p-3">
+        <label for="invite-link" class="text-sm text-faint">Onboarding link</label>
+        <input id="invite-link" type="text" readonly value="{{ link }}"
+               class="mt-1 w-full rounded-md border border-line bg-canvas px-2 py-1.5 font-mono text-sm"
+               onfocus="this.select()">
+    </div>
+
+    <div class="mt-4 rounded-md border border-line bg-surface p-3">
+        <p class="text-sm text-faint">Message</p>
+        <p id="invite-text" class="mt-1 text-sm">Zebra is a self-improving AI agent that runs on your own server. Setting one up takes about 20 minutes and stays on Oracle Cloud's free tier. Start here:</p>
+    </div>
+
+    <div class="mt-4 flex flex-wrap gap-2">
+        <button type="button" id="invite-share" class="btn btn-primary" hidden>Share</button>
+        <button type="button" id="invite-copy" class="btn">Copy link</button>
+    </div>
+    <p id="invite-status" class="mt-2 text-sm text-muted" role="status" aria-live="polite"></p>
+
+    <script>
+    (function () {
+        var link = document.getElementById("invite-link").value;
+        var text = document.getElementById("invite-text").textContent;
+        var status = document.getElementById("invite-status");
+        var share = document.getElementById("invite-share");
+        var copy = document.getElementById("invite-copy");
+        if (navigator.share) {
+            share.hidden = false;
+            share.addEventListener("click", function () {
+                navigator.share({title: "Zebra", text: text, url: link}).catch(function () {});
+            });
+        }
+        copy.addEventListener("click", function () {
+            var done = function () { status.textContent = "Link copied."; };
+            var fallback = function () {
+                var input = document.getElementById("invite-link");
+                input.select();
+                try { document.execCommand("copy"); done(); }
+                catch (e) { status.textContent = "Select the link and copy it."; }
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(link).then(done, fallback);
+            } else { fallback(); }
+        });
+    })();
+    </script>
+    {% else %}
+    <p class="mt-6 rounded-md border border-line bg-surface p-3 text-sm text-muted">
+        This Zebra does not know its public address yet, so it cannot build a link that works for
+        a friend. The owner sets <span class="font-mono">ZEBRA_PUBLIC_BASE_URL</span> (for example
+        <span class="font-mono">https://zebra.example.com</span>) and restarts.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

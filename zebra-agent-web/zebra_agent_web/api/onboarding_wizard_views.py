@@ -376,6 +376,19 @@ async def manage(request):
     return render(request, "onboarding/manage.html", context)
 
 
+@require_http_methods(["GET"])
+async def invite(request):
+    """Signed-in: the public onboarding link to share with friends (#330).
+
+    404 while onboarding is off (env AND owner switch). The link is the instance's configured
+    public origin plus the wizard path: never the Host header, never any user identity.
+    """
+    if not await ob.is_enabled():
+        raise Http404("Not found")
+    link = ob.public_wizard_url(reverse("onboarding_wizard"))
+    return render(request, "onboarding/invite.html", {"link": link})
+
+
 # ---------------------------------------------------------------------------
 # The #277 signup URLs, kept as redirects (#312): the guide is now wizard step 1
 # ---------------------------------------------------------------------------

@@ -155,7 +155,7 @@ Residual risks (accepted or tracked):
 S1 wizard shell (#276), S2 guardrails (#276), S3 access step (#278), S4 callback (#278/#279). Each
 has its own OpenSpec change. New settings: `ONBOARDING_ENABLED` (env default false, ANDed with the
 owner toggle), `ONBOARDING_SESSION_COST_CAP_USD`, `ONBOARDING_DAILY_COST_CAP_USD`,
-`ONBOARDING_STACK_ZIP_URL` (stubbed until #283). New endpoints: `/onboarding/*`,
+`ONBOARDING_STACK_ZIP_URL` (stubbed until #283), `PUBLIC_BASE_URL` (#330, the origin of the shared link). New endpoints: `/onboarding/*`,
 `POST /onboarding/callback/`, `manage.py onboarding_call_home` (instance side, wired in #279).
 
 ## 6a. As built (S1 + S2, #276)
