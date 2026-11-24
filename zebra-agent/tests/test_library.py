@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
-from zebra_agent.library import WorkflowInfo, WorkflowLibrary, list_goal_workflows
+from zebra_agent.library import WorkflowInfo, WorkflowLibrary, _yaml_version, list_goal_workflows
 from zebra_agent.metrics import WorkflowRun
 from zebra_agent.provenance import strip_commons
 
@@ -1001,6 +1001,30 @@ class TestBuiltinShadowing:
         assert "#224" in dream["retired"]["reason"]
         assert not (library.retired_path / "flow.yaml").exists()
         assert "builtin v2" in (library.retired_path / "flow.builtin-v2.yaml").read_text()
+
+    def test_higher_builtin_replaces_dream_rewrite_of_same_file(self, library, builtin):
+        """Prod layout (#327): the dream copy overwrote ``flow.yaml`` (v3); built-in v1 retired."""
+        (builtin / "flow.yaml").write_text(_versioned_yaml(1, "builtin v1"))
+        library.copy_builtin_workflows(builtin)
+        (library.library_path / "flow.yaml").write_text(_versioned_yaml(3, "dream"))
+        library.retired_path.mkdir(exist_ok=True)
+        (library.retired_path / "flow.yaml").write_text(_versioned_yaml(1, "builtin v1"))
+
+        (builtin / "flow.yaml").write_text(_versioned_yaml(4, "builtin v4"))
+        copied, upgraded = library.copy_builtin_workflows(builtin)
+
+        assert (copied, upgraded) == (1, ["Flow"])
+        assert "builtin v4" in library.get_workflow_yaml("Flow")
+        assert library.get_workflow("Flow").version == 4
+
+    def test_shipped_compute_outranks_prod_dream_copy(self):
+        """Built-in Compute must stay above the broken Dream v3 on prod (#327)."""
+        from pathlib import Path
+
+        import zebra_agent
+
+        shipped = Path(zebra_agent.__file__).parent.parent / "workflows" / "compute.yaml"
+        assert _yaml_version(shipped) > 3
 
     def test_second_copy_after_upgrade_is_noop(self, library, builtin):
         self._shadowed(library, builtin)
