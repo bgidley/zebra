@@ -78,6 +78,10 @@ def test_off_means_404_everywhere(onboarding_env, settings, env_on, owner_on):
         ("get", f"/onboarding/r/{ob.make_token('p', 'n')}/"),
         ("post", "/onboarding/new-link/"),
         ("post", "/onboarding/forget/"),
+        ("get", "/onboarding/revoke/"),
+        ("post", "/onboarding/token/"),
+        ("post", "/onboarding/instance/"),
+        ("post", "/onboarding/callback/"),
     ]:
         assert getattr(client, method)(path).status_code == 404, path
     assert not ProcessInstanceModel.objects.exists()
@@ -238,6 +242,8 @@ def test_a_required_confirmation_must_be_ticked(onboarding_env):
     client = Client()
     _start(client)
     _submit(client, "done", **SIGNUP)
+    _submit(client, "done", name="mine")  # access (#278): nothing to tick
+    client.post("/onboarding/token/")  # provision needs its callback token first
     response = _submit(client, "done")
     assert response.status_code == 400
     assert "Tick this to continue" in response.content.decode()
@@ -249,16 +255,29 @@ def test_unknown_route_is_refused(onboarding_env):
     assert _submit(client, "skip_ahead", **SIGNUP).status_code == 400
 
 
-def test_the_whole_wizard_finishes(onboarding_env):
+def test_the_whole_wizard_finishes(onboarding_env, monkeypatch):
+    from zebra_agent_web.api import onboarding_callback as cb
+
+    async def proved(*_args, **_kwargs):  # the control proof itself: test_onboarding_callback
+        return None
+
+    monkeypatch.setattr(cb, "verify_control", proved)
     client = Client()
     _start(client)
     _submit(client, "done", **SIGNUP)
-    _submit(client, "done", ready="on")
+    _submit(client, "done", name="mine")
+    client.post("/onboarding/token/")
     _submit(client, "done", applied="on")
+    assert "call home" in client.get("/onboarding/").content.decode()
+    client.post("/onboarding/instance/", {"instance_url": "https://zebra.example.com"})
+    html = client.get("/onboarding/").content.decode()
+    assert "https://zebra.example.com" in html  # verify shows the verified instance
     _submit(client, "done", working="on")
     _submit(client, "done")
     _submit(client, "done")
-    assert "All done" in client.get("/onboarding/").content.decode()
+    page = client.get("/onboarding/").content.decode()
+    assert "All done" in page
+    assert 'href="/onboarding/revoke/"' in page  # revoke from the finished state (#278)
     model, _ = _process_props()
     assert model.state == "complete"
 

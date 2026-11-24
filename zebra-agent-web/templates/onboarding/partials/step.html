@@ -19,6 +19,7 @@ Context: state, form, field_errors, submitted_values, route_labels, halted.
             </li>
             {% endfor %}
         </ol>
+        <p class="mt-4 px-2 text-xs"><a class="text-muted underline hover:text-ink" href="{% url 'onboarding_revoke' %}">How to undo everything</a></p>
     </nav>
 
     <section class="rounded-lg border border-line bg-surface p-6" aria-live="polite">
@@ -30,16 +31,22 @@ Context: state, form, field_errors, submitted_values, route_labels, halted.
         {% if state.status == "finished" %}
             <h2 class="text-lg font-semibold">All done</h2>
             <p class="mt-2 text-sm text-muted">Every step is complete. Enjoy your Zebra.</p>
+            <p class="mt-4 text-sm"><a class="underline" href="{% url 'onboarding_revoke' %}">How to undo everything</a></p>
         {% elif state.status == "ended" %}
             <h2 class="text-lg font-semibold">This session has ended</h2>
             {% if state.ended_reason %}<p class="mt-2 text-sm text-muted">{{ state.ended_reason }}</p>{% endif %}
+            <p class="mt-4 text-sm"><a class="underline" href="{% url 'onboarding_revoke' %}">How to undo everything</a></p>
             <form method="post" action="{% url 'onboarding_start' %}" class="mt-4">
                 {% csrf_token %}
                 <button type="submit" class="rounded-md bg-ink px-4 py-2 text-sm font-medium text-ground hover:opacity-90">Start again</button>
             </form>
         {% elif state.status == "waiting" %}
+            {% if state.panel %}
+                {% include "onboarding/partials/panel.html" %}
+            {% else %}
             <h2 class="text-lg font-semibold">Working on it</h2>
             <p class="mt-2 text-sm text-muted">This step is waiting on something outside this page. Check back soon.</p>
+            {% endif %}
         {% else %}
             {% with step=state.current %}
             {% if state.retry %}
@@ -56,6 +63,7 @@ Context: state, form, field_errors, submitted_values, route_labels, halted.
                 <div class="rounded-md bg-surface-2 p-3"><dt class="text-xs font-medium text-faint">What it costs</dt><dd class="mt-1">{{ step.cost }}</dd></div>
                 <div class="rounded-md bg-surface-2 p-3"><dt class="text-xs font-medium text-faint">How to undo it</dt><dd class="mt-1">{{ step.undo }}</dd></div>
             </dl>
+            {% if state.panel %}{% include "onboarding/partials/panel.html" %}{% endif %}
             {% endif %}
 
             {% if guide_version %}{% include "onboarding/partials/signup_guide.html" %}{% endif %}

@@ -12,14 +12,20 @@
 #
 # A step the visitor reports as failed routes to its retry task, which shows the
 # reason and loops back to the step; later steps stay locked until it is done.
-# Step content beyond the shell (access grant, provisioning, callback) lands in
-# later slices (#277, #278, #279). See specs/onboarding-design.md.
+#
+# Access and callback (#278): `access` offers the published stack (option A) or,
+# by the `policy` route, `access_policy` with the policy text for an admin
+# (option B, no key upload). `provision` needs a one-time callback token; then
+# `await_instance` (`external: onboarding_callback`) waits until the new instance
+# calls POST /onboarding/callback/ and proves control of its URL
+# (zebra_agent_web.api.onboarding_callback). `onboarding_panel` names the extra
+# content the wizard renders for a step. See specs/onboarding-design.md.
 #
 # This is a system workflow: the goal selector never picks it, and the wizard
 # starts it only while its content matches the shipped built-in.
 
 name: "Onboarding"
-version: 2
+version: 3
 description: "Guide a visitor through getting their own Zebra in their own Oracle Cloud tenancy."
 tags: ["system", "onboarding"]
 use_when: "INTERNAL USE ONLY — started by the /onboarding/ wizard"
@@ -108,27 +114,56 @@ tasks:
       external: onboarding_visitor
       onboarding_step: access
       onboarding_order: 2
+      # The wizard renders the access panel (deploy link, tenancy-admin note, revoke link):
+      # zebra_agent_web.api.onboarding_access
+      onboarding_panel: access
       what_happens: >-
         You let a published Oracle Resource Manager stack build Zebra in one compartment of your
         tenancy. You apply it yourself; this server never holds a key to your tenancy.
       cost: >-
         Nothing: the stack creates Always Free resources only.
       undo: >-
-        Destroy the stack in Resource Manager and delete its compartment.
+        Destroy the stack in Resource Manager and delete its compartment (see "How to undo
+        everything").
       schema:
         type: object
         title: "Give access"
-        description: "The guided access step is coming in a later release. Confirm when you are ready to continue."
-        required: [ready]
+        description: >-
+          Choose how your Zebra gets built. The stack is the simple path; if you cannot use
+          Resource Manager, show your administrator the exact policy it needs instead.
         properties:
-          ready:
-            type: boolean
-            title: "I am a tenancy administrator (or have one to hand) and am ready to apply the stack"
+          name:
+            type: string
+            title: "A short name for your Zebra"
+            description: "Lower-case letters, digits and dashes. Used in the policy text, e.g. zebra-mine."
+            pattern: "^[a-z][a-z0-9-]{0,19}$"
+            maxLength: 20
+            default: "mine"
           problem:
             type: string
             title: "Something went wrong?"
             format: multiline
             maxLength: 2000
+
+  access_policy:
+    name: "Give access"
+    auto: false
+    properties:
+      external: onboarding_visitor
+      onboarding_step: access
+      # The policy text (one compartment; tenancy-level and runtime grants separate)
+      onboarding_panel: policy
+      what_happens: >-
+        Your tenancy administrator creates a group and a policy limited to one compartment, then
+        you apply the stack yourself. Nothing is uploaded here: no key, no password.
+      cost: "Nothing."
+      undo: >-
+        Delete the group and its policies, destroy the stack and delete the compartment.
+      schema:
+        type: object
+        title: "The policy for your administrator"
+        description: "Copy the text below to your tenancy administrator. Continue once it is in place."
+        properties: {}
 
   access_retry:
     name: "Give access: try again"
@@ -153,28 +188,59 @@ tasks:
       external: onboarding_visitor
       onboarding_step: provision
       onboarding_order: 3
+      # The provision panel: make the one-time callback token, open the stack
+      onboarding_panel: provision
+      onboarding_needs_token: true
       what_happens: >-
+        You make a one-time token here and paste it into the stack's onboarding_token field.
         The stack creates a small Arm instance and an Autonomous Database in your compartment and
-        installs Zebra on it.
+        installs Zebra on it; on first boot your Zebra uses the token to tell this wizard where
+        it is.
       cost: >-
         Nothing on Always Free shapes. Your own LLM key (OpenRouter) is set on your new Zebra, not
         here, and its spend is yours.
       undo: >-
-        Destroy the stack; every resource it made is removed.
+        Destroy the stack; every resource it made is removed. The token expires after an hour.
       schema:
         type: object
         title: "Build your Zebra"
-        description: "Apply the stack in Resource Manager and wait for the job to succeed."
+        description: "Make your token, open the stack, paste the token and run Apply."
         required: [applied]
         properties:
           applied:
             type: boolean
-            title: "The Resource Manager job succeeded"
+            title: "I pasted my token into the stack and started Apply"
           problem:
             type: string
             title: "Something went wrong?"
             format: multiline
             maxLength: 2000
+
+  await_instance:
+    name: "Wait for your Zebra to call home"
+    auto: false
+    properties:
+      # Completed by POST /onboarding/callback/ (or the visitor's manual paste), both after
+      # the control proof: zebra_agent_web.api.onboarding_callback
+      external: onboarding_callback
+      onboarding_step: provision
+      onboarding_panel: await
+
+  await_instance_retry:
+    name: "Build your Zebra: try again"
+    auto: false
+    properties:
+      <<: *retry
+      onboarding_step: provision
+      schema:
+        type: object
+        title: "This step did not finish"
+        properties:
+          reason:
+            type: string
+            title: "What went wrong"
+            readOnly: true
+            default: "{{__task_output_await_instance.problem}}"
 
   provision_retry:
     name: "Build your Zebra: try again"
@@ -208,6 +274,11 @@ tasks:
         title: "Check it works"
         required: [working]
         properties:
+          instance_url:
+            type: string
+            title: "Your new Zebra"
+            readOnly: true
+            default: "{{__task_output_await_instance.instance_url}}"
           working:
             type: boolean
             title: "My new Zebra's page loads and I can sign in"
@@ -325,7 +396,13 @@ routings:
   - {from: access, to: provision, condition: route_name, name: done}
   - {from: access, to: access_retry, condition: route_name, name: problem}
   - {from: access_retry, to: access}
-  - {from: provision, to: verify, condition: route_name, name: done}
+  - {from: access, to: access_policy, condition: route_name, name: policy}
+  - {from: access_policy, to: provision, condition: route_name, name: done}
+  - {from: access_policy, to: access, condition: route_name, name: back}
+  - {from: provision, to: await_instance, condition: route_name, name: done}
+  - {from: await_instance, to: verify, condition: route_name, name: done}
+  - {from: await_instance, to: await_instance_retry, condition: route_name, name: problem}
+  - {from: await_instance_retry, to: provision}
   - {from: provision, to: provision_retry, condition: route_name, name: problem}
   - {from: provision_retry, to: provision}
   - {from: verify, to: commons, condition: route_name, name: done}

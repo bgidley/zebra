@@ -61,6 +61,10 @@ ONBOARDING_WORKFLOWS = frozenset({WORKFLOW_NAME})
 LAUNCH_ENTRY = "onboarding"
 #: ``external`` value of a step the visitor completes (kept out of the owner's inbox).
 VISITOR_EXTERNAL = "onboarding_visitor"
+#: ``external`` value of the wait the new instance's callback completes (#278 S4).
+CALLBACK_EXTERNAL = "onboarding_callback"
+#: Where the session keeps ``sha256`` of its callback token (see ``onboarding_callback``).
+CALLBACK_HASH_KEY = "__onboarding_cb_sha256__"
 COOKIE_NAME = "zebra_onboarding"
 TOKEN_SALT = "zebra.onboarding.resume"
 MARKER_KEY = "__onboarding__"
@@ -77,6 +81,8 @@ _DEFAULTS: dict[str, Any] = {
     "MAX_LIVE_SESSIONS": 200,
     "SESSION_IDLE_DAYS": 30,
     "CLIENT_IP_HEADER": "",
+    "STACK_ZIP_URL": "",
+    "STACK_ZIP_SHA256": "",
 }
 
 _LIVE_STATES = (ProcessState.CREATED.value, ProcessState.RUNNING.value)
@@ -196,9 +202,13 @@ async def load_session(store: StateStore, token: str | None) -> ProcessInstance 
 
 
 async def _update_properties(store: StateStore, process_id: str, changes: dict[str, Any]) -> None:
-    """Merge *changes* into one process's properties under its lock."""
+    """Merge *changes* into one process's properties under its lock.
+
+    Store locks are re-entrant per owner, so each update locks under its own owner name.
+    """
+    owner = f"{_LOCK_OWNER}:{secrets.token_hex(8)}"
     for _attempt in range(20):
-        async with store.lock(process_id, _LOCK_OWNER, timeout_seconds=10) as acquired:
+        async with store.lock(process_id, owner, timeout_seconds=10) as acquired:
             if acquired:
                 process = await store.load_process(process_id)
                 if process is None:
@@ -452,6 +462,10 @@ class WizardState:
     routes: list[str] = field(default_factory=list)
     retry: bool = False
     ended_reason: str = ""
+    #: Extra content the step shows (``onboarding_panel``: access, policy, provision, await)
+    panel: str = ""
+    #: The READY ``external: onboarding_callback`` wait while the session waits on its instance
+    waiting_task_id: str | None = None
     summary: list[str] = field(default_factory=list)
 
     @property
@@ -470,6 +484,17 @@ def is_visitor_task(task_def: Any) -> bool:
     return (
         not task_def.auto
         and props.get("external") == VISITOR_EXTERNAL
+        and bool(props.get("onboarding_step"))
+    )
+
+
+def is_callback_task(task_def: Any) -> bool:
+    """The wait the new instance's callback completes (never completed by the step form)."""
+    props = getattr(task_def, "properties", None) or {}
+    return (
+        task_def is not None
+        and not task_def.auto
+        and props.get("external") == CALLBACK_EXTERNAL
         and bool(props.get("onboarding_step"))
     )
 
@@ -532,8 +557,20 @@ async def wizard_state(store: StateStore, process: ProcessInstance) -> WizardSta
             state.retry = bool(task_def.properties.get("onboarding_retry"))
             state.schema = _step_schema(task_def, process.properties or {})
             state.routes = _routes(definition, task.task_definition_id)
+            state.panel = str(task_def.properties.get("onboarding_panel") or "")
         else:
             state.status = "waiting"
+            waiting = [
+                t
+                for t in tasks
+                if t.state == TaskState.READY
+                and is_callback_task(definition.tasks.get(t.task_definition_id))
+            ]
+            if waiting:
+                task_def = definition.tasks[waiting[0].task_definition_id]
+                current_key = task_def.properties["onboarding_step"]
+                state.waiting_task_id = waiting[0].id
+                state.panel = str(task_def.properties.get("onboarding_panel") or "")
     reached = state.status == "finished"
     current_order = next(
         (order for order, _id, td in ordered if td.properties["onboarding_step"] == current_key),
@@ -653,8 +690,22 @@ async def submit_step(
     Only the session's own READY visitor task can be completed, and only by a route it has.
     """
     state = await wizard_state(engine.store, process)
+    if state.waiting_task_id is not None and task_id == state.waiting_task_id:
+        # While it waits on the instance the visitor can only report that something went wrong
+        if route != PROBLEM_ROUTE:
+            raise OnboardingRefused("Choose one of the step's buttons.", 400)
+        state.task_id = task_id
+        state.routes = [PROBLEM_ROUTE]
+        state.schema = {"type": "object", "properties": {PROBLEM_FIELD: {"type": "string"}}}
     if state.task_id is None or state.task_id != task_id:
         raise OnboardingRefused("This step has already moved on; here is where you are now.", 409)
+    if (
+        state.task_def is not None
+        and state.task_def.properties.get("onboarding_needs_token")
+        and route != PROBLEM_ROUTE
+        and not (process.properties or {}).get(CALLBACK_HASH_KEY)
+    ):
+        return {"applied": ["Make your one-time token first and paste it into the stack."]}
     if state.routes:
         if route not in state.routes:
             raise OnboardingRefused("Choose one of the step's buttons.", 400)

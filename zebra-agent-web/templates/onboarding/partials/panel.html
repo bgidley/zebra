@@ -1,0 +1,111 @@
+{% comment %}
+Onboarding step panels (#278): extra content for a step named by its task's onboarding_panel.
+  access    - tenancy-admin requirement and the Deploy to Oracle Cloud link (hidden unless
+              ONBOARDING_STACK_ZIP_URL is set)
+  policy    - the least-privilege policy text for the visitor's admin (option B, no key upload)
+  provision - make the one-time callback token (shown once) and open the stack
+  await     - waiting for the new instance to call home; manual paste fallback
+Context: state, stack, policy, zebra_name, callback_token, new_token, callback_url, halted.
+{% endcomment %}
+{% if state.panel == "await" %}
+<p class="text-xs font-medium uppercase tracking-wide text-faint">Step {{ state.current.order }} of {{ state.steps|length }}</p>
+<h2 class="mt-1 text-lg font-semibold">Waiting for your Zebra to call home</h2>
+<p class="mt-2 text-sm text-muted">
+    When the Apply job finishes, your new Zebra starts and calls this wizard with your token. This
+    wizard then checks that it really is your Zebra before moving on. It can take 10 to 20 minutes;
+    you can close this page and come back.
+</p>
+{% endif %}
+{% if state.panel == "access" or state.panel == "policy" %}
+<div class="mt-5 rounded-md border border-needs/40 bg-needs/10 p-4 text-sm" id="tenancy-admin">
+    <p class="font-medium">The person who applies the stack must be a tenancy administrator.</p>
+    <p class="mt-1 text-muted">
+        The stack creates billing guardrails (budgets that email you on any spend, and a quota that
+        refuses paid shapes) in your tenancy's root compartment, and the runtime dynamic group is a
+        tenancy-level object too. A compartment-only grant cannot create them. Not an administrator?
+        Untick <em>Create billing guardrails</em> (<code>create_guardrails = false</code>) in the
+        stack form: it then skips them and you should create budgets yourself, which is weaker. Or
+        give the policy text to your administrator.
+    </p>
+</div>
+{% endif %}
+
+{% if state.panel == "access" or state.panel == "provision" %}
+<div class="mt-5 rounded-md bg-surface-2 p-4 text-sm" id="deploy">
+    {% if stack.available %}
+        {% if state.panel == "access" %}<p class="text-muted">Look at the stack first if you like; you apply it in the next step, after making your one-time token.</p>{% endif %}
+        <a href="{{ stack.deploy_url }}" target="_blank" rel="noopener noreferrer"
+           class="mt-2 inline-block rounded-md bg-ink px-4 py-2 font-medium text-ground hover:opacity-90">Deploy to Oracle Cloud</a>
+        <p class="mt-2 break-all text-xs text-faint">Stack: {{ stack.zip_url }}{% if stack.sha256 %}<br>SHA-256: <code>{{ stack.sha256 }}</code>{% endif %}</p>
+    {% else %}
+        <p class="text-muted">The published stack is not available on this server yet, so there is no Deploy to Oracle Cloud link. You can still read the policy your administrator would need.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if state.panel == "policy" and policy %}
+<div class="mt-5 space-y-4 text-sm" id="policy">
+    <div>
+        <h3 class="font-semibold">1. Compartment policy (one compartment, zebra-{{ zebra_name }})</h3>
+        <p class="mt-1 text-muted">Your administrator creates the compartment <code>zebra-{{ zebra_name }}</code>, a group <code>zebra-{{ zebra_name }}-admins</code> with you in it, and this policy. It grants nothing outside that compartment.</p>
+        <pre class="mt-2 overflow-x-auto rounded-md bg-ground p-3 font-mono text-xs" data-policy="compartment">{{ policy.compartment }}</pre>
+    </div>
+    <div>
+        <h3 class="font-semibold">2. Tenancy-level grants (optional)</h3>
+        <p class="mt-1 text-muted">These two break the one-compartment rule, so they are separate. They let you create the billing guardrails (budgets and quota). Without them, set <code>create_guardrails = false</code> in the stack and create budgets yourself.</p>
+        <pre class="mt-2 overflow-x-auto rounded-md bg-ground p-3 font-mono text-xs" data-policy="tenancy">{{ policy.tenancy }}</pre>
+    </div>
+    <div>
+        <h3 class="font-semibold">3. Runtime (what your Zebra itself may do later)</h3>
+        <p class="mt-1 text-muted">An administrator creates this dynamic group and policy; the instance only gets read access to its own secrets and objects.</p>
+        <pre class="mt-2 overflow-x-auto rounded-md bg-ground p-3 font-mono text-xs" data-policy="runtime">{{ policy.runtime }}</pre>
+    </div>
+    <p class="text-muted">Nothing is uploaded here: never send this wizard a key or password. <a class="underline" href="{% url 'onboarding_revoke' %}">How to revoke all of this</a>.</p>
+</div>
+{% endif %}
+
+{% if state.panel == "provision" or state.panel == "await" %}
+<div class="mt-5 rounded-md bg-surface-2 p-4 text-sm" id="callback-token">
+    <h3 class="font-semibold">Your one-time token</h3>
+    {% if new_token %}
+        <p class="mt-1 text-muted">Copy it into the stack's <code>onboarding_token</code> field now. It is shown only once, works once and expires in an hour. It is not a key to anything: it only lets your new Zebra tell this wizard where it is.</p>
+        <input type="text" readonly value="{{ new_token }}" aria-label="One-time token" onclick="this.select()"
+               class="mt-2 w-full rounded-md border border-line bg-ground px-3 py-2 font-mono text-xs text-ink">
+    {% elif callback_token.live %}
+        <p class="mt-1 text-muted">Your token is set and expires at {{ callback_token.expires_at }} (UTC). Lost it, or it expired? Make a new one: the old one stops working.</p>
+    {% elif callback_token.used %}
+        <p class="mt-1 text-muted">Your token has been used.</p>
+    {% else %}
+        <p class="mt-1 text-muted">{% if callback_token.expired %}Your token expired. {% endif %}Make a token, then paste it into the stack's <code>onboarding_token</code> field before you run Apply.</p>
+    {% endif %}
+    {% if not callback_token.used %}
+    <form method="post" action="{% url 'onboarding_token' %}" class="mt-3">
+        {% csrf_token %}
+        <button type="submit" {% if halted %}disabled{% endif %} class="rounded-md bg-gray-700 px-3 py-1.5 hover:bg-gray-600">
+            {% if callback_token.exists %}Make a new token (the old one stops working){% else %}Make my one-time token{% endif %}
+        </button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if state.panel == "await" %}
+<form method="post" action="{% url 'onboarding_instance' %}" class="mt-5 rounded-md bg-surface-2 p-4 text-sm">
+    {% csrf_token %}
+    <label for="instance_url" class="font-semibold">Already running? Paste its address</label>
+    <p class="mt-1 text-muted">The same check is made: your Zebra must answer at <code>/.well-known/zebra-onboarding</code>.</p>
+    <input id="instance_url" name="instance_url" type="url" required placeholder="https://zebra.example.com" maxlength="300"
+           class="mt-2 w-full rounded-md border border-line bg-ground px-3 py-2 text-ink">
+    <button type="submit" {% if halted %}disabled{% endif %} class="mt-3 rounded-md bg-ink px-4 py-2 font-medium text-ground hover:opacity-90">Check my Zebra</button>
+</form>
+<form method="post" action="{% url 'onboarding_submit' %}" class="mt-4 text-sm">
+    {% csrf_token %}
+    <input type="hidden" name="task_id" value="{{ state.waiting_task_id }}">
+    <label for="await_problem" class="font-semibold">Something went wrong?</label>
+    <textarea id="await_problem" name="problem" maxlength="2000" rows="2"
+              class="mt-2 w-full rounded-md border border-line bg-ground px-3 py-2 text-ink"
+              placeholder="What happened, in your own words. Never paste passwords or keys."></textarea>
+    <button type="submit" name="next_route" value="problem" {% if halted %}disabled{% endif %}
+            class="mt-2 rounded-md bg-gray-700 px-3 py-1.5 hover:bg-gray-600">Something went wrong</button>
+</form>
+{% endif %}

@@ -95,3 +95,49 @@ async def test_resume_lands_on_the_same_step_after_a_failure_and_retry(onboardin
     process = await ob.load_session(store, token)
     text = str(process.properties)
     assert ob.read_token(token)[1] not in text and token not in text
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_the_instance_calls_home_once(onboarding_on, monkeypatch):
+    """#278: access → token → wait; the instance's callback completes it once (real store)."""
+    import json
+
+    from django.core.cache import cache
+    from zebra_agent_web.api import onboarding_callback as cb
+
+    served: dict[str, str] = {}
+
+    async def fake_instance(url, **_kwargs):
+        if url not in served:
+            raise cb.CallbackError("Could not reach the instance over https.", 422)
+        return served[url]
+
+    monkeypatch.setattr(cb, "fetch_challenge", fake_instance)
+    browser = AsyncClient()
+    await browser.post("/onboarding/start/")
+    signup = {"home_region": "uk-london-1", "account_created": "on", "budget_ack": "on"}
+    for fields in (signup, {"name": "mine"}):
+        response = await browser.post(
+            "/onboarding/step/",
+            {"task_id": await _task_id(browser), "next_route": "done", **fields},
+        )
+        assert response.status_code == 302
+    page = (await browser.post("/onboarding/token/")).content.decode()
+    token = page.split('aria-label="One-time token"', 1)[0].rsplit('value="', 1)[1].split('"')[0]
+    response = await browser.post(
+        "/onboarding/step/",
+        {"task_id": await _task_id(browser), "next_route": "done", "applied": "on"},
+    )
+    assert response.status_code == 302
+
+    instance = AsyncClient()
+    body = json.dumps({"token": token, "instance_url": "https://zebra.example.com"})
+    served["https://zebra.example.com"] = cb.token_hash(token)
+    cache.clear()  # the lookup falls back to scanning running sessions in the real database
+    first = await instance.post("/onboarding/callback/", body, content_type="application/json")
+    assert first.status_code == 200, first.content
+    replay = await instance.post("/onboarding/callback/", body, content_type="application/json")
+    assert replay.status_code == 410
+    html = (await browser.get("/onboarding/")).content.decode()
+    assert "Check it works" in html and "https://zebra.example.com" in html

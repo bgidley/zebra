@@ -1,0 +1,39 @@
+{% comment %}
+Onboarding revoke screen (#278 S3): how to undo everything the wizard had you set up.
+Reachable from every terminal state and without a session. Context: steps (title, body),
+zebra_name.
+{% endcomment %}<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+    {% include "partials/head_assets.html" %}
+    <meta name="referrer" content="same-origin">
+    <title>Undo your Zebra</title>
+</head>
+<body class="min-h-full flex flex-col text-ink">
+    <header class="flex items-center gap-2.5 h-14 px-5 sm:px-8">
+        <span class="zebra-mark" aria-hidden="true"></span>
+        <span class="text-[15px] font-semibold tracking-tight">Zebra</span>
+    </header>
+    <main class="flex-1 px-4 py-8 sm:py-12">
+        <div class="mx-auto w-full max-w-3xl">
+            <h1 class="text-2xl font-semibold tracking-tight">How to undo everything</h1>
+            <p class="mt-2 text-sm text-muted max-w-prose">
+                Everything lives in your own Oracle Cloud tenancy, so you remove it there. This
+                server never held a key to your tenancy, so there is nothing to revoke here.
+            </p>
+            <ol class="mt-8 space-y-4">
+                {% for title, body in steps %}
+                <li class="rounded-lg border border-line bg-surface p-5">
+                    <h2 class="text-sm font-semibold">{{ forloop.counter }}. {{ title }}</h2>
+                    <p class="mt-1 text-sm text-muted">{{ body }}</p>
+                </li>
+                {% endfor %}
+            </ol>
+            <p class="mt-8 text-sm"><a class="underline" href="{% url 'onboarding_wizard' %}">Back to the wizard</a></p>
+        </div>
+    </main>
+    <footer class="flex justify-center px-4 py-4">
+        {% include "partials/version_info.html" %}
+    </footer>
+</body>
+</html>

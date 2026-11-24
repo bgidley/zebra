@@ -269,6 +269,10 @@ ZEBRA_AGENT_SETTINGS = {
     # Header holding the visitor's IP behind a trusted proxy (CF-Connecting-IP behind the
     # Cloudflare Tunnel); empty = REMOTE_ADDR. Only set it when every request comes via the proxy.
     "ONBOARDING_CLIENT_IP_HEADER": os.environ.get("ZEBRA_ONBOARDING_CLIENT_IP_HEADER", ""),
+    # The published Resource Manager stack zip (#283) and its SHA-256 (#278). Empty or not
+    # https = no "Deploy to Oracle Cloud" link.
+    "ONBOARDING_STACK_ZIP_URL": os.environ.get("ZEBRA_ONBOARDING_STACK_ZIP_URL", ""),
+    "ONBOARDING_STACK_ZIP_SHA256": os.environ.get("ZEBRA_ONBOARDING_STACK_ZIP_SHA256", ""),
 }
 
 # Logging
