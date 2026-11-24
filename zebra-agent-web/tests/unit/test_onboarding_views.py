@@ -17,9 +17,10 @@ pytestmark = pytest.mark.django_db(transaction=True)
 SIGNUP = {"home_region": "uk-london-1", "account_created": "on", "budget_ack": "on"}
 
 
-def _page_hosts(page: str) -> set[str]:
-    """Hostnames of every https URL shown on *page* (parsed, not substring-matched)."""
-    return {urlsplit(url).hostname for url in re.findall(r"https://[^\s\"'<>]+", page)}
+def _shows_host(page: str, host: str) -> bool:
+    """True if an https URL on *page* has exactly *host* as its hostname (parsed, not a
+    substring match)."""
+    return any(urlsplit(url).hostname == host for url in re.findall(r"https://[^\s\"'<>]+", page))
 
 
 def _prod_middleware() -> list[str]:
@@ -279,7 +280,7 @@ def test_the_whole_wizard_finishes(onboarding_env, monkeypatch):
     client.post("/onboarding/instance/", {"instance_url": "https://zebra.example.com"})
     html = client.get("/onboarding/").content.decode()
     # verify shows the verified instance
-    assert "zebra.example.com" in _page_hosts(html)
+    assert _shows_host(html, "zebra.example.com")
     _submit(client, "done", working="on")
     _submit(client, "done")
     _submit(client, "done")

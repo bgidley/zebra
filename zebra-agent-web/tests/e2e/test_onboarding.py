@@ -20,9 +20,10 @@ async def _noop() -> None:
     return None
 
 
-def _page_hosts(page: str) -> set[str]:
-    """Hostnames of every https URL shown on *page* (parsed, not substring-matched)."""
-    return {urlsplit(url).hostname for url in re.findall(r"https://[^\s\"'<>]+", page)}
+def _shows_host(page: str, host: str) -> bool:
+    """True if an https URL on *page* has exactly *host* as its hostname (parsed, not a
+    substring match)."""
+    return any(urlsplit(url).hostname == host for url in re.findall(r"https://[^\s\"'<>]+", page))
 
 
 @pytest.fixture
@@ -148,4 +149,4 @@ async def test_the_instance_calls_home_once(onboarding_on, monkeypatch):
     replay = await instance.post("/onboarding/callback/", body, content_type="application/json")
     assert replay.status_code == 410
     html = (await browser.get("/onboarding/")).content.decode()
-    assert "Check it works" in html and "zebra.example.com" in _page_hosts(html)
+    assert "Check it works" in html and _shows_host(html, "zebra.example.com")
