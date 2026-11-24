@@ -248,6 +248,10 @@ ZEBRA_AGENT_SETTINGS = {
     # anonymous wizard also needs the owner's switch (SystemStateModel.onboarding_enabled).
     "ONBOARDING_ENABLED": os.environ.get("ZEBRA_ONBOARDING_ENABLED", "0").lower()
     in ("1", "true", "yes", "on"),
+    # The instance's public origin (https://host, no path) used to build the shareable
+    # onboarding link (#330): never the request Host. Falls back to the first https origin in
+    # CSRF_TRUSTED_ORIGINS; with neither, the share page shows no link.
+    "PUBLIC_BASE_URL": os.environ.get("ZEBRA_PUBLIC_BASE_URL", "").strip(),
     # Hard LLM caps: per wizard session (its __cost_cap_usd__) and per UTC day for all of them.
     "ONBOARDING_SESSION_COST_CAP_USD": float(
         os.environ.get("ZEBRA_ONBOARDING_SESSION_COST_CAP_USD", "0.05")

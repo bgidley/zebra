@@ -47,6 +47,28 @@ def onboarding_on(settings, monkeypatch, workflow_engine, workflow_library):
     cache.clear()
 
 
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_invite_link_from_the_nav_opens_the_wizard_for_a_stranger(
+    onboarding_on, test_user, settings
+):
+    """#330: a signed-in user finds the link in the nav; an anonymous visitor opens it."""
+    settings.ZEBRA_AGENT_SETTINGS = {
+        **settings.ZEBRA_AGENT_SETTINGS,
+        "PUBLIC_BASE_URL": "https://zebra.example.com",
+    }
+    member = AsyncClient()
+    await member.aforce_login(test_user)
+    assert 'href="/invite/"' in (await member.get("/onboarding/manage/")).content.decode()
+    page = (await member.get("/invite/")).content.decode()
+    link = page.split('id="invite-link"', 1)[1].split('value="', 1)[1].split('"', 1)[0]
+    assert link == "https://zebra.example.com/onboarding/"
+    assert test_user.username not in link
+
+    stranger = AsyncClient()
+    assert (await stranger.get(urlsplit(link).path)).status_code == 200
+
+
 async def _task_id(client: AsyncClient) -> str:
     html = (await client.get("/onboarding/")).content.decode()
     return html.split('name="task_id" value="', 1)[1].split('"', 1)[0]

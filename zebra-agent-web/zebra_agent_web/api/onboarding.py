@@ -110,6 +110,23 @@ def config(name: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def public_wizard_url(path: str) -> str | None:
+    """The shareable https URL of *path* on this instance's configured public origin (#330).
+
+    From ``PUBLIC_BASE_URL`` (``ZEBRA_PUBLIC_BASE_URL``), else the first https entry of
+    ``CSRF_TRUSTED_ORIGINS``; never the request Host header. ``None`` when no valid https
+    origin is configured. Only scheme and host are used, so no userinfo, query or path leaks in.
+    """
+    from urllib.parse import urlsplit
+
+    configured = getattr(settings, "ZEBRA_AGENT_SETTINGS", {}).get("PUBLIC_BASE_URL", "")
+    for candidate in (configured, *getattr(settings, "CSRF_TRUSTED_ORIGINS", [])):
+        parts = urlsplit(candidate or "")
+        if parts.scheme == "https" and parts.hostname and parts.username is None:
+            return f"https://{parts.netloc}{path}"
+    return None
+
+
 async def owner_switch() -> bool:
     """The owner's onboarding toggle (``SystemStateModel.onboarding_enabled``)."""
     from zebra_agent_web.api.models import SystemStateModel
