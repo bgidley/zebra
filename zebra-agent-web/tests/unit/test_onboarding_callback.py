@@ -413,6 +413,27 @@ def test_a_failed_proof_leaves_the_token_unused(onboarding_env, instance):
 
 
 @pytestmark_db
+def test_a_failed_completion_hands_the_token_back(onboarding_env, instance, monkeypatch):
+    """If the wait cannot be completed after the claim, the token is not spent."""
+    engine, _library = onboarding_env
+    client = Client()
+    token = _to_await(client)
+    instance["serves"]["https://zebra.example.com"] = cb.token_hash(token)
+    real_complete = engine.complete_task
+
+    async def broken(*_args, **_kwargs):
+        raise RuntimeError("task moved on")
+
+    monkeypatch.setattr(engine, "complete_task", broken)
+    assert _call(token).status_code == 409
+    props, tasks = _props()
+    assert props[cb.USED_KEY] is False
+    assert ("await_instance", "ready") in [(t, s.lower()) for t, s in tasks]
+    monkeypatch.setattr(engine, "complete_task", real_complete)
+    assert _call(token).status_code == 200
+
+
+@pytestmark_db
 def test_a_session_not_yet_waiting_gets_409(onboarding_env, instance):
     client = Client()
     _to_provision(client)

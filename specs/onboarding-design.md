@@ -239,7 +239,8 @@ under step 3 and the visitor may only report a problem from it). A task's `onboa
 6. Success: the token is marked used under the process lock (compare-and-set, so two concurrent
    callbacks complete once) and `await_instance` completes by route `done` with the non-secret
    output `{instance_url, version, commons_fingerprint, verified_at, via: callback|manual}`. The
-   verify step shows `instance_url`. A failed proof leaves the token unused.
+   verify step shows `instance_url`. A failed proof leaves the token unused; if completing the wait fails after the claim, the
+   token is handed back (409) so the instance can retry.
 7. Manual fallback: `POST /onboarding/instance/` (session cookie, CSRF, 10/min/IP) with
    `instance_url` runs the same proof against the session's current token.
 
