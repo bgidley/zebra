@@ -1,4 +1,4 @@
-Narrative design: [specs/work-zebra-mac-design.md](../../../specs/work-zebra-mac-design.md), section WZ1.
+Narrative design: [specs/work-zebra-mac-design.md](../../../../specs/work-zebra-mac-design.md), section WZ1.
 
 Key decisions:
 - Converse API (not InvokeModel / the Anthropic Bedrock SDK): one request shape for every Bedrock
