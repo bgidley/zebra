@@ -7,7 +7,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 ## Package Overview
 
 `zebra-tasks` provides reusable task actions that extend the core workflow engine:
-- **LLM Actions**: Call LLMs (all through OpenRouter) from workflows
+- **LLM Actions**: Call LLMs (OpenRouter by default, or AWS Bedrock) from workflows
 - **Subtask Actions**: Spawn and manage sub-workflows
 - **Compute Actions**: Computational task utilities
 - **Agent Actions**: Agent-specific task actions
@@ -17,7 +17,7 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | Directory | Purpose |
 |-----------|---------|
 | `zebra_tasks/` | Package root |
-| `zebra_tasks/llm/` | LLM calls (OpenRouter only, #205) |
+| `zebra_tasks/llm/` | LLM calls (OpenRouter, #205; or Bedrock with `ZEBRA_LLM_PROVIDER=bedrock`, #335) |
 | `zebra_tasks/llm/base.py` | LLMProvider base class, Message model; `llm_request_timeout()` (`ZEBRA_LLM_TIMEOUT_SECONDS`, default 180s) + `LLM_MAX_RETRIES` (2), passed to the OpenRouter client (#183) |
 | `zebra_tasks/llm/action.py` | LLMCallAction task action |
 | `zebra_tasks/llm/structured.py` | `parse_llm_json()` (unclosed fence, JSON in prose), `complete_json()` (one retry: 2× `max_tokens` after truncation, else a JSON-only note), `LLMJSONError.failure` (`error`, `finish_reason`, `truncated`, `attempts`, capped `raw_response`), `describe_failure()`. Used by the dream-cycle JSON steps (#195) |
@@ -84,7 +84,9 @@ This file provides coding agent guidelines specific to the `zebra-tasks` package
 | `zebra_tasks/launch.py` | The launch choke point (#245): `create_library_process(engine, definition, entry=, properties=, parent_process_id=, parent_task_id=)` awaits `check_launch(definition, entry=, properties=, extras=, registry=)` then creates the process; for a supervised workflow (`SupervisedLaunch`, #230) it saves the definition and creates its *Supervised run* wrapper instead; `LaunchRefused` while the Commons is stopped. `LAUNCH_ENTRIES`: `goal`, `agent_loop`, `dream_cycle`, `direct_run`, `routine`, `subworkflow`, `parallel_subworkflows`, `llm_agent_tool`, `onboarding` (#276). Use it to start any library workflow; `tests/test_launch.py` allowlists the other `create_process` calls |
 | `zebra_tasks/templating.py` | `resolve_templates()` — `{{templates}}` in every string of a nested dict/list (webhook, HTTP actions); `strip_templates()` — each `{{…}}` → a space in linear time (leak guard, PII and confidentiality scans; never the quadratic lazy `{{.*?}}` regex, #288) |
 | `zebra_tasks/web/kagi_news.py` | KagiNewsFetchAction (`kagi_news_fetch`: news.kagi.com `kite.json` feed, no key) and KagiNewsReadAction (`kagi_news_read`: batch Kagi Extract of picked stories, falls back to Kagi News summaries; never fails on extraction) (F155) |
-| `zebra_tasks/llm/models.py` | `TIERS` (`low`, `medium`, `high`, `max`), `DEFAULT_TIER` (`medium`), `normalize_model()`: a tier, or a `vendor/model` slug as given; names stored before #205 (`haiku`, `sonnet`, `opus`, `claude-*`, `kimi*`) read as their tier |
+| `zebra_tasks/llm/models.py` | `TIERS` (`low`, `medium`, `high`, `max`), `DEFAULT_TIER` (`medium`), `llm_provider()` (`ZEBRA_LLM_PROVIDER`: `openrouter` default / `bedrock`), `normalize_model()`: a tier; on OpenRouter a `vendor/model` slug as given; on Bedrock an exact Bedrock ID / ARN as given and a slug read as its tier with a warning; names stored before #205 (`haiku`, `sonnet`, `opus`, `claude-*`, `kimi*`) read as their tier |
+| `zebra_tasks/llm/bedrock.py` | `BedrockLLM` (#335): Converse API via boto3 in `asyncio.to_thread`; tier → `tier_model()` (`ZEBRA_BEDROCK_MODEL_<TIER>`); `to_converse()` / `from_converse()` (system blocks, merged same-role turns, `toolConfig` / `toolUse` / `toolResult`, tool history flattened to text when no tools are sent, `reasoningContent` dropped); no `temperature` for models that refuse it; `call_cost()` from `DEFAULT_PRICES` + `ZEBRA_BEDROCK_PRICES` (unknown model = highest rate); `get_client()` cached per credentials, `ZEBRA_BEDROCK_TOKEN_FILE` re-read on mtime change (`parse_token_file`: bare key, `{token, expires_at}`, `credential_process` JSON); botocore `Config(read_timeout=llm_request_timeout(), retries=LLM_MAX_RETRIES)`; missing / expired credentials → `LLMProviderAuthError` ("AWS session expired — run `aws sso login --profile X`") + `notify_owner` |
+| `zebra_tasks/notifications/owner.py` | `notify_owner(key, subject, body)` (#335): owner notice outside a workflow, over `ZEBRA_NOTIFY_WEBHOOK_URL` and/or SMTP (`ZEBRA_SMTP_HOST` + `ZEBRA_NOTIFY_EMAIL_TO`), always logged at ERROR, once per key per hour, never raises |
 | `zebra_tasks/llm/client.py` | `get_llm(model, context)`: the one entry point; with a context every call records its usage on the process. `model_for(task, context, default)`: task `model` > process `__llm_model__` > default > `medium`. `set_llm_factory()`: test seam (the root `conftest.py` resets it). Before each recorded call `check_cost_cap()` refuses (`LLMCostCapExceeded`, nothing spent) a process whose `__total_cost__` reached its `__cost_cap_usd__`, or one the `__llm_guard__` engine extra refuses (#276) |
 | `zebra_tasks/llm/openrouter.py` | `OpenRouterLLM` (`OPENROUTER_API_KEY`, OpenAI SDK): a tier goes to `openrouter/auto` with `plugins: [{id: auto-router, cost_tier}]`; a slug goes to that model. Adds `REASONING_HEADROOM_TOKENS` (4096) to `max_tokens` so reasoning models still answer (#204); `TokenUsage.cost_usd` from OpenRouter's `usage.cost` |
 | `zebra_tasks/llm/usage.py` | `record_usage(context, response)`: tokens, cost and history onto the process, soft budget warning |
@@ -145,7 +147,7 @@ class MyNewAction(TaskAction):
 
 ### LLM calls in a task action
 
-Every LLM call goes through OpenRouter (#205). Ask for a tier, never a vendor model:
+Every LLM call goes through `get_llm` (#205), which builds the configured provider (OpenRouter, or Bedrock, #335). Ask for a tier, never a vendor model:
 
 ```python
 from zebra_tasks.llm.base import Message
@@ -157,7 +159,8 @@ response = await llm.complete([Message.user(prompt)], max_tokens=500)
 
 - `model_for` picks the task's `model`, else the run's `__llm_model__`, else the default.
 - Passing `context` records tokens and cost on the process; do not track cost by hand.
-- `get_llm` raises `ValueError` without `OPENROUTER_API_KEY`; actions that must never fail
+- `get_llm` raises `ValueError` without `OPENROUTER_API_KEY` (on OpenRouter); a Bedrock call
+  raises `LLMProviderAuthError` when AWS credentials are missing or expired. Actions that must never fail
   (dream-cycle steps) catch it and degrade.
 - In tests, `set_llm_factory(lambda model: fake)` (or patch the module's `get_llm`).
 

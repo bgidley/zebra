@@ -23,6 +23,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "aiofiles>=23.0",
     "openai>=2.15.0",
+    "boto3>=1.40",
 ]
 
 [tool.uv.sources]

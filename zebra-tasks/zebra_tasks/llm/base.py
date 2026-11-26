@@ -32,6 +32,14 @@ def llm_request_timeout() -> float:
     return value
 
 
+class LLMProviderAuthError(RuntimeError):
+    """The provider refused the call: its credentials are missing or expired (#335).
+
+    The message says what the owner must do (e.g. ``aws sso login``). Retrying
+    will not help until they do.
+    """
+
+
 class MessageRole(str, Enum):
     """Role of a message in a conversation."""
 
@@ -96,7 +104,7 @@ class TokenUsage:
 
     input_tokens: int
     output_tokens: int
-    # USD cost OpenRouter reported for the call.
+    # USD cost of the call: reported by OpenRouter, priced from tokens on Bedrock.
     cost_usd: float = 0.0
 
     @property

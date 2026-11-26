@@ -779,6 +779,10 @@ See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking fl
 | `GOAL_TIMEOUT_SECONDS` | `ZEBRA_GOAL_TIMEOUT_SECONDS` | 900 | Max seconds a goal's auto tasks may run before it is failed (#142) |
 | `DAEMON_AUTO_START` | `ZEBRA_DAEMON_AUTO_START` | true | Auto-start daemon in ASGI server |
 | `DATABASES` | `ZEBRA_DB_ENGINE` | Oracle if `ORACLE_DSN`, else SQLite | `oracle` / `postgresql` / `sqlite`; unknown fails start-up. Postgres reads `PGHOST`/`PGPORT`/`PGDATABASE`/`PGUSER`/`PGPASSWORD` (#305) |
+| — | `ZEBRA_LLM_PROVIDER` | openrouter | LLM provider: `openrouter` / `bedrock`; unknown → openrouter with an error log (#335) |
+| — | `ZEBRA_BEDROCK_MODEL_LOW` / `_MEDIUM` / `_HIGH` / `_MAX` | `global.anthropic.claude-haiku-5-5` / `…sonnet-5-5` / `…opus-5-5` / `…opus-5-5` | Bedrock model or inference profile per tier; region from `AWS_REGION` (default `us-east-1`) (#335) |
+| — | `ZEBRA_BEDROCK_PRICES` | built-in table | JSON `{"<model id or part>": {"input": usd_per_1M, "output": usd_per_1M}}` over the Bedrock price table; unknown models are charged the highest known rate (#335) |
+| — | `ZEBRA_BEDROCK_TOKEN_FILE` | — | Bedrock credentials file (bare API key, `{"token", "expires_at"}`, or `credential_process` JSON), re-read on change; unset = boto3 chain (`AWS_PROFILE`). `ZEBRA_BEDROCK_SSO_PROFILE` names the profile in the expiry message (#335, #340) |
 | — | `ZEBRA_LLM_TIMEOUT_SECONDS` | 180 | Per-attempt LLM API timeout in every provider (2 retries), so a stalled call fails inside the goal budget (#183) |
 | `LLM_MODEL` | `ZEBRA_LLM_MODEL` | medium | Server default model tier (`low` / `medium` / `high` / `max`, #205) |
 | `RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | `ZEBRA_RECOVERY_MAX_INTERRUPTED_ATTEMPTS` | 3 | Recovery fails a process once a task has been interrupted this many times (#130) |
@@ -797,12 +801,21 @@ See `zebra-agent/AGENTS.md` and `zebra-agent-web/AGENTS.md` for cost tracking fl
 | `COMMONS_OFFER_MIN_SUCCESS_RATE` / `COMMONS_OFFER_MIN_RATING` | `ZEBRA_COMMONS_OFFER_MIN_SUCCESS_RATE` / `ZEBRA_COMMONS_OFFER_MIN_RATING` | 0.8 / 4.0 | Stats a learnt workflow needs (with ≥ 5 runs) before the dream cycle proposes offering it; an unrated workflow passes the rating test (#235) |
 | `COMMONS_SHARING_PROMOTION_APPROVALS` | `ZEBRA_COMMONS_SHARING_PROMOTION_APPROVALS` | 5 | Owner approvals of sharing proposals in a row, without a note, before Zebra asks (a pending suggestion) for more `sharing` autonomy (#235) |
 
-### LLM Model Tiers (OpenRouter only)
+### LLM Model Tiers and Providers
 
-Every LLM call goes through OpenRouter (#205). Zebra asks for a cost **tier**, never a vendor
-model: `low`, `medium` (default), `high`, `max`. A tier is sent to `openrouter/auto` with that
-auto-router `cost_tier`, so OpenRouter picks a model per prompt within the price band. An
-explicit `vendor/model` slug (e.g. `moonshotai/kimi-k3`) still names an exact model.
+Zebra asks for a cost **tier**, never a vendor model: `low`, `medium` (default), `high`, `max`.
+`ZEBRA_LLM_PROVIDER` picks who serves it (#335):
+
+- **`openrouter`** (default, prod): a tier is sent to `openrouter/auto` with that auto-router
+  `cost_tier`, so OpenRouter picks a model per prompt within the price band (#205). An explicit
+  `vendor/model` slug (e.g. `moonshotai/kimi-k3`) names an exact model.
+- **`bedrock`** (the work Zebra, #334): AWS Bedrock Converse API (`zebra_tasks/llm/bedrock.py`).
+  A tier maps to `ZEBRA_BEDROCK_MODEL_<TIER>` (default the Haiku / Sonnet / Opus / Opus `global.`
+  inference profiles); an exact Bedrock ID or ARN is sent as given; an OpenRouter slug is read as
+  its tier with a warning. Cost is priced from tokens (`ZEBRA_BEDROCK_PRICES` overrides the
+  table). Expired AWS credentials fail the call with "AWS session expired — run `aws sso login
+  --profile X`" and notify the owner (`zebra_tasks.notifications.owner`). Details:
+  [specs/work-zebra-mac-design.md](specs/work-zebra-mac-design.md).
 
 - **Per-request**: `model` in the goal form, API call or `--model` on the CLI
 - **Per-workflow-task**: `model` property on any `llm_call` / `llm_agent` task in YAML

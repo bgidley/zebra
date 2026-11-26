@@ -14,7 +14,9 @@ from zebra.core.models import TaskInstance, TaskState
 
 from zebra_tasks.http.actions import HttpGetAction
 from zebra_tasks.llm.base import Message
+from zebra_tasks.llm.bedrock import BedrockLLM, make_client
 from zebra_tasks.llm.openrouter import OpenRouterLLM
+from zebra_tasks.notifications.owner import notify_owner, reset_owner_notices
 from zebra_tasks.notifications.webhook import NotifyWebhookAction
 from zebra_tasks.web.kagi_extract import KagiExtractAction
 from zebra_tasks.web.kagi_news import KagiNewsFetchAction, KagiNewsReadAction
@@ -130,6 +132,27 @@ async def test_openrouter_client_goes_through_the_proxy(recording_proxy, monkeyp
         await llm.complete([Message.user("hi")])
 
     assert recording_proxy.connects == ["openrouter.test:443"]
+
+
+async def test_bedrock_client_goes_through_the_proxy(recording_proxy, monkeypatch):
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIDTEST")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setattr("zebra_tasks.llm.bedrock.LLM_MAX_RETRIES", 0)
+    llm = BedrockLLM("medium", client=make_client("eu-west-1", None))
+
+    with pytest.raises(Exception):
+        await llm.complete([Message.user("hi")])
+
+    assert recording_proxy.connects == ["bedrock-runtime.eu-west-1.amazonaws.com:443"]
+
+
+async def test_owner_notice_webhook_goes_through_the_proxy(recording_proxy, monkeypatch):
+    monkeypatch.setenv("ZEBRA_NOTIFY_WEBHOOK_URL", "https://hooks.test/owner")
+    reset_owner_notices()
+
+    assert await notify_owner("proxy-test", "S", "B") == []  # the proxy refuses it
+
+    assert recording_proxy.connects == ["hooks.test:443"]
 
 
 # --- source audit -------------------------------------------------------------------------

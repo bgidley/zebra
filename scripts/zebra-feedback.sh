@@ -93,6 +93,9 @@ if isinstance(out, dict):
         (v for k, v in out.items() if k not in skip and "usage" not in k and isinstance(v, str)),
         None,
     )
+    if text is None and out:
+        # No top-level string (the workflow nested its answer): show the output itself.
+        text = json.dumps(out, indent=2, default=str)[:4000]
 elif out:
     text = str(out)
 
