@@ -13,6 +13,7 @@ import json
 import os
 import re
 import socket
+import urllib.request
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -60,6 +61,14 @@ async def _resolve(host: str, port: int) -> list[str]:
     return [info[4][0] for info in infos]
 
 
+def _via_proxy(scheme: str, host: str) -> bool:
+    """Whether a request to ``host`` goes through a configured proxy (``NO_PROXY`` honoured)."""
+    configured = urllib.request.getproxies()
+    if not (configured.get(scheme) or configured.get("all")):
+        return False
+    return not urllib.request.proxy_bypass_environment(host)
+
+
 async def check_url(url: str) -> str:
     """Check that ``url`` is http(s) and its host resolves only to public addresses.
 
@@ -86,6 +95,8 @@ async def check_url(url: str) -> str:
     try:
         addresses = [str(ipaddress.ip_address(host))]
     except ValueError:
+        if _via_proxy(parsed.scheme, host):
+            return host
         try:
             addresses = await _resolve(host, port)
         except (OSError, UnicodeError) as e:

@@ -64,6 +64,19 @@ unit-postgres:
   after_script:
     - podman rm -f "ci-pg-${CI_JOB_ID}" || true
 
+# Egress allowlist proxy (#337): builds deploy/mac-container/egress with rootless Podman and
+# drives it with real CONNECT requests (allowed host passes; RFC1918, loopback, link-local,
+# non-443 and unlisted hosts are refused). Containers are named per test and removed by it.
+egress-squid:
+  stage: test
+  retry:
+    max: 1
+    when: script_failure # docker.io pull hiccups
+  variables:
+    ZEBRA_SQUID_TEST: "1"
+  script:
+    - uv run pytest tests/egress -v
+
 # OCI Resource Manager stack (#279): fmt, validate, `terraform test` with a mocked oci
 # provider, and a plan scanned against the Always Free allowlist. Terraform runs in a pinned
 # container; no OCI credentials, never applies. The scanner's pytest cases run in `unit`.

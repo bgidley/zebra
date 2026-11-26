@@ -1,6 +1,8 @@
 """Pytest fixtures for zebra-tasks tests."""
 
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -160,3 +162,19 @@ def mock_context(mock_engine, mock_store, mock_process, mock_task_definition):
         task_definition=mock_task_definition,
         extras={},  # For engine-level dependency injection
     )
+
+
+@pytest.fixture
+async def recording_proxy(monkeypatch):
+    """A running RecordingProxy that every proxy-aware client in the test is pointed at (#337)."""
+    sys.path.insert(0, str(Path(__file__).parents[2] / "tests" / "support"))
+    from recording_proxy import RecordingProxy
+
+    proxy = RecordingProxy()
+    await proxy.start()
+    for name in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+        monkeypatch.setenv(name, proxy.url)
+    for name in ("ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    yield proxy
+    await proxy.stop()
