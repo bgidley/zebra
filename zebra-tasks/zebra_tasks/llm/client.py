@@ -1,10 +1,11 @@
 """Get an LLM: the one entry point for every LLM call (#205).
 
 ``get_llm(model, context)`` returns an LLM for a tier (``low`` / ``medium`` / ``high``
-/ ``max``) or an exact OpenRouter ``vendor/model`` slug. Given the task's execution
-context, every call it makes adds its tokens and cost to that process and to the
-spend ledger (#206). ``model_for`` picks the model a task should use. Tests swap the
-backend with ``set_llm_factory``.
+/ ``max``) or an exact model (an OpenRouter ``vendor/model`` slug, or a Bedrock ID), from
+the provider ``ZEBRA_LLM_PROVIDER`` names (``openrouter``, the default, or ``bedrock``,
+#335). Given the task's execution context, every call it makes adds its tokens and cost
+to that process and to the spend ledger (#206). ``model_for`` picks the model a task
+should use. Tests swap the backend with ``set_llm_factory``.
 
 Hard cost caps (#276): before each call a process whose ``__cost_cap_usd__`` property is set
 is refused once its ``__total_cost__`` has reached it, and an ``__llm_guard__`` engine extra
@@ -16,7 +17,7 @@ from collections.abc import Callable
 from typing import Any
 
 from zebra_tasks.llm.base import LLMProvider, LLMResponse
-from zebra_tasks.llm.models import normalize_model
+from zebra_tasks.llm.models import llm_provider, normalize_model
 from zebra_tasks.llm.usage import record_spend, record_usage
 
 LLMFactory = Callable[[str], LLMProvider]
@@ -35,7 +36,7 @@ _factory: LLMFactory | None = None
 
 
 def get_llm(model: str | None = None, context: Any = None) -> LLMProvider:
-    """An LLM for *model* (a tier or ``vendor/model`` slug; default the medium tier).
+    """An LLM for *model* (a tier or exact model; default the medium tier).
 
     With *context* (a task's ``ExecutionContext``), each call's usage is recorded on
     its process (``__total_cost__``, ``__total_tokens__``, ``__token_history__``).
@@ -43,6 +44,10 @@ def get_llm(model: str | None = None, context: Any = None) -> LLMProvider:
     resolved = normalize_model(model)
     if _factory is not None:
         llm = _factory(resolved)
+    elif llm_provider() == "bedrock":
+        from zebra_tasks.llm.bedrock import BedrockLLM
+
+        llm = BedrockLLM(resolved)
     else:
         from zebra_tasks.llm.openrouter import OpenRouterLLM
 
@@ -51,7 +56,7 @@ def get_llm(model: str | None = None, context: Any = None) -> LLMProvider:
 
 
 def set_llm_factory(factory: LLMFactory | None) -> LLMFactory | None:
-    """Make ``get_llm`` build LLMs with *factory* (None restores OpenRouter).
+    """Make ``get_llm`` build LLMs with *factory* (None restores the configured provider).
 
     Returns the previous factory. For tests and local tooling.
     """

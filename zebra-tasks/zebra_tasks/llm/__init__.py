@@ -1,4 +1,4 @@
-"""LLM calls for Zebra workflows, all through OpenRouter (#205)."""
+"""LLM calls for Zebra workflows, through OpenRouter (#205) or AWS Bedrock (#335)."""
 
 from zebra_tasks.llm.action import LLMCallAction
 from zebra_tasks.llm.agent import LLMAgentAction
