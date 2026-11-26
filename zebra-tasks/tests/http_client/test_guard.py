@@ -21,6 +21,15 @@ def resolves_to(*addresses: str):
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
     monkeypatch.delenv("ZEBRA_HTTP_ALLOWED_PRIVATE_HOSTS", raising=False)
+    for name in (
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+    ):
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.mark.parametrize(
@@ -140,3 +149,38 @@ def test_bad_credentials_fail_without_leaking(monkeypatch, raw, message):
 def test_credential_name_must_be_simple():
     with pytest.raises(HttpGuardError, match="letters, digits"):
         load_credential("../etc")
+
+
+# --- behind an egress proxy (#337) ---------------------------------------------------------
+
+
+async def test_behind_a_proxy_a_hostname_is_left_to_the_proxy(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://zebra-egress:3128")
+
+    async def no_dns(host: str, port: int) -> list[str]:
+        raise AssertionError("must not resolve locally")
+
+    with patch(f"{MODULE}._resolve", no_dns):
+        assert await check_url("https://Api.Example.com/x") == "api.example.com"
+
+
+async def test_behind_a_proxy_a_private_ip_literal_is_still_refused(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://zebra-egress:3128")
+
+    with pytest.raises(HttpGuardError, match="not a public address"):
+        await check_url("https://10.1.2.3/x")
+
+
+async def test_a_no_proxy_host_is_still_resolved_and_checked(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://zebra-egress:3128")
+    monkeypatch.setenv("NO_PROXY", "zebra-pg,localhost")
+
+    with resolves_to("127.0.0.1"), pytest.raises(HttpGuardError, match="not a public address"):
+        await check_url("https://localhost/x")
+
+
+async def test_the_scheme_decides_which_proxy_applies(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://zebra-egress:3128")
+
+    with resolves_to("10.0.0.5"), pytest.raises(HttpGuardError):
+        await check_url("http://internal.example/x")  # no HTTP_PROXY: resolved here
