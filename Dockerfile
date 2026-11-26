@@ -79,7 +79,7 @@ COPY *.md ./
 COPY version.json /app/version.json
 
 # Copy entrypoint
-COPY docker/entrypoint.sh /app/docker/entrypoint.sh
+COPY docker/entrypoint.sh docker/extra-ca.sh docker/with-extra-ca.sh /app/docker/
 
 # Ensure venv is on PATH
 ENV PATH="/app/.venv/bin:$PATH" \

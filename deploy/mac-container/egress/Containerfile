@@ -1,0 +1,14 @@
+# zebra-egress (#337, WZ3): squid allowlist proxy, the work Zebra's only route out.
+# Pinned by digest (ubuntu/squid 6.x on Ubuntu 24.04, multi-arch index); bump deliberately.
+# Run: attached to the internal network and the default network, port 3128 not published.
+#   podman build -t zebra-egress deploy/mac-container/egress
+#   podman run -d --name zebra-egress -e ZEBRA_EGRESS_ALLOW=kagi.com,... zebra-egress
+FROM docker.io/ubuntu/squid:6.6-24.04_edge@sha256:7c8cbc0ce0248ba72e17fbdc2031b63fe9ee9b7e9bfb6890cbdbcaeac7353a14
+
+COPY squid.conf /etc/squid/squid.conf
+COPY entrypoint.sh /usr/local/bin/zebra-egress-entrypoint.sh
+RUN chmod 0755 /usr/local/bin/zebra-egress-entrypoint.sh \
+ && mkdir -p /etc/squid/allowlist.d
+
+EXPOSE 3128
+ENTRYPOINT ["/usr/local/bin/zebra-egress-entrypoint.sh"]

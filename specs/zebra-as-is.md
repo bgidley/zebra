@@ -562,6 +562,10 @@ text in 5xx responses (logged; generic message), escape it in 4xx HTML, and WebA
 only "Verification failed"; template stripping before scans uses the linear
 `zebra_tasks.templating.strip_templates()`.
 
+### Egress proxy and corporate CA (#337, WZ3)
+
+`deploy/mac-container/egress/` is the work Zebra's `zebra-egress` squid container (image pinned by digest): HTTPS CONNECT on 443 to an allowlist (`ZEBRA_EGRESS_ALLOW`, `allowlist.d/*.txt`) only; unlisted hosts, other ports, plain http and private / loopback / link-local destinations (by resolved address) get 403; optional `ZEBRA_EGRESS_PARENT_PROXY`; decisions on the container log. Not used by prod. Every outbound client honours `HTTPS_PROXY` / `NO_PROXY` (httpx incl. OpenAI SDK, botocore, git); `tests/egress/` plus `zebra-tasks/tests/test_egress_proxy_clients.py` (recording proxy, source scan) pin it. `http_get` / `http_request` skip local DNS for proxied hostnames (`guard._via_proxy`). SMTP is unsupported in the sandbox. `ZEBRA_EXTRA_CA_FILE` builds a combined bundle at start (`docker/extra-ca.sh`; no-op when unset). CI job `egress-squid` runs the container test. Runbook: [work-zebra-mac-runbook.md](work-zebra-mac-runbook.md).
+
 ### Ethics gate change (F111)
 
 `ethics_human_confirmation` (`auto: false`) was removed from `agent_main_loop.yaml` (version 6). The post-execution ethics review is now fully automated via `llm_call`. This unblocked autonomous daemon processing. (Since v10 / #143 it runs after `update_conceptual_memory` and is followed by `record_ethics_review`.)

@@ -8,6 +8,9 @@ if [ -f /app/.env ]; then
     set +a
 fi
 
+# Optional corporate CA (ZEBRA_EXTRA_CA_FILE, #337); a no-op when unset
+. /app/docker/extra-ca.sh || exit 1
+
 cd /app/zebra-agent-web
 
 echo "Running migrations..."

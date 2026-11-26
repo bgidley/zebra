@@ -68,6 +68,15 @@ async def fake_resolve(host: str, port: int) -> list[str]:
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
     monkeypatch.delenv("ZEBRA_HTTP_ALLOWED_PRIVATE_HOSTS", raising=False)
+    for name in (
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+    ):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv(
         "ZEBRA_HTTP_CRED_GITHUB",
         json.dumps({"host": "api.github.com", "type": "bearer", "token": "t0k-secret"}),
