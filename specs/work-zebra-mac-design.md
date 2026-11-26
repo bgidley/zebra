@@ -88,7 +88,9 @@ the highest rate in the table, with a warning, so it never counts as free.
 botocore `Config(read_timeout=llm_request_timeout(), connect_timeout=10,
 retries={"total_max_attempts": LLM_MAX_RETRIES + 1, "mode": "standard"})`: 180 s per attempt,
 3 attempts (#183). Standard mode retries throttling and 5xx; after that the `ClientError` fails the
-task. A read / connect timeout is raised as `TimeoutError`.
+task. A read / connect timeout is raised as `TimeoutError`. botocore honours `HTTPS_PROXY` /
+`NO_PROXY`, so calls go through the WZ3 egress proxy (`bedrock-runtime.<region>.amazonaws.com` is
+on its allowlist; `test_egress_proxy_clients.py` checks Bedrock and the owner webhook).
 
 ### Configuration
 `ZEBRA_LLM_PROVIDER` (`openrouter` default / `bedrock`), `AWS_REGION` (default `us-east-1`),

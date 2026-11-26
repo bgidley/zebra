@@ -15,7 +15,6 @@ It always logs the notice at ERROR, sends each *key* at most once per
 import asyncio
 import logging
 import os
-import smtplib
 import time
 from email.message import EmailMessage
 
@@ -64,7 +63,7 @@ async def notify_owner(key: str, subject: str, body: str) -> list[str]:
         try:
             await asyncio.to_thread(_send_email, host, recipients, subject, body)
             sent.append("email")
-        except (smtplib.SMTPException, OSError, ValueError) as e:
+        except (OSError, ValueError) as e:  # smtplib.SMTPException is an OSError
             logger.warning("Owner notice email failed: %s", type(e).__name__)
     return sent
 
