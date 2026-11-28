@@ -918,3 +918,37 @@ class TestSearchKeywords:
         from zebra_agent.storage.interfaces import search_keywords
 
         assert search_keywords(" To ") == ["to"]
+
+
+class TestWilsonInterval:
+    def test_no_runs_has_no_interval(self):
+        from zebra_agent.metrics import wilson_interval
+
+        assert wilson_interval(0, 0) is None
+
+    def test_small_perfect_sample_is_wide(self):
+        from zebra_agent.metrics import wilson_interval
+
+        low, high = wilson_interval(3, 3)
+        assert low == pytest.approx(0.4385, abs=1e-3)
+        assert high == pytest.approx(1.0)
+
+    def test_large_perfect_sample_is_tight(self):
+        from zebra_agent.metrics import wilson_interval
+
+        low, _ = wilson_interval(40, 40)
+        assert low == pytest.approx(0.9121, abs=1e-3)
+
+    def test_zero_successes_keeps_lower_bound_at_zero(self):
+        from zebra_agent.metrics import wilson_interval
+
+        low, high = wilson_interval(0, 5)
+        assert low == 0.0
+        assert 0.4 < high < 0.5
+
+    def test_confidence_labels(self):
+        from zebra_agent.metrics import sample_confidence
+
+        assert sample_confidence(0, 3) == "none"
+        assert sample_confidence(2, 3) == "insufficient"
+        assert sample_confidence(3, 3) == "adequate"
